@@ -693,11 +693,11 @@ function renderChapter(ch, ci) {
     : `<div class="no-topics">No topics yet — add one below.</div>`;
 
   return `
-    <div class="chapter-block" data-chid="${escHtml(ch.id || String(ci))}">
+    <div class="chapter-block" data-chid="${escHtml(ch.id || ch.chapter || String(ci))}">
       <div class="ch-header">
         <span class="ch-caret" aria-hidden="true">▾</span>
         <div class="ch-num" aria-hidden="true">${ci + 1}</div>
-        <div class="ch-title">${escHtml(ch.title)}</div>
+        <div class="ch-title">${escHtml(ch.chapter || ch.title)}</div>
         <div class="ch-meta">
           <span class="year-badge">${escHtml(ch.year || '')}</span>
           <span class="topic-count">${topics.length} topic${topics.length !== 1 ? 's' : ''}</span>
@@ -717,17 +717,19 @@ function renderChapter(ch, ci) {
 }
 
 function renderTopic(t, ti, ci) {
-  const objCodes = (t.objectives || '').split(/\s+/).filter(Boolean)
+  const objStr   = t.objectives || t.objective || '';
+  const objCodes = objStr.split(/\s+/).filter(Boolean)
     .map(o => `<span class="obj-code">${escHtml(o)}</span>`).join('');
 
   const resources = (t.resources || [])
     .map(r => `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`)
     .join('');
 
+  const dur = t.duration || t.hour;
   return `<tr>
     <td style="color:var(--ink-3);font-size:0.75rem">${ti + 1}</td>
-    <td style="font-weight:500">${escHtml(t.title)}</td>
-    <td>${t.duration ? t.duration + 'w' : '<span style="color:var(--ink-3)">—</span>'}</td>
+    <td style="font-weight:500">${escHtml(t.title || t.topic)}</td>
+    <td>${dur ? dur + (t.hour ? 'h' : 'w') : '<span style="color:var(--ink-3)">—</span>'}</td>
     <td><div class="obj-codes">${objCodes || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td><div class="resource-links">${resources || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td>
@@ -763,7 +765,7 @@ function editChapter(ci) {
   editChIdx = ci;
   const ch = chapters[ci];
   document.getElementById('chModalTitle').textContent = 'Edit Chapter';
-  document.getElementById('chTitleInput').value       = ch.title || '';
+  document.getElementById('chTitleInput').value       = ch.chapter || ch.title || '';
   document.getElementById('chYearSelect').value       = ch.year  || 'Year 9';
   document.getElementById('chapterModal').classList.add('open');
   document.getElementById('chTitleInput').focus();
@@ -775,9 +777,9 @@ async function saveChapterModal() {
   if (!title) { document.getElementById('chTitleInput').focus(); return; }
 
   if (modalMode === 'add-chapter') {
-    chapters.push({ id: genId(), title, year, topics: [] });
+    chapters.push({ id: genId(), chapter: title, year, topics: [] });
   } else {
-    chapters[editChIdx] = { ...chapters[editChIdx], title, year };
+    chapters[editChIdx] = { ...chapters[editChIdx], chapter: title, year };
   }
 
   closeChapterModal();
@@ -793,9 +795,10 @@ async function deleteChapter(e, ci) {
   e.stopPropagation();
   const ch = chapters[ci];
   const n  = (ch.topics || []).length;
+  const chName = ch.chapter || ch.title;
   const msg = n > 0
-    ? `Delete "${ch.title}"? This will also delete all ${n} topic${n !== 1 ? 's' : ''}.`
-    : `Delete chapter "${ch.title}"?`;
+    ? `Delete "${chName}"? This will also delete all ${n} topic${n !== 1 ? 's' : ''}.`
+    : `Delete chapter "${chName}"?`;
   if (!confirm(msg)) return;
   chapters.splice(ci, 1);
   await saveChapters();
@@ -824,9 +827,9 @@ function editTopic(ci, ti) {
   const t = chapters[ci].topics[ti];
   modalResources = (t.resources || []).map(r => ({ ...r }));
   document.getElementById('topModalTitle').textContent     = 'Edit Topic';
-  document.getElementById('topTitleInput').value           = t.title      || '';
-  document.getElementById('topDurationInput').value        = t.duration   || '';
-  document.getElementById('topObjectivesInput').value      = t.objectives || '';
+  document.getElementById('topTitleInput').value           = t.title      || t.topic      || '';
+  document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
+  document.getElementById('topObjectivesInput').value      = t.objectives || t.objective  || '';
   renderModalResources();
   document.getElementById('topicModal').classList.add('open');
   document.getElementById('topTitleInput').focus();
@@ -881,7 +884,7 @@ async function saveTopicModal() {
   if (!title) { document.getElementById('topTitleInput').focus(); return; }
 
   const resources = readModalResourcesFromDOM();
-  const topic = { title, duration, objectives, resources };
+  const topic = { topic: title, hour: duration, objective: objectives, resources };
 
   if (modalMode === 'add-topic') {
     if (!chapters[editChIdx].topics) chapters[editChIdx].topics = [];
@@ -905,7 +908,8 @@ function closeTopicModal() {
 
 async function deleteTopic(e, ci, ti) {
   e.stopPropagation();
-  if (!confirm(`Delete topic "${chapters[ci].topics[ti].title}"?`)) return;
+  const t = chapters[ci].topics[ti];
+  if (!confirm(`Delete topic "${t.title || t.topic}"?`)) return;
   chapters[ci].topics.splice(ti, 1);
   await saveChapters();
   showToast('Topic deleted.');
