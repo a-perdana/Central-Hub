@@ -51,6 +51,7 @@ const htmlFiles = [
   "academic-calendar.html",
   "appraisals.html",
   "academics.html",
+  "igcse-pacing.html",
   "assessments.html",
   "console.html",
 ];
