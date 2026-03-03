@@ -52,6 +52,7 @@ const htmlFiles = [
   "appraisals.html",
   "school-appraisals.html",
   "teacher-appraisals.html",
+  "ease-system.html",
   "academics.html",
   "secondary-checkpoint-pacing.html",
   "igcse-pacing.html",
@@ -84,3 +85,4 @@ console.log("Environment variables:");
 Object.keys(cfg).forEach((key) => {
   console.log(`  ${key}: ${cfg[key] ? "[SET]" : "[NOT SET - login will fail]"}`);
 });
+
