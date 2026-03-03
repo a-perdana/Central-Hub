@@ -50,6 +50,7 @@ const htmlFiles = [
   "login.html",
   "academic-calendar.html",
   "appraisals.html",
+  "school-appraisals.html",
   "academics.html",
   "secondary-checkpoint-pacing.html",
   "igcse-pacing.html",
