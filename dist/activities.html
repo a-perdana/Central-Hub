@@ -198,6 +198,27 @@
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; font-size: 0.875rem; padding: 10px 20px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 500; white-space: nowrap; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+    /* ===== EDIT BOARD BUTTON ===== */
+    .btn-edit-board { display: flex; align-items: center; gap: 5px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 500; color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+    .btn-edit-board:hover { background: var(--accent-2); border-color: var(--accent); }
+
+    /* ===== ASSIGNEE PICKER ===== */
+    .assignee-picker-wrap { position: relative; }
+    .selected-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 38px; border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; background: var(--paper); cursor: text; transition: border-color 0.2s; }
+    .selected-chips:focus-within { border-color: var(--accent); background: var(--white); }
+    .assignee-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-2); color: var(--accent-dk); font-size: 0.76rem; font-weight: 500; padding: 2px 8px 2px 10px; border-radius: 12px; white-space: nowrap; }
+    .chip-remove { background: none; border: none; cursor: pointer; color: inherit; font-size: 1rem; padding: 0 0 0 2px; line-height: 1; opacity: 0.65; font-family: inherit; }
+    .chip-remove:hover { opacity: 1; }
+    .assignee-search-input { border: none; outline: none; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); min-width: 100px; flex: 1; padding: 2px 0; }
+    .users-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--white); border: 1px solid var(--border); border-radius: 7px; box-shadow: var(--shadow); z-index: 600; max-height: 200px; overflow-y: auto; }
+    .user-option { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 0.875rem; color: var(--ink); transition: background 0.12s; }
+    .user-option:hover { background: var(--paper); }
+    .user-option.selected-user { background: var(--accent-2); }
+    .user-opt-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .user-opt-name { flex: 1; }
+    .user-opt-check { color: var(--accent); font-size: 0.9rem; font-weight: 700; }
+    .users-dropdown-empty { padding: 12px 14px; font-size: 0.84rem; color: var(--ink-3); }
+
     /* ===== ADMIN-ONLY ELEMENTS ===== */
     .admin-only { display: none; }
 
@@ -366,14 +387,21 @@
       </select>
     </div>
 
-    <!-- Assignee (admin only edit) -->
+    <!-- Assignees (admin only edit) -->
     <div class="detail-field admin-only" id="fieldAssignee">
-      <label class="detail-label" for="detailAssignee">Assignee</label>
-      <input class="detail-input" id="detailAssignee" type="text" placeholder="Full name…">
+      <label class="detail-label">Assignees</label>
+      <div class="assignee-picker-wrap">
+        <div class="selected-chips" onclick="document.getElementById('detailSearchInput').focus()">
+          <span id="detailTags"></span>
+          <input class="assignee-search-input" id="detailSearchInput" type="text" placeholder="Search users…"
+                 oninput="filterUsersList('detail',this.value)" onfocus="showUsersList('detail')" onblur="hideUsersList('detail')">
+        </div>
+        <div class="users-dropdown" id="detailDropdown" style="display:none"></div>
+      </div>
     </div>
-    <!-- Assignee display for non-admin -->
+    <!-- Assignees display for non-admin -->
     <div class="detail-field" id="fieldAssigneeView" style="display:none">
-      <label class="detail-label">Assignee</label>
+      <label class="detail-label">Assignees</label>
       <p id="detailAssigneeView" style="font-size:0.875rem;color:var(--ink-2);padding:2px 0"></p>
     </div>
 
@@ -480,15 +508,21 @@
       </div>
     </div>
 
-    <div class="form-row">
-      <div class="form-field">
-        <label class="form-label" for="newTaskAssignee">Assignee</label>
-        <input class="form-input" id="newTaskAssignee" type="text" placeholder="Full name">
+    <div class="form-field">
+      <label class="form-label">Assignees</label>
+      <div class="assignee-picker-wrap">
+        <div class="selected-chips" onclick="document.getElementById('newTaskSearchInput').focus()">
+          <span id="newTaskTags"></span>
+          <input class="assignee-search-input" id="newTaskSearchInput" type="text" placeholder="Search users…"
+                 oninput="filterUsersList('newTask',this.value)" onfocus="showUsersList('newTask')" onblur="hideUsersList('newTask')">
+        </div>
+        <div class="users-dropdown" id="newTaskDropdown" style="display:none"></div>
       </div>
-      <div class="form-field">
-        <label class="form-label" for="newTaskDue">Due Date</label>
-        <input class="form-input" id="newTaskDue" type="date">
-      </div>
+    </div>
+
+    <div class="form-field">
+      <label class="form-label" for="newTaskDue">Due Date</label>
+      <input class="form-input" id="newTaskDue" type="date">
     </div>
 
     <div class="form-field">
@@ -499,6 +533,29 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal('newTaskModal')">Cancel</button>
       <button class="btn-modal-save" onclick="saveNewTask()">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Edit Board ===== -->
+<div class="modal-overlay" id="editBoardModal" role="dialog" aria-modal="true" aria-label="Edit board">
+  <div class="modal-box">
+    <h2 class="modal-title">Edit Board</h2>
+    <div class="form-field">
+      <label class="form-label" for="editBoardName">Board name *</label>
+      <input class="form-input" id="editBoardName" type="text" maxlength="80">
+    </div>
+    <div class="form-field">
+      <label class="form-label" for="editBoardDesc">Description</label>
+      <textarea class="form-textarea" id="editBoardDesc" rows="2"></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Colour</label>
+      <div class="color-picker" id="editColorPicker"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('editBoardModal')">Cancel</button>
+      <button class="btn-modal-save" onclick="saveEditBoard()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -537,6 +594,12 @@ let db, isAdmin = false;
 let currentProjectId = null;
 let projects = [], tasks = [];
 let selectedTaskId = null;
+let allUsers = [];
+let editingProjectId = null;
+const pickerState = {
+  newTask: { selected: [] },
+  detail:  { selected: [] },
+};
 
 // ── Auth Ready ─────────────────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { user } }) => {
@@ -557,6 +620,7 @@ document.addEventListener('authReady', ({ detail: { user } }) => {
   if (isAdmin) {
     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('admin-only'));
     document.getElementById('emptyBoardsSub').textContent = 'Get started by creating your first activity board.';
+    loadUsers();
   }
 
   initColorPicker();
@@ -565,16 +629,144 @@ document.addEventListener('authReady', ({ detail: { user } }) => {
 
 // ── Color Picker ───────────────────────────────────────────────────────────
 function initColorPicker() {
-  const picker = document.getElementById('colorPicker');
-  picker.innerHTML = PROJECT_COLORS.map((c, i) =>
-    `<span class="color-option ${i === 0 ? 'selected' : ''}" data-color="${c}"
-           style="background:${c}" onclick="selectColor(this)" title="${c}" role="button" tabindex="0"
-           onkeydown="if(event.key==='Enter'||event.key===' ')selectColor(this)"></span>`
+  ['colorPicker', 'editColorPicker'].forEach(id => {
+    const picker = document.getElementById(id);
+    if (!picker) return;
+    picker.innerHTML = PROJECT_COLORS.map((c, i) =>
+      `<span class="color-option ${i === 0 ? 'selected' : ''}" data-color="${c}"
+             style="background:${c}" onclick="selectColor(this,'${id}')" title="${c}" role="button" tabindex="0"
+             onkeydown="if(event.key==='Enter'||event.key===' ')selectColor(this,'${id}')"></span>`
+    ).join('');
+  });
+}
+window.selectColor = (el, pickerId) => {
+  const scope = pickerId
+    ? document.getElementById(pickerId)
+    : document.querySelector('.color-picker');
+  scope.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+};
+
+// ── Load Users ─────────────────────────────────────────────────────────────
+async function loadUsers() {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    allUsers = snap.docs
+      .map(d => ({ uid: d.id, name: d.data().displayName || d.data().email || '' }))
+      .filter(u => u.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    console.error('loadUsers error:', err);
+  }
+}
+
+// ── Assignee Picker ─────────────────────────────────────────────────────────
+function renderPickerTags(pickerName) {
+  const state = pickerState[pickerName];
+  const el = document.getElementById(pickerName + 'Tags');
+  if (!el) return;
+  el.innerHTML = state.selected.map(u =>
+    `<span class="assignee-chip">${esc(u.name)}<button class="chip-remove" type="button"
+       onclick="removeAssignee('${pickerName}','${u.uid}')">×</button></span>`
   ).join('');
 }
-window.selectColor = (el) => {
-  document.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
-  el.classList.add('selected');
+
+function renderUsersDropdown(pickerName, searchVal) {
+  const dropdown = document.getElementById(pickerName + 'Dropdown');
+  if (!dropdown) return;
+  const state = pickerState[pickerName];
+  const q = (searchVal || '').toLowerCase();
+  const filtered = allUsers.filter(u => u.name.toLowerCase().includes(q));
+
+  if (filtered.length === 0) {
+    dropdown.innerHTML = '<p class="users-dropdown-empty">No users found.</p>';
+  } else {
+    dropdown.innerHTML = filtered.map(u => {
+      const isSel = state.selected.some(s => s.uid === u.uid);
+      const initials = u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+      return `
+        <div class="user-option ${isSel ? 'selected-user' : ''}"
+             onmousedown="toggleUser('${pickerName}','${u.uid}','${u.name.replace(/'/g, '&#39;')}')">
+          <div class="user-opt-avatar">${initials}</div>
+          <span class="user-opt-name">${esc(u.name)}</span>
+          ${isSel ? '<span class="user-opt-check">✓</span>' : ''}
+        </div>`;
+    }).join('');
+  }
+  dropdown.style.display = 'block';
+}
+
+window.filterUsersList = (pickerName, val) => renderUsersDropdown(pickerName, val);
+window.showUsersList   = (pickerName)      => renderUsersDropdown(pickerName, document.getElementById(pickerName + 'SearchInput')?.value || '');
+window.hideUsersList   = (pickerName)      => {
+  setTimeout(() => {
+    const d = document.getElementById(pickerName + 'Dropdown');
+    if (d) d.style.display = 'none';
+  }, 150);
+};
+
+window.toggleUser = (pickerName, uid, name) => {
+  const state = pickerState[pickerName];
+  const idx = state.selected.findIndex(u => u.uid === uid);
+  if (idx === -1) state.selected.push({ uid, name });
+  else state.selected.splice(idx, 1);
+  renderPickerTags(pickerName);
+  renderUsersDropdown(pickerName, document.getElementById(pickerName + 'SearchInput')?.value || '');
+};
+
+window.removeAssignee = (pickerName, uid) => {
+  pickerState[pickerName].selected = pickerState[pickerName].selected.filter(u => u.uid !== uid);
+  renderPickerTags(pickerName);
+};
+
+function initPicker(pickerName, preSelected) {
+  pickerState[pickerName].selected = preSelected || [];
+  renderPickerTags(pickerName);
+  const inp = document.getElementById(pickerName + 'SearchInput');
+  if (inp) inp.value = '';
+  const d = document.getElementById(pickerName + 'Dropdown');
+  if (d) d.style.display = 'none';
+}
+
+function getAssigneeNames(pickerName) {
+  return pickerState[pickerName].selected.map(u => u.name);
+}
+
+// ── Edit Board ──────────────────────────────────────────────────────────────
+window.editBoard = (projectId) => {
+  editingProjectId = projectId;
+  const p = projects.find(p => p.id === projectId);
+  if (!p) return;
+  document.getElementById('editBoardName').value = p.name || '';
+  document.getElementById('editBoardDesc').value = p.description || '';
+  // Pre-select current color
+  document.querySelectorAll('#editColorPicker .color-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.color === p.color);
+  });
+  // If no color matched, select first
+  const anySelected = document.querySelector('#editColorPicker .color-option.selected');
+  if (!anySelected) document.querySelector('#editColorPicker .color-option')?.classList.add('selected');
+  openModal('editBoardModal');
+};
+
+window.saveEditBoard = async () => {
+  const name = document.getElementById('editBoardName').value.trim();
+  if (!name) { showToast('Board name is required.'); return; }
+  const color = document.querySelector('#editColorPicker .color-option.selected')?.dataset.color || '#7c3aed';
+  const description = document.getElementById('editBoardDesc').value.trim();
+  try {
+    await updateDoc(doc(db, 'activity_projects', editingProjectId), { name, description, color });
+    const p = projects.find(p => p.id === editingProjectId);
+    if (p) { p.name = name; p.description = description; p.color = color; }
+    closeModal('editBoardModal');
+    renderProjectList();
+    const current = projects.find(p => p.id === currentProjectId);
+    if (current) renderProjectHeader(current);
+    showToast('Board updated.');
+  } catch (err) {
+    console.error('saveEditBoard error:', err);
+    showToast('Failed to update board.');
+  }
 };
 
 // ── Load Projects ──────────────────────────────────────────────────────────
@@ -656,16 +848,22 @@ function renderProjectHeader(project) {
   const inProgress = tasks.filter(t => t.status === 'in_progress').length;
   const onHold     = tasks.filter(t => t.status === 'on_hold').length;
 
-  const deleteBtnHtml = isAdmin
-    ? `<button class="btn-delete-board" onclick="confirmDeleteProject('${project.id}')">Delete Board</button>`
-    : '';
+  const adminBtns = isAdmin ? `
+    <button class="btn-edit-board" onclick="editBoard('${project.id}')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit
+    </button>
+    <button class="btn-delete-board" onclick="confirmDeleteProject('${project.id}')">Delete</button>` : '';
 
   document.getElementById('projectHeaderArea').innerHTML = `
     <div class="project-header">
       <div class="project-title-row">
         <span class="project-color-dot" style="background:${esc(project.color || '#7c3aed')}"></span>
         <h1 class="project-title">${esc(project.name)}</h1>
-        <div class="project-title-actions">${deleteBtnHtml}</div>
+        <div class="project-title-actions">${adminBtns}</div>
       </div>
       <div class="project-stats-row">
         <div class="project-stat"><span class="ps-value">${total}</span><span class="ps-label">Total</span></div>
@@ -713,7 +911,7 @@ function renderTaskTable(filterStatus = 'all', search = '') {
         <td>
           <span class="status-badge" style="color:${s.color};background:${s.bg}">${s.label}</span>
         </td>
-        <td class="assignee-cell">${esc(task.assignee || '—')}</td>
+        <td class="assignee-cell">${esc(getAssigneeDisplay(task))}</td>
         <td>
           <span class="priority-badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
         </td>
@@ -757,20 +955,21 @@ window.openDetailPanel = (taskId) => {
   document.getElementById('detailDescription').disabled = !isAdmin;
 
   if (isAdmin) {
-    document.getElementById('detailAssignee').value  = task.assignee || '';
+    // Init assignee picker with existing assignees
+    const preSelected = resolveAssigneesForPicker(task);
+    initPicker('detail', preSelected);
+
     document.getElementById('detailPriority').value  = task.priority || 'medium';
     document.getElementById('detailDueDate').value   = task.dueDate  || '';
     const pct = task.progress || 0;
     document.getElementById('detailProgress').value  = pct;
     document.getElementById('detailProgressLabel').textContent = pct + '%';
-    // Show admin fields, hide view-only
     document.getElementById('fieldAssignee').style.display     = 'block';
     document.getElementById('fieldAssigneeView').style.display = 'none';
   } else {
-    // Non-admin: show assignee as text
     document.getElementById('fieldAssignee').style.display     = 'none';
     document.getElementById('fieldAssigneeView').style.display = 'block';
-    document.getElementById('detailAssigneeView').textContent  = task.assignee || '—';
+    document.getElementById('detailAssigneeView').textContent  = getAssigneeDisplay(task) || '—';
   }
 
   document.getElementById('saveFeedback').classList.remove('show');
@@ -796,8 +995,10 @@ window.saveTaskDetail = async () => {
   if (isAdmin) {
     const name = document.getElementById('detailTaskName').value.trim();
     if (!name) { showToast('Task name cannot be empty.'); return; }
+    const assigneeNames = getAssigneeNames('detail');
     updates.name        = name;
-    updates.assignee    = document.getElementById('detailAssignee').value.trim();
+    updates.assignees   = assigneeNames;
+    updates.assignee    = assigneeNames[0] || '';  // backward compat
     updates.priority    = document.getElementById('detailPriority').value;
     updates.dueDate     = document.getElementById('detailDueDate').value;
     updates.progress    = parseInt(document.getElementById('detailProgress').value) || 0;
@@ -928,11 +1129,13 @@ window.saveNewTask = async () => {
   const name = document.getElementById('newTaskName').value.trim();
   if (!name) { showToast('Task name is required.'); return; }
 
+  const assigneeNames = getAssigneeNames('newTask');
   const taskData = {
     projectId:   currentProjectId,
     name,
     description: document.getElementById('newTaskDesc').value.trim(),
-    assignee:    document.getElementById('newTaskAssignee').value.trim(),
+    assignees:   assigneeNames,
+    assignee:    assigneeNames[0] || '',  // backward compat
     status:      document.getElementById('newTaskStatus').value,
     priority:    document.getElementById('newTaskPriority').value,
     dueDate:     document.getElementById('newTaskDue').value,
@@ -950,10 +1153,10 @@ window.saveNewTask = async () => {
     // Reset form
     document.getElementById('newTaskName').value     = '';
     document.getElementById('newTaskDesc').value     = '';
-    document.getElementById('newTaskAssignee').value = '';
     document.getElementById('newTaskDue').value      = '';
     document.getElementById('newTaskStatus').value   = 'todo';
     document.getElementById('newTaskPriority').value = 'medium';
+    initPicker('newTask', []);
     const project = projects.find(p => p.id === currentProjectId);
     if (project) renderProjectHeader(project);
     renderProjectList();
@@ -965,9 +1168,27 @@ window.saveNewTask = async () => {
   }
 };
 
+// ── Assignee Helpers ───────────────────────────────────────────────────────
+function getAssigneeDisplay(task) {
+  if (task.assignees && task.assignees.length > 0) return task.assignees.join(', ');
+  if (task.assignee) return task.assignee;
+  return '—';
+}
+
+function resolveAssigneesForPicker(task) {
+  const names = (task.assignees && task.assignees.length > 0)
+    ? task.assignees
+    : (task.assignee ? [task.assignee] : []);
+  return names.map(name => {
+    const found = allUsers.find(u => u.name === name);
+    return { uid: found?.uid || name, name };
+  });
+}
+
 // ── Modal Helpers ──────────────────────────────────────────────────────────
 window.openModal = (id) => {
   document.getElementById(id).classList.add('open');
+  if (id === 'newTaskModal') initPicker('newTask', []);
 };
 window.closeModal = (id) => {
   document.getElementById(id).classList.remove('open');
