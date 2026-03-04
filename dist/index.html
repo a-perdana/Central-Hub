@@ -557,6 +557,15 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
+    .board-card-name-text { flex: 1; }
+    .board-pct-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      letter-spacing: 0.01em;
+    }
     .board-progress-bar {
       height: 5px;
       background: var(--paper-2);
@@ -569,6 +578,37 @@
       border-radius: 3px;
       transition: width 0.5s ease;
     }
+    .board-task-list {
+      list-style: none;
+      margin: 6px 0 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .board-task-item {
+      font-size: 0.79rem;
+      color: var(--ink-2);
+      padding: 2px 0 2px 14px;
+      position: relative;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .board-task-item::before {
+      content: '';
+      position: absolute;
+      left: 2px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .board-task-item.task-done { color: var(--ink-3); text-decoration: line-through; }
+    .board-task-item.task-done::before { background: #22c55e; }
+    .board-task-more { font-size: 0.74rem; color: var(--ink-3); padding: 2px 0 2px 14px; }
+    .board-task-empty { font-size: 0.79rem; color: var(--ink-3); margin: 6px 0 10px; }
     .board-card-meta {
       display: flex;
       align-items: center;
@@ -577,11 +617,6 @@
     .board-tasks-label {
       font-size: 0.775rem;
       color: var(--ink-3);
-    }
-    .board-pct {
-      font-size: 0.775rem;
-      font-weight: 600;
-      color: var(--ink-2);
     }
     .boards-empty {
       font-size: 0.875rem;
@@ -1062,27 +1097,49 @@
         grid.innerHTML = '<p class="boards-empty">No active boards. <a href="activities" style="color:var(--accent)">Open Activities</a> to create one.</p>';
         return;
       }
-      grid.innerHTML = snap.docs.map(docSnap => {
-        const p     = docSnap.data();
-        const id    = docSnap.id;
-        const total = p.taskCount     || 0;
-        const done  = p.completedCount || 0;
+
+      // Fetch tasks for each project in parallel
+      const boards = await Promise.all(snap.docs.map(async docSnap => {
+        const p  = docSnap.data();
+        const id = docSnap.id;
+        const tasksSnap = await getDocs(
+          query(collection(db, 'activity_tasks'), where('projectId', '==', id))
+        );
+        const taskList = tasksSnap.docs.map(t => t.data());
+        const total = taskList.length;
+        const done  = taskList.filter(t => t.status === 'completed').length;
+        return { p, taskList, total, done };
+      }));
+
+      grid.innerHTML = boards.map(({ p, taskList, total, done }) => {
         const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
         const color = esc(p.color || '#7c3aed');
+        const colorRaw = p.color || '#7c3aed';
+        // build task list HTML (first 5 tasks)
+        const taskItems = taskList.slice(0, 5).map(t => {
+          const isDone = t.status === 'completed';
+          return `<li class="board-task-item${isDone ? ' task-done' : ''}">${esc(t.title || '')}</li>`;
+        }).join('');
+        const moreCount = taskList.length > 5 ? taskList.length - 5 : 0;
+        const tasksHtml = total > 0
+          ? `<ul class="board-task-list">${taskItems}${moreCount > 0 ? `<li class="board-task-more">+${moreCount} more</li>` : ''}</ul>`
+          : '<p class="board-task-empty">No tasks yet</p>';
+
         return `
           <a href="activities" class="board-card">
             <div class="board-card-top" style="background:${color}"></div>
             <div class="board-card-body">
               <p class="board-card-name">
                 <span class="board-card-dot" style="background:${color}"></span>
-                ${esc(p.name)}
+                <span class="board-card-name-text">${esc(p.name)}</span>
+                <span class="board-pct-badge" style="background:${color}22;color:${color}">${pct}%</span>
               </p>
               <div class="board-progress-bar">
                 <div class="board-progress-fill" style="width:${pct}%;background:${color}"></div>
               </div>
+              ${tasksHtml}
               <div class="board-card-meta">
                 <span class="board-tasks-label">${done} / ${total} tasks done</span>
-                <span class="board-pct">${pct}%</span>
               </div>
             </div>
           </a>`;

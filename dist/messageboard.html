@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Message Board — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:#1c1c2e; --ink-2:#44445a; --ink-3:#8888a8;
+      --paper:#f7f6f3; --paper-2:#efede8; --white:#ffffff;
+      --border:#e0ddd6; --accent:#0891b2; --accent-dk:#0e7490;
+      --shadow-sm:0 1px 4px rgba(28,28,46,.07);
+      --shadow:0 3px 14px rgba(28,28,46,.10);
+      --shadow-lg:0 10px 40px rgba(28,28,46,.16);
+      --radius:10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+
+    /* NAV */
+    .top-nav { position: sticky; top: 0; z-index: 100; height: 62px; padding: 0 28px; display: flex; align-items: center; gap: 28px; background: rgba(5,5,16,0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+    .nav-brand-name { font-size: 1.05rem; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 2px; flex: 1; }
+    .nav-link { font-size: 0.875rem; font-weight: 500; color: rgba(255,255,255,0.6); text-decoration: none; padding: 6px 12px; border-radius: 6px; transition: color 0.2s, background 0.2s; }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.07); }
+    .nav-link.active { color: #fff; background: rgba(255,255,255,0.10); }
+    .nav-auth { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .nav-user-name { font-size: 0.875rem; color: rgba(255,255,255,0.65); }
+    .nav-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; color: #fff; flex-shrink: 0; user-select: none; }
+    .btn-logout { font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500; color: rgba(255,255,255,0.48); background: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: color 0.2s, border-color 0.2s; }
+    .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,0.28); }
+
+    /* PAGE LAYOUT */
+    .page-layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 62px); }
+
+    /* SIDEBAR */
+    .sidebar { background: var(--white); border-right: 1px solid var(--border); padding: 20px 12px; position: sticky; top: 62px; height: calc(100vh - 62px); overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .sidebar-title { font-size: 0.68rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; padding: 8px 8px 4px; }
+    .cat-btn { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-radius: 7px; border: none; background: none; width: 100%; text-align: left; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink-2); transition: background 0.15s, color 0.15s; gap: 8px; }
+    .cat-btn:hover { background: var(--paper); color: var(--ink); }
+    .cat-btn.active { background: var(--accent-2); color: var(--accent-dk); font-weight: 600; }
+    .cat-btn-inner { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .cat-count { font-size: 0.72rem; font-weight: 600; background: var(--paper-2); color: var(--ink-3); border-radius: 20px; padding: 1px 7px; flex-shrink: 0; }
+    .cat-btn.active .cat-count { background: rgba(8,145,178,0.12); color: var(--accent-dk); }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 8px 0; }
+    .sidebar-stat { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; font-size: 0.8rem; color: var(--ink-3); }
+    .sidebar-stat-val { font-weight: 600; color: var(--ink-2); }
+
+    /* MAIN */
+    .main-content { padding: 24px 28px; }
+
+    /* VIEWS */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* LIST VIEW */
+    .list-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .list-title { font-size: 1.2rem; font-weight: 600; flex: 1; }
+    .search-wrap { position: relative; }
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+    .search-input { padding: 8px 12px 8px 32px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: var(--ink); background: var(--white); outline: none; width: 200px; }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--ink-3); }
+    .sort-select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--white); outline: none; }
+    .btn-new-topic { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: opacity 0.2s; }
+    .btn-new-topic:hover { opacity: 0.9; }
+
+    /* TOPIC LIST */
+    .topic-list { display: flex; flex-direction: column; gap: 2px; }
+    .topic-row { display: flex; align-items: center; gap: 14px; background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; cursor: pointer; transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s; }
+    .topic-row:hover { box-shadow: var(--shadow); transform: translateY(-1px); border-color: #cbc7bf; }
+    .topic-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; color: #fff; flex-shrink: 0; background: linear-gradient(135deg,#7c3aed,#0891b2); }
+    .topic-body { flex: 1; min-width: 0; }
+    .topic-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+    .topic-title { font-size: 0.925rem; font-weight: 600; color: var(--ink); }
+    .topic-meta { font-size: 0.78rem; color: var(--ink-3); }
+    .topic-stats { display: flex; align-items: center; gap: 14px; flex-shrink: 0; text-align: right; }
+    .topic-stat-item { display: flex; flex-direction: column; align-items: center; }
+    .topic-stat-val { font-size: 0.9rem; font-weight: 600; color: var(--ink-2); }
+    .topic-stat-lbl { font-size: 0.67rem; color: var(--ink-3); text-transform: uppercase; }
+    .empty-state { padding: 60px; text-align: center; color: var(--ink-3); font-size: 0.9rem; }
+
+    /* THREAD VIEW */
+    .thread-back { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--accent); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; padding: 0; margin-bottom: 16px; transition: color 0.2s; }
+    .thread-back:hover { color: var(--accent-dk); }
+    .thread-header { margin-bottom: 20px; }
+    .thread-category { font-size: 0.78rem; color: var(--ink-3); margin-bottom: 6px; }
+    .thread-title { font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.3; }
+    .post { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; }
+    .post.op { border-left: 3px solid var(--accent); }
+    .post-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .post-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .post-author { font-size: 0.875rem; font-weight: 600; color: var(--ink); }
+    .post-date { font-size: 0.78rem; color: var(--ink-3); }
+    .post-body { font-size: 0.9rem; color: var(--ink-2); line-height: 1.7; white-space: pre-wrap; }
+    .post-op-label { font-size: 0.68rem; font-weight: 600; background: var(--accent-2); color: var(--accent-dk); border-radius: 4px; padding: 2px 6px; }
+    .replies-heading { font-size: 0.82rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 20px 0 10px; }
+    .reply-form { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-top: 16px; }
+    .reply-form h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 10px; }
+    .reply-textarea { width: 100%; min-height: 100px; resize: vertical; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: var(--ink); background: var(--paper); outline: none; line-height: 1.6; transition: border-color 0.2s; }
+    .reply-textarea:focus { border-color: var(--accent); background: var(--white); }
+    .reply-textarea::placeholder { color: var(--ink-3); }
+    .reply-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+    .btn-post-reply { padding: 9px 18px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: opacity 0.2s; }
+    .btn-post-reply:hover { opacity: 0.88; }
+    .btn-post-reply:disabled { opacity: 0.5; cursor: not-allowed; }
+    .reply-error { font-size: 0.82rem; color: #dc2626; margin-bottom: 8px; display: none; }
+    .reply-error.visible { display: block; }
+
+    /* NEW TOPIC FORM */
+    .new-topic-form { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; max-width: 640px; }
+    .new-topic-form h3 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .form-label { font-size: 0.82rem; font-weight: 500; color: var(--ink-2); }
+    .form-input, .form-select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: var(--ink); background: var(--paper); outline: none; transition: border-color 0.2s; }
+    .form-input:focus, .form-select:focus { border-color: var(--accent); background: var(--white); }
+    .form-input::placeholder { color: var(--ink-3); }
+    .form-textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+    .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+    .btn-cancel-form { padding: 9px 18px; background: none; border: 1px solid var(--border); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink-2); cursor: pointer; }
+    .form-error { font-size: 0.82rem; color: #dc2626; background: #fee2e2; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; display: none; }
+    .form-error.visible { display: block; }
+
+    /* BADGES */
+    .badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+    .badge-general   { background: #e0e7ff; color: #3730a3; }
+    .badge-academic  { background: #d1fae5; color: #065f46; }
+    .badge-resources { background: #fef3c7; color: #92400e; }
+    .badge-events    { background: #ede9fe; color: #5b21b6; }
+    .badge-technical { background: #fee2e2; color: #991b1b; }
+
+    /* SKELETON */
+    .skel { background: linear-gradient(90deg,var(--paper-2) 25%,var(--paper) 50%,var(--paper-2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; display: block; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .page-layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 12px; gap: 4px; }
+      .sidebar-title, .sidebar-divider, .sidebar-stat { display: none; }
+      .cat-btn { width: auto; flex: none; }
+      .main-content { padding: 18px 16px; }
+      .nav-links { display: none; }
+      .topic-stats { display: none; }
+      .search-input { width: 140px; }
+    }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+</head>
+<body>
+
+<nav class="top-nav" aria-label="Main navigation">
+  <a href="index" class="nav-brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="6" fill="#8b5cf6"/>
+      <circle cx="16" cy="4.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <circle cx="27.5" cy="22.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <circle cx="4.5" cy="22.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <line x1="16" y1="10" x2="16" y2="7.7" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="21" y1="19.4" x2="24.7" y2="21.2" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="11" y1="19.4" x2="7.3" y2="21.2" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span class="nav-brand-name">CentralHub</span>
+  </a>
+  <div class="nav-links">
+    <a href="index" class="nav-link">Dashboard</a>
+    <a href="https://teachershub.eduversal.org" class="nav-link" id="navTeachersHub" target="_blank" rel="noopener">Teachers Hub</a>
+    <a href="https://academichub.eduversal.org" class="nav-link" id="navAcademicHub" target="_blank" rel="noopener">Academic Hub</a>
+  </div>
+  <div class="nav-auth">
+    <span class="nav-user-name"></span>
+    <div class="nav-avatar" id="navAvatar" aria-hidden="true"></div>
+    <button class="btn-logout" id="logoutBtn">Sign out</button>
+  </div>
+</nav>
+
+<div class="page-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" aria-label="Categories">
+    <p class="sidebar-title">Categories</p>
+    <button class="cat-btn active" data-cat="all" onclick="selectCat('all')">
+      <span class="cat-btn-inner"><span class="cat-dot" style="background:#8888a8"></span>All</span>
+      <span class="cat-count" id="cnt-all">0</span>
+    </button>
+    <button class="cat-btn" data-cat="general" onclick="selectCat('general')">
+      <span class="cat-btn-inner"><span class="cat-dot" style="background:#4338ca"></span>General</span>
+      <span class="cat-count" id="cnt-general">0</span>
+    </button>
+    <button class="cat-btn" data-cat="academic" onclick="selectCat('academic')">
+      <span class="cat-btn-inner"><span class="cat-dot" style="background:#059669"></span>Academic</span>
+      <span class="cat-count" id="cnt-academic">0</span>
+    </button>
+    <button class="cat-btn" data-cat="resources" onclick="selectCat('resources')">
+      <span class="cat-btn-inner"><span class="cat-dot" style="background:#d97706"></span>Resources</span>
+      <span class="cat-count" id="cnt-resources">0</span>
+    </button>
+    <button class="cat-btn" data-cat="events" onclick="selectCat('events')">
+      <span class="cat-btn-inner"><span class="cat-dot" style="background:#7c3aed"></span>Events</span>
+      <span class="cat-count" id="cnt-events">0</span>
+    </button>
+    <button class="cat-btn" data-cat="technical" onclick="selectCat('technical')">
+      <span class="cat-btn-inner"><span class="cat-dot" style="background:#dc2626"></span>Technical</span>
+      <span class="cat-count" id="cnt-technical">0</span>
+    </button>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-stat"><span>Total topics</span><span class="sidebar-stat-val" id="totalTopics">—</span></div>
+    <div class="sidebar-stat"><span>Total replies</span><span class="sidebar-stat-val" id="totalReplies">—</span></div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-content">
+
+    <!-- LIST VIEW -->
+    <div class="view active" id="viewList">
+      <div class="list-header">
+        <h1 class="list-title" id="listTitle">All Topics</h1>
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" id="searchInput" type="search" placeholder="Search topics…" aria-label="Search topics">
+        </div>
+        <select class="sort-select" id="sortSelect" aria-label="Sort topics">
+          <option value="newest">Latest</option>
+          <option value="replies">Most replies</option>
+          <option value="oldest">Oldest</option>
+        </select>
+        <button class="btn-new-topic" id="newTopicBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Topic
+        </button>
+      </div>
+      <div class="topic-list" id="topicList">
+        <div class="topic-row"><span class="skel" style="height:16px;width:55%;display:block"></span></div>
+        <div class="topic-row"><span class="skel" style="height:16px;width:70%;display:block"></span></div>
+        <div class="topic-row"><span class="skel" style="height:16px;width:40%;display:block"></span></div>
+      </div>
+    </div>
+
+    <!-- THREAD VIEW -->
+    <div class="view" id="viewThread">
+      <button class="thread-back" id="backBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to topics
+      </button>
+      <div class="thread-header">
+        <p class="thread-category" id="threadCat"></p>
+        <h2 class="thread-title" id="threadTitle"></h2>
+      </div>
+      <div id="threadPosts"></div>
+      <p class="replies-heading" id="repliesHeading"></p>
+      <div id="replyList"></div>
+      <div class="reply-form">
+        <h4>Post a Reply</h4>
+        <p class="reply-error" id="replyError"></p>
+        <textarea class="reply-textarea" id="replyText" placeholder="Write your reply…" rows="4"></textarea>
+        <div class="reply-footer">
+          <button class="btn-post-reply" id="postReplyBtn">Post Reply</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW TOPIC VIEW -->
+    <div class="view" id="viewNewTopic">
+      <div class="new-topic-form">
+        <h3>Start a New Topic</h3>
+        <div class="form-error" id="topicError" role="alert"></div>
+        <div class="form-group">
+          <label class="form-label" for="topicCat">Category *</label>
+          <select class="form-select" id="topicCat">
+            <option value="">Select category…</option>
+            <option value="general">General</option>
+            <option value="academic">Academic</option>
+            <option value="resources">Resources</option>
+            <option value="events">Events</option>
+            <option value="technical">Technical</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="topicTitle">Title *</label>
+          <input class="form-input" id="topicTitle" placeholder="What's the topic about?">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="topicBody">Body *</label>
+          <textarea class="form-input form-textarea" id="topicBody" placeholder="Describe your topic in detail…"></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn-cancel-form" id="cancelTopicBtn">Cancel</button>
+          <button class="btn-post-reply" id="submitTopicBtn">Post Topic</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+  import { collection, getDocs, addDoc, updateDoc, getDoc,
+           doc as fsDoc, query, orderBy, serverTimestamp, increment }
+    from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+  let db;
+  let allTopics    = [];
+  let currentCat   = 'all';
+  let currentUser  = null;
+  let openTopicId  = null;
+
+  const CAT_BADGE = {
+    general:   '<span class="badge badge-general">General</span>',
+    academic:  '<span class="badge badge-academic">Academic</span>',
+    resources: '<span class="badge badge-resources">Resources</span>',
+    events:    '<span class="badge badge-events">Events</span>',
+    technical: '<span class="badge badge-technical">Technical</span>',
+  };
+  const CAT_LABEL = { all:'All Topics', general:'General', academic:'Academic', resources:'Resources', events:'Events', technical:'Technical' };
+
+  // ===== Auth ready =====
+  document.addEventListener('authReady', async ({ detail: { user } }) => {
+    db = window.db;
+    currentUser = user;
+    await loadTopics();
+    bindEvents();
+  });
+
+  // ===== Load all topics =====
+  async function loadTopics() {
+    try {
+      const snap = await getDocs(query(collection(db, 'topics'), orderBy('createdAt','desc')));
+      allTopics = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateCounts();
+      renderTopics();
+    } catch(e) {
+      document.getElementById('topicList').innerHTML = '<div class="empty-state">Could not load topics.</div>';
+    }
+  }
+
+  function updateCounts() {
+    const cats = ['general','academic','resources','events','technical'];
+    document.getElementById('cnt-all').textContent = allTopics.length;
+    cats.forEach(c => {
+      document.getElementById('cnt-'+c).textContent = allTopics.filter(t => t.category === c).length;
+    });
+    document.getElementById('totalTopics').textContent  = allTopics.length;
+    const totalReplies = allTopics.reduce((sum, t) => sum + (t.replyCount || 0), 0);
+    document.getElementById('totalReplies').textContent = totalReplies;
+  }
+
+  // ===== Category select =====
+  function selectCat(cat) {
+    currentCat = cat;
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+    document.getElementById('listTitle').textContent = CAT_LABEL[cat] || cat;
+    renderTopics();
+    showView('list');
+  }
+
+  // ===== Render topics =====
+  function renderTopics() {
+    const q    = document.getElementById('searchInput').value.toLowerCase();
+    const sort = document.getElementById('sortSelect').value;
+    let list   = allTopics.filter(t =>
+      (currentCat === 'all' || t.category === currentCat) &&
+      (!q || t.title?.toLowerCase().includes(q) || t.author?.toLowerCase().includes(q))
+    );
+    list = [...list].sort((a, b) => {
+      if (sort === 'replies') return (b.replyCount||0) - (a.replyCount||0);
+      if (sort === 'oldest')  return (a.createdAt?.toMillis?.()||0) - (b.createdAt?.toMillis?.()||0);
+      return (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0);
+    });
+    const el = document.getElementById('topicList');
+    if (!list.length) { el.innerHTML = '<div class="empty-state">No topics yet. Be the first to start one!</div>'; return; }
+    el.innerHTML = list.map(t => {
+      const initials = (t.author||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+      const date = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
+      return `
+        <div class="topic-row" onclick="openThread('${t.id}')" role="button" tabindex="0" aria-label="Open topic: ${esc(t.title)}">
+          <div class="topic-avatar" aria-hidden="true">${initials}</div>
+          <div class="topic-body">
+            <div class="topic-title-row">
+              ${CAT_BADGE[t.category]||''}
+              <span class="topic-title">${esc(t.title||'Untitled')}</span>
+            </div>
+            <p class="topic-meta">${esc(t.author||'Anonymous')} &middot; ${date}</p>
+          </div>
+          <div class="topic-stats">
+            <div class="topic-stat-item"><span class="topic-stat-val">${t.replyCount||0}</span><span class="topic-stat-lbl">Replies</span></div>
+          </div>
+        </div>`;
+    }).join('');
+    // keyboard enter support
+    el.querySelectorAll('.topic-row').forEach(row => {
+      row.addEventListener('keydown', e => { if (e.key === 'Enter') row.click(); });
+    });
+  }
+
+  // ===== Open thread =====
+  async function openThread(id) {
+    openTopicId = id;
+    const topic = allTopics.find(t => t.id === id);
+    if (!topic) return;
+    showView('thread');
+    document.getElementById('threadCat').innerHTML  = CAT_BADGE[topic.category] || '';
+    document.getElementById('threadTitle').textContent = topic.title || 'Untitled';
+    document.getElementById('replyText').value = '';
+    document.getElementById('replyError').classList.remove('visible');
+
+    const initials = (topic.author||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const date = topic.createdAt?.toDate ? topic.createdAt.toDate().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) : '';
+    document.getElementById('threadPosts').innerHTML = `
+      <div class="post op">
+        <div class="post-head">
+          <div class="post-avatar" aria-hidden="true">${initials}</div>
+          <div>
+            <p class="post-author">${esc(topic.author||'Anonymous')} <span class="post-op-label">OP</span></p>
+            <p class="post-date">${date}</p>
+          </div>
+        </div>
+        <p class="post-body">${esc(topic.body||'')}</p>
+      </div>`;
+
+    // Load replies
+    try {
+      const rSnap = await getDocs(query(collection(db, 'topics', id, 'replies'), orderBy('createdAt')));
+      const replies = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      document.getElementById('repliesHeading').textContent = replies.length ? `${replies.length} ${replies.length===1?'Reply':'Replies'}` : '';
+      if (!replies.length) { document.getElementById('replyList').innerHTML = ''; return; }
+      document.getElementById('replyList').innerHTML = replies.map(r => {
+        const ri = (r.author||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+        const rd = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+        return `<div class="post">
+          <div class="post-head">
+            <div class="post-avatar" aria-hidden="true">${ri}</div>
+            <div><p class="post-author">${esc(r.author||'Anonymous')}</p><p class="post-date">${rd}</p></div>
+          </div>
+          <p class="post-body">${esc(r.body||'')}</p>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      document.getElementById('replyList').innerHTML = '<p style="color:var(--ink-3);font-size:.85rem">Could not load replies.</p>';
+    }
+  }
+
+  // ===== Post reply =====
+  async function postReply() {
+    const body = document.getElementById('replyText').value.trim();
+    const errEl = document.getElementById('replyError');
+    if (!body) { errEl.textContent = 'Reply cannot be empty.'; errEl.classList.add('visible'); return; }
+    errEl.classList.remove('visible');
+    const btn = document.getElementById('postReplyBtn');
+    btn.disabled = true; btn.textContent = 'Posting…';
+    try {
+      await addDoc(collection(db, 'topics', openTopicId, 'replies'), {
+        body,
+        author:    currentUser.displayName || currentUser.email,
+        createdAt: serverTimestamp(),
+      });
+      await updateDoc(fsDoc(db, 'topics', openTopicId), {
+        replyCount: increment(1),
+        lastReply:  serverTimestamp(),
+      });
+      // Refresh topic in memory
+      const snap = await getDoc(fsDoc(db, 'topics', openTopicId));
+      const idx  = allTopics.findIndex(t => t.id === openTopicId);
+      if (idx >= 0) allTopics[idx] = { id: openTopicId, ...snap.data() };
+      document.getElementById('replyText').value = '';
+      await openThread(openTopicId);
+    } catch(e) {
+      errEl.textContent = e.message; errEl.classList.add('visible');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Post Reply';
+    }
+  }
+
+  // ===== New Topic =====
+  async function submitTopic() {
+    const cat   = document.getElementById('topicCat').value;
+    const title = document.getElementById('topicTitle').value.trim();
+    const body  = document.getElementById('topicBody').value.trim();
+    const errEl = document.getElementById('topicError');
+    if (!cat || !title || !body) { errEl.textContent = 'All fields are required.'; errEl.classList.add('visible'); return; }
+    errEl.classList.remove('visible');
+    const btn = document.getElementById('submitTopicBtn');
+    btn.disabled = true; btn.textContent = 'Posting…';
+    try {
+      const ref = await addDoc(collection(db, 'topics'), {
+        category: cat, title, body,
+        author:     currentUser.displayName || currentUser.email,
+        replyCount: 0,
+        createdAt:  serverTimestamp(),
+      });
+      await loadTopics();
+      openThread(ref.id);
+    } catch(e) {
+      errEl.textContent = e.message; errEl.classList.add('visible');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Post Topic';
+    }
+  }
+
+  // ===== View switching =====
+  function showView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+  }
+
+  // ===== Bind events =====
+  function bindEvents() {
+    document.getElementById('searchInput').addEventListener('input', renderTopics);
+    document.getElementById('sortSelect').addEventListener('change', renderTopics);
+    document.getElementById('newTopicBtn').addEventListener('click', () => {
+      document.getElementById('topicCat').value   = currentCat !== 'all' ? currentCat : '';
+      document.getElementById('topicTitle').value = '';
+      document.getElementById('topicBody').value  = '';
+      document.getElementById('topicError').classList.remove('visible');
+      showView('newTopic');
+    });
+    document.getElementById('backBtn').addEventListener('click', () => showView('list'));
+    document.getElementById('cancelTopicBtn').addEventListener('click', () => showView('list'));
+    document.getElementById('postReplyBtn').addEventListener('click', postReply);
+    document.getElementById('submitTopicBtn').addEventListener('click', submitTopic);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Expose onclick handlers to global scope (called from dynamic HTML)
+  window.selectCat  = selectCat;
+  window.openThread = openThread;
+</script>
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Announcements — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:#1c1c2e; --ink-2:#44445a; --ink-3:#8888a8;
+      --paper:#f7f6f3; --paper-2:#efede8; --white:#ffffff;
+      --border:#e0ddd6; --accent:#0891b2; --accent-dk:#0e7490;
+      --shadow-sm:0 1px 4px rgba(28,28,46,.07);
+      --shadow:0 3px 14px rgba(28,28,46,.10);
+      --shadow-lg:0 10px 40px rgba(28,28,46,.16);
+      --radius:10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+
+    /* NAV */
+    .top-nav { position: sticky; top: 0; z-index: 100; height: 62px; padding: 0 28px; display: flex; align-items: center; gap: 28px; background: rgba(5,5,16,0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+    .nav-brand-name { font-size: 1.05rem; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 2px; flex: 1; }
+    .nav-link { font-size: 0.875rem; font-weight: 500; color: rgba(255,255,255,0.6); text-decoration: none; padding: 6px 12px; border-radius: 6px; transition: color 0.2s, background 0.2s; }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.07); }
+    .nav-link.active { color: #fff; background: rgba(255,255,255,0.10); }
+    .nav-auth { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .nav-user-name { font-size: 0.875rem; color: rgba(255,255,255,0.65); }
+    .nav-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; color: #fff; flex-shrink: 0; user-select: none; }
+    .btn-logout { font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500; color: rgba(255,255,255,0.48); background: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: color 0.2s, border-color 0.2s; }
+    .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,0.28); }
+
+    /* PAGE LAYOUT */
+    .page-layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 62px); }
+
+    /* SIDEBAR */
+    .sidebar { background: var(--white); border-right: 1px solid var(--border); padding: 24px 16px; position: sticky; top: 62px; height: calc(100vh - 62px); overflow-y: auto; }
+    .sidebar-title { font-size: 0.7rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+    .sidebar-section { margin-bottom: 24px; }
+    .filter-label { font-size: 0.8rem; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; display: block; }
+    .filter-select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); outline: none; }
+    .filter-select:focus { border-color: var(--accent); }
+    .sidebar-stat { display: flex; justify-content: space-between; align-items: center; font-size: 0.83rem; color: var(--ink-2); padding: 6px 0; border-bottom: 1px solid var(--paper-2); }
+    .sidebar-stat:last-child { border-bottom: none; }
+    .sidebar-stat-val { font-weight: 600; color: var(--ink); }
+
+    /* MAIN */
+    .main-content { padding: 28px 32px; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; flex-wrap: gap; gap: 12px; }
+    .main-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .btn-add { display: none; align-items: center; gap: 6px; padding: 9px 16px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: opacity 0.2s, transform 0.15s; }
+    .btn-add:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* ANNOUNCEMENT CARDS */
+    .announcements-list { display: flex; flex-direction: column; gap: 16px; }
+    .ann-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s, transform 0.2s; }
+    .ann-card:hover { box-shadow: var(--shadow); }
+    .ann-card.pinned { border-left: 3px solid #d97706; }
+    .ann-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .ann-title-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ann-title { font-size: 1.05rem; font-weight: 600; color: var(--ink); line-height: 1.3; }
+    .ann-body { font-size: 0.88rem; color: var(--ink-2); line-height: 1.65; margin-bottom: 14px; }
+    .ann-body.truncated { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .ann-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .ann-author { display: flex; align-items: center; gap: 8px; }
+    .ann-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); display: flex; align-items: center; justify-content: center; font-size: 0.68rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .ann-meta { font-size: 0.8rem; color: var(--ink-3); }
+    .ann-actions { display: flex; align-items: center; gap: 8px; }
+    .btn-readmore { font-size: 0.82rem; font-weight: 500; color: var(--accent); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; }
+    .btn-readmore:hover { color: var(--accent-dk); }
+    .btn-icon { background: none; border: 1px solid var(--border); border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-3); transition: color 0.2s, border-color 0.2s; }
+    .btn-icon:hover { color: var(--ink); border-color: #bbb; }
+    .btn-icon.pin-active { color: #d97706; border-color: #d97706; background: #fef3c7; }
+    .btn-icon-delete { color: var(--ink-3); }
+    .btn-icon-delete:hover { color: #dc2626; border-color: #fca5a5; background: #fee2e2; }
+    .admin-actions { display: none; align-items: center; gap: 6px; }
+    .admin-actions.visible { display: flex; }
+
+    /* BADGES */
+    .badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+    .badge-amber  { background: #fef3c7; color: #92400e; }
+    .badge-teal   { background: #e0f2fe; color: #0e7490; }
+    .badge-purple { background: #ede9fe; color: #5b21b6; }
+    .badge-green  { background: #dcfce7; color: #166534; }
+    .badge-orange { background: #ffedd5; color: #9a3412; }
+
+    /* PLATFORM CHECKBOXES (modal) */
+    .platform-checks { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 2px; }
+    .platform-check-item { display: flex; align-items: center; gap: 7px; font-size: 0.875rem; color: var(--ink-2); cursor: pointer; user-select: none; }
+    .platform-check-item input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+    /* PLATFORM CHIPS (card list) */
+    .ann-platforms { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+    .plat-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; border: 1px solid transparent; }
+    .plat-chip svg { flex-shrink: 0; }
+    .plat-on-central  { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+    .plat-on-academic { background: #e0f2fe; color: #0e7490; border-color: #7dd3fc; }
+    .plat-on-teachers { background: #dcfce7; color: #166534; border-color: #86efac; }
+    .plat-off { background: var(--paper-2); color: var(--ink-3); border-color: var(--border); opacity: 0.55; }
+
+    /* EMPTY / SKELETON */
+    .empty-state { padding: 60px; text-align: center; color: var(--ink-3); font-size: 0.9rem; }
+    .skel { background: linear-gradient(90deg,var(--paper-2) 25%,var(--paper) 50%,var(--paper-2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; display: block; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* MODAL */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(28,28,46,0.55); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 24px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--white); border-radius: 14px; width: 100%; max-width: 560px; box-shadow: var(--shadow-lg); animation: modalIn 0.25s ease; max-height: 90vh; display: flex; flex-direction: column; }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-head h3 { font-size: 1rem; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 1.4rem; color: var(--ink-3); cursor: pointer; line-height: 1; padding: 0; transition: color 0.2s; }
+    .modal-close:hover { color: var(--ink); }
+    .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+    .modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-label { font-size: 0.82rem; font-weight: 500; color: var(--ink-2); }
+    .form-input { padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: var(--ink); background: var(--paper); outline: none; transition: border-color 0.2s; }
+    .form-input:focus { border-color: var(--accent); background: var(--white); }
+    .form-input::placeholder { color: var(--ink-3); }
+    .form-textarea { resize: vertical; min-height: 140px; line-height: 1.6; }
+    .form-check { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; color: var(--ink-2); cursor: pointer; }
+    .form-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+    .btn-cancel { padding: 9px 18px; background: none; border: 1px solid var(--border); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink-2); cursor: pointer; }
+    .btn-cancel:hover { border-color: #bbb; }
+    .btn-save { padding: 9px 20px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+    .btn-save:hover { opacity: 0.88; }
+    .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+    .modal-error { font-size: 0.82rem; color: #dc2626; background: #fee2e2; border-radius: 6px; padding: 8px 12px; display: none; }
+    .modal-error.visible { display: block; }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .page-layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 16px; }
+      .main-content { padding: 20px 16px; }
+      .nav-links { display: none; }
+    }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+</head>
+<body>
+
+<nav class="top-nav" aria-label="Main navigation">
+  <a href="index" class="nav-brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="6" fill="#8b5cf6"/>
+      <circle cx="16" cy="4.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <circle cx="27.5" cy="22.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <circle cx="4.5" cy="22.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <line x1="16" y1="10" x2="16" y2="7.7" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="21" y1="19.4" x2="24.7" y2="21.2" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="11" y1="19.4" x2="7.3" y2="21.2" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span class="nav-brand-name">CentralHub</span>
+  </a>
+  <div class="nav-links">
+    <a href="index" class="nav-link">Dashboard</a>
+    <a href="https://teachershub.eduversal.org" class="nav-link" id="navTeachersHub" target="_blank" rel="noopener">Teachers Hub</a>
+    <a href="https://academichub.eduversal.org" class="nav-link" id="navAcademicHub" target="_blank" rel="noopener">Academic Hub</a>
+  </div>
+  <div class="nav-auth">
+    <span class="nav-user-name"></span>
+    <div class="nav-avatar" id="navAvatar" aria-hidden="true"></div>
+    <button class="btn-logout" id="logoutBtn">Sign out</button>
+  </div>
+</nav>
+
+<div class="page-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" aria-label="Filters">
+    <div class="sidebar-section">
+      <p class="sidebar-title">Filter</p>
+      <label class="filter-label" for="showFilter">Show</label>
+      <select class="filter-select" id="showFilter">
+        <option value="all">All announcements</option>
+        <option value="pinned">Pinned only</option>
+      </select>
+    </div>
+    <div class="sidebar-section">
+      <label class="filter-label" for="sortFilter">Sort by</label>
+      <select class="filter-select" id="sortFilter">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+      </select>
+    </div>
+    <div class="sidebar-section">
+      <p class="sidebar-title">Stats</p>
+      <div class="sidebar-stat"><span>Total</span><span class="sidebar-stat-val" id="statTotal">—</span></div>
+      <div class="sidebar-stat"><span>Pinned</span><span class="sidebar-stat-val" id="statPinned">—</span></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-content">
+    <div class="main-header">
+      <h1>Announcements</h1>
+      <button class="btn-add" id="addAnnBtn" aria-label="Create announcement">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        New Announcement
+      </button>
+    </div>
+    <div class="announcements-list" id="annList">
+      <!-- skeleton -->
+      <div class="ann-card"><span class="skel" style="height:20px;width:60%;margin-bottom:10px"></span><span class="skel" style="height:14px;width:100%;margin-bottom:6px"></span><span class="skel" style="height:14px;width:80%"></span></div>
+      <div class="ann-card"><span class="skel" style="height:20px;width:45%;margin-bottom:10px"></span><span class="skel" style="height:14px;width:100%;margin-bottom:6px"></span><span class="skel" style="height:14px;width:70%"></span></div>
+    </div>
+  </main>
+</div>
+
+<!-- CREATE / EDIT MODAL -->
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">New Announcement</h3>
+      <button class="modal-close" id="modalClose" aria-label="Close">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-error" id="modalError" role="alert"></div>
+      <div class="form-group">
+        <label class="form-label" for="fieldTitle">Title *</label>
+        <input class="form-input" id="fieldTitle" placeholder="Announcement title…">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="fieldBody">Content *</label>
+        <textarea class="form-input form-textarea" id="fieldBody" placeholder="Write the announcement body…"></textarea>
+      </div>
+      <label class="form-check">
+        <input type="checkbox" id="fieldPinned">
+        Pin this announcement to the top
+      </label>
+      <div class="form-group">
+        <label class="form-label">Publish to</label>
+        <div class="platform-checks">
+          <label class="platform-check-item">
+            <input type="checkbox" id="platCentral" checked>
+            CentralHub
+          </label>
+          <label class="platform-check-item">
+            <input type="checkbox" id="platAcademic">
+            Academic Hub
+          </label>
+          <label class="platform-check-item">
+            <input type="checkbox" id="platTeachers">
+            Teachers Hub
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="cancelBtn">Cancel</button>
+      <button class="btn-save"   id="saveBtn">Publish</button>
+    </div>
+  </div>
+</div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+  import { collection, getDocs, addDoc, updateDoc, deleteDoc,
+           doc as fsDoc, query, orderBy, serverTimestamp }
+    from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+  let db;
+  let allAnns   = [];
+  let isAdmin   = false;
+  let editingId = null;
+  let currentUser = null;
+
+  document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
+    db = window.db;
+    currentUser = user;
+    isAdmin = profile.role === 'central_admin';
+    if (isAdmin) document.getElementById('addAnnBtn').style.display = 'flex';
+    await loadAnnouncements();
+    bindControls();
+  });
+
+  // ===== Load =====
+  async function loadAnnouncements() {
+    try {
+      const snap = await getDocs(query(collection(db, 'announcements'), orderBy('createdAt','desc')));
+      // Show all announcements that target centralhub, or legacy ones with no platforms field
+      allAnns = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                         .filter(a => !a.platforms || a.platforms.includes('centralhub'));
+      updateStats();
+      applyFilters();
+    } catch(e) {
+      document.getElementById('annList').innerHTML = '<div class="empty-state">Could not load announcements.</div>';
+    }
+  }
+
+  function updateStats() {
+    document.getElementById('statTotal').textContent  = allAnns.length;
+    document.getElementById('statPinned').textContent = allAnns.filter(a => a.pinned).length;
+  }
+
+  // ===== Filters =====
+  function bindControls() {
+    document.getElementById('showFilter').addEventListener('change', applyFilters);
+    document.getElementById('sortFilter').addEventListener('change', applyFilters);
+    document.getElementById('addAnnBtn').addEventListener('click', openAddModal);
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('cancelBtn').addEventListener('click', closeModal);
+    document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+    document.getElementById('saveBtn').addEventListener('click', saveAnn);
+  }
+
+  function applyFilters() {
+    const show = document.getElementById('showFilter').value;
+    const sort = document.getElementById('sortFilter').value;
+    let list = allAnns.filter(a => show === 'pinned' ? a.pinned : true);
+    list = [...list].sort((a, b) => {
+      const ta = a.createdAt?.toMillis?.() || 0;
+      const tb = b.createdAt?.toMillis?.() || 0;
+      return sort === 'oldest' ? ta - tb : tb - ta;
+    });
+    // Pinned first regardless of sort
+    list.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    renderAnns(list);
+  }
+
+  // ===== Render =====
+  function renderAnns(list) {
+    const el = document.getElementById('annList');
+    if (!list.length) { el.innerHTML = '<div class="empty-state">No announcements found.</div>'; return; }
+
+    el.innerHTML = list.map(a => {
+      const date     = a.createdAt?.toDate ? a.createdAt.toDate().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '';
+      const author   = a.author || 'Admin';
+      const initials = author.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+      const pinClass = a.pinned ? ' pinned' : '';
+      const pinBadge = a.pinned ? '<span class="badge badge-amber">Pinned</span>' : '';
+      const plats = a.platforms || ['centralhub'];
+      const checkOn  = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      const checkOff = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      const platBadges = [
+        plats.includes('centralhub')
+          ? `<span class="plat-chip plat-on-central">${checkOn} CentralHub</span>`
+          : `<span class="plat-chip plat-off">${checkOff} CentralHub</span>`,
+        plats.includes('academichub')
+          ? `<span class="plat-chip plat-on-academic">${checkOn} Academic Hub</span>`
+          : `<span class="plat-chip plat-off">${checkOff} Academic Hub</span>`,
+        plats.includes('teachershub')
+          ? `<span class="plat-chip plat-on-teachers">${checkOn} Teachers Hub</span>`
+          : `<span class="plat-chip plat-off">${checkOff} Teachers Hub</span>`,
+      ].join('');
+      const adminActions = isAdmin ? `
+        <div class="admin-actions visible">
+          <button class="btn-icon ${a.pinned?'pin-active':''}" onclick="togglePin('${a.id}',${!!a.pinned})" aria-label="${a.pinned?'Unpin':'Pin'} announcement" title="${a.pinned?'Unpin':'Pin'}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="${a.pinned?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </button>
+          <button class="btn-icon" onclick="editAnn('${a.id}')" aria-label="Edit" title="Edit">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon btn-icon-delete" onclick="deleteAnn('${a.id}')" aria-label="Delete" title="Delete">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>` : '';
+
+      return `
+        <article class="ann-card${pinClass}" id="ann-${a.id}">
+          <div class="ann-top">
+            <div class="ann-title-wrap">
+              <h2 class="ann-title">${esc(a.title||'Untitled')}</h2>
+              ${pinBadge}
+            </div>
+            ${adminActions}
+          </div>
+          <p class="ann-body truncated" id="body-${a.id}">${esc(a.body||'').replace(/\n/g,'<br>')}</p>
+          <div class="ann-platforms">${platBadges}</div>
+          <div class="ann-footer">
+            <div class="ann-author">
+              <div class="ann-avatar" aria-hidden="true">${initials}</div>
+              <span class="ann-meta">${esc(author)} &middot; ${date}</span>
+            </div>
+            <button class="btn-readmore" onclick="toggleRead('${a.id}')" data-expanded="false">Read more</button>
+          </div>
+        </article>`;
+    }).join('');
+  }
+
+  function toggleRead(id) {
+    const body = document.getElementById('body-'+id);
+    const btn  = body.closest('.ann-card').querySelector('.btn-readmore');
+    const expanded = btn.dataset.expanded === 'true';
+    body.classList.toggle('truncated', expanded);
+    btn.textContent      = expanded ? 'Read more' : 'Show less';
+    btn.dataset.expanded = String(!expanded);
+  }
+
+  // ===== Toggle Pin =====
+  async function togglePin(id, currentlyPinned) {
+    try {
+      await updateDoc(fsDoc(db, 'announcements', id), { pinned: !currentlyPinned });
+      await loadAnnouncements();
+    } catch(e) { alert(e.message); }
+  }
+
+  // ===== Delete =====
+  async function deleteAnn(id) {
+    if (!confirm('Delete this announcement? This cannot be undone.')) return;
+    try {
+      await deleteDoc(fsDoc(db, 'announcements', id));
+      allAnns = allAnns.filter(a => a.id !== id);
+      updateStats();
+      applyFilters();
+    } catch(e) { alert(e.message); }
+  }
+
+  // ===== Modal =====
+  function openAddModal() {
+    editingId = null;
+    document.getElementById('modalTitle').textContent = 'New Announcement';
+    document.getElementById('fieldTitle').value  = '';
+    document.getElementById('fieldBody').value   = '';
+    document.getElementById('fieldPinned').checked = false;
+    document.getElementById('platCentral').checked  = true;
+    document.getElementById('platAcademic').checked = false;
+    document.getElementById('platTeachers').checked = false;
+    document.getElementById('saveBtn').textContent = 'Publish';
+    hideErr();
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('fieldTitle').focus();
+  }
+
+  function editAnn(id) {
+    const a = allAnns.find(x => x.id === id);
+    if (!a) return;
+    editingId = id;
+    document.getElementById('modalTitle').textContent = 'Edit Announcement';
+    document.getElementById('fieldTitle').value   = a.title  || '';
+    document.getElementById('fieldBody').value    = a.body   || '';
+    document.getElementById('fieldPinned').checked = !!a.pinned;
+    const plats = a.platforms || ['centralhub'];
+    document.getElementById('platCentral').checked  = plats.includes('centralhub');
+    document.getElementById('platAcademic').checked = plats.includes('academichub');
+    document.getElementById('platTeachers').checked = plats.includes('teachershub');
+    document.getElementById('saveBtn').textContent = 'Update';
+    hideErr();
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('fieldTitle').focus();
+  }
+
+  function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+  function showErr(msg) { const e = document.getElementById('modalError'); e.textContent = msg; e.classList.add('visible'); }
+  function hideErr()    { document.getElementById('modalError').classList.remove('visible'); }
+
+  async function saveAnn() {
+    const title  = document.getElementById('fieldTitle').value.trim();
+    const body   = document.getElementById('fieldBody').value.trim();
+    const pinned = document.getElementById('fieldPinned').checked;
+    if (!title || !body) { showErr('Title and content are required.'); return; }
+
+    const platforms = [];
+    if (document.getElementById('platCentral').checked)  platforms.push('centralhub');
+    if (document.getElementById('platAcademic').checked) platforms.push('academichub');
+    if (document.getElementById('platTeachers').checked) platforms.push('teachershub');
+    if (!platforms.length) { showErr('At least one platform must be selected.'); return; }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      if (editingId) {
+        await updateDoc(fsDoc(db, 'announcements', editingId), { title, body, pinned, platforms });
+      } else {
+        await addDoc(collection(db, 'announcements'), {
+          title, body, pinned, platforms,
+          author:    currentUser.displayName || currentUser.email,
+          createdAt: serverTimestamp(),
+        });
+      }
+      closeModal();
+      await loadAnnouncements();
+    } catch(e) {
+      showErr(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = editingId ? 'Update' : 'Publish';
+    }
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Expose onclick handlers to global scope (called from dynamic HTML)
+  window.togglePin  = togglePin;
+  window.editAnn    = editAnn;
+  window.deleteAnn  = deleteAnn;
+  window.toggleRead = toggleRead;
+</script>
+</body>
+</html>
