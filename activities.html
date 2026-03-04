@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activities — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Design Tokens ===== */
+    :root {
+      --ink:       #1c1c2e;
+      --ink-2:     #44445a;
+      --ink-3:     #8888a8;
+      --paper:     #f7f6f3;
+      --paper-2:   #efede8;
+      --white:     #ffffff;
+      --border:    #e0ddd6;
+      --accent:    #0891b2;
+      --accent-dk: #0e7490;
+      --accent-2:  #e0f2fe;
+      --shadow-sm: 0 1px 4px rgba(28,28,46,.07);
+      --shadow:    0 3px 14px rgba(28,28,46,.10);
+      --shadow-lg: 0 10px 40px rgba(28,28,46,.16);
+      --radius:    10px;
+      --panel-w:   400px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+
+    /* ===== TOP NAV ===== */
+    .top-nav { position: sticky; top: 0; z-index: 300; height: 62px; padding: 0 28px; display: flex; align-items: center; gap: 28px; background: rgba(5,5,16,0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+    .nav-brand-name { font-size: 1.05rem; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 2px; flex: 1; }
+    .nav-link { font-size: 0.875rem; font-weight: 500; color: rgba(255,255,255,0.6); text-decoration: none; padding: 6px 12px; border-radius: 6px; transition: color 0.2s, background 0.2s; }
+    .nav-link:hover  { color: #fff; background: rgba(255,255,255,0.07); }
+    .nav-link.active { color: #fff; background: rgba(255,255,255,0.10); }
+    .nav-auth { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .nav-user-name { font-size: 0.875rem; color: rgba(255,255,255,0.65); }
+    .nav-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; color: #fff; flex-shrink: 0; user-select: none; }
+    .btn-logout { font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500; color: rgba(255,255,255,0.48); background: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: color 0.2s, border-color 0.2s; }
+    .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,0.28); }
+
+    /* ===== PAGE LAYOUT ===== */
+    .page-layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 62px); }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar { background: var(--white); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 62px; height: calc(100vh - 62px); overflow-y: auto; }
+    .sidebar-header { padding: 18px 16px 10px; border-bottom: 1px solid var(--border); }
+    .sidebar-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .sidebar-heading { font-size: 0.7rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; }
+    .btn-new-board { display: flex; align-items: center; gap: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600; color: var(--accent); background: none; border: none; cursor: pointer; padding: 3px 6px; border-radius: 5px; transition: background 0.15s; }
+    .btn-new-board:hover { background: var(--accent-2); }
+    .btn-new-board svg { flex-shrink: 0; }
+
+    .project-list { padding: 8px 8px; flex: 1; }
+    .project-item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 7px; cursor: pointer; transition: background 0.15s; user-select: none; }
+    .project-item:hover  { background: var(--paper); }
+    .project-item.active { background: var(--paper-2); }
+    .project-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .project-name { font-size: 0.875rem; font-weight: 500; color: var(--ink); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .project-count { font-size: 0.72rem; font-weight: 600; color: var(--ink-3); background: var(--paper-2); border-radius: 10px; padding: 1px 7px; flex-shrink: 0; }
+    .sidebar-empty { font-size: 0.84rem; color: var(--ink-3); padding: 16px 10px; text-align: center; }
+
+    /* ===== MAIN AREA ===== */
+    .main-area { display: flex; flex-direction: column; min-width: 0; }
+
+    /* Project header */
+    .project-header { padding: 20px 28px 0; background: var(--white); border-bottom: 1px solid var(--border); }
+    .project-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .project-color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .project-title { font-family: 'Lora', serif; font-size: 1.35rem; font-weight: 600; color: var(--ink); }
+    .project-title-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .btn-delete-board { font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 500; color: #e11d48; background: none; border: 1px solid #fecdd3; border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: background 0.15s; }
+    .btn-delete-board:hover { background: #fff1f2; }
+    .project-stats-row { display: flex; gap: 0; border-top: 1px solid var(--border); margin: 0 -28px; }
+    .project-stat { display: flex; flex-direction: column; align-items: center; padding: 10px 20px; border-right: 1px solid var(--border); }
+    .project-stat:last-child { border-right: none; }
+    .ps-value { font-size: 1.15rem; font-weight: 600; color: var(--ink); line-height: 1; }
+    .ps-label { font-size: 0.72rem; color: var(--ink-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .ps-green .ps-value { color: #059669; }
+    .ps-blue  .ps-value { color: #0891b2; }
+    .ps-amber .ps-value { color: #d97706; }
+    .ps-red   .ps-value { color: #e11d48; }
+
+    /* Toolbar */
+    .toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 28px; border-bottom: 1px solid var(--border); background: var(--white); flex-wrap: wrap; }
+    .toolbar-search { flex: 1; min-width: 160px; max-width: 260px; position: relative; }
+    .toolbar-search svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+    .input-search { width: 100%; padding: 7px 10px 7px 32px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); outline: none; transition: border-color 0.2s; }
+    .input-search:focus { border-color: var(--accent); background: var(--white); }
+    .filter-select { padding: 7px 28px 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); outline: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238888a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; cursor: pointer; }
+    .filter-select:focus { border-color: var(--accent); }
+    .toolbar-spacer { flex: 1; }
+    .btn-add-task { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; transition: opacity 0.2s, transform 0.15s; white-space: nowrap; }
+    .btn-add-task:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* Empty state */
+    .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 40px; text-align: center; }
+    .empty-icon { width: 64px; height: 64px; border-radius: 16px; background: var(--paper-2); display: flex; align-items: center; justify-content: center; color: var(--ink-3); margin: 0 auto 20px; }
+    .empty-title { font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+    .empty-sub { font-size: 0.875rem; color: var(--ink-3); line-height: 1.6; max-width: 340px; }
+
+    /* ===== TASK TABLE ===== */
+    .table-wrap { flex: 1; overflow-x: auto; overflow-y: auto; }
+    .task-table { width: 100%; border-collapse: collapse; }
+    .task-table th { font-size: 0.72rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; padding: 10px 16px; text-align: left; background: var(--paper); border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+    .task-table td { padding: 12px 16px; font-size: 0.875rem; color: var(--ink-2); border-bottom: 1px solid var(--paper-2); vertical-align: middle; }
+    .task-row { cursor: pointer; transition: background 0.12s; }
+    .task-row:hover  { background: var(--paper); }
+    .task-row.selected { background: var(--accent-2); }
+    .task-name-cell { font-weight: 500; color: var(--ink); max-width: 260px; }
+    .task-name-cell s { color: var(--ink-3); font-weight: 400; }
+    .assignee-cell { white-space: nowrap; }
+    .due-overdue { color: #e11d48; font-weight: 500; }
+
+    /* Badges */
+    .status-badge, .priority-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    /* Progress */
+    .progress-wrap { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+    .progress-bar { flex: 1; height: 6px; background: var(--paper-2); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+    .progress-label { font-size: 0.75rem; color: var(--ink-3); font-variant-numeric: tabular-nums; width: 30px; text-align: right; flex-shrink: 0; }
+
+    /* ===== DETAIL PANEL ===== */
+    .detail-panel { position: fixed; right: calc(-1 * var(--panel-w) - 4px); top: 62px; width: var(--panel-w); height: calc(100vh - 62px); background: var(--white); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); z-index: 200; display: flex; flex-direction: column; transition: right 0.3s cubic-bezier(.4,0,.2,1); }
+    .detail-panel.open { right: 0; }
+
+    .detail-panel-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .detail-panel-title { font-size: 0.78rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; flex: 1; }
+    .btn-close-panel { background: none; border: none; cursor: pointer; color: var(--ink-3); padding: 4px; border-radius: 5px; display: flex; align-items: center; justify-content: center; transition: color 0.15s, background 0.15s; }
+    .btn-close-panel:hover { color: var(--ink); background: var(--paper-2); }
+
+    .detail-panel-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+    .detail-name { font-family: 'DM Sans', sans-serif; font-size: 1.05rem; font-weight: 600; color: var(--ink); width: 100%; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; margin: -6px -8px 16px; outline: none; resize: none; line-height: 1.4; transition: border-color 0.2s; background: transparent; }
+    .detail-name:focus { border-color: var(--accent); background: var(--white); }
+    .detail-name:read-only { cursor: default; }
+
+    .detail-field { margin-bottom: 16px; }
+    .detail-label { font-size: 0.72rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; display: block; }
+    .detail-select, .detail-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink); background: var(--paper); outline: none; transition: border-color 0.2s; }
+    .detail-select:focus, .detail-input:focus { border-color: var(--accent); background: var(--white); }
+    .detail-select:disabled, .detail-input:disabled { opacity: 0.6; cursor: not-allowed; }
+    .detail-textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink); background: var(--paper); outline: none; resize: vertical; min-height: 90px; line-height: 1.55; transition: border-color 0.2s; }
+    .detail-textarea:focus { border-color: var(--accent); background: var(--white); }
+    .detail-textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .progress-slider-row { display: flex; align-items: center; gap: 10px; }
+    .progress-slider { flex: 1; accent-color: var(--accent); }
+    .progress-slider-val { font-size: 0.84rem; font-weight: 600; color: var(--ink); width: 36px; text-align: right; }
+
+    .detail-panel-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; flex-shrink: 0; }
+    .btn-save-task { flex: 1; padding: 9px 16px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; transition: opacity 0.2s; }
+    .btn-save-task:hover { opacity: 0.88; }
+    .btn-delete-task { padding: 9px 14px; color: #e11d48; background: none; border: 1px solid #fecdd3; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; font-weight: 500; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 5px; }
+    .btn-delete-task:hover { background: #fff1f2; }
+
+    .save-feedback { font-size: 0.8rem; color: #059669; display: none; align-items: center; gap: 4px; }
+    .save-feedback.show { display: flex; }
+
+    /* ===== MODALS ===== */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 400; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: var(--white); border-radius: 14px; padding: 28px; width: 460px; max-width: 100%; box-shadow: var(--shadow-lg); animation: modalIn 0.2s ease; }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: none; } }
+    .modal-title { font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 600; color: var(--ink); margin-bottom: 20px; }
+    .form-field { margin-bottom: 16px; }
+    .form-label { font-size: 0.78rem; font-weight: 600; color: var(--ink-2); display: block; margin-bottom: 6px; }
+    .form-input, .form-select, .form-textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink); background: var(--paper); outline: none; transition: border-color 0.2s; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); background: var(--white); }
+    .form-textarea { resize: vertical; min-height: 72px; line-height: 1.55; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Color picker */
+    .color-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+    .color-option { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s; flex-shrink: 0; }
+    .color-option:hover   { transform: scale(1.15); }
+    .color-option.selected { border-color: var(--ink); transform: scale(1.15); }
+
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+    .btn-cancel { padding: 8px 16px; background: none; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500; color: var(--ink-2); cursor: pointer; transition: border-color 0.15s; }
+    .btn-cancel:hover { border-color: #bbb; }
+    .btn-modal-save { padding: 8px 20px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; transition: opacity 0.2s; }
+    .btn-modal-save:hover { opacity: 0.88; }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; font-size: 0.875rem; padding: 10px 20px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 500; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ===== ADMIN-ONLY ELEMENTS ===== */
+    .admin-only { display: none; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 900px) {
+      .page-layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .detail-panel { width: 100%; right: -100%; }
+      .detail-panel.open { right: 0; }
+    }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .top-nav { gap: 16px; }
+    }
+    @media (max-width: 520px) {
+      .nav-user-name { display: none; }
+      .top-nav { padding: 0 16px; }
+    }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+</head>
+<body>
+
+<!-- ===== TOP NAV ===== -->
+<nav class="top-nav" aria-label="Main navigation">
+  <a href="index" class="nav-brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="6" fill="#8b5cf6"/>
+      <circle cx="16" cy="4.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <circle cx="27.5" cy="22.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <circle cx="4.5" cy="22.5" r="3.2" fill="#6d28d9" opacity="0.9"/>
+      <line x1="16" y1="10" x2="16" y2="7.7" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="21" y1="19.4" x2="24.7" y2="21.2" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="11" y1="19.4" x2="7.3" y2="21.2" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span class="nav-brand-name">CentralHub</span>
+  </a>
+  <div class="nav-links">
+    <a href="index" class="nav-link">Dashboard</a>
+    <a href="activities" class="nav-link active">Activities</a>
+    <a href="https://teachershub.eduversal.org" class="nav-link" target="_blank" rel="noopener">Teachers Hub</a>
+    <a href="https://academichub.eduversal.org" class="nav-link" target="_blank" rel="noopener">Academic Hub</a>
+  </div>
+  <div class="nav-auth">
+    <span class="nav-user-name" id="navUserName"></span>
+    <div class="nav-avatar" id="navAvatar" aria-hidden="true"></div>
+    <button class="btn-logout" id="logoutBtn">Sign out</button>
+  </div>
+</nav>
+
+<!-- ===== PAGE LAYOUT ===== -->
+<div class="page-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" aria-label="Activity boards">
+    <div class="sidebar-header">
+      <div class="sidebar-top">
+        <span class="sidebar-heading">Boards</span>
+        <button class="btn-new-board admin-only" id="btnNewBoard" onclick="openModal('newProjectModal')" title="New board">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          New
+        </button>
+      </div>
+    </div>
+    <div class="project-list" id="projectList">
+      <p class="sidebar-empty">Loading…</p>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <div class="main-area" id="mainArea">
+
+    <!-- Project header rendered here by JS -->
+    <div id="projectHeaderArea"></div>
+
+    <!-- Toolbar -->
+    <div class="toolbar" id="toolbar" style="display:none">
+      <div class="toolbar-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input class="input-search" id="searchInput" type="search" placeholder="Search tasks…" oninput="applyFilters()">
+      </div>
+      <select class="filter-select" id="statusFilter" onchange="applyFilters()">
+        <option value="all">All statuses</option>
+        <option value="todo">To Do</option>
+        <option value="in_progress">In Progress</option>
+        <option value="under_review">Under Review</option>
+        <option value="completed">Completed</option>
+        <option value="on_hold">On Hold</option>
+      </select>
+      <div class="toolbar-spacer"></div>
+      <button class="btn-add-task admin-only" id="btnAddTask" onclick="openModal('newTaskModal')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Add Task
+      </button>
+    </div>
+
+    <!-- Task Table -->
+    <div class="table-wrap" id="tableWrap" style="display:none">
+      <table class="task-table" aria-label="Task list">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Status</th>
+            <th>Assignee</th>
+            <th>Priority</th>
+            <th>Due Date</th>
+            <th>Progress</th>
+          </tr>
+        </thead>
+        <tbody id="taskTableBody">
+          <tr><td colspan="6" style="text-align:center;padding:48px;color:var(--ink-3)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty state (no boards) -->
+    <div class="empty-state" id="emptyBoards" style="display:none">
+      <div class="empty-icon" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+        </svg>
+      </div>
+      <p class="empty-title">No boards yet</p>
+      <p class="empty-sub" id="emptyBoardsSub">Activity boards appear here. Ask an admin to create one.</p>
+    </div>
+
+  </div><!-- /main-area -->
+</div><!-- /page-layout -->
+
+<!-- ===== DETAIL PANEL ===== -->
+<aside class="detail-panel" id="detailPanel" aria-label="Task details">
+  <div class="detail-panel-head">
+    <span class="detail-panel-title">Task Details</span>
+    <div class="save-feedback" id="saveFeedback">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      Saved
+    </div>
+    <button class="btn-close-panel" onclick="closeDetailPanel()" title="Close" aria-label="Close detail panel">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="detail-panel-body">
+
+    <!-- Task name -->
+    <textarea class="detail-name" id="detailTaskName" rows="2" placeholder="Task name…"></textarea>
+
+    <!-- Status (everyone can update) -->
+    <div class="detail-field">
+      <label class="detail-label" for="detailStatus">Status</label>
+      <select class="detail-select" id="detailStatus">
+        <option value="todo">To Do</option>
+        <option value="in_progress">In Progress</option>
+        <option value="under_review">Under Review</option>
+        <option value="completed">Completed</option>
+        <option value="on_hold">On Hold</option>
+      </select>
+    </div>
+
+    <!-- Assignee (admin only edit) -->
+    <div class="detail-field admin-only" id="fieldAssignee">
+      <label class="detail-label" for="detailAssignee">Assignee</label>
+      <input class="detail-input" id="detailAssignee" type="text" placeholder="Full name…">
+    </div>
+    <!-- Assignee display for non-admin -->
+    <div class="detail-field" id="fieldAssigneeView" style="display:none">
+      <label class="detail-label">Assignee</label>
+      <p id="detailAssigneeView" style="font-size:0.875rem;color:var(--ink-2);padding:2px 0"></p>
+    </div>
+
+    <!-- Priority (admin only edit) -->
+    <div class="detail-field admin-only" id="fieldPriority">
+      <label class="detail-label" for="detailPriority">Priority</label>
+      <select class="detail-select" id="detailPriority">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+
+    <!-- Due date (admin only edit) -->
+    <div class="detail-field admin-only" id="fieldDue">
+      <label class="detail-label" for="detailDueDate">Due Date</label>
+      <input class="detail-input" id="detailDueDate" type="date">
+    </div>
+
+    <!-- Progress (admin only edit) -->
+    <div class="detail-field admin-only" id="fieldProgress">
+      <label class="detail-label">Progress</label>
+      <div class="progress-slider-row">
+        <input class="progress-slider" id="detailProgress" type="range" min="0" max="100" step="5" value="0"
+               oninput="document.getElementById('detailProgressLabel').textContent = this.value + '%'">
+        <span class="progress-slider-val" id="detailProgressLabel">0%</span>
+      </div>
+    </div>
+
+    <!-- Description (admin edit, all view) -->
+    <div class="detail-field">
+      <label class="detail-label" for="detailDescription">Description</label>
+      <textarea class="detail-textarea" id="detailDescription" placeholder="Add a description…"></textarea>
+    </div>
+
+  </div><!-- /body -->
+
+  <div class="detail-panel-footer">
+    <button class="btn-save-task" onclick="saveTaskDetail()">Save Changes</button>
+    <button class="btn-delete-task admin-only" id="btnDeleteTask" onclick="deleteTask()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+      </svg>
+      Delete
+    </button>
+  </div>
+</aside>
+
+<!-- ===== MODAL: New Board ===== -->
+<div class="modal-overlay" id="newProjectModal" role="dialog" aria-modal="true" aria-label="New board">
+  <div class="modal-box">
+    <h2 class="modal-title">New Activity Board</h2>
+
+    <div class="form-field">
+      <label class="form-label" for="newProjectName">Board name *</label>
+      <input class="form-input" id="newProjectName" type="text" placeholder="e.g. Principals Workshop" maxlength="80">
+    </div>
+
+    <div class="form-field">
+      <label class="form-label" for="newProjectDesc">Description</label>
+      <textarea class="form-textarea" id="newProjectDesc" placeholder="Brief description of this board…" rows="2"></textarea>
+    </div>
+
+    <div class="form-field">
+      <label class="form-label">Colour</label>
+      <div class="color-picker" id="colorPicker"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('newProjectModal')">Cancel</button>
+      <button class="btn-modal-save" onclick="saveNewProject()">Create Board</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: New Task ===== -->
+<div class="modal-overlay" id="newTaskModal" role="dialog" aria-modal="true" aria-label="New task">
+  <div class="modal-box">
+    <h2 class="modal-title">Add Task</h2>
+
+    <div class="form-field">
+      <label class="form-label" for="newTaskName">Task name *</label>
+      <input class="form-input" id="newTaskName" type="text" placeholder="Describe the task…" maxlength="140">
+    </div>
+
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="newTaskStatus">Status</label>
+        <select class="form-select" id="newTaskStatus">
+          <option value="todo">To Do</option>
+          <option value="in_progress">In Progress</option>
+          <option value="under_review">Under Review</option>
+          <option value="completed">Completed</option>
+          <option value="on_hold">On Hold</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="newTaskPriority">Priority</label>
+        <select class="form-select" id="newTaskPriority">
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label" for="newTaskAssignee">Assignee</label>
+        <input class="form-input" id="newTaskAssignee" type="text" placeholder="Full name">
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="newTaskDue">Due Date</label>
+        <input class="form-input" id="newTaskDue" type="date">
+      </div>
+    </div>
+
+    <div class="form-field">
+      <label class="form-label" for="newTaskDesc">Description</label>
+      <textarea class="form-textarea" id="newTaskDesc" placeholder="Optional details…" rows="2"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('newTaskModal')">Cancel</button>
+      <button class="btn-modal-save" onclick="saveNewTask()">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="toast" id="toast" role="alert" aria-live="polite"></div>
+
+<!-- ===== SCRIPTS ===== -->
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+
+<script type="module">
+import {
+  collection, getDocs, addDoc, updateDoc, deleteDoc,
+  doc, query, where, orderBy, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const STATUS = {
+  todo:         { label: 'To Do',        color: '#6b7280', bg: '#f3f4f6' },
+  in_progress:  { label: 'In Progress',  color: '#0891b2', bg: '#e0f2fe' },
+  under_review: { label: 'Under Review', color: '#d97706', bg: '#fef3c7' },
+  completed:    { label: 'Completed',    color: '#059669', bg: '#d1fae5' },
+  on_hold:      { label: 'On Hold',      color: '#e11d48', bg: '#ffe4e6' },
+};
+const PRIORITY = {
+  low:    { label: 'Low',    color: '#059669', bg: '#d1fae5' },
+  medium: { label: 'Medium', color: '#d97706', bg: '#fef3c7' },
+  high:   { label: 'High',   color: '#e11d48', bg: '#ffe4e6' },
+};
+const PROJECT_COLORS = ['#7c3aed','#0891b2','#059669','#d97706','#e11d48','#4338ca','#0284c7','#64748b'];
+
+// ── State ──────────────────────────────────────────────────────────────────
+let db, isAdmin = false;
+let currentProjectId = null;
+let projects = [], tasks = [];
+let selectedTaskId = null;
+
+// ── Auth Ready ─────────────────────────────────────────────────────────────
+document.addEventListener('authReady', ({ detail: { user } }) => {
+  db = window.db;
+  isAdmin = window.userProfile?.role_centralhub === 'central_admin';
+
+  // Nav user info
+  const name = user.displayName || user.email || '';
+  document.getElementById('navUserName').textContent = name;
+  document.getElementById('navAvatar').textContent = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || '?';
+
+  // Logout
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    signOut(window.auth).then(() => { window.location.href = 'login'; });
+  });
+
+  // Show admin controls
+  if (isAdmin) {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    document.getElementById('emptyBoardsSub').textContent = 'Get started by creating your first activity board.';
+  }
+
+  initColorPicker();
+  loadProjects();
+});
+
+// ── Color Picker ───────────────────────────────────────────────────────────
+function initColorPicker() {
+  const picker = document.getElementById('colorPicker');
+  picker.innerHTML = PROJECT_COLORS.map((c, i) =>
+    `<span class="color-option ${i === 0 ? 'selected' : ''}" data-color="${c}"
+           style="background:${c}" onclick="selectColor(this)" title="${c}" role="button" tabindex="0"
+           onkeydown="if(event.key==='Enter'||event.key===' ')selectColor(this)"></span>`
+  ).join('');
+}
+window.selectColor = (el) => {
+  document.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+};
+
+// ── Load Projects ──────────────────────────────────────────────────────────
+async function loadProjects() {
+  try {
+    const snap = await getDocs(query(collection(db, 'activity_projects'), orderBy('createdAt', 'asc')));
+    projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderProjectList();
+    if (projects.length > 0) {
+      selectProject(projects[0].id);
+    } else {
+      showEmptyBoards();
+    }
+  } catch (err) {
+    console.error('loadProjects error:', err);
+    showToast('Failed to load boards.');
+  }
+}
+
+function renderProjectList() {
+  const list = document.getElementById('projectList');
+  if (projects.length === 0) {
+    list.innerHTML = '<p class="sidebar-empty">No boards yet.</p>';
+    return;
+  }
+  list.innerHTML = projects.map(p => `
+    <div class="project-item ${p.id === currentProjectId ? 'active' : ''}"
+         data-id="${p.id}" onclick="selectProject('${p.id}')" role="button" tabindex="0"
+         onkeydown="if(event.key==='Enter')selectProject('${p.id}')">
+      <span class="project-dot" style="background:${esc(p.color || '#7c3aed')}"></span>
+      <span class="project-name">${esc(p.name)}</span>
+      ${p.taskCount ? `<span class="project-count">${p.taskCount}</span>` : ''}
+    </div>`
+  ).join('');
+}
+
+// ── Select Project ─────────────────────────────────────────────────────────
+window.selectProject = async (projectId) => {
+  currentProjectId = projectId;
+  selectedTaskId = null;
+  closeDetailPanel();
+  renderProjectList();
+
+  const project = projects.find(p => p.id === projectId);
+  if (!project) return;
+
+  // Show toolbar + table
+  document.getElementById('emptyBoards').style.display = 'none';
+  document.getElementById('toolbar').style.display = '';
+  document.getElementById('tableWrap').style.display = '';
+  document.getElementById('taskTableBody').innerHTML =
+    '<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--ink-3)">Loading…</td></tr>';
+
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'activity_tasks'),
+      where('projectId', '==', projectId),
+      orderBy('createdAt', 'asc')
+    ));
+    tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderProjectHeader(project);
+    renderTaskTable();
+  } catch (err) {
+    console.error('selectProject error:', err);
+    showToast('Failed to load tasks.');
+  }
+};
+
+function showEmptyBoards() {
+  document.getElementById('projectHeaderArea').innerHTML = '';
+  document.getElementById('toolbar').style.display = 'none';
+  document.getElementById('tableWrap').style.display = 'none';
+  document.getElementById('emptyBoards').style.display = '';
+}
+
+// ── Render Project Header ──────────────────────────────────────────────────
+function renderProjectHeader(project) {
+  const total      = tasks.length;
+  const done       = tasks.filter(t => t.status === 'completed').length;
+  const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+  const onHold     = tasks.filter(t => t.status === 'on_hold').length;
+
+  const deleteBtnHtml = isAdmin
+    ? `<button class="btn-delete-board" onclick="confirmDeleteProject('${project.id}')">Delete Board</button>`
+    : '';
+
+  document.getElementById('projectHeaderArea').innerHTML = `
+    <div class="project-header">
+      <div class="project-title-row">
+        <span class="project-color-dot" style="background:${esc(project.color || '#7c3aed')}"></span>
+        <h1 class="project-title">${esc(project.name)}</h1>
+        <div class="project-title-actions">${deleteBtnHtml}</div>
+      </div>
+      <div class="project-stats-row">
+        <div class="project-stat"><span class="ps-value">${total}</span><span class="ps-label">Total</span></div>
+        <div class="project-stat ps-green"><span class="ps-value">${done}</span><span class="ps-label">Done</span></div>
+        <div class="project-stat ps-blue"><span class="ps-value">${inProgress}</span><span class="ps-label">In Progress</span></div>
+        <div class="project-stat ps-red"><span class="ps-value">${onHold}</span><span class="ps-label">On Hold</span></div>
+      </div>
+    </div>`;
+}
+
+// ── Render Task Table ──────────────────────────────────────────────────────
+function renderTaskTable(filterStatus = 'all', search = '') {
+  let rows = tasks;
+  if (filterStatus !== 'all') rows = rows.filter(t => t.status === filterStatus);
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(t =>
+      t.name.toLowerCase().includes(q) ||
+      (t.assignee || '').toLowerCase().includes(q)
+    );
+  }
+
+  const tbody = document.getElementById('taskTableBody');
+  if (rows.length === 0) {
+    const msg = tasks.length === 0
+      ? (isAdmin ? 'No tasks yet. Click "Add Task" to get started.' : 'No tasks yet.')
+      : 'No tasks match your filter.';
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px;color:var(--ink-3)">${esc(msg)}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(task => {
+    const s   = STATUS[task.status]   || STATUS.todo;
+    const p   = PRIORITY[task.priority] || PRIORITY.medium;
+    const due = task.dueDate ? formatDate(task.dueDate) : '—';
+    const isOverdue = task.dueDate && task.status !== 'completed' && new Date(task.dueDate) < new Date();
+    const pct = task.progress || 0;
+
+    return `
+      <tr class="task-row ${task.id === selectedTaskId ? 'selected' : ''}"
+          data-id="${task.id}" onclick="openDetailPanel('${task.id}')">
+        <td class="task-name-cell">
+          ${task.status === 'completed' ? `<s>${esc(task.name)}</s>` : esc(task.name)}
+        </td>
+        <td>
+          <span class="status-badge" style="color:${s.color};background:${s.bg}">${s.label}</span>
+        </td>
+        <td class="assignee-cell">${esc(task.assignee || '—')}</td>
+        <td>
+          <span class="priority-badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
+        </td>
+        <td class="${isOverdue ? 'due-overdue' : ''}">${due}</td>
+        <td>
+          <div class="progress-wrap">
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${pct}%;background:${s.color}"></div>
+            </div>
+            <span class="progress-label">${pct}%</span>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────
+window.applyFilters = () => {
+  const status = document.getElementById('statusFilter').value;
+  const search = document.getElementById('searchInput').value.trim();
+  renderTaskTable(status, search);
+};
+
+// ── Detail Panel ───────────────────────────────────────────────────────────
+window.openDetailPanel = (taskId) => {
+  selectedTaskId = taskId;
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  // Highlight row
+  document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
+  document.querySelector(`.task-row[data-id="${taskId}"]`)?.classList.add('selected');
+
+  // Populate fields
+  const nameEl = document.getElementById('detailTaskName');
+  nameEl.value = task.name || '';
+  nameEl.readOnly = !isAdmin;
+
+  document.getElementById('detailStatus').value    = task.status || 'todo';
+  document.getElementById('detailDescription').value = task.description || '';
+  document.getElementById('detailDescription').disabled = !isAdmin;
+
+  if (isAdmin) {
+    document.getElementById('detailAssignee').value  = task.assignee || '';
+    document.getElementById('detailPriority').value  = task.priority || 'medium';
+    document.getElementById('detailDueDate').value   = task.dueDate  || '';
+    const pct = task.progress || 0;
+    document.getElementById('detailProgress').value  = pct;
+    document.getElementById('detailProgressLabel').textContent = pct + '%';
+    // Show admin fields, hide view-only
+    document.getElementById('fieldAssignee').style.display     = '';
+    document.getElementById('fieldAssigneeView').style.display = 'none';
+  } else {
+    // Non-admin: show assignee as text
+    document.getElementById('fieldAssignee').style.display     = 'none';
+    document.getElementById('fieldAssigneeView').style.display = '';
+    document.getElementById('detailAssigneeView').textContent  = task.assignee || '—';
+  }
+
+  document.getElementById('saveFeedback').classList.remove('show');
+  document.getElementById('detailPanel').classList.add('open');
+};
+
+window.closeDetailPanel = () => {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
+  selectedTaskId = null;
+};
+
+// ── Save Task Detail ───────────────────────────────────────────────────────
+window.saveTaskDetail = async () => {
+  if (!selectedTaskId) return;
+  const taskRef = doc(db, 'activity_tasks', selectedTaskId);
+
+  const updates = {
+    status:    document.getElementById('detailStatus').value,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (isAdmin) {
+    const name = document.getElementById('detailTaskName').value.trim();
+    if (!name) { showToast('Task name cannot be empty.'); return; }
+    updates.name        = name;
+    updates.assignee    = document.getElementById('detailAssignee').value.trim();
+    updates.priority    = document.getElementById('detailPriority').value;
+    updates.dueDate     = document.getElementById('detailDueDate').value;
+    updates.progress    = parseInt(document.getElementById('detailProgress').value) || 0;
+    updates.description = document.getElementById('detailDescription').value.trim();
+  }
+
+  try {
+    await updateDoc(taskRef, updates);
+
+    // Update local state
+    const idx = tasks.findIndex(t => t.id === selectedTaskId);
+    if (idx !== -1) tasks[idx] = { ...tasks[idx], ...updates };
+
+    // Update completed count on project
+    await syncProjectCounts();
+
+    // Re-render
+    const project = projects.find(p => p.id === currentProjectId);
+    if (project) renderProjectHeader(project);
+    applyFilters();
+
+    // Show feedback
+    const fb = document.getElementById('saveFeedback');
+    fb.classList.add('show');
+    setTimeout(() => fb.classList.remove('show'), 2000);
+  } catch (err) {
+    console.error('saveTaskDetail error:', err);
+    showToast('Failed to save changes.');
+  }
+};
+
+// ── Delete Task ────────────────────────────────────────────────────────────
+window.deleteTask = async () => {
+  if (!selectedTaskId) return;
+  if (!confirm('Delete this task? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db, 'activity_tasks', selectedTaskId));
+    tasks = tasks.filter(t => t.id !== selectedTaskId);
+    await syncProjectCounts();
+    closeDetailPanel();
+    const project = projects.find(p => p.id === currentProjectId);
+    if (project) renderProjectHeader(project);
+    renderProjectList();
+    applyFilters();
+    showToast('Task deleted.');
+  } catch (err) {
+    console.error('deleteTask error:', err);
+    showToast('Failed to delete task.');
+  }
+};
+
+// ── Delete Project ─────────────────────────────────────────────────────────
+window.confirmDeleteProject = async (projectId) => {
+  if (!confirm('Delete this board and all its tasks? This cannot be undone.')) return;
+  try {
+    // Delete all tasks in this project
+    const taskSnap = await getDocs(query(collection(db, 'activity_tasks'), where('projectId', '==', projectId)));
+    await Promise.all(taskSnap.docs.map(d => deleteDoc(doc(db, 'activity_tasks', d.id))));
+    // Delete project
+    await deleteDoc(doc(db, 'activity_projects', projectId));
+    projects = projects.filter(p => p.id !== projectId);
+    currentProjectId = null;
+    tasks = [];
+    renderProjectList();
+    if (projects.length > 0) {
+      selectProject(projects[0].id);
+    } else {
+      showEmptyBoards();
+    }
+    showToast('Board deleted.');
+  } catch (err) {
+    console.error('confirmDeleteProject error:', err);
+    showToast('Failed to delete board.');
+  }
+};
+
+// ── Sync Project Counts ────────────────────────────────────────────────────
+async function syncProjectCounts() {
+  if (!currentProjectId) return;
+  const total     = tasks.length;
+  const completed = tasks.filter(t => t.status === 'completed').length;
+  try {
+    await updateDoc(doc(db, 'activity_projects', currentProjectId), {
+      taskCount: total, completedCount: completed
+    });
+    const p = projects.find(p => p.id === currentProjectId);
+    if (p) { p.taskCount = total; p.completedCount = completed; }
+  } catch (err) {
+    console.error('syncProjectCounts error:', err);
+  }
+}
+
+// ── Modal: New Project ─────────────────────────────────────────────────────
+window.saveNewProject = async () => {
+  const name = document.getElementById('newProjectName').value.trim();
+  if (!name) { showToast('Board name is required.'); return; }
+  const color = document.querySelector('.color-option.selected')?.dataset.color || '#7c3aed';
+  const desc  = document.getElementById('newProjectDesc').value.trim();
+
+  try {
+    const docRef = await addDoc(collection(db, 'activity_projects'), {
+      name, description: desc, color,
+      status: 'active', taskCount: 0, completedCount: 0,
+      createdAt: serverTimestamp(),
+      createdBy: window.currentUser?.uid || '',
+      createdByName: window.currentUser?.displayName || '',
+    });
+    const newProject = { id: docRef.id, name, description: desc, color, status: 'active', taskCount: 0, completedCount: 0 };
+    projects.push(newProject);
+    closeModal('newProjectModal');
+    // Reset form
+    document.getElementById('newProjectName').value = '';
+    document.getElementById('newProjectDesc').value = '';
+    document.querySelectorAll('.color-option').forEach((o, i) => {
+      o.classList.toggle('selected', i === 0);
+    });
+    renderProjectList();
+    selectProject(docRef.id);
+  } catch (err) {
+    console.error('saveNewProject error:', err);
+    showToast('Failed to create board.');
+  }
+};
+
+// ── Modal: New Task ────────────────────────────────────────────────────────
+window.saveNewTask = async () => {
+  if (!currentProjectId) return;
+  const name = document.getElementById('newTaskName').value.trim();
+  if (!name) { showToast('Task name is required.'); return; }
+
+  const taskData = {
+    projectId:   currentProjectId,
+    name,
+    description: document.getElementById('newTaskDesc').value.trim(),
+    assignee:    document.getElementById('newTaskAssignee').value.trim(),
+    status:      document.getElementById('newTaskStatus').value,
+    priority:    document.getElementById('newTaskPriority').value,
+    dueDate:     document.getElementById('newTaskDue').value,
+    progress:    0,
+    createdAt:   serverTimestamp(),
+    updatedAt:   serverTimestamp(),
+    createdBy:   window.currentUser?.uid || '',
+  };
+
+  try {
+    const docRef = await addDoc(collection(db, 'activity_tasks'), taskData);
+    tasks.push({ id: docRef.id, ...taskData });
+    await syncProjectCounts();
+    closeModal('newTaskModal');
+    // Reset form
+    document.getElementById('newTaskName').value     = '';
+    document.getElementById('newTaskDesc').value     = '';
+    document.getElementById('newTaskAssignee').value = '';
+    document.getElementById('newTaskDue').value      = '';
+    document.getElementById('newTaskStatus').value   = 'todo';
+    document.getElementById('newTaskPriority').value = 'medium';
+    const project = projects.find(p => p.id === currentProjectId);
+    if (project) renderProjectHeader(project);
+    renderProjectList();
+    applyFilters();
+    showToast('Task added.');
+  } catch (err) {
+    console.error('saveNewTask error:', err);
+    showToast('Failed to add task.');
+  }
+};
+
+// ── Modal Helpers ──────────────────────────────────────────────────────────
+window.openModal = (id) => {
+  document.getElementById(id).classList.add('open');
+};
+window.closeModal = (id) => {
+  document.getElementById(id).classList.remove('open');
+};
+
+// Close modal on backdrop click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+});
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+</script>
+
+</body>
+</html>

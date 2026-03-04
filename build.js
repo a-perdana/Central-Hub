@@ -59,6 +59,7 @@ const htmlFiles = [
   "as-alevel-pacing.html",
   "assessments.html",
   "console.html",
+  "activities.html",
 ];
 
 htmlFiles.forEach((file) => {
