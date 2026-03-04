@@ -194,6 +194,9 @@
     .btn-modal-save { padding: 8px 20px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; transition: opacity 0.2s; }
     .btn-modal-save:hover { opacity: 0.88; }
 
+    /* ===== MOVE BOARD HINT ===== */
+    .move-board-hint { font-size: 0.76rem; color: var(--accent); margin-top: 5px; }
+
     /* ===== DATE RANGE TOGGLE ===== */
     .date-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     .date-label-row .detail-label,
@@ -495,6 +498,13 @@
       <textarea class="detail-textarea" id="detailDescription" placeholder="Add a description…"></textarea>
     </div>
 
+    <!-- Move to board (admin only) -->
+    <div class="detail-field admin-only" id="fieldMoveBoard">
+      <label class="detail-label" for="detailMoveBoard">Board</label>
+      <select class="detail-select" id="detailMoveBoard"></select>
+      <p class="move-board-hint" id="moveBoardHint" style="display:none">Task will be moved to the selected board on save.</p>
+    </div>
+
   </div><!-- /body -->
 
   <div class="detail-panel-footer">
@@ -668,7 +678,7 @@
 <script type="module">
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
-  doc, query, where, orderBy, serverTimestamp
+  doc, query, where, orderBy, serverTimestamp, increment
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
@@ -1208,6 +1218,16 @@ window.openDetailPanel = (taskId) => {
 
     document.getElementById('detailPriority').value  = task.priority || 'medium';
     document.getElementById('detailDueDate').value   = task.dueDate  || '';
+    // Populate board selector
+    const boardSel = document.getElementById('detailMoveBoard');
+    boardSel.innerHTML = projects.map(p =>
+      `<option value="${p.id}"${p.id === currentProjectId ? ' selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+    boardSel.onchange = () => {
+      document.getElementById('moveBoardHint').style.display =
+        boardSel.value !== currentProjectId ? '' : 'none';
+    };
+    document.getElementById('moveBoardHint').style.display = 'none';
     const hasRange = !!task.startDate;
     document.getElementById('detailUseRange').checked = hasRange;
     document.getElementById('detailStartDate').value  = task.startDate || '';
@@ -1260,8 +1280,37 @@ window.saveTaskDetail = async () => {
     updates.description = document.getElementById('detailDescription').value.trim();
   }
 
+  const targetBoardId = isAdmin ? document.getElementById('detailMoveBoard').value : currentProjectId;
+  const isMoving = targetBoardId && targetBoardId !== currentProjectId;
+  if (isMoving) updates.projectId = targetBoardId;
+
   try {
     await updateDoc(taskRef, updates);
+
+    if (isMoving) {
+      // Remove task from this board's local array
+      tasks = tasks.filter(t => t.id !== selectedTaskId);
+      // Sync source board counts (local tasks already updated)
+      await syncProjectCounts();
+      // Bump destination board counts
+      const isCompleted = updates.status === 'completed';
+      await updateDoc(doc(db, 'activity_projects', targetBoardId), {
+        taskCount:      increment(1),
+        completedCount: increment(isCompleted ? 1 : 0),
+      });
+      const destProject = projects.find(p => p.id === targetBoardId);
+      if (destProject) {
+        destProject.taskCount = (destProject.taskCount || 0) + 1;
+        if (isCompleted) destProject.completedCount = (destProject.completedCount || 0) + 1;
+      }
+      closeDetailPanel();
+      const srcProject = projects.find(p => p.id === currentProjectId);
+      if (srcProject) renderProjectHeader(srcProject);
+      renderProjectList();
+      applyFilters();
+      showToast(`Task moved to "${destProject?.name || 'board'}".`);
+      return;
+    }
 
     // Update local state
     const idx = tasks.findIndex(t => t.id === selectedTaskId);
