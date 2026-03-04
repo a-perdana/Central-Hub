@@ -194,6 +194,14 @@
     .btn-modal-save { padding: 8px 20px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; transition: opacity 0.2s; }
     .btn-modal-save:hover { opacity: 0.88; }
 
+    /* ===== DATE RANGE TOGGLE ===== */
+    .date-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .date-label-row .detail-label,
+    .date-label-row .form-label { margin-bottom: 0; }
+    .date-range-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--ink-3); cursor: pointer; user-select: none; }
+    .date-range-toggle input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+    .date-range-toggle:hover { color: var(--accent); }
+
     /* Toast */
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; font-size: 0.875rem; padding: 10px 20px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 500; white-space: nowrap; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -458,7 +466,16 @@
 
     <!-- Due date (admin only edit) -->
     <div class="detail-field admin-only" id="fieldDue">
-      <label class="detail-label" for="detailDueDate">Due Date</label>
+      <div class="date-label-row">
+        <label class="detail-label" for="detailDueDate" id="detailDueDateLabel">Due Date</label>
+        <label class="date-range-toggle">
+          <input type="checkbox" id="detailUseRange" onchange="toggleDetailRange(this.checked)">
+          <span>Add start date</span>
+        </label>
+      </div>
+      <div id="detailStartDateWrap" style="display:none;margin-bottom:6px">
+        <input class="detail-input" id="detailStartDate" type="date" placeholder="Start date">
+      </div>
       <input class="detail-input" id="detailDueDate" type="date">
     </div>
 
@@ -562,8 +579,17 @@
     </div>
 
     <div class="form-field">
-      <label class="form-label" for="newTaskDue">Due Date</label>
-      <input class="form-input" id="newTaskDue" type="date">
+      <div class="date-label-row">
+        <label class="form-label" for="newTaskDue" style="margin-bottom:0" id="newTaskDueLabel">Due Date</label>
+        <label class="date-range-toggle">
+          <input type="checkbox" id="newTaskUseRange" onchange="toggleNewTaskRange(this.checked)">
+          <span>Add start date</span>
+        </label>
+      </div>
+      <div id="newTaskStartWrap" style="display:none;margin-top:6px;margin-bottom:6px">
+        <input class="form-input" id="newTaskStart" type="date" placeholder="Start date">
+      </div>
+      <input class="form-input" id="newTaskDue" type="date" style="margin-top:6px">
     </div>
 
     <div class="form-field">
@@ -1116,7 +1142,9 @@ function renderTaskTable(filterStatus = 'all', search = '') {
   tbody.innerHTML = rows.map(task => {
     const s   = STATUS[task.status]   || STATUS.todo;
     const p   = PRIORITY[task.priority] || PRIORITY.medium;
-    const due = task.dueDate ? formatDate(task.dueDate) : '—';
+    const due = task.startDate
+      ? formatDate(task.startDate) + ' – ' + (task.dueDate ? formatDate(task.dueDate) : '?')
+      : (task.dueDate ? formatDate(task.dueDate) : '—');
     const isOverdue = task.dueDate && task.status !== 'completed' && new Date(task.dueDate) < new Date();
     const pct = task.progress || 0;
 
@@ -1180,6 +1208,11 @@ window.openDetailPanel = (taskId) => {
 
     document.getElementById('detailPriority').value  = task.priority || 'medium';
     document.getElementById('detailDueDate').value   = task.dueDate  || '';
+    const hasRange = !!task.startDate;
+    document.getElementById('detailUseRange').checked = hasRange;
+    document.getElementById('detailStartDate').value  = task.startDate || '';
+    document.getElementById('detailStartDateWrap').style.display = hasRange ? '' : 'none';
+    document.getElementById('detailDueDateLabel').textContent    = hasRange ? 'End Date' : 'Due Date';
     const pct = task.progress || 0;
     document.getElementById('detailProgress').value  = pct;
     document.getElementById('detailProgressLabel').textContent = pct + '%';
@@ -1220,6 +1253,9 @@ window.saveTaskDetail = async () => {
     updates.assignee    = assigneeNames[0] || '';  // backward compat
     updates.priority    = document.getElementById('detailPriority').value;
     updates.dueDate     = document.getElementById('detailDueDate').value;
+    updates.startDate   = document.getElementById('detailUseRange').checked
+      ? document.getElementById('detailStartDate').value
+      : '';
     updates.progress    = parseInt(document.getElementById('detailProgress').value) || 0;
     updates.description = document.getElementById('detailDescription').value.trim();
   }
@@ -1358,6 +1394,9 @@ window.saveNewTask = async () => {
     status:      document.getElementById('newTaskStatus').value,
     priority:    document.getElementById('newTaskPriority').value,
     dueDate:     document.getElementById('newTaskDue').value,
+    startDate:   document.getElementById('newTaskUseRange').checked
+      ? document.getElementById('newTaskStart').value
+      : '',
     progress:    0,
     createdAt:   serverTimestamp(),
     updatedAt:   serverTimestamp(),
@@ -1372,7 +1411,11 @@ window.saveNewTask = async () => {
     // Reset form
     document.getElementById('newTaskName').value     = '';
     document.getElementById('newTaskDesc').value     = '';
-    document.getElementById('newTaskDue').value      = '';
+    document.getElementById('newTaskDue').value       = '';
+    document.getElementById('newTaskUseRange').checked = false;
+    document.getElementById('newTaskStart').value     = '';
+    document.getElementById('newTaskStartWrap').style.display = 'none';
+    document.getElementById('newTaskDueLabel').textContent    = 'Due Date';
     document.getElementById('newTaskStatus').value   = 'todo';
     document.getElementById('newTaskPriority').value = 'medium';
     initPicker('newTask', []);
@@ -1434,6 +1477,19 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
+
+// ── Date Range Toggles ─────────────────────────────────────────────────────
+window.toggleDetailRange = (checked) => {
+  document.getElementById('detailStartDateWrap').style.display = checked ? '' : 'none';
+  document.getElementById('detailDueDateLabel').textContent    = checked ? 'End Date' : 'Due Date';
+  if (!checked) document.getElementById('detailStartDate').value = '';
+};
+
+window.toggleNewTaskRange = (checked) => {
+  document.getElementById('newTaskStartWrap').style.display = checked ? '' : 'none';
+  document.getElementById('newTaskDueLabel').textContent     = checked ? 'End Date' : 'Due Date';
+  if (!checked) document.getElementById('newTaskStart').value = '';
+};
 
 // ── Utils ──────────────────────────────────────────────────────────────────
 function esc(str) {
