@@ -55,6 +55,95 @@ service cloud.firestore {
       );
     }
 
+    function isCentralUser() {
+      return isAuthorized() && (
+        userProfile().role_centralhub == 'central_admin' ||
+        userProfile().role_centralhub == 'central_user'
+      );
+    }
+
+    function isAcademicUser() {
+      return isAuthorized() && (
+        userProfile().role_academichub == 'academic_admin' ||
+        userProfile().role_academichub == 'academic_user'
+      );
+    }
+
+    function isTeachersUser() {
+      return isAuthorized() && (
+        userProfile().role_teachershub == 'teachers_admin' ||
+        userProfile().role_teachershub == 'teachers_user'
+      );
+    }
+
+    function canAccessPlatform(platform) {
+      return (
+        (platform == 'centralhub'  && isCentralUser()) ||
+        (platform == 'academichub' && isAcademicUser()) ||
+        (platform == 'teachershub' && isTeachersUser())
+      );
+    }
+
+    function surveyHasPlatform(surveyData, platform) {
+      return (
+        (
+          ('platforms' in surveyData) &&
+          surveyData.platforms is list &&
+          surveyData.platforms.hasAny([platform])
+        ) ||
+        (
+          !('platforms' in surveyData) &&
+          platform == 'centralhub'
+        )
+      );
+    }
+
+    function canReadSurvey(surveyData) {
+      return isAdmin() || (
+        isAuthorized() && (
+          (surveyHasPlatform(surveyData, 'centralhub')  && isCentralUser()) ||
+          (surveyHasPlatform(surveyData, 'academichub') && isAcademicUser()) ||
+          (surveyHasPlatform(surveyData, 'teachershub') && isTeachersUser())
+        )
+      );
+    }
+
+    function surveyExists(surveyId) {
+      return exists(/databases/$(database)/documents/surveys/$(surveyId));
+    }
+
+    function surveyData(surveyId) {
+      return get(/databases/$(database)/documents/surveys/$(surveyId)).data;
+    }
+
+    function surveyIsOpenForResponses(surveyId) {
+      return (
+        surveyExists(surveyId) &&
+        canReadSurvey(surveyData(surveyId)) &&
+        (
+          !('status' in surveyData(surveyId)) ||
+          surveyData(surveyId).status == 'published'
+        ) &&
+        (
+          !('allowResponses' in surveyData(surveyId)) ||
+          surveyData(surveyId).allowResponses == true
+        )
+      );
+    }
+
+    function isValidResponsePayload(data) {
+      return (
+        data.userId == request.auth.uid &&
+        data.surveyId is string &&
+        data.platform is string &&
+        data.answers is list &&
+        data.platform in ['centralhub', 'academichub', 'teachershub'] &&
+        canAccessPlatform(data.platform) &&
+        surveyIsOpenForResponses(data.surveyId) &&
+        surveyHasPlatform(surveyData(data.surveyId), data.platform)
+      );
+    }
+
     // â”€â”€ users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     match /users/{uid} {
       // Any signed-in user can read/write their own doc
@@ -91,6 +180,29 @@ service cloud.firestore {
                          || (isAuthorized() && resource.data.authorId == request.auth.uid);
         allow update: if false;
       }
+    }
+
+    // ── surveys (cross-platform) ─────────────────────────────────────────────
+    match /surveys/{surveyId} {
+      allow read: if canReadSurvey(resource.data);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── survey_responses ─────────────────────────────────────────────────────
+    match /survey_responses/{responseId} {
+      allow read: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAuthorized() &&
+                       isValidResponsePayload(request.resource.data);
+
+      allow update: if isAuthorized() &&
+                       resource.data.userId == request.auth.uid &&
+                       isValidResponsePayload(request.resource.data) &&
+                       request.resource.data.userId == resource.data.userId &&
+                       request.resource.data.surveyId == resource.data.surveyId &&
+                       request.resource.data.platform == resource.data.platform;
+
+      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
     }
 
     // â”€â”€ central_documents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

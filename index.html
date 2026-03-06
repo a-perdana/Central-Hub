@@ -648,6 +648,25 @@
       color: var(--ink-3);
       padding: 20px 0;
     }
+    .survey-platforms {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 0 0 8px;
+    }
+    .survey-chip {
+      font-size: 0.67rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .survey-chip.central  { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+    .survey-chip.academic { background: #e0f2fe; color: #0e7490; border-color: #7dd3fc; }
+    .survey-chip.teachers { background: #dcfce7; color: #166534; border-color: #86efac; }
+    .survey-chip.muted    { background: var(--paper-2); color: var(--ink-3); border-color: var(--border); }
 
     /* ===== UPCOMING EVENTS ===== */
     .upcoming-section {
@@ -939,6 +958,22 @@
           </svg>
         </a>
 
+        <a href="surveys" class="quick-card">
+          <div class="qc-icon qi-indigo" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+          </div>
+          <div class="qc-body">
+            <p class="qc-title">Surveys <span class="qc-count" id="quickCountSurveys">(—)</span></p>
+            <p class="qc-desc">Create and share surveys to Academic Hub and Teachers Hub</p>
+          </div>
+          <svg class="qc-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </a>
+
         <a href="messageboard" class="quick-card">
           <div class="qc-icon qi-green" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1136,6 +1171,25 @@
     </div>
   </div>
 
+  <!-- Active Surveys -->
+  <div class="boards-section" role="region" aria-label="Active surveys">
+    <div class="boards-header">
+      <h2 class="section-label" style="margin-bottom:0">Active Surveys</h2>
+      <a href="surveys" class="boards-link">Open Surveys →</a>
+    </div>
+    <div class="boards-grid" id="surveysGrid">
+      <!-- skeleton while loading -->
+      <div class="board-card" style="pointer-events:none">
+        <div class="board-card-top" style="background:var(--paper-2)"></div>
+        <div class="board-card-body">
+          <p class="board-card-name"><span class="skel" style="width:140px;height:14px"></span></p>
+          <div class="board-progress-bar"><div class="board-progress-fill skel" style="width:52%"></div></div>
+          <div class="board-card-meta"><span class="skel" style="width:110px;height:12px"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Management Modules -->
   <div class="modules-section" role="region" aria-label="Management modules">
     <h2 class="section-label">Management Modules</h2>
@@ -1235,6 +1289,7 @@
   // ============================================================
 
   let db;
+  let isCentralAdmin = false;
 
   // ── Calendar fallback data (used when API is unavailable) ────────────────────
   const CAL_DEMO_EVENTS = [
@@ -1414,8 +1469,9 @@
   });
 
   // Wait for auth-guard to confirm session
-  document.addEventListener('authReady', ({ detail: { user } }) => {
+  document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     db = window.db;
+    isCentralAdmin = profile?.role === 'central_admin';
     const firstName = user.displayName
       ? user.displayName.split(' ')[0]
       : 'there';
@@ -1425,6 +1481,7 @@
     loadQuickAccessCounts();
     loadActivity();
     loadBoards();
+    loadActiveSurveys();
   });
 
   function setQuickCount(id, value) {
@@ -1438,30 +1495,36 @@
 
   // ----- Stats -----
   async function loadStats() {
-    try {
-      const [schoolsSnap, staffSnap, docsSnap, announcementsSnap] = await Promise.all([
-        getDocs(collection(db, 'schools')),
-        getDocs(collection(db, 'staff')),
-        getDocs(collection(db, 'central_documents')),
-        getDocs(collection(db, 'announcements')),
-      ]);
-      document.getElementById('statSchools').textContent       = schoolsSnap.size;
-      document.getElementById('statStaff').textContent         = staffSnap.size;
-      document.getElementById('statDocs').textContent          = docsSnap.size;
-      document.getElementById('statAnnouncements').textContent = announcementsSnap.size;
-      setQuickCount('quickCountSchools', schoolsSnap.size);
-      setQuickCount('quickCountStaff', staffSnap.size);
-      setQuickCount('quickCountDocuments', docsSnap.size);
-      setQuickCount('quickCountAnnouncements', announcementsSnap.size);
-    } catch (err) {
-      console.error('Stats load error:', err);
-      ['statSchools','statStaff','statDocs','statAnnouncements'].forEach(id => {
-        document.getElementById(id).textContent = '—';
-      });
-      ['quickCountSchools','quickCountStaff','quickCountDocuments','quickCountAnnouncements'].forEach(id => {
-        setQuickCount(id, '—');
-      });
-    }
+    const targets = [
+      { key: 'schools',       statId: 'statSchools',       quickId: 'quickCountSchools' },
+      { key: 'staff',         statId: 'statStaff',         quickId: 'quickCountStaff' },
+      { key: 'central_documents', statId: 'statDocs',      quickId: 'quickCountDocuments' },
+      { key: 'announcements', statId: 'statAnnouncements', quickId: 'quickCountAnnouncements' },
+      { key: 'surveys',       statId: null,                quickId: 'quickCountSurveys' },
+    ];
+
+    const settled = await Promise.allSettled(
+      targets.map((t) => {
+        if (t.key !== 'surveys') return getDocs(collection(db, t.key));
+        const surveysRef = collection(db, 'surveys');
+        return isCentralAdmin
+          ? getDocs(surveysRef)
+          : getDocs(query(surveysRef, where('platforms', 'array-contains', 'centralhub')));
+      })
+    );
+
+    settled.forEach((res, idx) => {
+      const t = targets[idx];
+      const count = res.status === 'fulfilled' ? res.value.size : '—';
+      if (t.statId) {
+        const statEl = document.getElementById(t.statId);
+        if (statEl) statEl.textContent = count;
+      }
+      setQuickCount(t.quickId, count);
+      if (res.status === 'rejected') {
+        console.error(`Stats load error (${t.key}):`, res.reason);
+      }
+    });
   }
 
   async function loadQuickAccessCounts() {
@@ -1592,6 +1655,99 @@
       console.error('loadBoards error:', err);
       grid.innerHTML = '<p class="boards-empty">Could not load boards.</p>';
     }
+  }
+
+  // ----- Active Surveys -----
+  async function loadActiveSurveys() {
+    const grid = document.getElementById('surveysGrid');
+    try {
+      const baseRef = collection(db, 'surveys');
+      const snap = isCentralAdmin
+        ? await getDocs(query(baseRef, limit(24)))
+        : await getDocs(query(baseRef, where('platforms', 'array-contains', 'centralhub'), limit(24)));
+
+      const active = snap.docs
+        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+        .filter((s) => {
+          const status = String(s.status || 'published').toLowerCase();
+          return status === 'published' && s.allowResponses !== false;
+        })
+        .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        .slice(0, 6);
+
+      if (!active.length) {
+        grid.innerHTML = '<p class="boards-empty">No active surveys. <a href="surveys" style="color:var(--accent)">Open Surveys</a> to publish one.</p>';
+        return;
+      }
+
+      grid.innerHTML = active.map((s) => {
+        const color = '#0891b2';
+        const platforms = Array.isArray(s.platforms) && s.platforms.length
+          ? s.platforms
+          : ['centralhub'];
+        const enabledCount = ['centralhub', 'academichub', 'teachershub']
+          .filter((p) => platforms.includes(p)).length;
+        const sharePct = Math.round((enabledCount / 3) * 100);
+        const questions = parseSurveyQuestions(s.questionsRaw, s.questions);
+
+        const items = questions.slice(0, 4).map((q) => (
+          `<li class="board-task-item">${esc(q)}</li>`
+        )).join('');
+        const moreCount = questions.length > 4 ? questions.length - 4 : 0;
+        const questionsHtml = questions.length
+          ? `<ul class="board-task-list">${items}${moreCount ? `<li class="board-task-more">+${moreCount} more question${moreCount > 1 ? 's' : ''}</li>` : ''}</ul>`
+          : '<p class="board-task-empty">No questions defined</p>';
+
+        const chips = `
+          <div class="survey-platforms">
+            <span class="survey-chip ${platforms.includes('centralhub') ? 'central' : 'muted'}">CentralHub</span>
+            <span class="survey-chip ${platforms.includes('academichub') ? 'academic' : 'muted'}">Academic</span>
+            <span class="survey-chip ${platforms.includes('teachershub') ? 'teachers' : 'muted'}">Teachers</span>
+          </div>
+        `;
+
+        return `
+          <a href="surveys" class="board-card">
+            <div class="board-card-top" style="background:${color}"></div>
+            <div class="board-card-body">
+              <p class="board-card-name">
+                <span class="board-card-dot" style="background:${color}"></span>
+                <span class="board-card-name-text">${esc(s.title || 'Untitled Survey')}</span>
+                <span class="board-pct-badge" style="background:${color}22;color:${color}">${enabledCount}/3 hubs</span>
+              </p>
+              <div class="board-progress-bar">
+                <div class="board-progress-fill" style="width:${sharePct}%;background:${color}"></div>
+              </div>
+              ${chips}
+              ${questionsHtml}
+              <div class="board-card-meta">
+                <span class="board-tasks-label">${questions.length} question${questions.length === 1 ? '' : 's'}</span>
+                <span class="board-tasks-label">${formatBoardDate(s.createdAt)}</span>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('loadActiveSurveys error:', err);
+      grid.innerHTML = '<p class="boards-empty">Could not load active surveys.</p>';
+    }
+  }
+
+  function parseSurveyQuestions(raw, arr) {
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map((q) => String(q || '').trim()).filter(Boolean);
+    }
+    return String(raw || '')
+      .split(/\r?\n/)
+      .map((q) => q.trim())
+      .filter(Boolean);
+  }
+
+  function formatBoardDate(ts) {
+    const d = ts?.toDate?.();
+    if (!d) return 'No date';
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 </script>
 

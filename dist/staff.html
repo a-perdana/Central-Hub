@@ -126,6 +126,117 @@
 </head>
 <body>
 
+<style>
+  .btn-my-tasks {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .btn-my-tasks:hover { color: #fff; border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); }
+
+  .nav-my-tasks { position: relative; }
+
+  .my-tasks-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 340px;
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(28,28,46,0.18);
+    z-index: 9999;
+    overflow: hidden;
+  }
+  .my-tasks-dropdown.open { display: block; }
+
+  .mtd-header {
+    padding: 11px 16px 9px;
+    border-bottom: 1px solid #ece9e3;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #8888a8;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+
+  .mtd-list { max-height: 360px; overflow-y: auto; }
+
+  .mtd-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #f4f1ec;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .mtd-item:last-child { border-bottom: none; }
+  .mtd-item:hover { background: #f7f6f3; }
+
+  .mtd-task-name {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #1c1c2e;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mtd-board {
+    font-size: 0.73rem;
+    color: #8888a8;
+    flex-shrink: 0;
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mtd-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .mtd-empty {
+    padding: 22px 16px;
+    font-size: 0.84rem;
+    color: #8888a8;
+    text-align: center;
+  }
+
+  .mtd-footer {
+    padding: 9px 16px;
+    border-top: 1px solid #ece9e3;
+    text-align: center;
+  }
+  .mtd-footer a {
+    font-size: 0.82rem;
+    color: #0891b2;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .mtd-footer a:hover { text-decoration: underline; }
+</style>
+
 <nav class="top-nav" aria-label="Main navigation">
   <a href="index" class="nav-brand">
     <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -147,11 +258,26 @@
   </div>
 
   <div class="nav-auth">
+    <!-- My Tasks -->
+    <div class="nav-my-tasks" id="navMyTasks">
+      <button class="btn-my-tasks" id="myTasksBtn">
+        My Tasks (<strong id="myTasksCount" style="color:#ff3333;font-weight:700">0</strong>)
+      </button>
+      <div class="my-tasks-dropdown" id="myTasksDropdown">
+        <div class="mtd-header">My Assigned Tasks</div>
+        <div class="mtd-list" id="myTasksList">
+          <p class="mtd-empty">Loading…</p>
+        </div>
+        <div class="mtd-footer"><a href="activities">View all in Activities →</a></div>
+      </div>
+    </div>
+
     <span class="nav-user-name"></span>
     <div class="nav-avatar" id="navAvatar" aria-hidden="true"></div>
     <button class="btn-logout" id="logoutBtn">Sign out</button>
   </div>
 </nav>
+
 <script>
   (function () {
     const aliases = {
@@ -175,7 +301,90 @@
       const isActive = linkPage === targetPage || (targetPage === "console" && isConsoleLink);
       link.classList.toggle("active", Boolean(isActive));
     });
+
+    // Toggle dropdown
+    document.getElementById('myTasksBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      document.getElementById('myTasksDropdown').classList.toggle('open');
+    });
+
+    // Close on outside click
+    document.addEventListener('click', function () {
+      const dd = document.getElementById('myTasksDropdown');
+      if (dd) dd.classList.remove('open');
+    });
   })();
+</script>
+
+<script type="module">
+import {
+  collection, getDocs, query, where
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const STATUS = {
+  todo:         { label: 'To Do',        color: '#6b7280', bg: '#f3f4f6' },
+  in_progress:  { label: 'In Progress',  color: '#0891b2', bg: '#e0f2fe' },
+  under_review: { label: 'Under Review', color: '#d97706', bg: '#fef3c7' },
+  completed:    { label: 'Completed',    color: '#059669', bg: '#d1fae5' },
+  on_hold:      { label: 'On Hold',      color: '#e11d48', bg: '#ffe4e6' },
+};
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('authReady', async ({ detail: { user } }) => {
+  const db = window.db;
+  const displayName = window.userProfile?.displayName || user.displayName || '';
+  const listEl = document.getElementById('myTasksList');
+  const countEl = document.getElementById('myTasksCount');
+
+  if (!displayName || !db) {
+    if (listEl) listEl.innerHTML = '<p class="mtd-empty">Not signed in.</p>';
+    return;
+  }
+
+  try {
+    // Fetch tasks assigned to this user by display name
+    const snap = await getDocs(query(
+      collection(db, 'activity_tasks'),
+      where('assignees', 'array-contains', displayName)
+    ));
+    const myTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Fetch board names
+    const projectIds = [...new Set(myTasks.map(t => t.projectId).filter(Boolean))];
+    const projectMap = {};
+    if (projectIds.length > 0) {
+      const projSnap = await getDocs(collection(db, 'activity_projects'));
+      projSnap.docs.forEach(d => { projectMap[d.id] = d.data().name || ''; });
+    }
+
+    // Update count badge
+    if (countEl) countEl.textContent = myTasks.length;
+
+    // Render list
+    if (!listEl) return;
+    if (myTasks.length === 0) {
+      listEl.innerHTML = '<p class="mtd-empty">No tasks assigned to you.</p>';
+      return;
+    }
+
+    listEl.innerHTML = myTasks.map(t => {
+      const st = STATUS[t.status] || { label: t.status || '—', color: '#6b7280', bg: '#f3f4f6' };
+      const boardName = projectMap[t.projectId] || '';
+      return `<a class="mtd-item" href="activities">
+        <span class="mtd-task-name" title="${esc(t.name)}">${esc(t.name || 'Untitled')}</span>
+        ${boardName ? `<span class="mtd-board" title="${esc(boardName)}">${esc(boardName)}</span>` : ''}
+        <span class="mtd-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
+      </a>`;
+    }).join('');
+
+  } catch (err) {
+    console.error('My Tasks navbar error:', err);
+    if (listEl) listEl.innerHTML = '<p class="mtd-empty">Failed to load tasks.</p>';
+  }
+});
 </script>
 
 
