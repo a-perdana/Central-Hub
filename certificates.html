@@ -1,0 +1,143 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certificates - CentralHub</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:0;background:#f7f6f3;color:#1c1c2e}
+    .wrap{padding:18px;max-width:1400px;margin:auto}
+    .top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    .actions,.filters{display:flex;gap:8px;flex-wrap:wrap}
+    input,select,button,textarea{padding:8px;border:1px solid #d8d4ce;border-radius:6px;font-size:13px}
+    button{cursor:pointer;background:#fff}
+    .primary{background:#0891b2;color:#fff;border-color:#0891b2}
+    .stats{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0}
+    .card{background:#fff;border:1px solid #e3dfd7;border-radius:8px;padding:8px 10px;font-size:12px}
+    table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e3dfd7}
+    th,td{border-bottom:1px solid #eee;padding:8px;font-size:13px;text-align:left;vertical-align:top}
+    th{background:#f1efea}
+    .mono{font-family:Consolas,monospace}
+    .muted{color:#777;font-size:12px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+    .issued{background:#d1fae5;color:#065f46}.sent{background:#e0f2fe;color:#075985}.revoked{background:#fee2e2;color:#991b1b}
+    dialog{width:min(860px,96vw);border:0;border-radius:8px;padding:0}
+    .modal{padding:14px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .row{margin-bottom:8px}.err{color:#991b1b;font-size:12px;min-height:16px}
+    @media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<!-- SHARED_NAVBAR -->
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h2 style="margin:0">Certificate Tracking</h2>
+      <div class="muted">Partner schools workshop certificate records</div>
+    </div>
+    <div class="actions">
+      <button id="exportBtn">Export CSV</button>
+      <button id="seedBtn" style="display:none">Seed July 2025 Sample</button>
+      <button id="bulkBtn" style="display:none">Bulk Import</button>
+      <button id="addBtn" class="primary" style="display:none">Add Certificate</button>
+    </div>
+  </div>
+
+  <div class="filters" style="margin:10px 0">
+    <input id="q" placeholder="Search number/name/email" />
+    <select id="eventFilter"><option value="">All events</option></select>
+    <select id="levelFilter"><option value="">All levels</option></select>
+    <select id="statusFilter">
+      <option value="">All status</option><option value="issued">Issued</option><option value="sent">Sent</option><option value="revoked">Revoked</option>
+    </select>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div class="stats">
+    <div class="card">Total: <strong id="stTotal">-</strong></div>
+    <div class="card">Events: <strong id="stEvents">-</strong></div>
+    <div class="card">Sent: <strong id="stSent">-</strong></div>
+    <div class="card">Revoked: <strong id="stRevoked">-</strong></div>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>No</th><th>Name</th><th>Institution</th><th>Level</th><th>Event</th><th>Issue Date</th><th>Status</th><th>File</th><th class="admin-col" style="display:none">Actions</th>
+    </tr></thead>
+    <tbody id="tbody"><tr><td colspan="9" class="muted">Loading...</td></tr></tbody>
+  </table>
+</div>
+
+<dialog id="editDlg"><div class="modal">
+  <h3 id="editTitle">Add Certificate</h3>
+  <div class="grid2 row"><input id="fEventName" placeholder="Event name*"/><input id="fEventCode" placeholder="Event prefix*"/></div>
+  <div class="grid3 row"><input id="fEventDate" type="date"/><input id="fIssueDate" type="date"/><select id="fStatus"><option value="issued">Issued</option><option value="sent">Sent</option><option value="revoked">Revoked</option></select></div>
+  <div class="grid2 row"><input id="fNo" placeholder="Certificate number*"/><input id="fName" placeholder="Participant name*"/></div>
+  <div class="grid3 row"><input id="fEmail" placeholder="Email"/><input id="fLevel" placeholder="Level"/><input id="fInstitution" placeholder="Institution*"/></div>
+  <div class="grid2 row"><input id="fFileUrl" placeholder="File URL"/><input id="fNotes" placeholder="Notes"/></div>
+  <div id="editErr" class="err"></div>
+  <div class="actions"><button id="editCancel">Cancel</button><button id="editSave" class="primary">Save</button></div>
+</div></dialog>
+
+<dialog id="bulkDlg"><div class="modal">
+  <h3>Bulk Import</h3>
+  <div class="grid2 row"><input id="bEventName" value="Principals Workshop July 2025"/><input id="bEventCode" value="DTP-P-072025"/></div>
+  <div class="grid3 row"><input id="bEventDate" type="date" value="2025-07-15"/><input id="bIssueDate" type="date" value="2025-07-31"/><select id="bStatus"><option value="sent">Sent</option><option value="issued">Issued</option><option value="revoked">Revoked</option></select></div>
+  <textarea id="bText" rows="10" placeholder="No,Name,Email,Level,Institution,Number"></textarea>
+  <div id="bulkErr" class="err"></div>
+  <div id="bulkRes" class="muted"></div>
+  <div class="actions"><button id="bulkCancel">Cancel</button><button id="pasteBtn">Paste Sample</button><button id="bulkRun" class="primary">Import</button></div>
+</div></dialog>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+import {collection,getDocs,addDoc,updateDoc,deleteDoc as fsDeleteDoc,doc as fsDoc,query,orderBy,where,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+let db,isAdmin=false,rows=[],editId=null;
+const SAMPLE=[
+['1','Ahmad Nurani, S.T., M.Pd.','principalsma@semesta.sch.id','SMP-SMA','Semesta Bilingual Boarding School','DTP-P-072025499'],
+['2','Ahmad Sandra, S.Ag, M.Pd.','sandra@scr.sch.id','SMP-SMA','Cahaya Rancamaya','DTP-P-072025500'],
+['3','Bayu Ariadi','bayuariadi@kesatuanbangsa.sch.id','SMP-SMA','Kesatuan Bangsa','DTP-P-072025501'],
+['4','Biadelma Nanda Illiandi','biadelma@pribadidepok.sch.id','SMP-SMA','Pribadi Depok','DTP-P-072025502'],
+['5','Bibit Wiyana','bibit@pribadidepok.sch.id','SMP-SMA','Pribadi Depok','DTP-P-072025503'],
+['6','Dhony Hestung','dhony@scr.sch.id','SMP-SMA','Pakar Belia Islamic School','DTP-P-072025504'],
+['7','Husen Abdillah','husen@kesatuanbangsa.sch.id','SMP-SMA','Kesatuan Bangsa','DTP-P-072025505'],
+['8','Irham Niarsih','principalsmp@semesta.sch.id','SMP-SMA','Semesta Bilingual Boarding School','DTP-P-072025506'],
+['9','Irwansyah','irwansyah@scr.sch.id','SMP-SMA','Cahaya Rancamaya','DTP-P-072025507'],
+['10','Ita Rusita','itarosita@semesta.sch.id','SMP-SMA','Semesta 3','DTP-P-072025508'],
+['11','Maman Firmansyah','maman@pribadidepok.sch.id','SMP-SMA','Pribadi Premiere School','DTP-P-072025509'],
+['12','Muhamad Budiawan','m.budiawan@kbs.sch.id','SMP-SMA','Kharisma Bangsa','DTP-P-072025510'],
+['13','Muhammad Iqbal','iqbal@tnafatih.sch.id','SMP-SMA','TNA Fatih Bilingual School','DTP-P-072025511'],
+['14','Muhammad Syaiful Arif','mariifsyaiful@gmail.com','SMP-SMA','Emer Islamic Boarding School','DTP-P-072025512'],
+['15','Ridho Anwar Tumbuan','ridho_anwar@pribadibandung.sch.id','SMP-SMA','Kharisma Bangsa','DTP-P-072025513'],
+['16','Rifqi Aziz','rifqiaziz@pribadidepok.sch.id','SMP-SMA','Pribadi Premiere School','DTP-P-072025514'],
+['17','Rudi Firmayanto','rudi_firmayanto@fatih.sch.id','SMP-SMA','Fatih Bilingual School','DTP-P-072025515'],
+['18','Siska Indriani, S.Hum., Gr.','siska_indriani@pribadibandung.sch.id','SMP-SMA','Pribadi Bandung','DTP-P-072025516'],
+['19','Sudarman','sudarman@fatih.sch.id','SMP-SMA','Fatih Bilingual School','DTP-P-072025517']
+];
+const E=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+function fill(select,vals){const cur=select.value;const first=select.options[0].textContent;const u=[...new Set(vals.filter(Boolean))].sort();select.innerHTML=`<option value="">${first}</option>`;u.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;select.appendChild(o)});select.value=u.includes(cur)?cur:''}
+function stats(){const events=new Set(rows.map(r=>r.eventName).filter(Boolean));E('stTotal').textContent=rows.length;E('stEvents').textContent=events.size;E('stSent').textContent=rows.filter(r=>r.status==='sent').length;E('stRevoked').textContent=rows.filter(r=>r.status==='revoked').length;fill(E('eventFilter'),rows.map(r=>r.eventName));fill(E('levelFilter'),rows.map(r=>r.level));}
+function filtered(){const q=E('q').value.toLowerCase().trim(),ev=E('eventFilter').value,lv=E('levelFilter').value,st=E('statusFilter').value;return rows.filter(r=>{if(ev&&r.eventName!==ev)return false;if(lv&&r.level!==lv)return false;if(st&&r.status!==st)return false;const h=[r.certificateNumber,r.holderName,r.email,r.institution,r.eventName].join(' ').toLowerCase();return !q||h.includes(q)})}
+function render(){const data=filtered();if(!data.length){E('tbody').innerHTML='<tr><td colspan="9" class="muted">No records</td></tr>';return;}E('tbody').innerHTML=data.map(r=>`<tr><td class="mono">${esc(r.certificateNumber)}</td><td>${esc(r.holderName)}<div class="muted">${esc(r.email||'')}</div></td><td>${esc(r.institution||'-')}</td><td>${esc(r.level||'-')}</td><td>${esc(r.eventName||'-')}<div class="muted">${esc(r.eventDate||'')}</div></td><td>${esc(r.issueDate||'-')}</td><td><span class="pill ${esc(r.status||'issued')}">${esc(r.status||'issued')}</span></td><td>${r.fileUrl?`<a href="${esc(r.fileUrl)}" target="_blank" rel="noopener">Open</a>`:'-'}</td><td class="admin-cell" style="display:${isAdmin?'':'none'}"><button onclick="window._edit('${r.id}')">Edit</button> <button onclick="window._del('${r.id}')">Delete</button></td></tr>`).join('')}
+async function load(){const snap=await getDocs(query(collection(db,'central_certificates'),orderBy('createdAt','desc')));rows=snap.docs.map(d=>({id:d.id,...d.data()}));stats();render()}
+async function dup(no,exclude=null){const s=await getDocs(query(collection(db,'central_certificates'),where('certificateNumber','==',no)));return s.docs.some(d=>d.id!==exclude)}
+function next(prefix){let m=0;rows.forEach(r=>{if((r.certificateNumber||'').startsWith(prefix)){const n=parseInt(String(r.certificateNumber).slice(prefix.length).replace(/\D/g,''),10);if(Number.isFinite(n)&&n>m)m=n}});return m+1}
+function resetForm(){editId=null;E('editTitle').textContent='Add Certificate';E('fEventName').value='Principals Workshop July 2025';E('fEventCode').value='DTP-P-072025';E('fEventDate').value='2025-07-15';E('fIssueDate').value=new Date().toISOString().slice(0,10);E('fStatus').value='issued';['fNo','fName','fEmail','fLevel','fInstitution','fFileUrl','fNotes'].forEach(i=>E(i).value='');E('fLevel').value='SMP-SMA';E('editErr').textContent=''}
+window._edit=(id)=>{if(!isAdmin)return;resetForm();if(id){const r=rows.find(x=>x.id===id);if(!r)return;editId=id;E('editTitle').textContent='Edit Certificate';E('fEventName').value=r.eventName||'';E('fEventCode').value=r.eventCode||'';E('fEventDate').value=r.eventDate||'';E('fIssueDate').value=r.issueDate||'';E('fStatus').value=r.status||'issued';E('fNo').value=r.certificateNumber||'';E('fName').value=r.holderName||'';E('fEmail').value=r.email||'';E('fLevel').value=r.level||'';E('fInstitution').value=r.institution||'';E('fFileUrl').value=r.fileUrl||'';E('fNotes').value=r.notes||'';}E('editDlg').showModal()};
+window._del=async(id)=>{if(!isAdmin)return;if(!confirm('Delete this record?'))return;await fsDeleteDoc(fsDoc(db,'central_certificates',id));await load()};
+async function saveForm(){const p={eventName:E('fEventName').value.trim(),eventCode:E('fEventCode').value.trim(),eventDate:E('fEventDate').value,issueDate:E('fIssueDate').value,status:E('fStatus').value,certificateNumber:E('fNo').value.trim(),holderName:E('fName').value.trim(),email:E('fEmail').value.trim(),level:E('fLevel').value.trim(),institution:E('fInstitution').value.trim(),fileUrl:E('fFileUrl').value.trim(),notes:E('fNotes').value.trim()};if(!p.eventName||!p.eventCode||!p.issueDate||!p.holderName||!p.institution){E('editErr').textContent='Required fields are missing.';return;}if(!p.certificateNumber)p.certificateNumber=`${p.eventCode}${next(p.eventCode)}`;if(await dup(p.certificateNumber,editId)){E('editErr').textContent='Certificate number already exists.';return;}if(editId)await updateDoc(fsDoc(db,'central_certificates',editId),{...p,updatedAt:serverTimestamp()});else await addDoc(collection(db,'central_certificates'),{...p,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});E('editDlg').close();await load()}
+function parseText(t){const lines=String(t||'').trim().split(/\r?\n/).filter(Boolean);if(!lines.length)return [];const sep=lines[0].includes('\t')?'\t':',';let r=lines.map(l=>l.split(sep).map(x=>x.trim()));const h=r[0].join(' ').toLowerCase();if(h.includes('name')&&h.includes('institution'))r=r.slice(1);return r.map(c=>({name:c[1]||'',email:c[2]||'',level:c[3]||'',institution:c[4]||'',number:c[5]||''})).filter(x=>x.name||x.institution||x.number)}
+async function runBulk(){const ev=E('bEventName').value.trim(),code=E('bEventCode').value.trim(),evd=E('bEventDate').value,id=E('bIssueDate').value||new Date().toISOString().slice(0,10),st=E('bStatus').value;if(!ev||!code){E('bulkErr').textContent='Event name/prefix required.';return;}const data=parseText(E('bText').value);if(!data.length){E('bulkErr').textContent='No rows detected.';return;}let imp=0,skip=0,seq=next(code);for(const r of data){const no=(r.number||`${code}${seq++}`).trim();if(!no||await dup(no)){skip++;continue;}await addDoc(collection(db,'central_certificates'),{eventName:ev,eventCode:code,eventDate:evd,issueDate:id,status:st,certificateNumber:no,holderName:r.name,email:r.email,level:r.level,institution:r.institution,fileUrl:'',notes:'',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});imp++;}E('bulkRes').textContent=`Imported: ${imp}, skipped: ${skip}`;await load()}
+function csvExport(){const data=filtered();const h=['Certificate Number','Name','Email','Level','Institution','Event Name','Event Code','Event Date','Issue Date','Status','File URL','Notes'];const out=[h.join(',')];data.forEach(r=>{out.push([r.certificateNumber,r.holderName,r.email,r.level,r.institution,r.eventName,r.eventCode,r.eventDate,r.issueDate,r.status,r.fileUrl,r.notes].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','))});const blob=new Blob([out.join('\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`central-certificates-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url)}
+async function seed(){let imp=0,skip=0;for(const r of SAMPLE){if(await dup(r[5])){skip++;continue;}await addDoc(collection(db,'central_certificates'),{eventName:'Principals Workshop July 2025',eventCode:'DTP-P-072025',eventDate:'2025-07-15',issueDate:'2025-07-31',status:'sent',certificateNumber:r[5],holderName:r[1],email:r[2],level:r[3],institution:r[4],fileUrl:'',notes:'Seed July 2025 sample',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});imp++;}alert(`Imported: ${imp}, skipped: ${skip}`);await load()}
+
+document.addEventListener('authReady',async({detail})=>{db=window.db;isAdmin=detail.profile?.role==='central_admin';if(isAdmin){E('addBtn').style.display='';E('bulkBtn').style.display='';E('seedBtn').style.display='';document.querySelector('.admin-col').style.display=''}await load()});
+['q','eventFilter','levelFilter','statusFilter'].forEach(id=>E(id).addEventListener('input',render));E('resetBtn').onclick=()=>{['q','eventFilter','levelFilter','statusFilter'].forEach(id=>E(id).value='');render()};
+E('addBtn').onclick=()=>{resetForm();E('editDlg').showModal()};E('editCancel').onclick=()=>E('editDlg').close();E('editSave').onclick=saveForm;
+E('bulkBtn').onclick=()=>E('bulkDlg').showModal();E('bulkCancel').onclick=()=>E('bulkDlg').close();E('bulkRun').onclick=runBulk;E('pasteBtn').onclick=()=>{E('bText').value=['No\tName\tEmail\tLevel\tInstitution\tNumber',...SAMPLE.map(x=>x.join('\t'))].join('\n')};
+E('seedBtn').onclick=seed;E('exportBtn').onclick=csvExport;
+</script>
+</body>
+</html>
