@@ -1,4 +1,4 @@
-﻿const fs   = require("fs");
+const fs   = require("fs");
 const path = require("path");
 
 function copyDirRecursive(srcDir, destDir) {
@@ -66,6 +66,7 @@ const htmlFiles = [
   "console.html",
   "activities.html",
   "certificates.html",
+  "certificate-verify.html",
 ];
 
 htmlFiles.forEach((file) => {
@@ -96,5 +97,6 @@ console.log("Environment variables:");
 Object.keys(cfg).forEach((key) => {
   console.log(`  ${key}: ${cfg[key] ? "[SET]" : "[NOT SET - login will fail]"}`);
 });
+
 
 

@@ -1,0 +1,100 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certificate Verification - CentralHub</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:0;background:#f7f6f3;color:#1c1c2e}
+    .wrap{max-width:900px;margin:24px auto;padding:16px}
+    .box{background:#fff;border:1px solid #e3dfd7;border-radius:10px;padding:14px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    input,button{padding:10px;border:1px solid #d8d4ce;border-radius:6px;font-size:14px}
+    input{flex:1;min-width:280px}
+    button{cursor:pointer}
+    .primary{background:#0891b2;color:#fff;border-color:#0891b2}
+    .muted{color:#777;font-size:12px}
+    .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
+    .ok{background:#d1fae5;color:#065f46}.warn{background:#fef3c7;color:#92400e}.bad{background:#fee2e2;color:#991b1b}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .field{font-size:14px}
+    .label{font-size:12px;color:#777}
+    @media(max-width:700px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2 style="margin:0 0 6px 0">Certificate Verification</h2>
+  <div class="muted" style="margin-bottom:12px">Enter certificate number from PDF or use the verification link.</div>
+
+  <div class="box">
+    <div class="row">
+      <input id="no" placeholder="Example: DTP-P-072025499" />
+      <button id="findBtn" class="primary">Verify</button>
+    </div>
+    <div id="state" class="muted">Ready</div>
+    <div id="result" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+import {collection,getDocs,query,where,limit} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const E=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+let db;
+
+function statusBadge(status){
+  if(status==='revoked') return '<span class="badge bad">Revoked</span>';
+  if(status==='issued') return '<span class="badge warn">Issued</span>';
+  return '<span class="badge ok">Verified</span>';
+}
+
+async function verify(){
+  const certNo=E('no').value.trim();
+  if(!certNo){E('state').textContent='Please enter certificate number.';E('result').innerHTML='';return;}
+  E('state').textContent='Searching...';
+  E('result').innerHTML='';
+
+  try{
+    const snap=await getDocs(query(collection(db,'central_certificates'),where('certificateNumber','==',certNo),limit(1)));
+    if(snap.empty){
+      E('state').textContent='Certificate not found.';
+      E('result').innerHTML='<div class="muted">No record matched this certificate number.</div>';
+      return;
+    }
+
+    const d=snap.docs[0].data();
+    E('state').innerHTML=`Status: ${statusBadge(d.status||'sent')}`;
+    E('result').innerHTML=`
+      <div class="grid">
+        <div class="field"><div class="label">Certificate Number</div><div><strong>${esc(d.certificateNumber||'')}</strong></div></div>
+        <div class="field"><div class="label">Participant</div><div><strong>${esc(d.holderName||'')}</strong></div></div>
+        <div class="field"><div class="label">Institution</div><div>${esc(d.institution||'-')}</div></div>
+        <div class="field"><div class="label">Level</div><div>${esc(d.level||'-')}</div></div>
+        <div class="field"><div class="label">Event</div><div>${esc(d.eventName||'-')}</div></div>
+        <div class="field"><div class="label">Event Date</div><div>${esc(d.eventDate||'-')}</div></div>
+        <div class="field"><div class="label">Issue Date</div><div>${esc(d.issueDate||'-')}</div></div>
+        <div class="field"><div class="label">PDF</div><div>${d.fileUrl?`<a href="${esc(d.fileUrl)}" target="_blank" rel="noopener">Open PDF</a>`:'-'}</div></div>
+      </div>
+    `;
+  }catch(err){
+    console.error(err);
+    E('state').textContent='Verification failed.';
+    E('result').innerHTML='<div class="muted">Please try again.</div>';
+  }
+}
+
+document.addEventListener('authReady', async ()=>{
+  db=window.db;
+  const no=new URLSearchParams(window.location.search).get('no');
+  if(no){E('no').value=no; await verify();}
+  else{E('state').textContent='Enter certificate number and click Verify.';}
+});
+
+E('findBtn').onclick=verify;
+E('no').addEventListener('keydown',e=>{if(e.key==='Enter')verify();});
+</script>
+</body>
+</html>
