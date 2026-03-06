@@ -66,6 +66,7 @@ const htmlFiles = [
   "console.html",
   "activities.html",
   "surveys.html",
+  "survey-console.html",
   "certificates.html",
   "certificate-verify.html",
 ];
