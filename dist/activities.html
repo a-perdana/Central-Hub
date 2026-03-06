@@ -300,8 +300,8 @@
 
   <div class="nav-links">
     <a href="index" class="nav-link" data-nav-page="index">Dashboard</a>
-    <a href="https://teachershub.eduversal.org" class="nav-link" id="navTeachersHub" target="_blank" rel="noopener">Teachers Hub</a>
     <a href="https://academichub.eduversal.org" class="nav-link" id="navAcademicHub" target="_blank" rel="noopener">Academic Hub</a>
+    <a href="https://teachershub.eduversal.org" class="nav-link" id="navTeachersHub" target="_blank" rel="noopener">Teachers Hub</a>
   </div>
 
   <div class="nav-auth">
@@ -787,7 +787,15 @@ async function loadUsers() {
       getDocs(collection(db, 'activity_groups')),
     ]);
     allUsers = usersSnap.docs
-      .map(d => ({ uid: d.id, name: d.data().displayName || d.data().email || '' }))
+      .map(d => {
+        const data = d.data() || {};
+        return {
+          uid: d.id,
+          name: data.displayName || data.email || '',
+          role_centralhub: data.role_centralhub || '',
+          platform: data.platform || '',
+        };
+      })
       .filter(u => u.name)
       .sort((a, b) => a.name.localeCompare(b.name));
     allGroups = groupsSnap.docs
@@ -796,6 +804,16 @@ async function loadUsers() {
   } catch (err) {
     console.error('loadUsers error:', err);
   }
+}
+
+function isCentralAssignable(user) {
+  const roleOrPlatform = (user?.role_centralhub || user?.platform || '').toLowerCase();
+  return roleOrPlatform === 'central_user' || roleOrPlatform === 'central_admin';
+}
+
+function getUsersForPicker(pickerName) {
+  if (pickerName === 'newTask' || pickerName === 'detail') return allUsers.filter(isCentralAssignable);
+  return allUsers;
 }
 
 // ── Assignee Picker ─────────────────────────────────────────────────────────
@@ -814,7 +832,8 @@ function renderUsersDropdown(pickerName, searchVal) {
   if (!dropdown) return;
   const state = pickerState[pickerName];
   const q = (searchVal || '').toLowerCase();
-  const filtered = allUsers.filter(u => u.name.toLowerCase().includes(q));
+  const pickerUsers = getUsersForPicker(pickerName);
+  const filtered = pickerUsers.filter(u => u.name.toLowerCase().includes(q));
 
   let html = '';
 
@@ -883,8 +902,9 @@ window.toggleGroup = (pickerName, groupId) => {
   if (!group) return;
   const memberUids = group.memberUids || [];
   const state = pickerState[pickerName];
+  const pickerUsers = getUsersForPicker(pickerName);
   memberUids.forEach(uid => {
-    const user = allUsers.find(u => u.uid === uid);
+    const user = pickerUsers.find(u => u.uid === uid);
     if (!user) return;
     if (!state.selected.some(s => s.uid === uid)) {
       state.selected.push({ uid, name: user.name });
