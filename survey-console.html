@@ -1200,6 +1200,83 @@
         margin: 8px 0 3px;
       }
 
+      /* EXPANDED QUESTIONS PANEL (Read more) */
+      .questions-expanded {
+        display: none;
+        margin: 14px 0 6px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        overflow: hidden;
+        background: var(--paper);
+      }
+      .qe-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--paper-2);
+      }
+      .qe-header-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .qe-item {
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--paper-2);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .qe-item:last-child {
+        border-bottom: none;
+      }
+      .qe-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .qe-num {
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: var(--white);
+        background: var(--ink-3);
+        border-radius: 4px;
+        padding: 2px 6px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .qe-text {
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: var(--ink);
+        line-height: 1.45;
+        flex: 1;
+      }
+      .qe-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding-left: 30px;
+      }
+      .qe-option {
+        font-size: 0.76rem;
+        color: var(--ink-2);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 3px 10px;
+      }
+      .qe-scale-hint {
+        font-size: 0.76rem;
+        color: var(--ink-3);
+        padding-left: 30px;
+        font-style: italic;
+      }
+
       /* IMAGE LIGHTBOX */
       .image-lightbox {
         display: none;
@@ -2151,6 +2228,7 @@
 
             const questions = getCardQuestions(a);
             const questionsHtml = buildQuestionsCardHtml(questions);
+            const questionsExpandedHtml = buildQuestionsExpandedHtml(questions, a.id);
 
             return `
         <article class="ann-card${pinClass}" id="ann-${a.id}">
@@ -2164,6 +2242,7 @@
           </div>
           <div class="ann-body truncated" id="body-${a.id}"></div>
           ${questionsHtml}
+          ${questionsExpandedHtml}
           <div class="ann-platforms">${platBadges}</div>
           <div class="ann-footer">
             <div class="ann-author">
@@ -2187,9 +2266,11 @@
 
       function toggleRead(id) {
         const body = document.getElementById("body-" + id);
+        const qexp = document.getElementById("qexp-" + id);
         const btn = body.closest(".ann-card").querySelector(".btn-readmore");
         const expanded = btn.dataset.expanded === "true";
         body.classList.toggle("truncated", expanded);
+        if (qexp) qexp.style.display = expanded ? "none" : "block";
         btn.textContent = expanded ? "Read more" : "Show less";
         btn.dataset.expanded = String(!expanded);
       }
@@ -2729,6 +2810,54 @@
             ? `<span class="plat-chip plat-off">+${questions.length - 2} more</span>`
             : "";
         return `<div class="q-summary-row">${summaryBadges}</div><div class="ann-platforms">${previews}${more}</div>`;
+      }
+
+      function buildQuestionsExpandedHtml(questions, surveyId) {
+        if (!questions.length) return "";
+        const typeCls = {
+          text: "q-type-text",
+          multiple_choice: "q-type-mc",
+          rating: "q-type-rating",
+          likert: "q-type-likert",
+        };
+        const typeLabel = {
+          text: "Open-ended",
+          multiple_choice: "Multiple Choice",
+          rating: "Rating",
+          likert: "Likert",
+        };
+        const items = questions
+          .map((q, i) => {
+            const type = q.type || "text";
+            let detail = "";
+            if (type === "multiple_choice" && q.options?.length) {
+              detail = `<div class="qe-options">${q.options
+                .map((o) => `<span class="qe-option">${esc(o)}</span>`)
+                .join("")}</div>`;
+            } else if (type === "likert") {
+              const labels = q.likertLabels || LIKERT_LABELS;
+              detail = `<div class="qe-scale-hint">${labels.join(" · ")}</div>`;
+            } else if (type === "rating") {
+              detail = `<div class="qe-scale-hint">Scale: 1 – ${q.scale || 5} ★</div>`;
+            }
+            return `
+            <div class="qe-item">
+              <div class="qe-top">
+                <span class="qe-num">Q${i + 1}</span>
+                <span class="qe-text">${esc(q.text || "")}</span>
+                <span class="q-type-badge ${typeCls[type] || "q-type-text"}" style="margin-left:auto;flex-shrink:0">${typeLabel[type] || type}</span>
+              </div>
+              ${detail}
+            </div>`;
+          })
+          .join("");
+        return `
+        <div class="questions-expanded" id="qexp-${surveyId}">
+          <div class="qe-header-row">
+            <span class="qe-header-label">Questions · ${questions.length}</span>
+          </div>
+          ${items}
+        </div>`;
       }
 
       // ── Results / Analysis view ───────────────────────────────────────
