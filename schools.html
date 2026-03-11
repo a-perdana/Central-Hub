@@ -79,6 +79,8 @@
     .btn-view:hover { color: var(--accent-dk); }
     .btn-edit-card { font-size: 0.82rem; font-weight: 500; color: var(--ink-3); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.2s, border-color 0.2s; }
     .btn-edit-card:hover { color: var(--ink); border-color: #bbb; }
+    .btn-delete-card { font-size: 0.82rem; font-weight: 500; color: #dc2626; background: none; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.2s, background 0.2s, border-color 0.2s; }
+    .btn-delete-card:hover { background: #fee2e2; border-color: #fca5a5; }
 
     /* BADGES */
     .badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.03em; }
@@ -318,7 +320,7 @@
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
-  import { collection, getDocs, addDoc, updateDoc,
+  import { collection, getDocs, addDoc, updateDoc, deleteDoc,
            doc as fsDoc, query, orderBy, serverTimestamp }
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
@@ -416,7 +418,7 @@
         <p class="school-email">${esc(s.adminEmail || '')}</p>
         <div class="card-footer">
           <button class="btn-view" onclick="viewSchool('${s.id}')">View details →</button>
-          ${isAdmin ? `<button class="btn-edit-card" onclick="editSchool('${s.id}')">Edit</button>` : ''}
+          ${isAdmin ? `<button class="btn-edit-card" onclick="editSchool('${s.id}')">Edit</button><button class="btn-delete-card" onclick="deleteSchool('${s.id}')">Delete</button>` : ''}
         </div>
       </div>`).join('');
   }
@@ -664,9 +666,22 @@
     return '';
   }
 
+  async function deleteSchool(id) {
+    const s = allSchools.find(x => x.id === id);
+    if (!s) return;
+    if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteDoc(fsDoc(db, 'schools', id));
+      await loadSchools();
+    } catch (e) {
+      alert('Could not delete: ' + e.message);
+    }
+  }
+
   // Expose onclick handlers to global scope (called from dynamic HTML)
   window.viewSchool = viewSchool;
   window.editSchool = editSchool;
+  window.deleteSchool = deleteSchool;
 </script>
 </body>
 </html>
