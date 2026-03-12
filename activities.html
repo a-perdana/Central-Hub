@@ -169,6 +169,22 @@
     .save-feedback { font-size: 0.8rem; color: #059669; display: none; align-items: center; gap: 4px; }
     .save-feedback.show { display: flex; }
 
+    /* ===== RESOURCES ===== */
+    .resource-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+    .resource-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--border); border-radius: 7px; }
+    .resource-item-icon { flex-shrink: 0; color: var(--ink-3); margin-top: 1px; }
+    .resource-item-body { flex: 1; min-width: 0; }
+    .resource-item-url { font-size: 0.84rem; font-weight: 500; color: var(--accent); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .resource-item-url:hover { text-decoration: underline; }
+    .resource-item-note { font-size: 0.78rem; color: var(--ink-3); margin-top: 2px; }
+    .btn-remove-resource { background: none; border: none; cursor: pointer; color: var(--ink-3); padding: 2px; border-radius: 4px; flex-shrink: 0; transition: color 0.15s; }
+    .btn-remove-resource:hover { color: #e11d48; }
+    .resource-add-form { display: flex; flex-direction: column; gap: 6px; }
+    .resource-add-form input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); outline: none; transition: border-color 0.2s; }
+    .resource-add-form input:focus { border-color: var(--accent); background: var(--white); }
+    .btn-add-resource { align-self: flex-start; display: flex; align-items: center; gap: 5px; padding: 6px 12px; background: var(--paper-2); border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 600; color: var(--ink-2); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+    .btn-add-resource:hover { background: var(--accent-2); border-color: var(--accent); color: var(--accent); }
+
     /* ===== MODALS ===== */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 400; display: none; align-items: center; justify-content: center; padding: 20px; }
     .modal-overlay.open { display: flex; }
@@ -475,6 +491,20 @@
       <textarea class="detail-textarea" id="detailDescription" placeholder="Add a description…"></textarea>
     </div>
 
+    <!-- Resources (admin edit, all view) -->
+    <div class="detail-field">
+      <label class="detail-label">Resources</label>
+      <div class="resource-list" id="detailResourceList"></div>
+      <div class="resource-add-form admin-only" id="resourceAddForm">
+        <input type="url" id="resourceUrlInput" placeholder="https://drive.google.com/… veya YouTube linki">
+        <input type="text" id="resourceNoteInput" placeholder="Kısa açıklama (isteğe bağlı)">
+        <button class="btn-add-resource" onclick="addDetailResource()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Link Ekle
+        </button>
+      </div>
+    </div>
+
     <!-- Move to board (admin only) -->
     <div class="detail-field admin-only" id="fieldMoveBoard">
       <label class="detail-label" for="detailMoveBoard">Board</label>
@@ -678,6 +708,7 @@ let db, isAdmin = false;
 let currentProjectId = null;
 let projects = [], tasks = [];
 let selectedTaskId = null;
+let detailResources = [];
 let allUsers = [];
 let allGroups = [];
 let editingProjectId = null;
@@ -1183,6 +1214,42 @@ window.applyFilters = () => {
   renderTaskTable(status, search);
 };
 
+// ── Resources ──────────────────────────────────────────────────────────────
+function renderDetailResources() {
+  const list = document.getElementById('detailResourceList');
+  if (!detailResources.length) {
+    list.innerHTML = isAdmin ? '' : '<p style="font-size:0.84rem;color:var(--ink-3)">Kaynak eklenmemiş.</p>';
+    return;
+  }
+  list.innerHTML = detailResources.map((r, i) => `
+    <div class="resource-item">
+      <svg class="resource-item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <div class="resource-item-body">
+        <a class="resource-item-url" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>
+        ${r.note ? `<div class="resource-item-note">${esc(r.note)}</div>` : ''}
+      </div>
+      ${isAdmin ? `<button class="btn-remove-resource" onclick="removeDetailResource(${i})" title="Kaldır" aria-label="Kaynağı kaldır">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>` : ''}
+    </div>
+  `).join('');
+}
+
+window.addDetailResource = () => {
+  const url = document.getElementById('resourceUrlInput').value.trim();
+  if (!url) { showToast('Lütfen bir URL girin.'); return; }
+  const note = document.getElementById('resourceNoteInput').value.trim();
+  detailResources.push({ url, note });
+  document.getElementById('resourceUrlInput').value  = '';
+  document.getElementById('resourceNoteInput').value = '';
+  renderDetailResources();
+};
+
+window.removeDetailResource = (i) => {
+  detailResources.splice(i, 1);
+  renderDetailResources();
+};
+
 // ── Detail Panel ───────────────────────────────────────────────────────────
 window.openDetailPanel = (taskId) => {
   selectedTaskId = taskId;
@@ -1235,6 +1302,12 @@ window.openDetailPanel = (taskId) => {
     document.getElementById('detailAssigneeView').textContent  = getAssigneeDisplay(task) || '—';
   }
 
+  detailResources = Array.isArray(task.resources) ? task.resources.map(r => ({ ...r })) : [];
+  renderDetailResources();
+
+  document.getElementById('resourceUrlInput').value  = '';
+  document.getElementById('resourceNoteInput').value = '';
+
   document.getElementById('saveFeedback').classList.remove('show');
   document.getElementById('detailPanel').classList.add('open');
 };
@@ -1269,6 +1342,7 @@ window.saveTaskDetail = async () => {
       : '';
     updates.progress    = parseInt(document.getElementById('detailProgress').value) || 0;
     updates.description = document.getElementById('detailDescription').value.trim();
+    updates.resources   = detailResources;
   }
 
   const targetBoardId = isAdmin ? document.getElementById('detailMoveBoard').value : currentProjectId;
@@ -1318,7 +1392,10 @@ window.saveTaskDetail = async () => {
     // Show feedback
     const fb = document.getElementById('saveFeedback');
     fb.classList.add('show');
-    setTimeout(() => fb.classList.remove('show'), 2000);
+    setTimeout(() => {
+      fb.classList.remove('show');
+      closeDetailPanel();
+    }, 800);
   } catch (err) {
     console.error('saveTaskDetail error:', err);
     showToast('Failed to save changes.');
