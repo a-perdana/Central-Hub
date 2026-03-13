@@ -76,8 +76,9 @@
     .badge-teacher  { background: #d1fae5; color: #065f46; }
     .badge-central  { background: #ede9fe; color: #5b21b6; }
     .badge-academic { background: #fef3c7; color: #92400e; }
-    .badge-teachers { background: #d1fae5; color: #065f46; }
-    .badge-unknown  { background: var(--paper-2); color: var(--ink-3); }
+    .badge-teachers  { background: #d1fae5; color: #065f46; }
+    .badge-research  { background: #fce7f3; color: #9d174d; }
+    .badge-unknown   { background: var(--paper-2); color: var(--ink-3); }
 
     /* EMPTY / SKELETON */
     .empty-row td { text-align: center; padding: 48px; color: var(--ink-3); font-size: 0.875rem; }
@@ -153,6 +154,8 @@
       <option value="academic_user">academic_user</option>
       <option value="teachers_admin">teachers_admin</option>
       <option value="teachers_user">teachers_user</option>
+      <option value="research_admin">research_admin</option>
+      <option value="research_user">research_user</option>
     </select>
     <span class="user-count" id="userCount"></span>
   </div>
@@ -166,12 +169,13 @@
           <th>CentralHub</th>
           <th>Academic Hub</th>
           <th>Teachers Hub</th>
+          <th>Research Hub</th>
           <th>Joined</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="usersBody">
-        <tr><td colspan="6" style="padding:48px;text-align:center;color:var(--ink-3)">
+        <tr><td colspan="7" style="padding:48px;text-align:center;color:var(--ink-3)">
           <span class="skel" style="height:16px;width:60%;display:block;margin:auto"></span>
         </td></tr>
       </tbody>
@@ -227,6 +231,14 @@
           <option value="teachers_user">teachers_user</option>
         </select>
       </div>
+      <div class="form-group">
+        <label class="form-label" for="fieldRoleRH">Research Hub Role</label>
+        <select class="form-select" id="fieldRoleRH">
+          <option value="">— not set —</option>
+          <option value="research_admin">research_admin</option>
+          <option value="research_user">research_user</option>
+        </select>
+      </div>
     </div>
     <div class="drawer-footer">
       <button class="btn-delete" id="deleteBtn">Delete user</button>
@@ -253,6 +265,8 @@
     academic_user:   '<span class="badge badge-teacher">academic_user</span>',
     teachers_admin:  '<span class="badge badge-academic">teachers_admin</span>',
     teachers_user:   '<span class="badge badge-teachers">teachers_user</span>',
+    research_admin:  '<span class="badge badge-research">research_admin</span>',
+    research_user:   '<span class="badge badge-research">research_user</span>',
   };
 
   const PLATFORM_BADGE = {
@@ -281,7 +295,7 @@
       applyFilters();
     } catch (e) {
       document.getElementById('usersBody').innerHTML =
-        '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--ink-3)">Could not load users.</td></tr>';
+        '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--ink-3)">Could not load users.</td></tr>';
     }
   }
 
@@ -302,7 +316,7 @@
     const ro = document.getElementById('roleFilter').value;
     const list = allUsers.filter(u =>
       (!q  || u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)) &&
-      (!ro || u.role_centralhub === ro || u.role_academichub === ro || u.role_teachershub === ro)
+      (!ro || u.role_centralhub === ro || u.role_academichub === ro || u.role_teachershub === ro || u.role_researchhub === ro)
     );
     document.getElementById('userCount').textContent =
       `${list.length} user${list.length !== 1 ? 's' : ''}`;
@@ -312,7 +326,7 @@
   function renderTable(list) {
     const body = document.getElementById('usersBody');
     if (!list.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="6">No users match your filters.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="7">No users match your filters.</td></tr>';
       return;
     }
     body.innerHTML = list.map(u => {
@@ -324,6 +338,7 @@
       const chBadge = ROLE_BADGE[u.role_centralhub]  || '<span style="color:var(--ink-3)">—</span>';
       const ahBadge = ROLE_BADGE[u.role_academichub] || '<span style="color:var(--ink-3)">—</span>';
       const thBadge = ROLE_BADGE[u.role_teachershub]  || '<span style="color:var(--ink-3)">—</span>';
+      const rhBadge = ROLE_BADGE[u.role_researchhub]  || '<span style="color:var(--ink-3)">—</span>';
       return `
         <tr>
           <td>
@@ -338,6 +353,7 @@
           <td>${chBadge}</td>
           <td>${ahBadge}</td>
           <td>${thBadge}</td>
+          <td>${rhBadge}</td>
           <td style="color:var(--ink-3);font-size:0.82rem">${joined}</td>
           <td><button class="btn-action" onclick="editUser('${u.id}')">Edit</button></td>
         </tr>`;
@@ -353,6 +369,7 @@
     document.getElementById('fieldRoleCH').value = u.role_centralhub  || '';
     document.getElementById('fieldRoleAH').value = u.role_academichub || '';
     document.getElementById('fieldRoleTH').value = u.role_teachershub || '';
+    document.getElementById('fieldRoleRH').value = u.role_researchhub || '';
     hideErr();
     document.getElementById('drawerOverlay').classList.add('open');
   }
@@ -367,6 +384,7 @@
     const roleCH      = document.getElementById('fieldRoleCH').value;
     const roleAH      = document.getElementById('fieldRoleAH').value;
     const roleTH      = document.getElementById('fieldRoleTH').value;
+    const roleRH      = document.getElementById('fieldRoleRH').value;
     if (!displayName) { showErr('Name is required.'); return; }
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
@@ -377,11 +395,13 @@
         role_centralhub:  roleCH,
         role_academichub: roleAH,
         role_teachershub: roleTH,
+        role_researchhub: roleRH,
       });
       const u = allUsers.find(x => x.id === editingId);
       if (u) {
         u.displayName = displayName; u.email = email;
-        u.role_centralhub = roleCH; u.role_academichub = roleAH; u.role_teachershub = roleTH;
+        u.role_centralhub = roleCH; u.role_academichub = roleAH;
+        u.role_teachershub = roleTH; u.role_researchhub = roleRH;
       }
       closeDrawer();
       applyFilters();
