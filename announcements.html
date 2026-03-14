@@ -480,6 +480,16 @@
         <input type="checkbox" id="fieldLocked">
         Lock this post (only you can edit)
       </label>
+      <div class="form-group">
+        <label class="form-label" for="fieldLinkedTopic">İlişkili Konu</label>
+        <select class="form-input" id="fieldLinkedTopic">
+          <option value="">None</option>
+          <!-- populated by loadTopicDropdownForAnn() -->
+        </select>
+        <p style="font-size:0.76rem;color:#8888a8;margin-top:3px;">
+          Optional — Bu duyuru seçilen topic sayfasında İlişkili Duyuru olarak görünecek.
+        </p>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn-cancel" id="cancelBtn">Cancel</button>
@@ -498,7 +508,7 @@
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
-  import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc as fsDoc, query, orderBy, serverTimestamp }
+  import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc as fsDoc, query, orderBy, where, limit, serverTimestamp }
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject }
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
@@ -528,7 +538,36 @@
     if (isAdmin) document.getElementById('addAnnBtn').style.display = 'flex';
     await loadAnnouncements();
     bindControls();
+    loadTopicDropdownForAnn();
   });
+
+  async function loadTopicDropdownForAnn() {
+    const sel = document.getElementById('fieldLinkedTopic');
+    if (!sel) return;
+    while (sel.options.length > 1) sel.remove(1);
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, 'topics'),
+          where('status', 'in', ['open', 'in_progress']),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        )
+      );
+      snap.docs.forEach(d => {
+        const t = d.data();
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        const dateStr = t.createdAt?.toDate
+          ? t.createdAt.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short'})
+          : '';
+        opt.textContent = `${t.title || 'Untitled'} (${dateStr})`;
+        sel.appendChild(opt);
+      });
+    } catch(e) {
+      console.warn('Could not load topics for announcement form:', e);
+    }
+  }
 
   async function loadAnnouncements() {
     try {
@@ -775,6 +814,7 @@
     modalExistingImagePath = '';
     modalRemoveExistingImage = false;
     renderModalImagePreview();
+    document.getElementById('fieldLinkedTopic').value = '';
     document.getElementById('saveBtn').textContent = 'Publish';
     hideErr();
     document.getElementById('modalOverlay').classList.add('open');
@@ -802,6 +842,7 @@
     modalExistingImagePath = a.imagePath || '';
     modalRemoveExistingImage = false;
     renderModalImagePreview();
+    document.getElementById('fieldLinkedTopic').value = '';
     document.getElementById('saveBtn').textContent = 'Update';
     hideErr();
     document.getElementById('modalOverlay').classList.add('open');
@@ -810,6 +851,7 @@
 
   function closeModal() {
     cleanupModalImageObjectUrl();
+    document.getElementById('fieldLinkedTopic').value = '';
     document.getElementById('modalOverlay').classList.remove('open');
   }
   function showErr(msg) {
@@ -865,12 +907,32 @@
       if (editingId) {
         await updateDoc(fsDoc(db, 'announcements', editingId), { title, body, category, pinned, locked, platforms, imageUrl, imagePath });
       } else {
-        await addDoc(collection(db, 'announcements'), {
+        const annRef = await addDoc(collection(db, 'announcements'), {
           title, body, category, pinned, locked, platforms, imageUrl, imagePath,
           author: currentUser.displayName || currentUser.email,
           authorId: currentUser.uid,
           createdAt: serverTimestamp(),
         });
+        const annId = annRef.id;
+        const linkedTopicId = document.getElementById('fieldLinkedTopic').value;
+        if (linkedTopicId) {
+          try {
+            // Primary: set linkedAnnouncementId on the topic (this is what the thread view reads)
+            await updateDoc(fsDoc(db, 'topics', linkedTopicId), {
+              linkedAnnouncementId: annId
+            });
+            // Secondary: set linkedTopicId on the announcement (informational only)
+            await updateDoc(fsDoc(db, 'announcements', annId), {
+              linkedTopicId: linkedTopicId
+            });
+          } catch(e) {
+            console.warn('Bidirectional link failed:', e);
+            showErr('Announcement saved, but linking to topic failed. Check console for details.');
+            btn.disabled = false;
+            btn.textContent = 'Publish';
+            return;
+          }
+        }
       }
       closeModal();
       await loadAnnouncements();
