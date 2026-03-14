@@ -137,6 +137,16 @@
     .platform-badge.th { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
     .platform-badge.ah { background:#ede9fe; color:#5b21b6; border:1px solid #ddd6fe; }
 
+    /* WORKSPACE STATUS / DEADLINE / CATEGORY BADGES */
+    .ws-badge { display:inline-flex; align-items:center; font-size:0.68rem; font-weight:700; padding:2px 7px; border-radius:4px; white-space:nowrap; }
+    .ws-badge-open        { background:#d1fae5; color:#065f46; }
+    .ws-badge-in_progress { background:#fef3c7; color:#92400e; }
+    .ws-badge-closed      { background:#f3f4f6; color:#6b7280; }
+    .ws-cat-badge     { display:inline-flex; align-items:center; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:4px; background:#e0f2fe; color:#0369a1; white-space:nowrap; }
+    .ws-deadline-badge{ display:inline-flex; align-items:center; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:4px; background:#fee2e2; color:#dc2626; white-space:nowrap; }
+    .form-divider { border:none; border-top:1px dashed var(--border); margin:14px 0 12px; }
+    .form-hint    { font-size:0.76rem; color:var(--ink-3); margin-top:2px; }
+
     /* SKELETON */
     .skel { background: linear-gradient(90deg,var(--paper-2) 25%,var(--paper) 50%,var(--paper-2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; display: block; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
@@ -247,7 +257,7 @@
     <!-- NEW TOPIC VIEW -->
     <div class="view" id="viewNewTopic">
       <div class="new-topic-form">
-        <h3>Start a New Topic</h3>
+        <h3 id="topicFormTitle">Start a New Topic</h3>
         <div class="form-error" id="topicError" role="alert"></div>
         <div class="form-group">
           <label class="form-label" for="topicCat">Category *</label>
@@ -267,6 +277,33 @@
         <div class="form-group">
           <label class="form-label" for="topicBody">Body *</label>
           <textarea class="form-input form-textarea" id="topicBody" placeholder="Describe your topic in detail…"></textarea>
+        </div>
+        <hr class="form-divider">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div class="form-group">
+            <label class="form-label" for="topicStatus">Status</label>
+            <select class="form-select" id="topicStatus">
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="topicDeadline">Deadline</label>
+            <input class="form-input" id="topicDeadline" type="date">
+            <p class="form-hint">Optional</p>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" for="topicWsCat">Workspace Category</label>
+          <select class="form-select" id="topicWsCat">
+            <option value="">None</option>
+            <option value="Akreditasyon">Akreditasyon</option>
+            <option value="Müfredat">Müfredat</option>
+            <option value="Genel">Genel</option>
+            <option value="Personel">Personel</option>
+          </select>
+          <p class="form-hint">Optional — groups this topic by purpose</p>
         </div>
         <div class="form-actions">
           <button class="btn-cancel-form" id="cancelTopicBtn">Cancel</button>
@@ -290,6 +327,7 @@
   let currentCat   = 'all';
   let currentUser  = null;
   let openTopicId  = null;
+  let editingTopicId = null;
 
   const CAT_BADGE = {
     general:   '<span class="badge badge-general">General</span>',
@@ -460,28 +498,59 @@
 
   // ===== New Topic =====
   async function submitTopic() {
-    const cat   = document.getElementById('topicCat').value;
-    const title = document.getElementById('topicTitle').value.trim();
-    const body  = document.getElementById('topicBody').value.trim();
+    const cat    = document.getElementById('topicCat').value;
+    const title  = document.getElementById('topicTitle').value.trim();
+    const body   = document.getElementById('topicBody').value.trim();
+    const status      = document.getElementById('topicStatus').value || 'open';
+    const wsCat       = document.getElementById('topicWsCat').value || null;
+    const deadlineVal = document.getElementById('topicDeadline').value;
     const errEl = document.getElementById('topicError');
-    if (!cat || !title || !body) { errEl.textContent = 'All fields are required.'; errEl.classList.add('visible'); return; }
+
+    if (!cat || !title || !body) {
+      errEl.textContent = 'Category, title, and body are required.';
+      errEl.classList.add('visible');
+      return;
+    }
     errEl.classList.remove('visible');
     const btn = document.getElementById('submitTopicBtn');
-    btn.disabled = true; btn.textContent = 'Posting…';
+    btn.disabled = true;
+    btn.textContent = editingTopicId ? 'Saving…' : 'Posting…';
+
     try {
-      const ref = await addDoc(collection(db, 'topics'), {
-        category: cat, title, body,
-        author:     currentUser.displayName || currentUser.email,
-        replyCount: 0,
-        createdAt:  serverTimestamp(),
-        source:     'central_hub',
-      });
-      await loadTopics();
-      openThread(ref.id);
+      const payload = {
+        category:          cat,
+        title,
+        body,
+        status,
+        deadline:          deadlineVal ? new Date(deadlineVal) : null,
+        workspaceCategory: wsCat,
+      };
+
+      if (editingTopicId) {
+        await updateDoc(fsDoc(db, 'topics', editingTopicId), payload);
+        await loadTopics();
+        openThread(editingTopicId);
+        editingTopicId = null;
+      } else {
+        // TODO Phase 2: replace addDoc with doc(collection(...))+setDoc to pre-generate ID for Storage paths
+        const ref = await addDoc(collection(db, 'topics'), {
+          ...payload,
+          author:               currentUser.displayName || currentUser.email,
+          replyCount:           0,
+          createdAt:            serverTimestamp(),
+          source:               'central_hub',
+          attachments:          [],
+          linkedAnnouncementId: null,
+        });
+        await loadTopics();
+        openThread(ref.id);
+      }
     } catch(e) {
-      errEl.textContent = e.message; errEl.classList.add('visible');
+      errEl.textContent = e.message;
+      errEl.classList.add('visible');
     } finally {
-      btn.disabled = false; btn.textContent = 'Post Topic';
+      btn.disabled = false;
+      btn.textContent = editingTopicId ? 'Save Changes' : 'Post Topic';
     }
   }
 
@@ -500,6 +569,11 @@
       document.getElementById('topicTitle').value = '';
       document.getElementById('topicBody').value  = '';
       document.getElementById('topicError').classList.remove('visible');
+      document.getElementById('topicStatus').value   = 'open';
+      document.getElementById('topicDeadline').value  = '';
+      document.getElementById('topicWsCat').value     = '';
+      document.getElementById('topicFormTitle').textContent = 'Start a New Topic';
+      editingTopicId = null;
       showView('newTopic');
     });
     document.getElementById('backBtn').addEventListener('click', () => showView('list'));
