@@ -315,6 +315,14 @@
           <p class="form-hint">Optional — groups this topic by purpose</p>
         </div>
         <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label" for="topicLinkedAnn">İlişkili Duyuru</label>
+          <select class="form-select" id="topicLinkedAnn">
+            <option value="">None</option>
+            <!-- populated by loadAnnouncementDropdown() -->
+          </select>
+          <p class="form-hint">Optional — links this topic to an existing announcement.</p>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Attachments</label>
           <div class="file-drop-zone" id="fileDropZone" onclick="document.getElementById('fileInput').click()">
             <input type="file" id="fileInput" multiple accept="*/*" style="display:none">
@@ -363,6 +371,30 @@
   };
   const CAT_LABEL = { all:'All Topics', general:'General', academic:'Academic', resources:'Resources', events:'Events', technical:'Technical' };
 
+  // ===== Announcement dropdown =====
+  async function loadAnnouncementDropdown() {
+    const sel = document.getElementById('topicLinkedAnn');
+    if (!sel) return;
+    while (sel.options.length > 1) sel.remove(1);
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'announcements'), orderBy('createdAt', 'desc'), limit(50))
+      );
+      snap.docs.forEach(d => {
+        const a = d.data();
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        const dateStr = a.createdAt?.toDate
+          ? a.createdAt.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'})
+          : '';
+        opt.textContent = `${a.title || 'Untitled'} (${dateStr})`;
+        sel.appendChild(opt);
+      });
+    } catch(e) {
+      console.warn('Could not load announcements:', e);
+    }
+  }
+
   // ===== Auth ready =====
   document.addEventListener('authReady', async ({ detail: { user } }) => {
     db = window.db;
@@ -370,6 +402,7 @@
     currentUser = user;
     await loadTopics();
     bindEvents();
+    await loadAnnouncementDropdown();
   });
 
   // ===== Load all topics =====
@@ -537,6 +570,7 @@
     document.getElementById('topicBody').value   = topic.body || '';
     document.getElementById('topicStatus').value = topic.status || 'open';
     document.getElementById('topicWsCat').value  = topic.workspaceCategory || '';
+    document.getElementById('topicLinkedAnn').value = topic.linkedAnnouncementId || '';
     if (topic.deadline) {
       const d = topic.deadline.toDate ? topic.deadline.toDate() : new Date(topic.deadline);
       document.getElementById('topicDeadline').value = d.toISOString().split('T')[0];
@@ -724,6 +758,7 @@
       document.getElementById('topicStatus').value   = 'open';
       document.getElementById('topicDeadline').value  = '';
       document.getElementById('topicWsCat').value     = '';
+      document.getElementById('topicLinkedAnn').value  = '';
       document.getElementById('topicFormTitle').textContent = 'Start a New Topic';
       editingTopicId = null;
       pendingAttachments  = [];
