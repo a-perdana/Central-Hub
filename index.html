@@ -1512,6 +1512,25 @@
         background: var(--accent-2);
       }
 
+      /* ACTIVE TOPICS PANEL */
+      .active-topics-panel { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-sm); overflow:hidden; margin-top:20px; }
+      .active-topics-head { padding:14px 18px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+      .active-topics-head h3 { font-size:0.925rem; font-weight:600; color:var(--ink); }
+      .active-topics-head a { font-size:0.8rem; color:var(--accent); text-decoration:none; }
+      .active-topics-head a:hover { text-decoration:underline; }
+      .at-item { display:flex; flex-direction:column; gap:4px; padding:11px 18px; border-bottom:1px solid var(--paper-2); transition:background 0.15s; text-decoration:none; }
+      .at-item:last-child { border-bottom:none; }
+      .at-item:hover { background:var(--paper); }
+      .at-badges { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+      .at-title { font-size:0.875rem; font-weight:500; color:var(--ink); }
+      .at-meta { font-size:0.75rem; color:var(--ink-3); }
+      .at-ws-badge { font-size:0.65rem; font-weight:700; padding:1px 5px; border-radius:3px; }
+      .at-status-open        { background:#d1fae5; color:#065f46; }
+      .at-status-in_progress { background:#fef3c7; color:#92400e; }
+      .at-deadline { font-size:0.65rem; font-weight:600; padding:1px 5px; border-radius:3px; background:#fee2e2; color:#dc2626; }
+      .at-cat { font-size:0.65rem; font-weight:600; padding:1px 5px; border-radius:3px; background:#e0f2fe; color:#0369a1; }
+      .at-empty { padding:24px 18px; text-align:center; color:var(--ink-3); font-size:0.85rem; }
+
       /* ===== RESPONSIVE ===== */
       @media (max-width: 1100px) {
         .upcoming-cards {
@@ -2083,6 +2102,17 @@
             </div>
             <div class="activity-list" id="activityList">
               <div class="act-empty">Loading…</div>
+            </div>
+          </div>
+
+          <!-- Active Topics -->
+          <div class="active-topics-panel" role="region" aria-label="Active topics">
+            <div class="active-topics-head">
+              <h3>Active Topics</h3>
+              <a href="messageboard">View all →</a>
+            </div>
+            <div id="activeTopicsList">
+              <div class="at-empty">Loading…</div>
             </div>
           </div>
         </div>
@@ -3347,6 +3377,7 @@
           loadBoards();
           loadActiveSurveys();
           loadPublications();
+          loadActiveTopics();
         },
       );
 
@@ -3697,6 +3728,51 @@
         } catch (err) {
           console.error("loadPublications error:", err);
           section.style.display = "none";
+        }
+      }
+
+      async function loadActiveTopics() {
+        const el = document.getElementById('activeTopicsList');
+        if (!el) return;
+        try {
+          // Phase 1: client-side filter (no composite index needed yet)
+          const snap = await getDocs(
+            query(collection(db, 'topics'), orderBy('createdAt', 'desc'), limit(20))
+          );
+          const topics = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(t => t.status === 'open' || t.status === 'in_progress')
+            .slice(0, 5);
+
+          if (!topics.length) {
+            el.innerHTML = '<div class="at-empty">No active topics.</div>';
+            return;
+          }
+
+          const statusLabel = { open: 'OPEN', in_progress: 'IN PROGRESS' };
+          const statusCls   = { open: 'at-status-open', in_progress: 'at-status-in_progress' };
+
+          el.innerHTML = topics.map(t => {
+            let badges = '';
+            if (t.status && statusLabel[t.status]) {
+              badges += `<span class="at-ws-badge ${statusCls[t.status]}">${statusLabel[t.status]}</span>`;
+            }
+            if (t.workspaceCategory) {
+              badges += `<span class="at-cat">${esc(t.workspaceCategory)}</span>`;
+            }
+            if (t.deadline) {
+              const d = t.deadline.toDate ? t.deadline.toDate() : new Date(t.deadline);
+              badges += `<span class="at-deadline">⏰ ${d.toLocaleDateString('id-ID',{day:'numeric',month:'short'})}</span>`;
+            }
+            return `<a href="messageboard" class="at-item">
+              <div class="at-badges">${badges}</div>
+              <span class="at-title">${esc(t.title || 'Untitled')}</span>
+              <span class="at-meta">${t.replyCount || 0} replies</span>
+            </a>`;
+          }).join('');
+        } catch(err) {
+          console.error('loadActiveTopics error:', err);
+          el.innerHTML = '<div class="at-empty">Could not load topics.</div>';
         }
       }
 
