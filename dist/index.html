@@ -685,14 +685,18 @@
         color: var(--ink-3);
       }
 
-      /* Shelf wrapper — horizontal scroll on small screens */
+      /* Shelf wrapper — horizontally scrollable */
       .pub-shelf {
         background: linear-gradient(180deg, #f0ece3 0%, #e8e2d6 100%);
         border: 1px solid #d9d2c5;
         border-radius: 14px;
-        padding: 28px 28px 0;
+        padding: 28px 0 0;
         position: relative;
         overflow: hidden;
+      }
+      .pub-shelf .pub-grid {
+        padding-left: 28px;
+        padding-right: 28px;
       }
       /* wooden shelf plank at the bottom */
       .pub-shelf::after {
@@ -708,10 +712,19 @@
       .pub-grid {
         display: flex;
         gap: 20px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         align-items: flex-end;
         padding-bottom: 4px;
+        overflow-x: auto;
+        overflow-y: visible;
+        cursor: grab;
+        user-select: none;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
       }
+      .pub-grid::-webkit-scrollbar { display: none; }
+      .pub-grid.is-dragging { cursor: grabbing; }
 
       /* ── Individual book ── */
       .pub-book {
@@ -4464,7 +4477,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       // ----- Publications (Yayınlarımız) -----
       let _allFeaturedDocs = [];
-      const PUB_SHOW_COUNT = 5;
 
       async function loadPublications() {
         const section = document.getElementById("publicationsSection");
@@ -4490,7 +4502,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             return;
           }
           section.style.display = "";
-          renderPubGrid(PUB_SHOW_COUNT);
+          renderPubGrid();
         } catch (err) {
           console.error("loadPublications error:", err);
           section.style.display = "none";
@@ -4560,7 +4572,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
       }
 
-      function renderPubGrid(showCount) {
+      function renderPubGrid() {
         const grid = document.getElementById("pubGrid");
 
         const catColors = {
@@ -4576,12 +4588,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         };
         const fallback = { spine: "#44445a", band: "#8888a8" };
 
-        const visible = _allFeaturedDocs.slice(0, showCount);
-        const remaining = _allFeaturedDocs.length - showCount;
-
         const docIconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`;
 
-        const books = visible
+        const books = _allFeaturedDocs
           .map((d) => {
             const c = catColors[d.category] || fallback;
             const href = d.driveLink ? esc(d.driveLink) : "documents";
@@ -4613,21 +4622,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           })
           .join("");
 
-        const showAllBtn =
-          remaining > 0
-            ? `<button class="pub-show-all-book" id="pubShowAll">
-               <span class="pub-show-all-num">+${remaining}</span>
-               <span class="pub-show-all-lbl">more</span>
-             </button>`
-            : "";
+        grid.innerHTML = books;
 
-        grid.innerHTML = books + showAllBtn;
-
-        const btn = document.getElementById("pubShowAll");
-        if (btn)
-          btn.addEventListener("click", () =>
-            renderPubGrid(_allFeaturedDocs.length),
-          );
+        // Drag-to-scroll
+        let isDown = false, startX, scrollLeft;
+        grid.addEventListener("mousedown", (e) => {
+          isDown = true;
+          grid.classList.add("is-dragging");
+          startX = e.pageX - grid.offsetLeft;
+          scrollLeft = grid.scrollLeft;
+        });
+        grid.addEventListener("mouseleave", () => { isDown = false; grid.classList.remove("is-dragging"); });
+        grid.addEventListener("mouseup", () => { isDown = false; grid.classList.remove("is-dragging"); });
+        grid.addEventListener("mousemove", (e) => {
+          if (!isDown) return;
+          e.preventDefault();
+          const x = e.pageX - grid.offsetLeft;
+          grid.scrollLeft = scrollLeft - (x - startX) * 1.4;
+        });
       }
 
       function parseSurveyQuestions(raw, arr) {
