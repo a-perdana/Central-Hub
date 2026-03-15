@@ -253,3 +253,62 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 - **Calendar fallback** is `window.CAL_DEMO_EVENTS` loaded from `calendar-fallback.js`. Do NOT inline the array inside page scripts — update the standalone file instead.
 - **N+1 Firestore queries are forbidden.** When fetching sub-collections for a list of parents (e.g. tasks for projects), always use a single `where('parentId', 'in', ids)` query and group results in JS. The `in` operator supports up to 30 values.
 - **Event notification modal** only appears for events ≤7 days away. Do not change this threshold without user approval.
+- **All UI text must be in English.** No Turkish labels in forms, buttons, or cards — this was a past bug (`İlişkili Duyuru`).
+- **Dates use `en-GB` locale** everywhere (`toLocaleDateString('en-GB', ...)`). Never use `id-ID` or other locales.
+
+---
+
+## Common Mistakes — Do Not Repeat
+
+These are bugs that were introduced and fixed. Never reintroduce them.
+
+### 1. Missing Firebase imports
+Before writing any code that calls a Firestore/Storage function, verify **every** function used is in the import list at the top of the `<script type="module">` block. Past bugs:
+- `addDoc` not imported → reply posting silently broken with ReferenceError
+- `limit` not imported → dropdown query failed silently
+- `deleteDoc` not imported → delete feature broken
+
+**Rule:** After writing code, scan every function call against the import list. If it's not there, add it.
+
+### 2. Undefined CSS variables
+Every `var(--name)` used in CSS must be defined in `:root`. Past bug: `--accent-2` was used in `.cat-btn.active` and `.post-op-label` but missing from `:root` — those elements rendered with no background colour.
+
+**Rule:** When adding a new CSS variable usage, add it to `:root` at the same time.
+
+### 3. Never use `alert()` or `confirm()`
+Browser blocking dialogs are banned. Use inline error messages (`.visible` class on error elements) or double-click confirmation patterns (set `data-confirming` attribute, reset after 3s timeout).
+
+### 4. Admin-only UI must check `isAdmin`
+Edit, Delete, and any destructive/management buttons must be gated behind `isAdmin`. Never render admin actions for all users and rely on Firestore rules to block the write — the UI must enforce it too. Past bug: Edit Topic button shown to all users.
+
+**Pattern:**
+```js
+const isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
+// then in authReady handler, set module-level isAdmin variable
+// then gate: if (isAdmin) { ... render admin buttons ... }
+```
+
+### 5. Validate user-supplied URLs
+Any URL from Firestore or user input used in an `href` or `src` must be validated. Block `javascript:` protocol:
+```js
+function safeUrl(url) {
+  return /^https?:\/\//i.test(url) ? url : '#';
+}
+```
+
+### 6. After a single document mutation, refresh only that document
+Do not call `loadTopics()` (full collection refetch) just to update one document's data. Use a targeted `getDoc` and update the in-memory array:
+```js
+const snap = await getDoc(fsDoc(db, 'topics', id));
+const idx = allTopics.findIndex(t => t.id === id);
+if (idx >= 0) allTopics[idx] = { id, ...snap.data() };
+```
+
+### 7. Large collections need pagination
+Never fetch an unbounded collection with `getDocs(collection(...))`. Always add `limit(N)` and a "Load more" UI pattern. Past bug: `loadTopics()` fetched all topics with no limit.
+
+### 8. Cancel button context
+When a form is used for both Create and Edit modes, the Cancel button must return to the appropriate view:
+- Editing → back to the thread/detail view
+- Creating → back to the list view
+Never unconditionally `showView('list')` in a shared Cancel handler.
