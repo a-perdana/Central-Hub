@@ -32,6 +32,17 @@ const DEFAULT_ROLE  = 'central_user';
 // Roles permitted to use CentralHub
 const ALLOWED_ROLES = ['central_admin', 'central_user'];
 
+// Only @eduversal.org email addresses are allowed to access CentralHub.
+// Email/password accounts (manually created in Firebase Console) bypass
+// this check so that service accounts can still be used if needed.
+const ALLOWED_DOMAIN = 'eduversal.org';
+function isDomainAllowed(user) {
+  const domain = (user.email || '').split('@')[1];
+  if (domain === ALLOWED_DOMAIN) return true;
+  // Allow manually-created email/password accounts (no Google provider)
+  return user.providerData.some(p => p.providerId === 'password');
+}
+
 // Hide page content until auth is confirmed (prevents flash of content)
 document.body.style.visibility = 'hidden';
 
@@ -543,7 +554,14 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  // 2. Fetch (or create) Firestore profile
+  // 2. Domain check — only @eduversal.org (or email/password) accounts allowed
+  if (!isDomainAllowed(user)) {
+    await signOut(auth);
+    window.location.replace('login?error=domain');
+    return;
+  }
+
+  // 3. Fetch (or create) Firestore profile
   let profile;
   const userRef = doc(db, 'users', user.uid);
   try {
@@ -586,7 +604,7 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  // 3. Role check
+  // 4. Role check
   const platformRole = profile[PLATFORM_KEY];
   if (!ALLOWED_ROLES.includes(platformRole)) {
     await signOut(auth);
@@ -596,14 +614,14 @@ onAuthStateChanged(auth, async (user) => {
   // Set profile.role for backward compat with page-level checks
   profile.role = platformRole;
 
-  // 4. Name prompt if missing
+  // 5. Name prompt if missing
   if (!profile.displayName) {
     const name = await promptForName();
     await setDoc(userRef, { displayName: name }, { merge: true });
     profile.displayName = name;
   }
 
-  // 5. All checks passed — expose globals
+  // 6. All checks passed — expose globals
   window.currentUser = user;
   window.userProfile = profile;
 

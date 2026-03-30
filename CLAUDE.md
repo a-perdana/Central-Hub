@@ -2,7 +2,7 @@
 
 ## What This App Is
 
-CentralHub is the super-admin control panel for the Eduversal platform. Only `central_admin` users can access it. It manages schools, staff, announcements, documents, and the message board across the whole platform. It is a **vanilla HTML/CSS/JS application** (no React, no bundler framework). Pages are plain `.html` files with inline scripts that load Firebase via CDN.
+CentralHub is the super-admin control panel for the Eduversal platform. `central_user` and `central_admin` roles can access it; only `central_admin` sees management actions. It manages schools, staff, announcements, documents, and the message board across the whole platform. It is a **vanilla HTML/CSS/JS application** (no React, no bundler framework). Pages are plain `.html` files with inline scripts that load Firebase via CDN.
 
 **Deployment:** Vercel (build output in `dist/`).
 
@@ -80,9 +80,10 @@ Every protected page (all pages except `login.html`) loads `auth-guard.js` as a 
 1. Hides `document.body` immediately (prevents flash of content).
 2. Initialises Firebase (guards against double-init with `getApps()`).
 3. Listens on `onAuthStateChanged`. If no user → redirects to `login` (clean URL).
-4. Fetches `users/{uid}` from Firestore. If missing, creates a profile stub with no role.
-5. Role-checks against `['central_admin']`. If not allowed → signs out and redirects to `login?error=access`.
-6. Exposes globals and dispatches `authReady`.
+4. **Domain check** — if email is not `@eduversal.org` (and not an email/password account) → signs out and redirects to `login?error=domain`.
+5. Fetches `users/{uid}` from Firestore. If missing, creates a profile and auto-assigns `central_user`.
+6. Role-checks against `['central_user', 'central_admin']`. If not allowed → signs out and redirects to `login?error=access`.
+7. Exposes globals and dispatches `authReady`.
 
 **Globals exposed after `authReady`:**
 | Global               | Value                                |
@@ -115,11 +116,11 @@ Each platform has its **own** Firestore role field — there is no single shared
 | Teachers Hub  | `role_teachershub`    | `'teachers_user'` \| `'teachers_admin'`|
 | Research Hub  | `role_researchhub`    | `'research_user'` \| `'research_admin'`|
 
-**CentralHub allowed values:** `role_centralhub === 'central_admin'`.
+**CentralHub allowed values:** `'central_user'` (read access) | `'central_admin'` (full management access).
 
 `auth-guard.js` also accepts the legacy `role === 'central_admin'` for backwards compatibility with accounts that have not logged in since the migration.
 
-`central_admin` accounts are created **manually** in the Firebase Console (email/password), never via self-registration. First login auto-assigns `central_user` via `setDoc` with `{ merge: true }`.
+Access is restricted to `@eduversal.org` email addresses (enforced in both `login.html` and `auth-guard.js`). Email/password accounts created manually in Firebase Console bypass the domain check. First login auto-assigns `central_user` via `setDoc` with `{ merge: true }`. `central_admin` must be set manually via `console.html`.
 
 **isAdmin check pattern (always use both for safety):**
 ```js
