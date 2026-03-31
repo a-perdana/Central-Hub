@@ -12,13 +12,13 @@ service cloud.firestore {
              request.auth.token.email.matches('.*@eduversal\\.org$');
     }
 
-    // School teachers â€” any @*.sch.id Google account (Academic Hub / Teachers Hub)
+    // School teachers - any @*.sch.id Google account (Academic Hub / Teachers Hub)
     function isSchoolUser() {
       return isSignedIn() &&
              request.auth.token.email.matches('.*\\.sch\\.id$');
     }
 
-    // Manually-added users sign in via email/password â€” Firebase sets
+    // Manually-added users sign in via email/password - Firebase sets
     // sign_in_provider = 'password' for these accounts.
     function isEmailPasswordUser() {
       return isSignedIn() &&
@@ -144,29 +144,29 @@ service cloud.firestore {
       );
     }
 
-    // â”€â”€ users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- users -----------------------------------------------
     match /users/{uid} {
       // Any signed-in user can read/write their own doc
       // (covers school-domain Teachers Hub / Academic Hub users logging in via Google)
       allow get:    if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      // List (collection query) is admin-only â€” only CentralHub console uses this
+      // List (collection query) is admin-only - only CentralHub console uses this
       allow list:   if isAdmin();
       allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
-    // â”€â”€ schools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- schools ---------------------------------------------
     match /schools/{schoolId} {
       allow read:   if isAuthorized();
       allow create, update, delete: if isAdmin();
     }
 
-    // â”€â”€ staff â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- staff -----------------------------------------------
     match /staff/{staffId} {
       allow read:   if isAuthorized();
       allow create, update, delete: if isAdmin();
     }
 
-    // â”€â”€ announcements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();
       allow create, update, delete: if isAdmin();
@@ -182,17 +182,17 @@ service cloud.firestore {
       }
     }
 
-    // ── surveys (cross-platform) ─────────────────────────────────────────────
+    // -- surveys (cross-platform) ----------------------------
     match /surveys/{surveyId} {
       // get: enforce per-document platform check (resource.data available)
       allow get: if canReadSurvey(resource.data);
       // list: resource.data is unavailable for queries; allow any authorized user to list
-      // (client-side where("platforms","array-contains",...) filters the results)
+      // (client-side filtering handles platform visibility)
       allow list: if isAuthorized();
       allow create, update, delete: if isAdmin();
     }
 
-    // ── survey_responses ─────────────────────────────────────────────────────
+    // -- survey_responses ------------------------------------
     match /survey_responses/{responseId} {
       allow read: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
 
@@ -209,62 +209,63 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
     }
 
-    // â”€â”€ central_documents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- central_documents -----------------------------------
     match /central_documents/{docId} {
       allow read:   if isAuthorized();
       allow create, update, delete: if isAdmin();
     }
-    // â”€â”€ central_certificates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    // -- central_certificates --------------------------------
     match /central_certificates/{docId} {
       allow read:   if isAuthorized();
       allow create, update, delete: if isAdmin();
     }
 
-    // â”€â”€ school_appraisals (Central Hub handbook content) â”€â”€
+    // -- school_appraisals -----------------------------------
     match /school_appraisals/{docId} {
       allow read:   if isAuthorized();
       allow write:  if isAdmin();
     }
 
-    // â”€â”€ teacher_appraisals (Central Hub handbook content) â”€
+    // -- teacher_appraisals ----------------------------------
     match /teacher_appraisals/{docId} {
       allow read:   if isAuthorized();
       allow write:  if isAdmin();
     }
 
-    // â”€â”€ ease_system (Central Hub EASE handbook content) â”€â”€â”€
+    // -- ease_system -----------------------------------------
     match /ease_system/{docId} {
       allow read:   if isAuthorized();
       allow write:  if isAdmin();
     }
 
-    // â”€â”€ documents (Academic Hub) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- documents (Academic Hub) ----------------------------
     match /documents/{docId} {
       allow read:   if isAuthorized();
       allow create, update, delete: if isAHAdmin();
     }
 
-    // â”€â”€ doc_likes (Academic Hub) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- doc_likes (Academic Hub) ----------------------------
     match /doc_likes/{likeId} {
       allow read:  if isAuthorized();
       allow write: if isAuthorized() && request.resource.data.userId == request.auth.uid;
       allow delete: if isAuthorized();
     }
 
-    // â”€â”€ doc_ratings (Academic Hub) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- doc_ratings (Academic Hub) --------------------------
     match /doc_ratings/{ratingId} {
       allow read:  if isAuthorized();
       allow write: if isAuthorized() && request.resource.data.userId == request.auth.uid;
     }
 
-    // â”€â”€ library (Academic Hub) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- library (Academic Hub) ------------------------------
     match /library/{resourceId} {
       allow read:   if isAuthorized();
       allow create, delete: if isAHAdmin();
       allow update: if isAHAdmin();
     }
 
-    // â”€â”€ prompts (Academic Hub â€” AI Prompts) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- prompts (Academic Hub - AI Prompts) -----------------
     match /prompts/{promptId} {
       allow read:   if isAuthorized();
       allow create, delete: if isAHAdmin();
@@ -274,26 +275,26 @@ service cloud.firestore {
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']));
     }
 
-    // â”€â”€ feedbacks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- feedbacks -------------------------------------------
     match /feedbacks/{fbId} {
       allow create: if isAuthorized();
       allow read, update, delete: if isAdmin();
     }
 
-    // ── feedback (Central Hub index feedback modal) ──────────────────────────
+    // -- feedback (Central Hub index feedback modal) ---------
     match /feedback/{fbId} {
       allow create: if isAuthorized();
       allow read, update, delete: if isAdmin();
     }
 
-    // â”€â”€ timeline_activities (Academic Calendar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- timeline_activities (Academic Calendar) -------------
     match /timeline_activities/{actId} {
       allow read:   if isAuthorized();
       allow create, update: if isModerator();
       allow delete: if isAdmin();
     }
 
-    // â”€â”€ timeline_completions (Academic Calendar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- timeline_completions (Academic Calendar) ------------
     match /timeline_completions/{compId} {
       allow read:   if isAuthorized();
       allow write:  if isAuthorized() && request.resource.data.userId == request.auth.uid;
@@ -304,7 +305,7 @@ service cloud.firestore {
       return isAuthorized() && userProfile().role_teachershub == 'teachers_admin';
     }
 
-    // â”€â”€ IGCSE pacing structures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- IGCSE pacing structures -----------------------------
     // Writers: teachers_admin (Teachers Hub) OR central_admin (CentralHub)
     match /igcse_pacing/{docId} {
       allow read:  if isAuthorized();
@@ -361,18 +362,18 @@ service cloud.firestore {
       allow write: if isTeachersAdmin() || isAdmin();
     }
 
-    // â”€â”€ userProgress (per-user pacing progress) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- userProgress (per-user pacing progress) -------------
     match /userProgress/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
-    // â”€â”€ activity_projects (Activities board) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- activity_projects (Activities board) ----------------
     match /activity_projects/{docId} {
       allow read:                    if isAuthorized();
       allow create, update, delete:  if isAdmin();
     }
 
-    // â”€â”€ activity_tasks (Activities board tasks) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- activity_tasks (Activities board tasks) -------------
     // All authorized users can update (for status changes).
     // Only admins can create or delete tasks.
     match /activity_tasks/{docId} {
@@ -381,13 +382,13 @@ service cloud.firestore {
       allow update:         if isAuthorized();
     }
 
-    // â”€â”€ activity_groups (Assignee groups for Activities) â”€â”€â”€
+    // -- activity_groups (Assignee groups for Activities) ----
     match /activity_groups/{docId} {
       allow read:                    if isAuthorized();
       allow create, update, delete:  if isAdmin();
     }
 
-    // â”€â”€ section_overrides (Academic Standards inline edits) â”€
+    // -- section_overrides (Academic Standards inline edits) -
     match /section_overrides/{sectionId} {
       allow read: if isAuthorized();
       allow write: if isAHAdmin();
@@ -398,43 +399,40 @@ service cloud.firestore {
       }
     }
 
-    // ── partner_schools (School Performance KPI) ─────────────────
+    // -- partner_schools (School Performance KPI) ------------
     match /partner_schools/{schoolId} {
       allow read:  if isAcademicUser();
       allow write: if isAHAdmin();
     }
 
-    // ── kpi_config (School Performance KPI — criteria definitions) ─
+    // -- kpi_config (School Performance KPI - criteria definitions) --
     match /kpi_config/{kpiId} {
       allow read:  if isAcademicUser();
       allow write: if isAHAdmin();
     }
 
-    // ── kpi_settings (School Performance KPI — semester settings) ──
+    // -- kpi_settings (School Performance KPI - semester settings) ---
     match /kpi_settings/{semId} {
       allow read:  if isAcademicUser();
       allow write: if isAHAdmin();
     }
 
-    // ── school_performance_kpi (KPI data submissions) ──────────────
+    // -- school_performance_kpi (KPI data submissions) -------
     // Structure: school_performance_kpi/{semId}/schools/{schoolId}
     match /school_performance_kpi/{semId}/schools/{schoolId} {
-      // Academic users can read their own school's data; admins read all
       allow read: if isAHAdmin()
                   || (isAcademicUser()
                       && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId);
-      // Any academic user can write (deadline enforced client-side)
       allow write: if isAcademicUser();
     }
 
-    // ── ah_categories (Academic Hub dashboard category config) ─────
+    // -- ah_categories (Academic Hub dashboard category config) --
     match /ah_categories/{catId} {
       allow read:                   if isAcademicUser();
       allow create, update, delete: if isAHAdmin();
     }
 
-    // ── networkAudits (School Network Security Audit results) ───────
-    // Any authorized user can create their own audit; only admins can list/delete
+    // -- networkAudits (School Network Security Audit results) --
     match /networkAudits/{auditId} {
       allow create: if isAuthorized() && request.resource.data.testerUid == request.auth.uid;
       allow read:   if isAdmin() || (isAuthorized() && resource.data.testerUid == request.auth.uid);
@@ -443,14 +441,13 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // ── pathwaySubmissions (Cambridge Pathway Simulator — public) ───
-    // Anyone (unauthenticated) may submit; only admins may read/delete.
+    // -- pathwaySubmissions (Cambridge Pathway Simulator - public) --
     match /pathwaySubmissions/{docId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
-    // ── topics (message board) ─────────────────────────────────────
+    // -- topics (message board) ------------------------------
     match /topics/{topicId} {
       allow read:   if isAuthorized();
       allow create: if isAuthorized();
@@ -466,5 +463,3 @@ service cloud.firestore {
     }
   }
 }
-
-
