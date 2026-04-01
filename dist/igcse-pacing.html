@@ -164,6 +164,13 @@
       font-size: 0.78rem; padding: 5px 10px;
     }
     .btn-danger:hover { background: #fef2f2; }
+    .btn-reorder {
+      background: none; border: 1px solid var(--border); color: var(--ink-3);
+      font-size: 0.78rem; padding: 3px 7px; border-radius: 5px; cursor: pointer;
+      line-height: 1; transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-reorder:hover:not(:disabled) { background: var(--paper-2); color: var(--ink); border-color: var(--ink-3); }
+    .btn-reorder:disabled { opacity: 0.25; cursor: default; }
     .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
 
     /* ===== CHAPTER BLOCKS ===== */
@@ -283,6 +290,8 @@
     .form-row { display: flex; gap: 12px; }
     .form-row .form-group { flex: 1; margin-bottom: 0; }
     .form-hint { font-size: 0.75rem; color: var(--ink-3); margin-top: 4px; }
+    .field-error { font-size: 0.75rem; color: #dc2626; margin-top: 4px; display: none; }
+    .form-input.invalid, .form-select.invalid { border-color: #dc2626; }
 
     /* ===== RESOURCES ===== */
     .res-section-head {
@@ -1366,11 +1375,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="form-group">
         <label class="form-label" for="chTitleInput">Chapter Title</label>
         <input class="form-input" id="chTitleInput" type="text" placeholder="e.g. Number and Algebra"
-          onkeydown="if(event.key==='Enter')saveChapterModal()">
+          onkeydown="if(event.key==='Enter')saveChapterModal()" oninput="clearFieldError('chTitleInput','chTitleError');_modalDirty=true">
+        <p class="field-error" id="chTitleError">Chapter title is required.</p>
       </div>
       <div class="form-group">
         <label class="form-label" for="chYearSelect">Year Group</label>
-        <select class="form-select" id="chYearSelect">
+        <select class="form-select" id="chYearSelect" onchange="_modalDirty=true">
           <option value="Year 9">Year 9</option>
           <option value="Year 10">Year 10</option>
         </select>
@@ -1392,17 +1402,18 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label" for="topTitleInput">Topic Title</label>
-        <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number">
+        <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number" oninput="clearFieldError('topTitleInput','topTitleError');_modalDirty=true">
+        <p class="field-error" id="topTitleError">Topic title is required.</p>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="topDurationInput">Duration (weeks)</label>
-          <input class="form-input" id="topDurationInput" type="number" min="1" max="20" placeholder="e.g. 3">
+          <label class="form-label" for="topDurationInput">Duration (hours)</label>
+          <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 6" oninput="_modalDirty=true">
         </div>
         <div class="form-group">
           <label class="form-label" for="topObjectivesInput">Objectives</label>
-          <input class="form-input" id="topObjectivesInput" type="text" placeholder="e.g. C1.1 E1.2 E1.3">
-          <p class="form-hint">Space-separated codes</p>
+          <input class="form-input" id="topObjectivesInput" type="text" placeholder="e.g. C1.1 E1.2 E1.3" oninput="_modalDirty=true">
+          <p class="form-hint">Space-separated, e.g. <code style="font-family:'DM Mono',monospace;font-size:.7rem">C1.1 E1.2 E1.3</code></p>
         </div>
       </div>
       <!-- Resources -->
@@ -1453,6 +1464,7 @@ let modalMode  = null;  // 'add-chapter'|'edit-chapter'|'add-topic'|'edit-topic'
 let editChIdx  = null;
 let editTopIdx = null;
 let modalResources = [];  // working copy of resources in topic modal
+let _modalDirty    = false; // true when user has changed any modal field
 
 // ── Auth ─────────────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { profile } }) => {
@@ -1588,6 +1600,8 @@ function renderChapter(ch, ci) {
           <span class="topic-count">${topics.length} topic${topics.length !== 1 ? 's' : ''}</span>
         </div>
         <div class="ch-actions">
+          <button class="btn-reorder" onclick="moveChapter(event,${ci},-1)" title="Move up" ${ci===0?'disabled':''}>↑</button>
+          <button class="btn-reorder" onclick="moveChapter(event,${ci},1)" title="Move down" ${ci===chapters.length-1?'disabled':''}>↓</button>
           <button class="btn btn-edit" onclick="editChapter(${ci})" title="Edit chapter">Edit</button>
           <button class="btn btn-danger" onclick="deleteChapter(event,${ci})" title="Delete chapter">Delete</button>
         </div>
@@ -1607,23 +1621,36 @@ function renderTopic(t, ti, ci) {
     .map(o => `<span class="obj-code">${escHtml(o)}</span>`).join('');
 
   const resources = (t.resources || [])
-    .map(r => `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`)
+    .map(r => `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`)
     .join('');
 
   const dur = t.duration || t.hour;
   return `<tr>
     <td style="color:var(--ink-3);font-size:0.75rem">${ti + 1}</td>
     <td style="font-weight:500">${escHtml(t.title || t.topic)}</td>
-    <td>${dur ? dur + (t.hour ? 'h' : 'w') : '<span style="color:var(--ink-3)">—</span>'}</td>
+    <td>${dur != null ? dur + 'h' : '<span style="color:var(--ink-3)">—</span>'}</td>
     <td><div class="obj-codes">${objCodes || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td><div class="resource-links">${resources || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td>
       <div class="row-actions">
+        <button class="btn-reorder" onclick="moveTopic(${ci},${ti},-1)" title="Move up" ${ti===0?'disabled':''}>↑</button>
+        <button class="btn-reorder" onclick="moveTopic(${ci},${ti},1)" title="Move down" ${ti===chapters[${ci}].topics.length-1?'disabled':''}>↓</button>
         <button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>
         <button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>
       </div>
     </td>
   </tr>`;
+}
+
+function clearFieldError(inputId, errorId) {
+  const input = document.getElementById(inputId);
+  const err   = document.getElementById(errorId);
+  if (input) input.classList.remove('invalid');
+  if (err)   err.style.display = 'none';
+}
+
+function safeUrl(url) {
+  return /^https?:\/\//i.test(url) ? url : '#';
 }
 
 function escHtml(str) {
@@ -1641,6 +1668,7 @@ function openAddChapterModal() {
   document.getElementById('chModalTitle').textContent = 'Add Chapter';
   document.getElementById('chTitleInput').value       = '';
   document.getElementById('chYearSelect').value       = 'Year 9';
+  _modalDirty = false;
   document.getElementById('chapterModal').classList.add('open');
   document.getElementById('chTitleInput').focus();
 }
@@ -1652,6 +1680,7 @@ function editChapter(ci) {
   document.getElementById('chModalTitle').textContent = 'Edit Chapter';
   document.getElementById('chTitleInput').value       = ch.chapter || ch.title || '';
   document.getElementById('chYearSelect').value       = ch.year  || 'Year 9';
+  _modalDirty = false;
   document.getElementById('chapterModal').classList.add('open');
   document.getElementById('chTitleInput').focus();
 }
@@ -1659,7 +1688,27 @@ function editChapter(ci) {
 async function saveChapterModal() {
   const title = document.getElementById('chTitleInput').value.trim();
   const year  = document.getElementById('chYearSelect').value;
-  if (!title) { document.getElementById('chTitleInput').focus(); return; }
+  if (!title) {
+    document.getElementById('chTitleInput').classList.add('invalid');
+    const err = document.getElementById('chTitleError');
+    if (err) err.style.display = 'block';
+    document.getElementById('chTitleInput').focus();
+    return;
+  }
+
+  // Duplicate check (case-insensitive, skip self when editing)
+  const titleLower = title.toLowerCase();
+  const isDuplicate = chapters.some((ch, idx) => {
+    if (modalMode === 'edit-chapter' && idx === editChIdx) return false;
+    return (ch.chapter || ch.title || '').toLowerCase() === titleLower;
+  });
+  if (isDuplicate) {
+    document.getElementById('chTitleInput').classList.add('invalid');
+    const err = document.getElementById('chTitleError');
+    if (err) { err.textContent = 'A chapter with this name already exists.'; err.style.display = 'block'; }
+    document.getElementById('chTitleInput').focus();
+    return;
+  }
 
   if (modalMode === 'add-chapter') {
     chapters.push({ id: genId(), chapter: title, year, topics: [] });
@@ -1667,12 +1716,18 @@ async function saveChapterModal() {
     chapters[editChIdx] = { ...chapters[editChIdx], chapter: title, year };
   }
 
+  _modalDirty = false;
   closeChapterModal();
   await saveChapters();
   showToast(modalMode === 'add-chapter' ? 'Chapter added.' : 'Chapter updated.');
 }
 
 function closeChapterModal() {
+  if (_modalDirty) {
+    showToast('Changes discarded.', false);
+    _modalDirty = false;
+  }
+  clearFieldError('chTitleInput', 'chTitleError');
   document.getElementById('chapterModal').classList.remove('open');
 }
 
@@ -1701,6 +1756,7 @@ function openAddTopicModal(ci) {
   document.getElementById('topDurationInput').value        = '';
   document.getElementById('topObjectivesInput').value      = '';
   renderModalResources();
+  _modalDirty = false;
   document.getElementById('topicModal').classList.add('open');
   document.getElementById('topTitleInput').focus();
 }
@@ -1716,6 +1772,7 @@ function editTopic(ci, ti) {
   document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
   document.getElementById('topObjectivesInput').value      = t.objectives || t.objective  || '';
   renderModalResources();
+  _modalDirty = false;
   document.getElementById('topicModal').classList.add('open');
   document.getElementById('topTitleInput').focus();
 }
@@ -1766,9 +1823,15 @@ async function saveTopicModal() {
   const title      = document.getElementById('topTitleInput').value.trim();
   const duration   = parseInt(document.getElementById('topDurationInput').value) || null;
   const objectives = document.getElementById('topObjectivesInput').value.trim();
-  if (!title) { document.getElementById('topTitleInput').focus(); return; }
+  if (!title) {
+    document.getElementById('topTitleInput').classList.add('invalid');
+    const err = document.getElementById('topTitleError');
+    if (err) err.style.display = 'block';
+    document.getElementById('topTitleInput').focus();
+    return;
+  }
 
-  const resources = readModalResourcesFromDOM();
+  const resources = readModalResourcesFromDOM().filter(r => /^https?:\/\//i.test(r.url));
   const topic = { topic: title, hour: duration, objective: objectives, resources };
 
   if (modalMode === 'add-topic') {
@@ -1782,12 +1845,18 @@ async function saveTopicModal() {
     };
   }
 
+  _modalDirty = false;
   closeTopicModal();
   await saveChapters();
   showToast(modalMode === 'add-topic' ? 'Topic added.' : 'Topic updated.');
 }
 
 function closeTopicModal() {
+  if (_modalDirty) {
+    showToast('Changes discarded.', false);
+    _modalDirty = false;
+  }
+  clearFieldError('topTitleInput', 'topTitleError');
   document.getElementById('topicModal').classList.remove('open');
 }
 
@@ -1798,6 +1867,23 @@ async function deleteTopic(e, ci, ti) {
   chapters[ci].topics.splice(ti, 1);
   await saveChapters();
   showToast('Topic deleted.');
+}
+
+// ── Reorder ──────────────────────────────────────────────────────
+async function moveChapter(e, ci, dir) {
+  e.stopPropagation();
+  const ni = ci + dir;
+  if (ni < 0 || ni >= chapters.length) return;
+  [chapters[ci], chapters[ni]] = [chapters[ni], chapters[ci]];
+  await saveChapters();
+}
+
+async function moveTopic(ci, ti, dir) {
+  const topics = chapters[ci].topics;
+  const ni = ti + dir;
+  if (ni < 0 || ni >= topics.length) return;
+  [topics[ti], topics[ni]] = [topics[ni], topics[ti]];
+  await saveChapters();
 }
 
 // ── Toast ─────────────────────────────────────────────────────────
@@ -1824,6 +1910,8 @@ Object.assign(window, {
   closeTopicModal,
   addModalResource,
   removeModalResource,
+  moveChapter,
+  moveTopic,
 });
 
 // Close modals on backdrop click
