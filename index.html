@@ -2914,9 +2914,12 @@
           return                     { cls: "ue-cd-future",   label: `In ${diffDays} days` };
         }
 
+        // ── Pre-compute startMs for all upcoming events (avoids repeated new Date() in map) ──
+        const upcomingMs = upcoming.map((e) => new Date(e.date_start).getTime());
+
         // ── Show nearest event as notification — only if ≤7 days away ─────────
         const ne = upcoming[0];
-        const neMs = new Date(ne.date_start).getTime();
+        const neMs = upcomingMs[0];
         const neDiff = Math.round((neMs - todayMs) / 86400000);
         if (!sessionStorage.getItem("eventNotifyShown") && neDiff <= 7) {
           const neStyle = calEventStyle(ne);
@@ -2960,13 +2963,12 @@
         }
 
         container.innerHTML = upcoming
-          .map((e) => {
+          .map((e, i) => {
             const style = calEventStyle(e);
             const [sy, sm, sd] = e.date_start.split("-").map(Number);
             const [, em, ed] = e.date_end.split("-").map(Number);
             const isMultiDay = e.date_start !== e.date_end;
-            const startMs = new Date(e.date_start).getTime();
-            const diffDays = Math.round((startMs - todayMs) / 86400000);
+            const diffDays = Math.round((upcomingMs[i] - todayMs) / 86400000);
             const { cls: cdClass, label: cdLabel } = getCountdownInfo(diffDays);
 
             const rangeHtml = isMultiDay
@@ -3091,6 +3093,26 @@
         const list = document.getElementById("activityList");
         if (_unsubAnnouncements) _unsubAnnouncements();
 
+        function buildActivityItem(docSnap) {
+          const d = docSnap.data();
+          const author = d.author || "Admin";
+          const initials = author.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+          const date = d.createdAt?.toDate
+            ? d.createdAt.toDate().toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+            : "";
+          const pinTag = d.pinned ? `<span class="act-pin">Pinned</span>` : "";
+          const el = document.createElement("div");
+          el.className = "activity-item";
+          el.dataset.id = docSnap.id;
+          el.innerHTML = `
+            <div class="act-avatar" aria-hidden="true">${initials}</div>
+            <div class="act-body">
+              <p class="act-title">${esc(d.title || "Untitled")}${pinTag}</p>
+              <p class="act-meta">${esc(author)} &middot; ${date}</p>
+            </div>`;
+          return el;
+        }
+
         _unsubAnnouncements = onSnapshot(
           query(
             collection(db, "announcements"),
@@ -3102,35 +3124,27 @@
               list.innerHTML = '<div class="act-empty">No announcements yet.</div>';
               return;
             }
-            list.innerHTML = snap.docs
-              .map((docSnap) => {
-                const d = docSnap.data();
-                const author = d.author || "Admin";
-                const initials = author
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase();
-                const date = d.createdAt?.toDate
-                  ? d.createdAt.toDate().toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                    })
-                  : "";
-                const pinTag = d.pinned
-                  ? `<span class="act-pin">Pinned</span>`
-                  : "";
-                return `
-          <div class="activity-item">
-            <div class="act-avatar" aria-hidden="true">${initials}</div>
-            <div class="act-body">
-              <p class="act-title">${esc(d.title || "Untitled")}${pinTag}</p>
-              <p class="act-meta">${esc(author)} &middot; ${date}</p>
-            </div>
-          </div>`;
-              })
-              .join("");
+            // Remove stale empty state if present
+            const emptyEl = list.querySelector(".act-empty");
+            if (emptyEl) emptyEl.remove();
+
+            snap.docChanges().forEach((change) => {
+              if (change.type === "added") {
+                // Insert at correct position (list is ordered desc)
+                const newEl = buildActivityItem(change.doc);
+                const sibling = list.children[change.newIndex];
+                sibling ? list.insertBefore(newEl, sibling) : list.appendChild(newEl);
+              } else if (change.type === "modified") {
+                const existing = list.querySelector(`[data-id="${change.doc.id}"]`);
+                if (existing) existing.replaceWith(buildActivityItem(change.doc));
+              } else if (change.type === "removed") {
+                const existing = list.querySelector(`[data-id="${change.doc.id}"]`);
+                if (existing) existing.remove();
+                if (!list.children.length) {
+                  list.innerHTML = '<div class="act-empty">No announcements yet.</div>';
+                }
+              }
+            });
           },
           (err) => {
             console.error("Activity snapshot error:", err);
@@ -3440,7 +3454,14 @@
         };
         const fallback = { spine: "#44445a", band: "#8888a8" };
 
-        const docIconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`;
+        // Define SVG symbol once; reference per card avoids repeated inline blobs
+        if (!document.getElementById('_pubDocIcon')) {
+          const svgDefs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svgDefs.setAttribute('style', 'display:none');
+          svgDefs.innerHTML = `<symbol id="_pubDocIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></symbol>`;
+          document.body.appendChild(svgDefs);
+        }
+        const docIconSvg = `<svg width="18" height="18"><use href="#_pubDocIcon"/></svg>`;
 
         const books = _allFeaturedDocs
           .map((d) => {
@@ -3486,8 +3507,12 @@
         });
         grid.addEventListener("mouseleave", () => { isDown = false; grid.classList.remove("is-dragging"); });
         grid.addEventListener("mouseup", () => { isDown = false; grid.classList.remove("is-dragging"); });
+        let _lastMoveTime = 0;
         grid.addEventListener("mousemove", (e) => {
           if (!isDown) return;
+          const now = Date.now();
+          if (now - _lastMoveTime < 16) return;
+          _lastMoveTime = now;
           e.preventDefault();
           const x = e.pageX - grid.offsetLeft;
           grid.scrollLeft = scrollLeft - (x - startX) * 1.4;
@@ -3854,12 +3879,10 @@
 
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            _allItems = Array.from(dropdown.querySelectorAll(".search-result-item"));
             _focusedIdx = Math.min(_focusedIdx + 1, _allItems.length - 1);
             updateFocus();
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            _allItems = Array.from(dropdown.querySelectorAll(".search-result-item"));
             _focusedIdx = Math.max(_focusedIdx - 1, -1);
             updateFocus();
           } else if (e.key === "Enter") {

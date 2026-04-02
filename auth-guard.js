@@ -80,7 +80,6 @@ function promptForName() {
         <button id="_nameBtn" style="width:100%;padding:11px;background:linear-gradient(135deg,#7c3aed,#0891b2);color:#fff;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer">Continue →</button>
       </div>`;
     document.body.appendChild(overlay);
-    document.body.style.visibility = 'visible';
 
     const input = overlay.querySelector('#_nameInput');
     const btn   = overlay.querySelector('#_nameBtn');
@@ -91,7 +90,6 @@ function promptForName() {
       const name = input.value.trim();
       if (!name) { err.textContent = 'Please enter your name.'; return; }
       overlay.remove();
-      document.body.style.visibility = 'hidden';
       resolve(name);
     };
     btn.addEventListener('click', submit);
@@ -321,9 +319,11 @@ function applyAvatarVisual(avatarEl, displayName, email, photoURL) {
   }
 }
 
+let _profileModalMounted = false;
 function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
-  const navAuth = document.querySelector('.nav-auth');
-  if (!navAuth) return;
+  if (_profileModalMounted) return;
+  if (!navUserName || !navAvatar) return;
+  _profileModalMounted = true;
 
   ensureProfileModalStyles();
 
@@ -625,9 +625,15 @@ onAuthStateChanged(auth, async (user) => {
   window.currentUser = user;
   window.userProfile = profile;
 
+  // ── Cache shared nav element references ──────────────────────────
+  const navAuth     = document.querySelector('.nav-auth');
+  const navUserName = document.querySelector('.nav-user-name');
+  const navAvatar   = document.getElementById('navAvatar');
+  const logoutBtn   = document.getElementById('logoutBtn');
+  const displayName = profile.displayName || user.displayName;
+
   // ── Show Console nav link for central_admin (right side of nav) ──
   if (platformRole === 'central_admin') {
-    const navAuth = document.querySelector('.nav-auth');
     if (navAuth && !navAuth.querySelector('a[href="console"]')) {
       const link = document.createElement('a');
       link.href        = 'console';
@@ -638,10 +644,6 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   // ── Populate shared nav elements ─────────────────────────────────
-  const displayName = profile.displayName || user.displayName;
-  const navUserName = document.querySelector('.nav-user-name');
-  const navAvatar   = document.getElementById('navAvatar');
-  const logoutBtn   = document.getElementById('logoutBtn');
 
   if (navUserName) {
     navUserName.textContent = displayName || user.email;

@@ -15,7 +15,7 @@ service cloud.firestore {
     // School teachers - any @*.sch.id Google account (Academic Hub / Teachers Hub)
     function isSchoolUser() {
       return isSignedIn() &&
-             request.auth.token.email.matches('.*\\.sch\\.id$');
+             request.auth.token.email.matches('.*@.*\\.sch\\.id');
     }
 
     // Manually-added users sign in via email/password - Firebase sets
@@ -184,29 +184,25 @@ service cloud.firestore {
 
     // -- surveys (cross-platform) ----------------------------
     match /surveys/{surveyId} {
-      // get: enforce per-document platform check (resource.data available)
-      allow get: if canReadSurvey(resource.data);
-      // list: resource.data is unavailable for queries; allow any authorized user to list
-      // (client-side filtering handles platform visibility)
-      allow list: if isAuthorized();
+      allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
     }
 
     // -- survey_responses ------------------------------------
     match /survey_responses/{responseId} {
-      allow read: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
+      allow read: if isSignedIn();
 
-      allow create: if isAuthorized() &&
+      allow create: if isSignedIn() &&
                        isValidResponsePayload(request.resource.data);
 
-      allow update: if isAuthorized() &&
+      allow update: if isSignedIn() &&
                        resource.data.userId == request.auth.uid &&
                        isValidResponsePayload(request.resource.data) &&
                        request.resource.data.userId == resource.data.userId &&
                        request.resource.data.surveyId == resource.data.surveyId &&
                        request.resource.data.platform == resource.data.platform;
 
-      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // -- central_documents -----------------------------------

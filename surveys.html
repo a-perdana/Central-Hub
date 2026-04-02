@@ -474,12 +474,16 @@
       myResponses = {};
       if (!currentUser || !allSurveys.length) return;
 
-      const tasks = allSurveys.map(async (survey) => {
-        const responseRef = doc(db, "survey_responses", buildResponseDocId(survey.id, currentUser.uid));
-        const snap = await getDoc(responseRef);
-        if (snap.exists()) myResponses[survey.id] = snap.data();
+      // Single query for all responses by this user — avoids N+1 individual getDoc calls
+      const snap = await getDocs(query(
+        collection(db, "survey_responses"),
+        where("userId", "==", currentUser.uid),
+        where("platform", "==", PLATFORM_KEY),
+      ));
+      snap.forEach(d => {
+        const data = d.data();
+        if (data.surveyId) myResponses[data.surveyId] = data;
       });
-      await Promise.all(tasks);
     }
 
     async function saveResponse(survey, answers) {
