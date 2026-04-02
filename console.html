@@ -79,6 +79,13 @@
     .badge-teachers  { background: #d1fae5; color: #065f46; }
     .badge-research  { background: #fce7f3; color: #9d174d; }
     .badge-unknown   { background: var(--paper-2); color: var(--ink-3); }
+    .badge-pending  { background: #fef3c7; color: #92400e; }
+    .badge-approved { background: #d1fae5; color: #065f46; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
+
+    /* Pending approval highlight */
+    tr.row-pending td { background: #fffbeb; }
+    tr.row-pending:hover td { background: #fef3c7; }
 
     /* EMPTY / SKELETON */
     .empty-row td { text-align: center; padding: 48px; color: var(--ink-3); font-size: 0.875rem; }
@@ -156,6 +163,7 @@
       <option value="teachers_user">teachers_user</option>
       <option value="research_admin">research_admin</option>
       <option value="research_user">research_user</option>
+      <option value="__pending_ah">AH — pending approval</option>
     </select>
     <span class="user-count" id="userCount"></span>
   </div>
@@ -168,6 +176,7 @@
           <th>User</th>
           <th>CentralHub</th>
           <th>Academic Hub</th>
+          <th>AH Approval</th>
           <th>Teachers Hub</th>
           <th>Research Hub</th>
           <th>Joined</th>
@@ -175,7 +184,7 @@
         </tr>
       </thead>
       <tbody id="usersBody">
-        <tr><td colspan="7" style="padding:48px;text-align:center;color:var(--ink-3)">
+        <tr><td colspan="8" style="padding:48px;text-align:center;color:var(--ink-3)">
           <span class="skel" style="height:16px;width:60%;display:block;margin:auto"></span>
         </td></tr>
       </tbody>
@@ -224,6 +233,15 @@
         </select>
       </div>
       <div class="form-group">
+        <label class="form-label" for="fieldApprovalAH">Academic Hub Approval</label>
+        <select class="form-select" id="fieldApprovalAH">
+          <option value="">— not set —</option>
+          <option value="pending">pending</option>
+          <option value="approved">approved</option>
+          <option value="rejected">rejected</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label class="form-label" for="fieldRoleTH">Teachers Hub Role</label>
         <select class="form-select" id="fieldRoleTH">
           <option value="">— not set —</option>
@@ -251,7 +269,7 @@
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
-  import { collection, getDocs, updateDoc, deleteDoc, doc as fsDoc }
+  import { collection, getDocs, updateDoc, deleteDoc, doc as fsDoc, query, where }
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
   let db;
@@ -267,6 +285,12 @@
     teachers_user:   '<span class="badge badge-teachers">teachers_user</span>',
     research_admin:  '<span class="badge badge-research">research_admin</span>',
     research_user:   '<span class="badge badge-research">research_user</span>',
+  };
+
+  const APPROVAL_BADGE = {
+    pending:  '<span class="badge badge-pending">pending</span>',
+    approved: '<span class="badge badge-approved">approved</span>',
+    rejected: '<span class="badge badge-rejected">rejected</span>',
   };
 
   const PLATFORM_BADGE = {
@@ -314,10 +338,12 @@
   function applyFilters() {
     const q  = document.getElementById('searchInput').value.toLowerCase();
     const ro = document.getElementById('roleFilter').value;
-    const list = allUsers.filter(u =>
-      (!q  || u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)) &&
-      (!ro || u.role_centralhub === ro || u.role_academichub === ro || u.role_teachershub === ro || u.role_researchhub === ro)
-    );
+    const list = allUsers.filter(u => {
+      if (q && !u.displayName?.toLowerCase().includes(q) && !u.email?.toLowerCase().includes(q)) return false;
+      if (ro === '__pending_ah') return u.approval_status_academichub === 'pending';
+      if (ro && u.role_centralhub !== ro && u.role_academichub !== ro && u.role_teachershub !== ro && u.role_researchhub !== ro) return false;
+      return true;
+    });
     document.getElementById('userCount').textContent =
       `${list.length} user${list.length !== 1 ? 's' : ''}`;
     renderTable(list);
@@ -326,7 +352,7 @@
   function renderTable(list) {
     const body = document.getElementById('usersBody');
     if (!list.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="7">No users match your filters.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="8">No users match your filters.</td></tr>';
       return;
     }
     body.innerHTML = list.map(u => {
@@ -335,12 +361,19 @@
       const joined   = u.createdAt?.toDate
         ? u.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : '—';
-      const chBadge = ROLE_BADGE[u.role_centralhub]  || '<span style="color:var(--ink-3)">—</span>';
-      const ahBadge = ROLE_BADGE[u.role_academichub] || '<span style="color:var(--ink-3)">—</span>';
-      const thBadge = ROLE_BADGE[u.role_teachershub]  || '<span style="color:var(--ink-3)">—</span>';
-      const rhBadge = ROLE_BADGE[u.role_researchhub]  || '<span style="color:var(--ink-3)">—</span>';
+      const chBadge       = ROLE_BADGE[u.role_centralhub]              || '<span style="color:var(--ink-3)">—</span>';
+      const ahBadge       = ROLE_BADGE[u.role_academichub]             || '<span style="color:var(--ink-3)">—</span>';
+      const ahApproval    = APPROVAL_BADGE[u.approval_status_academichub] || '<span style="color:var(--ink-3)">—</span>';
+      const thBadge       = ROLE_BADGE[u.role_teachershub]             || '<span style="color:var(--ink-3)">—</span>';
+      const rhBadge       = ROLE_BADGE[u.role_researchhub]             || '<span style="color:var(--ink-3)">—</span>';
+      const isPending     = u.approval_status_academichub === 'pending';
+      const approvalCell  = isPending
+        ? `${ahApproval}
+           <button class="btn-action" style="margin-left:6px;color:#065f46;border-color:#6ee7b7" onclick="approveUser('${u.id}')">Approve</button>
+           <button class="btn-action" style="margin-left:4px;color:#991b1b;border-color:#fca5a5" onclick="rejectUser('${u.id}')">Reject</button>`
+        : ahApproval;
       return `
-        <tr>
+        <tr${isPending ? ' class="row-pending"' : ''}>
           <td>
             <div class="user-name-cell">
               <div class="user-avatar" aria-hidden="true">${initials}</div>
@@ -352,6 +385,7 @@
           </td>
           <td>${chBadge}</td>
           <td>${ahBadge}</td>
+          <td style="white-space:nowrap">${approvalCell}</td>
           <td>${thBadge}</td>
           <td>${rhBadge}</td>
           <td style="color:var(--ink-3);font-size:0.82rem">${joined}</td>
@@ -364,12 +398,13 @@
     const u = allUsers.find(x => x.id === id);
     if (!u) return;
     editingId = id;
-    document.getElementById('fieldName').value   = u.displayName      || '';
-    document.getElementById('fieldEmail').value  = u.email            || '';
-    document.getElementById('fieldRoleCH').value = u.role_centralhub  || '';
-    document.getElementById('fieldRoleAH').value = u.role_academichub || '';
-    document.getElementById('fieldRoleTH').value = u.role_teachershub || '';
-    document.getElementById('fieldRoleRH').value = u.role_researchhub || '';
+    document.getElementById('fieldName').value       = u.displayName                   || '';
+    document.getElementById('fieldEmail').value      = u.email                         || '';
+    document.getElementById('fieldRoleCH').value     = u.role_centralhub               || '';
+    document.getElementById('fieldRoleAH').value     = u.role_academichub              || '';
+    document.getElementById('fieldApprovalAH').value = u.approval_status_academichub   || '';
+    document.getElementById('fieldRoleTH').value     = u.role_teachershub              || '';
+    document.getElementById('fieldRoleRH').value     = u.role_researchhub              || '';
     hideErr();
     document.getElementById('drawerOverlay').classList.add('open');
   }
@@ -379,12 +414,13 @@
   function hideErr()     { document.getElementById('drawerError').classList.remove('visible'); }
 
   async function saveUser() {
-    const displayName = document.getElementById('fieldName').value.trim();
-    const email       = document.getElementById('fieldEmail').value.trim();
-    const roleCH      = document.getElementById('fieldRoleCH').value;
-    const roleAH      = document.getElementById('fieldRoleAH').value;
-    const roleTH      = document.getElementById('fieldRoleTH').value;
-    const roleRH      = document.getElementById('fieldRoleRH').value;
+    const displayName  = document.getElementById('fieldName').value.trim();
+    const email        = document.getElementById('fieldEmail').value.trim();
+    const roleCH       = document.getElementById('fieldRoleCH').value;
+    const roleAH       = document.getElementById('fieldRoleAH').value;
+    const approvalAH   = document.getElementById('fieldApprovalAH').value;
+    const roleTH       = document.getElementById('fieldRoleTH').value;
+    const roleRH       = document.getElementById('fieldRoleRH').value;
     if (!displayName) { showErr('Name is required.'); return; }
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
@@ -392,15 +428,17 @@
       await updateDoc(fsDoc(db, 'users', editingId), {
         displayName,
         email,
-        role_centralhub:  roleCH,
-        role_academichub: roleAH,
-        role_teachershub: roleTH,
-        role_researchhub: roleRH,
+        role_centralhub:              roleCH,
+        role_academichub:             roleAH,
+        approval_status_academichub:  approvalAH,
+        role_teachershub:             roleTH,
+        role_researchhub:             roleRH,
       });
       const u = allUsers.find(x => x.id === editingId);
       if (u) {
         u.displayName = displayName; u.email = email;
         u.role_centralhub = roleCH; u.role_academichub = roleAH;
+        u.approval_status_academichub = approvalAH;
         u.role_teachershub = roleTH; u.role_researchhub = roleRH;
       }
       closeDrawer();
@@ -430,11 +468,27 @@
     }
   }
 
+  async function setApprovalStatus(id, status) {
+    try {
+      await updateDoc(fsDoc(db, 'users', id), { approval_status_academichub: status });
+      const u = allUsers.find(x => x.id === id);
+      if (u) u.approval_status_academichub = status;
+      applyFilters();
+    } catch (e) {
+      alert('Could not update approval status: ' + e.message);
+    }
+  }
+
+  function approveUser(id) { setApprovalStatus(id, 'approved'); }
+  function rejectUser(id)  { setApprovalStatus(id, 'rejected'); }
+
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  window.editUser = editUser;
+  window.editUser    = editUser;
+  window.approveUser = approveUser;
+  window.rejectUser  = rejectUser;
 </script>
 
 </body>
