@@ -465,6 +465,35 @@
       color: var(--ink-3);
       font-size: 0.875rem;
     }
+    .tp-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 12px 18px;
+      border-top: 1px solid var(--paper-2);
+    }
+    .tp-page-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--ink-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .tp-page-btn:hover:not(:disabled) { background: var(--paper-2); border-color: #c8c5be; }
+    .tp-page-btn:disabled { opacity: 0.35; cursor: default; }
+    .tp-page-info {
+      font-size: 0.82rem;
+      color: var(--ink-3);
+      min-width: 80px;
+      text-align: center;
+    }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 960px) {
@@ -658,6 +687,15 @@
       <tbody id="tpTbody"></tbody>
     </table>
     <div class="tp-empty" id="tpEmpty" style="display:none;">No progress data for this subject yet.</div>
+    <div class="tp-pagination" id="tpPagination" style="display:none;">
+      <button class="tp-page-btn" id="tpPrev" aria-label="Previous page">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="tp-page-info" id="tpPageInfo"></span>
+      <button class="tp-page-btn" id="tpNext" aria-label="Next page">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
   </div>
 
   <!-- Status Banner -->
@@ -807,25 +845,29 @@
     'cp-english':  { label: 'Checkpoint English',     structureCol: 'checkpoint_english_pacing', structureDoc: 'year7-8',   statusField: 'checkpoint_english_statuses'  },
   };
 
+  const PAGE_SIZE = 5;
+
   let currentSubject = 'igcse-math';
-  // Cache: structureKey → { totalTopics, topicIndex } where topicIndex maps "ci-ti" → topic name
+  let currentPage    = 1;
+  let allRows        = [];   // sorted rows for current subject
+
   const structureCache = {};
-  // Cache: all userProgress docs fetched once per session (uid → data)
   let progressCache = null;
-  // Cache: users with role_teachershub fetched once (uid → profile)
   let teachersCache = null;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function setLoading(on) {
-    document.getElementById('tpLoading').style.display = on ? '' : 'none';
-    document.getElementById('tpTable').style.display   = on ? 'none' : '';
-    document.getElementById('tpEmpty').style.display   = 'none';
+    document.getElementById('tpLoading').style.display    = on ? '' : 'none';
+    document.getElementById('tpTable').style.display      = on ? 'none' : '';
+    document.getElementById('tpEmpty').style.display      = 'none';
+    document.getElementById('tpPagination').style.display = 'none';
   }
 
   function showEmpty() {
-    document.getElementById('tpLoading').style.display = 'none';
-    document.getElementById('tpTable').style.display   = 'none';
-    document.getElementById('tpEmpty').style.display   = '';
+    document.getElementById('tpLoading').style.display    = 'none';
+    document.getElementById('tpTable').style.display      = 'none';
+    document.getElementById('tpEmpty').style.display      = '';
+    document.getElementById('tpPagination').style.display = 'none';
   }
 
   function esc(str) {
@@ -863,7 +905,7 @@
     return progressCache;
   }
 
-  // ── Fetch teachers (role_teachershub users) ───────────────────────────────
+  // ── Fetch teachers ────────────────────────────────────────────────────────
   async function getTeachers() {
     if (teachersCache) return teachersCache;
     const q = query(
@@ -876,7 +918,6 @@
     return teachersCache;
   }
 
-  // ── Find current "inprogress" topic for a teacher ─────────────────────────
   function findActiveTopics(statuses, topicIndex) {
     return Object.entries(statuses)
       .filter(([, v]) => v === 'inprogress')
@@ -884,48 +925,20 @@
       .filter(Boolean);
   }
 
-  // ── Render table ──────────────────────────────────────────────────────────
-  async function renderSubject(subjectKey) {
-    setLoading(true);
-    const cfg = SUBJECTS[subjectKey];
-
-    const [structure, allProgress, teachers] = await Promise.all([
-      getStructure(subjectKey),
-      getAllProgress(),
-      getTeachers(),
-    ]);
-
-    const { totalTopics, topicIndex } = structure;
-
-    // Build rows only for teachers who have any progress data for this subject
-    const rows = [];
-    for (const [uid, profile] of Object.entries(teachers)) {
-      const prog = allProgress[uid];
-      const statuses = (prog && prog[cfg.statusField]) ? prog[cfg.statusField] : {};
-      const doneCount = Object.values(statuses).filter(v => v === 'done').length;
-      const inprogressCount = Object.values(statuses).filter(v => v === 'inprogress').length;
-      const activeTopics = findActiveTopics(statuses, topicIndex);
-      const displayName = profile.displayName || (profile.email ? profile.email.split('@')[0] : uid);
-      rows.push({ uid, displayName, email: profile.email || '', doneCount, inprogressCount, activeTopics, totalTopics });
-    }
-
-    // Sort: inprogress first, then by doneCount desc
-    rows.sort((a, b) => {
-      if (b.inprogressCount !== a.inprogressCount) return b.inprogressCount - a.inprogressCount;
-      return b.doneCount - a.doneCount;
-    });
-
-    if (rows.length === 0) { showEmpty(); return; }
+  // ── Render one page of rows ───────────────────────────────────────────────
+  function renderPage() {
+    const totalPages = Math.ceil(allRows.length / PAGE_SIZE);
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageRows = allRows.slice(start, start + PAGE_SIZE);
 
     const tbody = document.getElementById('tpTbody');
-    tbody.innerHTML = rows.map(r => {
+    tbody.innerHTML = pageRows.map(r => {
       const pct = r.totalTopics > 0 ? Math.round((r.doneCount / r.totalTopics) * 100) : 0;
       const activeTopic = r.activeTopics[0] || null;
-
       let statusBadge;
-      if (r.inprogressCount > 0)    statusBadge = `<span class="tp-badge inprogress">In Progress</span>`;
-      else if (r.doneCount > 0)     statusBadge = `<span class="tp-badge">Active</span>`;
-      else                           statusBadge = `<span class="tp-badge notstarted">Not Started</span>`;
+      if (r.inprogressCount > 0) statusBadge = `<span class="tp-badge inprogress">In Progress</span>`;
+      else if (r.doneCount > 0)  statusBadge = `<span class="tp-badge">Active</span>`;
+      else                        statusBadge = `<span class="tp-badge notstarted">Not Started</span>`;
 
       return `<tr>
         <td>
@@ -948,9 +961,65 @@
       </tr>`;
     }).join('');
 
-    setLoading(false);
-    document.getElementById('tpTable').style.display = '';
+    // Update pagination controls
+    const paginationEl = document.getElementById('tpPagination');
+    if (totalPages > 1) {
+      document.getElementById('tpPageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+      document.getElementById('tpPrev').disabled = currentPage === 1;
+      document.getElementById('tpNext').disabled = currentPage === totalPages;
+      paginationEl.style.display = 'flex';
+    } else {
+      paginationEl.style.display = 'none';
+    }
   }
+
+  // ── Load subject data & build full row list ───────────────────────────────
+  async function renderSubject(subjectKey) {
+    setLoading(true);
+    const cfg = SUBJECTS[subjectKey];
+
+    const [structure, allProgress, teachers] = await Promise.all([
+      getStructure(subjectKey),
+      getAllProgress(),
+      getTeachers(),
+    ]);
+
+    const { totalTopics, topicIndex } = structure;
+
+    const rows = [];
+    for (const [uid, profile] of Object.entries(teachers)) {
+      const prog = allProgress[uid];
+      const statuses = (prog && prog[cfg.statusField]) ? prog[cfg.statusField] : {};
+      const doneCount = Object.values(statuses).filter(v => v === 'done').length;
+      const inprogressCount = Object.values(statuses).filter(v => v === 'inprogress').length;
+      const activeTopics = findActiveTopics(statuses, topicIndex);
+      const displayName = profile.displayName || (profile.email ? profile.email.split('@')[0] : uid);
+      rows.push({ uid, displayName, email: profile.email || '', doneCount, inprogressCount, activeTopics, totalTopics });
+    }
+
+    rows.sort((a, b) => {
+      if (b.inprogressCount !== a.inprogressCount) return b.inprogressCount - a.inprogressCount;
+      return b.doneCount - a.doneCount;
+    });
+
+    if (rows.length === 0) { showEmpty(); return; }
+
+    allRows = rows;
+    currentPage = 1;
+
+    document.getElementById('tpLoading').style.display = 'none';
+    document.getElementById('tpTable').style.display   = '';
+    renderPage();
+  }
+
+  // ── Pagination buttons ────────────────────────────────────────────────────
+  document.getElementById('tpPrev').addEventListener('click', () => {
+    if (currentPage > 1) { currentPage--; renderPage(); }
+  });
+  document.getElementById('tpNext').addEventListener('click', () => {
+    const totalPages = Math.ceil(allRows.length / PAGE_SIZE);
+    if (currentPage < totalPages) { currentPage++; renderPage(); }
+  });
 
   // ── Tab switching ─────────────────────────────────────────────────────────
   document.getElementById('tpTabs').addEventListener('click', e => {
