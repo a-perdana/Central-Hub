@@ -69,6 +69,7 @@ const htmlFiles = [
   "survey-console.html",
   "certificates.html",
   "certificate-verify.html",
+  "checklist-admin.html",
 ];
 
 htmlFiles.forEach((file) => {

@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checklist Admin — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:       #1c1c2e;
+      --ink-2:     #44445a;
+      --ink-3:     #8888a8;
+      --paper:     #f7f6f3;
+      --paper-2:   #efede8;
+      --white:     #ffffff;
+      --border:    #e0ddd6;
+      --accent:    #0891b2;
+      --accent-dk: #0e7490;
+      --accent-2:  #e0f2fe;
+      --green:     #059669;
+      --green-2:   #d1fae5;
+      --shadow-sm: 0 1px 4px rgba(28,28,46,.07);
+      --shadow:    0 3px 14px rgba(28,28,46,.10);
+      --shadow-lg: 0 10px 40px rgba(28,28,46,.16);
+      --radius:    10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ── TOP NAV ── */
+    .top-nav {
+      position: sticky; top: 0; z-index: 100; height: 62px; padding: 0 28px;
+      display: flex; align-items: center; gap: 28px;
+      background: rgba(5,5,16,0.95); backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+    .nav-brand-name { font-size: 1.05rem; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 2px; flex: 1; }
+    .nav-link {
+      font-size: 0.875rem; font-weight: 500; color: rgba(255,255,255,0.6);
+      text-decoration: none; padding: 6px 12px; border-radius: 6px; transition: color 0.2s, background 0.2s;
+    }
+    .nav-link:hover  { color: #fff; background: rgba(255,255,255,0.07); }
+    .nav-link.active { color: #fff; background: rgba(255,255,255,0.10); }
+    .nav-auth { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .nav-user-name { font-size: 0.875rem; color: rgba(255,255,255,0.65); }
+    .nav-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: linear-gradient(135deg, #7c3aed, #0891b2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .btn-logout {
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500;
+      color: rgba(255,255,255,0.48); background: none;
+      border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 5px 12px;
+      cursor: pointer; transition: color 0.2s, border-color 0.2s;
+    }
+    .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,0.28); }
+
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(140deg, #0c1a2e 0%, #0a3a5c 50%, #0891b2 100%);
+      padding: 36px 40px 28px; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background:
+        radial-gradient(circle at 10% 60%, rgba(255,255,255,0.05) 0%, transparent 50%),
+        radial-gradient(circle at 85% 20%, rgba(0,0,0,0.15) 0%, transparent 50%);
+    }
+    .hero-inner { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
+    .hero-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 8px; }
+    .hero-title { font-family: 'Lora', serif; font-size: 1.7rem; font-weight: 600; color: #fff; margin-bottom: 6px; }
+    .hero-desc { font-size: 0.875rem; color: rgba(255,255,255,0.65); }
+
+    /* ── PAGE WRAP ── */
+    .page-wrap { max-width: 1100px; margin: 0 auto; padding: 28px 40px 72px; }
+
+    /* ── ACCESS DENIED ── */
+    .access-denied {
+      text-align: center; padding: 56px 24px; background: var(--white);
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .access-denied h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .access-denied p  { font-size: 0.875rem; color: var(--ink-3); }
+
+    /* ── PLATFORM TABS ── */
+    .platform-tabs {
+      display: flex; gap: 4px; margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+    }
+    .plat-tab {
+      padding: 10px 22px; border: none; background: transparent;
+      font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600;
+      color: var(--ink-3); cursor: pointer; border-radius: 8px 8px 0 0;
+      transition: all 0.18s; position: relative; bottom: -2px;
+      border: 2px solid transparent; border-bottom: none;
+    }
+    .plat-tab:hover { color: var(--ink-2); background: var(--paper-2); }
+    .plat-tab.active {
+      color: var(--accent-dk); background: var(--white);
+      border-color: var(--border); border-bottom-color: var(--white);
+    }
+
+    /* ── WEEK NAV ── */
+    .week-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);
+    }
+    .week-nav-center { text-align: center; }
+    .week-num  { font-size: 1.05rem; font-weight: 700; color: var(--ink); }
+    .week-dates{ font-size: 0.78rem; color: var(--ink-3); margin-top: 2px; }
+    .week-this { font-size: 11px; font-weight: 700; color: var(--green); margin-top: 2px; }
+    .btn-nav {
+      padding: 8px 16px; background: var(--paper); border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+      color: var(--ink-2); transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-nav:hover:not(:disabled) { background: var(--paper-2); }
+    .btn-nav:disabled { opacity: 0.35; cursor: default; }
+
+    /* ── TWO COLUMN LAYOUT ── */
+    .two-col { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+
+    /* ── TEMPLATE PANEL ── */
+    .panel {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    }
+    .panel-head {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-head h3 { font-size: 0.95rem; font-weight: 600; color: var(--ink); }
+    .panel-body { padding: 16px 20px; }
+
+    .task-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 8px;
+      border: 1px solid var(--border); margin-bottom: 7px;
+      background: var(--paper);
+    }
+    .task-item-title { flex: 1; font-size: 0.875rem; color: var(--ink); }
+    .task-item-cat {
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px;
+      text-transform: uppercase; flex-shrink: 0;
+    }
+    .task-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .btn-xs {
+      padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--white); cursor: pointer; font-size: 11px; font-weight: 600;
+      color: var(--ink-3); transition: all 0.15s; font-family: 'DM Sans', sans-serif; line-height: 1;
+    }
+    .btn-xs:hover { background: var(--paper-2); color: var(--ink); }
+    .btn-xs.danger:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+    .no-tasks { text-align: center; padding: 24px; color: var(--ink-3); font-size: 0.875rem; }
+
+    /* ── PROGRESS TABLE ── */
+    .progress-stats {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; text-align: center; box-shadow: var(--shadow-sm);
+    }
+    .stat-num { font-size: 2rem; font-weight: 900; color: var(--ink); line-height: 1; }
+    .stat-num.green { color: var(--green); }
+    .stat-label { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 6px; }
+
+    .progress-table-wrap { overflow-x: auto; }
+    table.prog-tbl { width: 100%; border-collapse: collapse; }
+    table.prog-tbl th {
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+      color: var(--ink-3); padding: 10px 16px; text-align: left;
+      background: var(--paper); border-bottom: 1px solid var(--border);
+    }
+    table.prog-tbl td {
+      padding: 12px 16px; border-bottom: 1px solid var(--paper-2);
+      font-size: 0.82rem; vertical-align: middle;
+    }
+    table.prog-tbl tr:last-child td { border-bottom: none; }
+    table.prog-tbl tr:hover td { background: var(--paper); }
+
+    .prog-bar-wrap { display: flex; align-items: center; gap: 10px; }
+    .prog-bar { height: 7px; background: var(--paper-2); border-radius: 4px; overflow: hidden; flex: 1; min-width: 60px; }
+    .prog-bar-fill { height: 100%; border-radius: 4px; background: var(--green); transition: width 0.4s ease; }
+    .prog-pct { font-size: 12px; font-weight: 700; color: var(--ink-2); min-width: 36px; text-align: right; }
+
+    .badge-done {
+      display: inline-block; padding: 2px 9px; border-radius: 10px;
+      font-size: 11px; font-weight: 700; background: var(--green-2); color: var(--green);
+    }
+    .badge-partial {
+      display: inline-block; padding: 2px 9px; border-radius: 10px;
+      font-size: 11px; font-weight: 700; background: #fef9c3; color: #a16207;
+    }
+    .badge-none {
+      display: inline-block; padding: 2px 9px; border-radius: 10px;
+      font-size: 11px; font-weight: 700; background: var(--paper-2); color: var(--ink-3);
+    }
+
+    /* ── LOADING ── */
+    .loading-state { text-align: center; padding: 48px; color: var(--ink-3); }
+    .spinner {
+      width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── MODAL ── */
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(28,28,46,0.55);
+      backdrop-filter: blur(4px); z-index: 9000;
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-bg.open { display: flex; }
+    .modal-box {
+      background: var(--white); border-radius: 14px; width: 100%; max-width: 460px;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); }
+    .modal-head h3 { font-size: 1rem; font-weight: 600; color: var(--ink); }
+    .modal-body { padding: 20px 24px; }
+    .modal-footer {
+      padding: 14px 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+      background: var(--paper); border-radius: 0 0 14px 14px;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+    .form-input, .form-select {
+      width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink);
+      outline: none; transition: border-color 0.15s; background: var(--white);
+    }
+    .form-input:focus, .form-select:focus { border-color: var(--accent); }
+    .field-error { font-size: 0.75rem; color: #dc2626; margin-top: 4px; display: none; }
+    .form-input.invalid { border-color: #dc2626; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
+      padding: 9px 18px; border-radius: 8px; border: 1px solid transparent;
+      cursor: pointer; transition: all 0.18s; display: inline-flex; align-items: center; gap: 6px; line-height: 1;
+    }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover { background: var(--accent-dk); border-color: var(--accent-dk); }
+    .btn-secondary { background: var(--white); color: var(--ink-2); border-color: var(--border); }
+    .btn-secondary:hover { background: var(--paper); }
+    .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; font-size: 0.875rem;
+      padding: 12px 20px; border-radius: 10px; z-index: 9999;
+      opacity: 0; transform: translateY(8px); transition: all 0.28s;
+      pointer-events: none; background: var(--ink); color: #fff;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { background: #dc2626; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .page-wrap { padding: 20px 16px 56px; }
+      .hero { padding: 28px 20px; }
+    }
+    @media (max-width: 520px) {
+      .top-nav { padding: 0 16px; }
+      .nav-user-name { display: none; }
+    }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+</head>
+<body>
+
+<!-- ── TOP NAV ── -->
+<!-- SHARED_NAVBAR -->
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-inner">
+    <p class="hero-eyebrow">Academics · CentralHub</p>
+    <h1 class="hero-title">Weekly Checklist Admin</h1>
+    <p class="hero-desc">Manage task templates and monitor staff &amp; leadership weekly progress.</p>
+  </div>
+</section>
+
+<div class="page-wrap">
+
+  <!-- Access Denied -->
+  <div id="accessDenied" class="access-denied" style="display:none">
+    <h3>Access Restricted</h3>
+    <p>This page is only available to Central Admins.</p>
+  </div>
+
+  <!-- Main -->
+  <div id="mainContent" style="display:none">
+
+    <!-- Platform Tabs -->
+    <div class="platform-tabs">
+      <button class="plat-tab active" data-plat="teachers">Teachers Hub</button>
+      <button class="plat-tab" data-plat="leadership">Academic Leadership</button>
+    </div>
+
+    <!-- Week Navigator -->
+    <div class="week-nav">
+      <button class="btn-nav" id="prevWeekBtn">← Prev</button>
+      <div class="week-nav-center">
+        <div class="week-num" id="weekLabel">Week —</div>
+        <div class="week-dates" id="weekDates"></div>
+        <div class="week-this" id="weekThisIndicator" style="display:none">This week</div>
+      </div>
+      <button class="btn-nav" id="nextWeekBtn">Next →</button>
+    </div>
+
+    <!-- Two-column -->
+    <div class="two-col">
+
+      <!-- LEFT: Template panel -->
+      <div class="panel">
+        <div class="panel-head">
+          <h3 id="templatePanelTitle">This Week's Tasks</h3>
+          <button class="btn btn-primary btn-sm" onclick="openTaskModal(null)">+ Add</button>
+        </div>
+        <div class="panel-body">
+          <div id="templateLoading" class="loading-state" style="padding:24px">
+            <div class="spinner"></div>
+          </div>
+          <div id="templateEmpty" class="no-tasks" style="display:none">No tasks set for this week.</div>
+          <div id="templateList" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Progress panel -->
+      <div>
+        <!-- Stats row -->
+        <div class="progress-stats" id="statsRow">
+          <div class="stat-card">
+            <div class="stat-num" id="statTotal">—</div>
+            <div class="stat-label">Tasks</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="statUsers">—</div>
+            <div class="stat-label">Staff tracked</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num green" id="statFullDone">—</div>
+            <div class="stat-label">Fully done</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="statAvgPct">—</div>
+            <div class="stat-label">Avg completion</div>
+          </div>
+        </div>
+
+        <!-- Progress table -->
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Staff Progress</h3>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <div id="progressLoading" class="loading-state">
+              <div class="spinner"></div>
+              Loading progress data…
+            </div>
+            <div id="progressEmpty" class="no-tasks" style="display:none">
+              No progress recorded yet for this week.
+            </div>
+            <div class="progress-table-wrap" id="progressTableWrap" style="display:none">
+              <table class="prog-tbl" id="progressTable">
+                <thead>
+                  <tr>
+                    <th style="width:30%">Name</th>
+                    <th style="width:12%">Done</th>
+                    <th>Progress</th>
+                    <th style="width:14%">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="progressBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /two-col -->
+
+  </div><!-- /mainContent -->
+
+</div><!-- /page-wrap -->
+
+<!-- ── TASK MODAL ── -->
+<div class="modal-bg" id="taskModal">
+  <div class="modal-box">
+    <div class="modal-head"><h3 id="taskModalTitle">Add Task</h3></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="taskTitleInput">Task</label>
+        <input class="form-input" id="taskTitleInput" type="text" placeholder="Task description"
+          onkeydown="if(event.key==='Enter')saveTask()" oninput="this.classList.remove('invalid');document.getElementById('taskTitleError').style.display='none'">
+        <p class="field-error" id="taskTitleError">Task description is required.</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="taskCatInput">Category</label>
+        <select class="form-select" id="taskCatInput"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeTaskModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+import {
+  collection, doc, getDoc, setDoc, getDocs, onSnapshot,
+  serverTimestamp, query, where
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// ── Config ────────────────────────────────────────────────────────
+const ACADEMIC_YEAR = '2025-26';
+const TOTAL_WEEKS   = 40;
+const WEEK1_START   = new Date(2025, 6, 21);
+
+const PLATFORM_CATS = {
+  teachers: [
+    'Planning', 'Assessment', 'Communication',
+    'Professional Development', 'Administration', 'Other',
+  ],
+  leadership: [
+    'Staff Meeting', 'Lesson Observation', 'Subject Leader Meeting',
+    'Data Review', 'Parent Communication', 'Reporting',
+    'Professional Development', 'Other',
+  ],
+};
+
+const CAT_COLORS = {
+  'Planning':                    { color: '#2563eb', bg: '#eff6ff' },
+  'Assessment':                  { color: '#7c3aed', bg: '#f5f3ff' },
+  'Communication':               { color: '#d97706', bg: '#fffbeb' },
+  'Professional Development':    { color: '#059669', bg: '#ecfdf5' },
+  'Administration':              { color: '#0891b2', bg: '#f0f9ff' },
+  'Staff Meeting':               { color: '#2563eb', bg: '#eff6ff' },
+  'Lesson Observation':          { color: '#7c3aed', bg: '#f5f3ff' },
+  'Subject Leader Meeting':      { color: '#d97706', bg: '#fffbeb' },
+  'Data Review':                 { color: '#0891b2', bg: '#f0f9ff' },
+  'Parent Communication':        { color: '#059669', bg: '#ecfdf5' },
+  'Reporting':                   { color: '#dc2626', bg: '#fef2f2' },
+  'Other':                       { color: '#6b7280', bg: '#f9fafb' },
+};
+
+// ── State ─────────────────────────────────────────────────────────
+let currentPlatform = 'teachers';
+let currentWeek     = 1;
+let tasks           = [];
+let allProgress     = []; // [{uid, displayName, email, done, total}]
+let editTaskId      = null;
+let unsubTemplate   = null;
+
+// ── Auth ──────────────────────────────────────────────────────────
+document.addEventListener('authReady', ({ detail: { profile } }) => {
+  const isAdmin = profile?.role_centralhub === 'central_admin'
+               || profile?.role === 'central_admin';
+
+  if (!isAdmin) {
+    document.getElementById('accessDenied').style.display = '';
+    return;
+  }
+
+  document.getElementById('mainContent').style.display = '';
+
+  // Platform tabs
+  document.querySelectorAll('.plat-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.plat-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentPlatform = tab.dataset.plat;
+      loadWeek(currentWeek);
+    });
+  });
+
+  // Week nav
+  document.getElementById('prevWeekBtn').addEventListener('click', () => {
+    if (currentWeek > 1) loadWeek(currentWeek - 1);
+  });
+  document.getElementById('nextWeekBtn').addEventListener('click', () => {
+    if (currentWeek < TOTAL_WEEKS) loadWeek(currentWeek + 1);
+  });
+
+  currentWeek = getWeekNumber(new Date());
+  loadWeek(currentWeek);
+});
+
+// ── Helpers ───────────────────────────────────────────────────────
+function getWeekNumber(date) {
+  const diff = date - WEEK1_START;
+  const w = Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return Math.max(1, Math.min(TOTAL_WEEKS, w));
+}
+
+function getWeekDates(w) {
+  const start = new Date(WEEK1_START);
+  start.setDate(start.getDate() + (w - 1) * 7);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 4);
+  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
+function templateDocId(week) {
+  return `${ACADEMIC_YEAR}_w${String(week).padStart(2,'0')}_${currentPlatform}`;
+}
+
+function progressDocId(uid, week) {
+  return `${uid}_${ACADEMIC_YEAR}_w${String(week).padStart(2,'0')}_${currentPlatform}`;
+}
+
+function updateWeekUI() {
+  document.getElementById('weekLabel').textContent = `Week ${currentWeek}`;
+  document.getElementById('weekDates').textContent  = getWeekDates(currentWeek);
+  document.getElementById('prevWeekBtn').disabled   = currentWeek <= 1;
+  document.getElementById('nextWeekBtn').disabled   = currentWeek >= TOTAL_WEEKS;
+  const ind = document.getElementById('weekThisIndicator');
+  ind.style.display = (currentWeek === getWeekNumber(new Date())) ? '' : 'none';
+  document.getElementById('templatePanelTitle').textContent =
+    `Week ${currentWeek} Tasks`;
+}
+
+// ── Load week ─────────────────────────────────────────────────────
+function loadWeek(week) {
+  currentWeek = week;
+  updateWeekUI();
+
+  if (unsubTemplate) { unsubTemplate(); unsubTemplate = null; }
+  tasks = [];
+  allProgress = [];
+
+  // Show loaders
+  ['templateLoading','progressLoading'].forEach(id => document.getElementById(id).style.display = '');
+  ['templateEmpty','templateList','progressEmpty','progressTableWrap'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+
+  const db = window.db;
+
+  // 1. Subscribe to template
+  unsubTemplate = onSnapshot(doc(db, 'weekly_templates', templateDocId(week)), snap => {
+    tasks = (snap.exists() && Array.isArray(snap.data().tasks)) ? snap.data().tasks : [];
+    renderTemplate();
+    loadProgress(); // reload progress whenever template changes
+  }, err => {
+    console.error('Template error:', err);
+    document.getElementById('templateLoading').style.display = 'none';
+  });
+}
+
+function renderTemplate() {
+  document.getElementById('templateLoading').style.display = 'none';
+
+  if (tasks.length === 0) {
+    document.getElementById('templateEmpty').style.display = '';
+    document.getElementById('templateList').style.display  = 'none';
+    return;
+  }
+
+  document.getElementById('templateEmpty').style.display = 'none';
+  document.getElementById('templateList').style.display  = '';
+
+  const list = document.getElementById('templateList');
+  list.innerHTML = tasks.map((t, i) => {
+    const cc = CAT_COLORS[t.category] || CAT_COLORS['Other'];
+    return `
+      <div class="task-item">
+        <span style="color:var(--ink-3);font-size:0.72rem;min-width:18px">${i+1}</span>
+        <span class="task-item-title">${escHtml(t.title)}</span>
+        <span class="task-item-cat" style="color:${cc.color};background:${cc.bg}">${escHtml(t.category)}</span>
+        <div class="task-item-actions">
+          <button class="btn-xs" data-edit="${escAttr(t.id)}">Edit</button>
+          <button class="btn-xs danger" data-delete="${escAttr(t.id)}">Del</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openTaskModal(btn.dataset.edit));
+  });
+  list.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.confirming === 'true') {
+        deleteTask(btn.dataset.delete);
+      } else {
+        btn.dataset.confirming = 'true';
+        btn.textContent = '?';
+        setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Del'; }, 2500);
+      }
+    });
+  });
+}
+
+// ── Load progress ─────────────────────────────────────────────────
+async function loadProgress() {
+  document.getElementById('progressLoading').style.display = '';
+  document.getElementById('progressEmpty').style.display   = 'none';
+  document.getElementById('progressTableWrap').style.display = 'none';
+
+  const db = window.db;
+
+  // Fetch all users
+  let users = [];
+  try {
+    const usersSnap = await getDocs(collection(db, 'users'));
+    usersSnap.forEach(d => {
+      const data = d.data();
+      // Filter by platform role
+      const hasRole = currentPlatform === 'teachers'
+        ? (data.role_teachershub === 'teachers_user' || data.role_teachershub === 'teachers_admin')
+        : (data.role_academichub === 'academic_user' || data.role_academichub === 'academic_admin');
+      if (hasRole) users.push({ uid: d.id, displayName: data.displayName || data.email, email: data.email });
+    });
+  } catch (err) {
+    console.error('Users fetch error:', err);
+    document.getElementById('progressLoading').style.display = 'none';
+    return;
+  }
+
+  if (users.length === 0) {
+    document.getElementById('progressLoading').style.display = 'none';
+    document.getElementById('progressEmpty').style.display   = '';
+    return;
+  }
+
+  // Fetch each user's progress doc
+  // Batch: fetch all in parallel (each is a single doc read)
+  const progressDocs = await Promise.all(
+    users.map(u => getDoc(doc(db, 'weekly_progress', progressDocId(u.uid, currentWeek))))
+  );
+
+  allProgress = users.map((u, i) => {
+    const snap = progressDocs[i];
+    let done = 0;
+    if (snap.exists()) {
+      const items = snap.data().items || {};
+      done = tasks.filter(t => items[t.id]?.checked).length;
+    }
+    return { ...u, done, total: tasks.length };
+  });
+
+  // Sort: most done first
+  allProgress.sort((a, b) => b.done - a.done);
+
+  renderProgressTable();
+  renderStats();
+}
+
+function renderStats() {
+  const total    = tasks.length;
+  const users    = allProgress.length;
+  const fullDone = allProgress.filter(u => u.total > 0 && u.done === u.total).length;
+  const avgPct   = users > 0 && total > 0
+    ? Math.round(allProgress.reduce((s, u) => s + (u.done / u.total) * 100, 0) / users)
+    : 0;
+
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statUsers').textContent   = users;
+  document.getElementById('statFullDone').textContent= fullDone;
+  document.getElementById('statAvgPct').textContent  = avgPct + '%';
+}
+
+function renderProgressTable() {
+  document.getElementById('progressLoading').style.display = 'none';
+
+  if (allProgress.length === 0) {
+    document.getElementById('progressEmpty').style.display = '';
+    return;
+  }
+
+  document.getElementById('progressTableWrap').style.display = '';
+  const tbody = document.getElementById('progressBody');
+  tbody.innerHTML = allProgress.map(u => {
+    const pct = u.total > 0 ? Math.round(u.done / u.total * 100) : 0;
+    const statusBadge = pct === 100
+      ? `<span class="badge-done">Complete</span>`
+      : pct > 0
+        ? `<span class="badge-partial">${pct}%</span>`
+        : `<span class="badge-none">Not started</span>`;
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:600;color:var(--ink)">${escHtml(u.displayName || u.email)}</div>
+          ${u.displayName && u.email !== u.displayName
+            ? `<div style="font-size:11px;color:var(--ink-3)">${escHtml(u.email)}</div>` : ''}
+        </td>
+        <td style="font-weight:700;color:var(--ink)">${u.done}<span style="color:var(--ink-3);font-weight:400">/${u.total}</span></td>
+        <td>
+          <div class="prog-bar-wrap">
+            <div class="prog-bar"><div class="prog-bar-fill" style="width:${pct}%"></div></div>
+            <span class="prog-pct">${pct}%</span>
+          </div>
+        </td>
+        <td>${statusBadge}</td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Admin: save template ──────────────────────────────────────────
+async function saveTaskTemplate() {
+  const db = window.db;
+  await setDoc(doc(db, 'weekly_templates', templateDocId(currentWeek)), {
+    weekNumber: currentWeek, academicYear: ACADEMIC_YEAR, platform: currentPlatform,
+    tasks, updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+// ── Task modal ────────────────────────────────────────────────────
+function openTaskModal(taskId) {
+  editTaskId = taskId;
+  const task = taskId ? tasks.find(t => t.id === taskId) : null;
+
+  document.getElementById('taskModalTitle').textContent = task ? 'Edit Task' : 'Add Task';
+  document.getElementById('taskTitleInput').value       = task?.title || '';
+
+  // Rebuild category select for current platform
+  const cats = PLATFORM_CATS[currentPlatform] || PLATFORM_CATS.teachers;
+  const catSel = document.getElementById('taskCatInput');
+  catSel.innerHTML = cats.map(c => `<option value="${escAttr(c)}"${task?.category===c?' selected':''}>${escHtml(c)}</option>`).join('');
+
+  document.getElementById('taskModal').classList.add('open');
+  document.getElementById('taskTitleInput').focus();
+}
+
+function closeTaskModal() {
+  document.getElementById('taskModal').classList.remove('open');
+  editTaskId = null;
+}
+
+async function saveTask() {
+  const title = document.getElementById('taskTitleInput').value.trim();
+  const cat   = document.getElementById('taskCatInput').value;
+  if (!title) {
+    document.getElementById('taskTitleInput').classList.add('invalid');
+    document.getElementById('taskTitleError').style.display = 'block';
+    return;
+  }
+  if (editTaskId) {
+    const idx = tasks.findIndex(t => t.id === editTaskId);
+    if (idx >= 0) tasks[idx] = { ...tasks[idx], title, category: cat };
+  } else {
+    tasks.push({ id: genId(), title, category: cat });
+  }
+  closeTaskModal();
+  await saveTaskTemplate();
+  showToast(editTaskId ? 'Task updated.' : 'Task added.');
+}
+
+async function deleteTask(taskId) {
+  tasks = tasks.filter(t => t.id !== taskId);
+  await saveTaskTemplate();
+  showToast('Task deleted.');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function escHtml(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+  return String(str ?? '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let _toastTimer;
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+Object.assign(window, { openTaskModal, closeTaskModal, saveTask });
+
+document.getElementById('taskModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeTaskModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeTaskModal();
+});
+</script>
+
+</body>
+</html>
