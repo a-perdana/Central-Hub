@@ -117,19 +117,26 @@
     .week-nav {
       display: flex; align-items: center; justify-content: space-between;
       background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 14px 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm);
+      padding: 14px 20px; margin-bottom: 24px; box-shadow: var(--shadow-sm); gap: 12px;
     }
-    .week-nav-center { text-align: center; }
+    .week-nav-center { text-align: center; flex: 1; }
     .week-num  { font-size: 1.05rem; font-weight: 700; color: var(--ink); }
     .week-dates{ font-size: 0.78rem; color: var(--ink-3); margin-top: 2px; }
     .week-this { font-size: 11px; font-weight: 700; color: var(--green); margin-top: 2px; }
     .btn-nav {
       padding: 8px 16px; background: var(--paper); border: 1px solid var(--border);
       border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
-      color: var(--ink-2); transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+      color: var(--ink-2); transition: all 0.15s; font-family: 'DM Sans', sans-serif; flex-shrink: 0;
     }
     .btn-nav:hover:not(:disabled) { background: var(--paper-2); }
     .btn-nav:disabled { opacity: 0.35; cursor: default; }
+    .week-jump-select {
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; color: var(--ink);
+      background: var(--paper); cursor: pointer; outline: none; flex-shrink: 0;
+      transition: border-color 0.15s;
+    }
+    .week-jump-select:focus { border-color: var(--accent); }
 
     /* ── TWO COLUMN LAYOUT ── */
     .two-col { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
@@ -328,6 +335,7 @@
         <div class="week-dates" id="weekDates"></div>
         <div class="week-this" id="weekThisIndicator" style="display:none">This week</div>
       </div>
+      <select class="week-jump-select" id="weekJumpSelect" title="Jump to week"></select>
       <button class="btn-nav" id="nextWeekBtn">Next →</button>
     </div>
 
@@ -510,6 +518,16 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
     if (currentWeek < TOTAL_WEEKS) loadWeek(currentWeek + 1);
   });
 
+  // Populate jump select
+  const jumpSel = document.getElementById('weekJumpSelect');
+  for (let w = 1; w <= TOTAL_WEEKS; w++) {
+    const opt = document.createElement('option');
+    opt.value = w;
+    opt.textContent = `Wk ${w}  (${getWeekDates(w)})`;
+    jumpSel.appendChild(opt);
+  }
+  jumpSel.addEventListener('change', () => loadWeek(Number(jumpSel.value)));
+
   currentWeek = getWeekNumber(new Date());
   loadWeek(currentWeek);
 });
@@ -545,8 +563,9 @@ function updateWeekUI() {
   document.getElementById('nextWeekBtn').disabled   = currentWeek >= TOTAL_WEEKS;
   const ind = document.getElementById('weekThisIndicator');
   ind.style.display = (currentWeek === getWeekNumber(new Date())) ? '' : 'none';
-  document.getElementById('templatePanelTitle').textContent =
-    `Week ${currentWeek} Tasks`;
+  document.getElementById('templatePanelTitle').textContent = `Week ${currentWeek} Tasks`;
+  const jumpSel = document.getElementById('weekJumpSelect');
+  if (jumpSel) jumpSel.value = currentWeek;
 }
 
 // ── Load week ─────────────────────────────────────────────────────
