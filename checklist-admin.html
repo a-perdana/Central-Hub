@@ -138,9 +138,9 @@
     }
     .week-jump-select:focus { border-color: var(--accent); }
 
-    /* ── TASK ITEMS INLINE ── */
-    #templateList { display: flex; flex-wrap: wrap; gap: 8px; }
-    #templateList .task-item { flex: 1 1 280px; max-width: 420px; margin-bottom: 0; }
+    /* ── TASK ITEMS ── */
+    #templateList { display: flex; flex-direction: column; gap: 6px; }
+    #templateList .task-item { margin-bottom: 0; }
 
     /* ── TEMPLATE PANEL ── */
     .panel {
@@ -393,6 +393,11 @@
     <div class="panel">
       <div class="panel-head">
         <h3>Staff Progress</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="search" id="progressSearch" placeholder="Search name…"
+            style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--ink);background:var(--paper);outline:none;width:180px;"
+            oninput="filterProgress()">
+        </div>
       </div>
       <div class="panel-body" style="padding:0">
         <div id="progressLoading" class="loading-state">
@@ -414,6 +419,10 @@
             </thead>
             <tbody id="progressBody"></tbody>
           </table>
+          <div id="progressPager" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border);font-size:0.82rem;color:var(--ink-3);">
+            <span id="pagerInfo"></span>
+            <div style="display:flex;gap:4px" id="pagerBtns"></div>
+          </div>
         </div>
           </div>
         </div>
@@ -496,6 +505,8 @@ let currentWeek     = 1;
 let tasks           = [];
 let allProgress     = []; // [{uid, displayName, email, done, total}]
 let editTaskId      = null;
+let progressPage    = 0;
+const PAGE_SIZE     = 5;
 let unsubTemplate   = null;
 let essentials      = [];
 let unsubEssentials = null;
@@ -598,6 +609,9 @@ function loadWeek(week) {
   if (unsubTemplate) { unsubTemplate(); unsubTemplate = null; }
   tasks = [];
   allProgress = [];
+  progressPage = 0;
+  const searchEl = document.getElementById('progressSearch');
+  if (searchEl) searchEl.value = '';
 
   // Show loaders
   ['templateLoading','progressLoading'].forEach(id => document.getElementById(id).style.display = '');
@@ -730,17 +744,36 @@ function renderStats() {
   document.getElementById('statAvgPct').textContent  = avgPct + '%';
 }
 
+function filterProgress() {
+  progressPage = 0;
+  renderProgressTable();
+}
+
 function renderProgressTable() {
   document.getElementById('progressLoading').style.display = 'none';
 
   if (allProgress.length === 0) {
     document.getElementById('progressEmpty').style.display = '';
+    document.getElementById('progressTableWrap').style.display = 'none';
     return;
   }
 
-  document.getElementById('progressTableWrap').style.display = '';
+  const q = (document.getElementById('progressSearch')?.value || '').toLowerCase();
+  const filtered = q
+    ? allProgress.filter(u =>
+        (u.displayName || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q))
+    : allProgress;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (progressPage >= totalPages) progressPage = totalPages - 1;
+  const page = filtered.slice(progressPage * PAGE_SIZE, (progressPage + 1) * PAGE_SIZE);
+
+  document.getElementById('progressEmpty').style.display = filtered.length === 0 ? '' : 'none';
+  document.getElementById('progressTableWrap').style.display = filtered.length === 0 ? 'none' : '';
+
   const tbody = document.getElementById('progressBody');
-  tbody.innerHTML = allProgress.map(u => {
+  tbody.innerHTML = page.map(u => {
     const pct = u.total > 0 ? Math.round(u.done / u.total * 100) : 0;
     const statusBadge = pct === 100
       ? `<span class="badge-done">Complete</span>`
@@ -765,7 +798,30 @@ function renderProgressTable() {
         <td>${statusBadge}</td>
       </tr>`;
   }).join('');
+
+  // Pager
+  const pager = document.getElementById('progressPager');
+  const info  = document.getElementById('pagerInfo');
+  const btns  = document.getElementById('pagerBtns');
+  if (totalPages <= 1) {
+    pager.style.display = 'none';
+  } else {
+    pager.style.display = 'flex';
+    const start = progressPage * PAGE_SIZE + 1;
+    const end   = Math.min((progressPage + 1) * PAGE_SIZE, filtered.length);
+    info.textContent = `${start}–${end} of ${filtered.length}`;
+    btns.innerHTML = '';
+    for (let i = 0; i < totalPages; i++) {
+      const b = document.createElement('button');
+      b.textContent = i + 1;
+      b.style.cssText = `padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:${i===progressPage?'var(--accent)':'var(--white)'};color:${i===progressPage?'#fff':'var(--ink-2)'};font-size:0.78rem;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:600;`;
+      b.addEventListener('click', () => { progressPage = i; renderProgressTable(); });
+      btns.appendChild(b);
+    }
+  }
 }
+
+window.filterProgress = filterProgress;
 
 // ── Admin: save template ──────────────────────────────────────────
 async function saveTaskTemplate() {
