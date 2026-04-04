@@ -214,6 +214,8 @@
     table.topics-tbl tr:last-child td { border-bottom: none; }
     table.topics-tbl tr:hover td { background: var(--paper); }
     .obj-codes { display: flex; flex-wrap: wrap; gap: 4px; }
+    .obj-rich { font-size: 0.8rem; color: var(--ink-2); line-height: 1.4; }
+    .obj-rich ul { padding-left: 14px; margin: 2px 0; }
     .obj-code {
       font-family: 'DM Mono', monospace; font-size: 0.7rem;
       background: var(--paper-2); color: var(--ink-2); padding: 1px 5px; border-radius: 3px;
@@ -283,6 +285,30 @@
     .form-row { display: flex; gap: 12px; }
     .form-row .form-group { flex: 1; margin-bottom: 0; }
     .form-hint { font-size: 0.75rem; color: var(--ink-3); margin-top: 4px; }
+
+    /* ===== RICH TEXT EDITOR ===== */
+    .rte-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--white); transition: border-color 0.15s; }
+    .rte-wrap:focus-within { border-color: var(--accent); }
+    .rte-toolbar {
+      display: flex; gap: 2px; padding: 5px 8px; border-bottom: 1px solid var(--border);
+      background: var(--paper); border-radius: 8px 8px 0 0;
+    }
+    .rte-btn {
+      border: none; background: none; cursor: pointer; color: var(--ink-2);
+      padding: 3px 7px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
+      line-height: 1.4; transition: background 0.1s, color 0.1s;
+    }
+    .rte-btn:hover { background: var(--paper-2); color: var(--ink); }
+    .rte-btn.active { background: var(--accent-2); color: var(--accent-dk); }
+    .rte-sep { width: 1px; background: var(--border); margin: 3px 4px; align-self: stretch; }
+    .rte-editor {
+      padding: 9px 12px; min-height: 80px; max-height: 180px; overflow-y: auto;
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink);
+      outline: none; line-height: 1.55;
+    }
+    .rte-editor:empty:before { content: attr(data-placeholder); color: var(--ink-3); pointer-events: none; }
+    .rte-editor ul { padding-left: 18px; margin: 2px 0; }
+    .rte-editor li { margin: 1px 0; }
 
     /* ===== RESOURCES ===== */
     .res-section-head {
@@ -482,9 +508,18 @@
           <input class="form-input" id="topDurationInput" type="number" min="1" max="20" placeholder="e.g. 3">
         </div>
         <div class="form-group">
-          <label class="form-label" for="topObjectivesInput">Objectives</label>
-          <input class="form-input" id="topObjectivesInput" type="text" placeholder="e.g. C1.1 E1.2 E1.3">
-          <p class="form-hint">Space-separated codes</p>
+          <label class="form-label">Objectives</label>
+          <div class="rte-wrap">
+            <div class="rte-toolbar">
+              <button class="rte-btn" type="button" title="Bold" onclick="_rteExec('bold')"><b>B</b></button>
+              <button class="rte-btn" type="button" title="Italic" onclick="_rteExec('italic')"><i>I</i></button>
+              <div class="rte-sep"></div>
+              <button class="rte-btn" type="button" title="Bullet list" onclick="_rteExec('insertUnorderedList')">&#8226; List</button>
+              <div class="rte-sep"></div>
+              <button class="rte-btn" type="button" title="Clear formatting" onclick="_rteClear()">Clear</button>
+            </div>
+            <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="e.g. C1.1 Estimate and add…"></div>
+          </div>
         </div>
       </div>
       <!-- Resources -->
@@ -687,9 +722,13 @@ function renderChapter(ch, ci) {
 }
 
 function renderTopic(t, ti, ci) {
-  const objStr   = t.objectives || t.objective || '';
-  const objCodes = objStr.split(/\s+/).filter(Boolean)
-    .map(o => `<span class="obj-code">${escHtml(o)}</span>`).join('');
+  const objRaw = t.objectives || t.objective || '';
+  // If stored as HTML (contains tags), render directly; otherwise treat as plain text codes
+  const objCodes = objRaw
+    ? (/<[a-z]/i.test(objRaw)
+        ? `<div class="obj-rich">${objRaw}</div>`
+        : objRaw.split(/\s+/).filter(Boolean).map(o => `<span class="obj-code">${escHtml(o)}</span>`).join(''))
+    : '';
 
   const resources = (t.resources || [])
     .map(r => `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`)
@@ -775,6 +814,16 @@ async function deleteChapter(e, ci) {
   showToast('Chapter deleted.');
 }
 
+// ── Rich Text Editor helpers ──────────────────────────────────────
+function _rteExec(cmd) {
+  document.getElementById('topObjectivesEditor').focus();
+  document.execCommand(cmd, false, null);
+}
+function _rteClear() {
+  document.getElementById('topObjectivesEditor').innerHTML = '';
+  document.getElementById('topObjectivesEditor').focus();
+}
+
 // ── Topic CRUD ────────────────────────────────────────────────────
 function openAddTopicModal(ci) {
   modalMode  = 'add-topic';
@@ -784,7 +833,7 @@ function openAddTopicModal(ci) {
   document.getElementById('topModalTitle').textContent     = 'Add Topic';
   document.getElementById('topTitleInput').value           = '';
   document.getElementById('topDurationInput').value        = '';
-  document.getElementById('topObjectivesInput').value      = '';
+  document.getElementById('topObjectivesEditor').innerHTML = '';
   renderModalResources();
   document.getElementById('topicModal').classList.add('open');
   document.getElementById('topTitleInput').focus();
@@ -799,7 +848,8 @@ function editTopic(ci, ti) {
   document.getElementById('topModalTitle').textContent     = 'Edit Topic';
   document.getElementById('topTitleInput').value           = t.title      || t.topic      || '';
   document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
-  document.getElementById('topObjectivesInput').value      = t.objectives || t.objective  || '';
+  const rawObj = t.objectives || t.objective || '';
+  document.getElementById('topObjectivesEditor').innerHTML = rawObj;
   renderModalResources();
   document.getElementById('topicModal').classList.add('open');
   document.getElementById('topTitleInput').focus();
@@ -850,7 +900,7 @@ function removeModalResource(i) {
 async function saveTopicModal() {
   const title      = document.getElementById('topTitleInput').value.trim();
   const duration   = parseInt(document.getElementById('topDurationInput').value) || null;
-  const objectives = document.getElementById('topObjectivesInput').value.trim();
+  const objectives = document.getElementById('topObjectivesEditor').innerHTML.trim();
   if (!title) { document.getElementById('topTitleInput').focus(); return; }
 
   const resources = readModalResourcesFromDOM();
