@@ -302,7 +302,7 @@
     .rte-btn.active { background: var(--accent-2); color: var(--accent-dk); }
     .rte-sep { width: 1px; background: var(--border); margin: 3px 4px; align-self: stretch; }
     .rte-editor {
-      padding: 9px 12px; min-height: 80px; max-height: 180px; overflow-y: auto;
+      padding: 9px 12px; min-height: 140px; max-height: 280px; overflow-y: auto;
       font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink);
       outline: none; line-height: 1.55;
     }
@@ -502,9 +502,15 @@
         <label class="form-label" for="topTitleInput">Topic Title</label>
         <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number">
       </div>
-      <div class="form-group">
-        <label class="form-label" for="topDurationInput">Duration (weeks)</label>
-        <input class="form-input" id="topDurationInput" type="number" min="1" max="20" placeholder="e.g. 3" style="max-width:160px">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="topDurationInput">Duration (weeks)</label>
+          <input class="form-input" id="topDurationInput" type="number" min="1" max="60" placeholder="e.g. 3">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="topStartWeekInput">Start Week</label>
+          <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Objectives</label>
@@ -685,10 +691,11 @@ function renderChapter(ch, ci) {
     ? `<table class="topics-tbl">
         <thead><tr>
           <th style="width:4%">#</th>
-          <th style="width:30%">Topic</th>
-          <th style="width:9%">Duration</th>
-          <th style="width:25%">Objectives</th>
-          <th style="width:20%">Resources</th>
+          <th style="width:28%">Topic</th>
+          <th style="width:8%">Duration</th>
+          <th style="width:8%">Start Wk</th>
+          <th style="width:24%">Objectives</th>
+          <th style="width:16%">Resources</th>
           <th style="width:12%"></th>
         </tr></thead>
         <tbody>${topics.map((t, ti) => renderTopic(t, ti, ci)).join('')}</tbody>
@@ -721,11 +728,10 @@ function renderChapter(ch, ci) {
 
 function renderTopic(t, ti, ci) {
   const objRaw = t.objectives || t.objective || '';
-  // If stored as HTML (contains tags), render directly; otherwise treat as plain text codes
   const objCodes = objRaw
     ? (/<[a-z]/i.test(objRaw)
         ? `<div class="obj-rich">${objRaw}</div>`
-        : objRaw.split(/\s+/).filter(Boolean).map(o => `<span class="obj-code">${escHtml(o)}</span>`).join(''))
+        : `<div class="obj-rich">${escHtml(objRaw)}</div>`)
     : '';
 
   const resources = (t.resources || [])
@@ -737,6 +743,7 @@ function renderTopic(t, ti, ci) {
     <td style="color:var(--ink-3);font-size:0.75rem">${ti + 1}</td>
     <td style="font-weight:500">${escHtml(t.title || t.topic)}</td>
     <td>${dur ? dur + (t.hour ? 'h' : 'w') : '<span style="color:var(--ink-3)">—</span>'}</td>
+    <td>${t.startWeek ? 'Wk ' + t.startWeek : '<span style="color:var(--ink-3)">—</span>'}</td>
     <td><div class="obj-codes">${objCodes || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td><div class="resource-links">${resources || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td>
@@ -831,6 +838,7 @@ function openAddTopicModal(ci) {
   document.getElementById('topModalTitle').textContent     = 'Add Topic';
   document.getElementById('topTitleInput').value           = '';
   document.getElementById('topDurationInput').value        = '';
+  document.getElementById('topStartWeekInput').value       = '';
   document.getElementById('topObjectivesEditor').innerHTML = '';
   renderModalResources();
   document.getElementById('topicModal').classList.add('open');
@@ -846,6 +854,7 @@ function editTopic(ci, ti) {
   document.getElementById('topModalTitle').textContent     = 'Edit Topic';
   document.getElementById('topTitleInput').value           = t.title      || t.topic      || '';
   document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
+  document.getElementById('topStartWeekInput').value       = t.startWeek  || '';
   const rawObj = t.objectives || t.objective || '';
   document.getElementById('topObjectivesEditor').innerHTML = rawObj;
   renderModalResources();
@@ -898,11 +907,12 @@ function removeModalResource(i) {
 async function saveTopicModal() {
   const title      = document.getElementById('topTitleInput').value.trim();
   const duration   = parseInt(document.getElementById('topDurationInput').value) || null;
+  const startWeek  = parseInt(document.getElementById('topStartWeekInput').value) || null;
   const objectives = document.getElementById('topObjectivesEditor').innerHTML.trim();
   if (!title) { document.getElementById('topTitleInput').focus(); return; }
 
   const resources = readModalResourcesFromDOM();
-  const topic = { topic: title, hour: duration, objective: objectives, resources };
+  const topic = { topic: title, hour: duration, startWeek, objective: objectives, resources };
 
   if (modalMode === 'add-topic') {
     if (!chapters[editChIdx].topics) chapters[editChIdx].topics = [];
