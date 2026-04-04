@@ -339,6 +339,20 @@
       <button class="btn-nav" id="nextWeekBtn">Next →</button>
     </div>
 
+    <!-- Weekly Essentials Panel -->
+    <div class="panel" style="margin-bottom:24px">
+      <div class="panel-head">
+        <h3 id="essentialsPanelTitle">Weekly Essentials</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-input" id="essentialTitleInput" type="text" placeholder="Add essential item…" style="width:220px;padding:6px 10px;font-size:0.82rem">
+          <button class="btn btn-primary btn-sm" id="essentialAddBtn">+ Add</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="essentialsList"></div>
+      </div>
+    </div>
+
     <!-- Two-column -->
     <div class="two-col">
 
@@ -487,6 +501,8 @@ let tasks           = [];
 let allProgress     = []; // [{uid, displayName, email, done, total}]
 let editTaskId      = null;
 let unsubTemplate   = null;
+let essentials      = [];
+let unsubEssentials = null;
 
 // ── Auth ──────────────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { profile } }) => {
@@ -507,6 +523,7 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
       tab.classList.add('active');
       currentPlatform = tab.dataset.plat;
       loadWeek(currentWeek);
+      loadEssentials();
     });
   });
 
@@ -530,6 +547,13 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
 
   currentWeek = getWeekNumber(new Date());
   loadWeek(currentWeek);
+  loadEssentials();
+
+  // Essentials events
+  document.getElementById('essentialAddBtn').addEventListener('click', addEssential);
+  document.getElementById('essentialTitleInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addEssential();
+  });
 });
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -566,6 +590,8 @@ function updateWeekUI() {
   document.getElementById('templatePanelTitle').textContent = `Week ${currentWeek} Tasks`;
   const jumpSel = document.getElementById('weekJumpSelect');
   if (jumpSel) jumpSel.value = currentWeek;
+  const platformLabel = currentPlatform === 'teachers' ? 'Teachers Hub' : 'Academic Leadership';
+  document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${platformLabel}`;
 }
 
 // ── Load week ─────────────────────────────────────────────────────
@@ -799,6 +825,68 @@ async function deleteTask(taskId) {
   tasks = tasks.filter(t => t.id !== taskId);
   await saveTaskTemplate();
   showToast('Task deleted.');
+}
+
+// ── Weekly Essentials ─────────────────────────────────────────────
+function loadEssentials() {
+  const platformLabel = currentPlatform === 'teachers' ? 'Teachers Hub' : 'Academic Leadership';
+  document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${platformLabel}`;
+
+  if (unsubEssentials) { unsubEssentials(); unsubEssentials = null; }
+
+  unsubEssentials = onSnapshot(doc(window.db, 'weekly_essentials', currentPlatform), snap => {
+    essentials = (snap.exists() && Array.isArray(snap.data().items)) ? snap.data().items : [];
+    renderEssentials();
+  }, err => {
+    console.error('Essentials listener error:', err);
+  });
+}
+
+function renderEssentials() {
+  const list = document.getElementById('essentialsList');
+  if (essentials.length === 0) {
+    list.innerHTML = '<p class="no-tasks">No essentials yet.</p>';
+    return;
+  }
+  list.innerHTML = essentials.map(item => `
+    <div class="task-item">
+      <span class="task-item-title">${escHtml(item.title)}</span>
+      <button class="btn-xs danger" data-del-ess="${escAttr(item.id)}">Del</button>
+    </div>`).join('');
+
+  list.querySelectorAll('[data-del-ess]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.confirming === 'true') {
+        deleteEssential(btn.dataset.delEss);
+      } else {
+        btn.dataset.confirming = 'true';
+        btn.textContent = '?';
+        setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Del'; }, 2500);
+      }
+    });
+  });
+}
+
+async function saveEssentials() {
+  await setDoc(doc(window.db, 'weekly_essentials', currentPlatform), {
+    items: essentials, updatedAt: serverTimestamp()
+  });
+}
+
+async function addEssential() {
+  const input = document.getElementById('essentialTitleInput');
+  const title = input.value.trim();
+  if (!title) return;
+  essentials.push({ id: genId(), title });
+  await saveEssentials();
+  input.value = '';
+  showToast('Essential added.');
+}
+
+async function deleteEssential(id) {
+  essentials = essentials.filter(item => item.id !== id);
+  await saveEssentials();
+  showToast('Essential deleted.');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
