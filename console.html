@@ -195,6 +195,10 @@
         </td></tr>
       </tbody>
     </table>
+    <div id="tablePager" style="display:none;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border);font-size:0.82rem;color:var(--ink-3);">
+      <span id="pagerInfo"></span>
+      <div id="pagerBtns" style="display:flex;gap:4px"></div>
+    </div>
   </div>
 
 </div>
@@ -283,6 +287,8 @@
   let editingId = null;
   let sortCol   = null;
   let sortDir   = 'asc';
+  let currentPage = 0;
+  const PAGE_SIZE = 10;
 
   const ROLE_BADGE = {
     central_admin:   '<span class="badge badge-admin">central_admin</span>',
@@ -362,6 +368,11 @@
   }
 
   function applyFilters() {
+    currentPage = 0;
+    applyFiltersAtPage();
+  }
+
+  function applyFiltersAtPage() {
     const q  = document.getElementById('searchInput').value.toLowerCase();
     const ro = document.getElementById('roleFilter').value;
     const list = allUsers.filter(u => {
@@ -370,9 +381,10 @@
       if (ro && u.role_centralhub !== ro && u.role_academichub !== ro && u.role_teachershub !== ro && u.role_researchhub !== ro) return false;
       return true;
     });
+    const sorted = sortList(list);
     document.getElementById('userCount').textContent =
-      `${list.length} user${list.length !== 1 ? 's' : ''}`;
-    renderTable(sortList(list));
+      `${sorted.length} user${sorted.length !== 1 ? 's' : ''}`;
+    renderTable(sorted);
   }
 
   const ROLE_ORDER = {
@@ -416,24 +428,34 @@
   }
 
   function renderTable(list) {
-    const body = document.getElementById('usersBody');
+    const body  = document.getElementById('usersBody');
+    const pager = document.getElementById('tablePager');
+    const info  = document.getElementById('pagerInfo');
+    const btns  = document.getElementById('pagerBtns');
+
     if (!list.length) {
       body.innerHTML = '<tr class="empty-row"><td colspan="8">No users match your filters.</td></tr>';
+      pager.style.display = 'none';
       return;
     }
-    body.innerHTML = list.map(u => {
+
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (currentPage >= totalPages) currentPage = totalPages - 1;
+    const page = list.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
+    body.innerHTML = page.map(u => {
       const name     = u.displayName || u.email?.split('@')[0] || '—';
       const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
       const joined   = u.createdAt?.toDate
         ? u.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : '—';
-      const chBadge       = ROLE_BADGE[u.role_centralhub]              || '<span style="color:var(--ink-3)">—</span>';
-      const ahBadge       = ROLE_BADGE[u.role_academichub]             || '<span style="color:var(--ink-3)">—</span>';
-      const ahApproval    = APPROVAL_BADGE[u.approval_status_academichub] || '<span style="color:var(--ink-3)">—</span>';
-      const thBadge       = ROLE_BADGE[u.role_teachershub]             || '<span style="color:var(--ink-3)">—</span>';
-      const rhBadge       = ROLE_BADGE[u.role_researchhub]             || '<span style="color:var(--ink-3)">—</span>';
-      const isPending     = u.approval_status_academichub === 'pending';
-      const approvalCell  = isPending
+      const chBadge      = ROLE_BADGE[u.role_centralhub]                 || '<span style="color:var(--ink-3)">—</span>';
+      const ahBadge      = ROLE_BADGE[u.role_academichub]                || '<span style="color:var(--ink-3)">—</span>';
+      const ahApproval   = APPROVAL_BADGE[u.approval_status_academichub] || '<span style="color:var(--ink-3)">—</span>';
+      const thBadge      = ROLE_BADGE[u.role_teachershub]                || '<span style="color:var(--ink-3)">—</span>';
+      const rhBadge      = ROLE_BADGE[u.role_researchhub]                || '<span style="color:var(--ink-3)">—</span>';
+      const isPending    = u.approval_status_academichub === 'pending';
+      const approvalCell = isPending
         ? `${ahApproval}
            <button class="btn-action" style="margin-left:6px;color:#065f46;border-color:#6ee7b7" onclick="approveUser('${u.id}')">Approve</button>
            <button class="btn-action" style="margin-left:4px;color:#991b1b;border-color:#fca5a5" onclick="rejectUser('${u.id}')">Reject</button>`
@@ -458,6 +480,23 @@
           <td><button class="btn-action" onclick="editUser('${u.id}')">Edit</button></td>
         </tr>`;
     }).join('');
+
+    if (totalPages <= 1) {
+      pager.style.display = 'none';
+    } else {
+      pager.style.display = 'flex';
+      const start = currentPage * PAGE_SIZE + 1;
+      const end   = Math.min((currentPage + 1) * PAGE_SIZE, list.length);
+      info.textContent = `${start}–${end} of ${list.length}`;
+      btns.innerHTML = '';
+      for (let i = 0; i < totalPages; i++) {
+        const b = document.createElement('button');
+        b.textContent = i + 1;
+        b.style.cssText = `padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:${i===currentPage?'var(--accent)':'var(--white)'};color:${i===currentPage?'#fff':'var(--ink-2)'};font-size:0.78rem;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:600;`;
+        b.addEventListener('click', () => { currentPage = i; applyFiltersAtPage(); });
+        btns.appendChild(b);
+      }
+    }
   }
 
   function editUser(id) {
