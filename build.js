@@ -62,6 +62,7 @@ const htmlFiles = [
   "secondary-checkpoint-pacing.html",
   "igcse-pacing.html",
   "as-alevel-pacing.html",
+  "assessment-management.html",
   "assessments.html",
   "console.html",
   "activities.html",
