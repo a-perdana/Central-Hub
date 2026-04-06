@@ -171,8 +171,9 @@ Academic Hub and Teachers Hub do NOT have their own `firestore.rules`. Never cre
 ### What `build.js` does:
 1. Generates `dist/firebase-config.js` from Vercel environment variables.
 2. Injects `partials/navbar.html` into every HTML page (replacing `<!-- SHARED_NAVBAR -->`).
-3. Copies all HTML files into `dist/`.
-4. Copies `auth-guard.js`, `calendar-fallback.js`, and `resources/` into `dist/`.
+3. Injects `<link rel="stylesheet" href="shared-styles.css">` into every HTML page (before the first `<style>` tag).
+4. Copies all HTML files into `dist/`.
+5. Copies `auth-guard.js`, `calendar-fallback.js`, `shared-styles.css`, and `resources/` into `dist/`.
 
 ### Vercel environment variables required:
 ```
@@ -227,7 +228,8 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | File                         | Purpose                                                                                   |
 |------------------------------|-------------------------------------------------------------------------------------------|
 | `auth-guard.js`              | Auth + role gate for all protected pages (modular SDK v10)                                |
-| `build.js`                   | Vercel build script — injects navbar, generates firebase-config.js, copies assets         |
+| `build.js`                   | Vercel build script — injects navbar + shared-styles, generates firebase-config.js, copies assets |
+| `shared-styles.css`          | **Central design system** — `:root` tokens, reset, body, modal, drawer, badge, btn, form, table, sidebar, skel/shimmer, avatar, pagination, empty-state, profile modal CSS |
 | `partials/navbar.html`       | Shared navbar HTML+CSS+JS injected into every page via `<!-- SHARED_NAVBAR -->` comment   |
 | `calendar-fallback.js`       | Static fallback calendar events (`window.CAL_DEMO_EVENTS`) — update each academic year    |
 | `firebase.json`              | Firestore rules config (no hosting section used)                                          |
@@ -236,6 +238,37 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `firestore.rules`            | Firestore security rules — **THE authoritative copy, deploy from here**                   |
 | `vercel.json`                | Vercel deployment config (build cmd, output dir)                                          |
 | `resources/`                 | Static assets                                                                             |
+
+---
+
+## CSS Architecture
+
+All pages share a single design system file: **`shared-styles.css`**.
+
+`build.js` automatically injects `<link rel="stylesheet" href="shared-styles.css">` into every HTML file at build time. During local dev, ensure the tag is present in the HTML file.
+
+### What shared-styles.css provides (do NOT duplicate in page `<style>` blocks):
+- `:root` design tokens: `--ink`, `--paper`, `--accent`, `--accent-dk`, `--accent-2`, `--border`, `--shadow-sm`, `--shadow`, `--shadow-lg`, `--radius`, `--white`
+- Reset: `* { box-sizing: border-box; margin: 0; padding: 0; }`
+- `body {}` base (font, background, color, min-height)
+- `.page-layout`, `.sidebar` and all sidebar sub-components
+- `.filter-bar`, `.filter-chip`, `.search-input-wrap`, `.search-input`, `.search-icon`, `.btn-reset`
+- `.badge` base + all standard color variants (active, inactive, pending, warning, success, info, neutral, violet, danger, draft, read, unread, pinned, featured, role-*)
+- `.skel` + `@keyframes shimmer`
+- `.modal-overlay`, `.modal`, `@keyframes modalIn`, `.modal-head`, `.modal-close`, `.modal-body`, `.modal-footer`, `.modal-error`
+- `.form-group`, `.form-label`, `.form-input`, `.form-select`, `.form-textarea`, `.form-hint`, `.form-error`
+- `.btn-primary`, `.btn-save`, `.btn-add`, `.btn-cancel`, `.btn-delete`, `.btn-icon` base
+- `.toolbar` and sub-components
+- `.avatar`, `.avatar-sm`, `.avatar-lg`
+- `.pagination`, `.page-btn`, `.page-btn.active`
+- `.empty-state`
+- Profile modal CSS (`.profile-modal-*` classes) — auth-guard.js no longer injects these dynamically
+
+### Page-specific `<style>` blocks should contain ONLY:
+- `:root` accent color overrides (e.g. `--accent: #7c3aed` for assessments, `--d97706` for appraisals)
+- Component styles unique to that page
+- Override rules that differ from shared defaults (e.g. different modal max-width, different padding)
+- `display: none` overrides for admin-only elements (e.g. `.btn-add { display: none; }`)
 
 ---
 

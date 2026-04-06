@@ -75,7 +75,19 @@ const htmlFiles = [
 
 htmlFiles.forEach((file) => {
   if (!fs.existsSync(file)) return;
-  const source = fs.readFileSync(file, "utf8");
+  let source = fs.readFileSync(file, "utf8");
+
+  // Inject shared-styles.css before the first <style> or </head> tag
+  if (!source.includes('shared-styles.css')) {
+    const sharedLink = '  <link rel="stylesheet" href="shared-styles.css">\n';
+    if (source.includes('<style>') || source.includes('<style ')) {
+      source = source.replace(/(\s*<style[\s>])/, `\n${sharedLink}$1`);
+    } else {
+      source = source.replace('</head>', `${sharedLink}</head>`);
+    }
+  }
+
+  // Inject shared navbar
   const withSharedNavbar = sharedNavbar
     ? source.replace("<!-- SHARED_NAVBAR -->", sharedNavbar)
     : source;
@@ -107,6 +119,12 @@ Object.keys(cfg).forEach((key) => {
 
 // Copy calendar-fallback.js
 if (fs.existsSync("calendar-fallback.js")) {
-  fs.copyFileSync("calendar-fallback.js", require("path").join("dist", "calendar-fallback.js"));
+  fs.copyFileSync("calendar-fallback.js", path.join("dist", "calendar-fallback.js"));
   console.log("Copied: calendar-fallback.js");
+}
+
+// Copy shared-styles.css
+if (fs.existsSync("shared-styles.css")) {
+  fs.copyFileSync("shared-styles.css", path.join("dist", "shared-styles.css"));
+  console.log("Copied: shared-styles.css");
 }
