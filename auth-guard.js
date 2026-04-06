@@ -174,11 +174,23 @@ function ensureProfileModalStyles() {
     }
     .profile-modal-foot {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
       gap: 8px;
       padding: 14px 18px 16px;
       border-top: 1px solid #efede8;
     }
+    .profile-btn-signout {
+      border: none;
+      background: none;
+      color: #ef4444;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      padding: 8px 4px;
+    }
+    .profile-btn-signout:hover { text-decoration: underline; }
     .profile-btn {
       border: 1px solid #d8d4ce;
       background: #fff;
@@ -322,16 +334,18 @@ function applyAvatarVisual(avatarEl, displayName, email, photoURL) {
 let _profileModalMounted = false;
 function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
   if (_profileModalMounted) return;
-  if (!navUserName || !navAvatar) return;
+  if (!navAvatar) return;
   _profileModalMounted = true;
 
   ensureProfileModalStyles();
 
-  navUserName.style.cursor = 'pointer';
+  if (navUserName) {
+    navUserName.style.cursor = 'pointer';
+    navUserName.title = 'Open profile';
+    navUserName.classList.add('nav-profile-trigger');
+  }
   navAvatar.style.cursor = 'pointer';
-  navUserName.title = 'Open profile';
   navAvatar.title = 'Open profile';
-  navUserName.classList.add('nav-profile-trigger');
   navAvatar.classList.add('nav-profile-trigger');
 
   const overlay = document.createElement('div');
@@ -373,8 +387,11 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
       </div>
       <p class="profile-modal-msg" id="profileMsg"></p>
       <div class="profile-modal-foot">
-        <button type="button" class="profile-btn" id="profileCancelBtn">Cancel</button>
-        <button type="button" class="profile-btn profile-btn-primary" id="profileSaveBtn">Save</button>
+        <button type="button" class="profile-btn-signout" id="profileSignOutBtn">Sign out</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="profile-btn" id="profileCancelBtn">Cancel</button>
+          <button type="button" class="profile-btn profile-btn-primary" id="profileSaveBtn">Save</button>
+        </div>
       </div>
     </div>
   `;
@@ -385,6 +402,7 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
     close: overlay.querySelector('#profileCloseBtn'),
     cancel: overlay.querySelector('#profileCancelBtn'),
     save: overlay.querySelector('#profileSaveBtn'),
+    signOut: overlay.querySelector('#profileSignOutBtn'),
     msg: overlay.querySelector('#profileMsg'),
     avatarPreview: overlay.querySelector('#profileAvatarPreview'),
     photoPickBtn: overlay.querySelector('#profilePhotoPickBtn'),
@@ -404,7 +422,7 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
 
   const refreshNav = (name, photoURL) => {
     const finalName = (name || '').trim() || user.email;
-    navUserName.textContent = finalName;
+    if (navUserName) navUserName.textContent = finalName;
     applyAvatarVisual(navAvatar, finalName, user.email, photoURL);
   };
 
@@ -436,10 +454,14 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
     overlay.classList.remove('open');
   };
 
-  navUserName.addEventListener('click', open);
+  if (navUserName) navUserName.addEventListener('click', open);
   navAvatar.addEventListener('click', open);
   el.close.addEventListener('click', close);
   el.cancel.addEventListener('click', close);
+  el.signOut.addEventListener('click', async () => {
+    await signOut(auth);
+    window.location.href = 'login';
+  });
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();
   });
@@ -655,7 +677,7 @@ onAuthStateChanged(auth, async (user) => {
     applyAvatarVisual(navAvatar, displayName, user.email, profile.photoURL || user.photoURL || '');
   }
 
-  if (navUserName && navAvatar) {
+  if (navAvatar) {
     mountProfileModal({ user, profile, userRef, navUserName, navAvatar });
   }
 
