@@ -632,14 +632,16 @@ onAuthStateChanged(auth, async (user) => {
   const logoutBtn   = document.getElementById('logoutBtn');
   const displayName = profile.displayName || user.displayName;
 
-  // ── Show Console nav link for central_admin (right side of nav) ──
+  // ── Show Console nav link for central_admin (in nav-links) ──
   if (platformRole === 'central_admin') {
-    if (navAuth && !navAuth.querySelector('a[href="console"]')) {
+    const navLinks = document.querySelector('.nav-links');
+    if (navLinks && !navLinks.querySelector('a[href="console"]')) {
       const link = document.createElement('a');
       link.href        = 'console';
       link.className   = 'nav-link';
+      link.setAttribute('data-nav-page', 'console');
       link.textContent = 'Console';
-      navAuth.insertBefore(link, navAuth.firstChild);
+      navLinks.appendChild(link);
     }
   }
 
