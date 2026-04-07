@@ -366,6 +366,22 @@
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast.error { background: #dc2626; }
 
+    /* ===== CHAPTER PAGER ===== */
+    .chapter-pager {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 4px; margin-top: 4px; font-size: 0.82rem; color: var(--ink-3);
+    }
+    .chapter-pager-info { font-size: 0.82rem; color: var(--ink-3); }
+    .chapter-pager-btns { display: flex; gap: 5px; }
+    .pg-btn {
+      padding: 5px 12px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--white); color: var(--ink-2); font-size: 0.8rem; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s;
+    }
+    .pg-btn:hover { background: var(--paper-2); color: var(--ink); }
+    .pg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pg-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 768px) {
       .hero { padding: 32px 24px; }
@@ -477,6 +493,10 @@
 
     <!-- Chapters List -->
     <div class="chapters-list" id="chaptersList" style="display:none"></div>
+    <div class="chapter-pager" id="chapterPager" style="display:none">
+      <span class="chapter-pager-info" id="pagerInfo"></span>
+      <div class="chapter-pager-btns" id="pagerBtns"></div>
+    </div>
 
   </div><!-- /mainContent -->
 
@@ -755,6 +775,7 @@ function loadSubject(subj) {
   document.getElementById('subjSub').textContent =
     `${cfg.code} · ${programme.docId.replace('-', '–').replace('year','Year ').replace(/(\d)(\d)/, '$1 / Year $2')}`;
 
+  currentPage = 0;
   document.getElementById('loadingState').style.display = '';
   document.getElementById('emptyState').style.display   = 'none';
   document.getElementById('chaptersList').style.display = 'none';
@@ -792,15 +813,25 @@ async function saveChapters() {
 }
 
 // ── Render ────────────────────────────────────────────────────────
+const PAGE_SIZE = 5;
+let currentPage = 0;
+
 function render() {
   const list  = document.getElementById('chaptersList');
   const empty = document.getElementById('emptyState');
+  const pager = document.getElementById('chapterPager');
+  const info  = document.getElementById('pagerInfo');
+  const btns  = document.getElementById('pagerBtns');
 
   if (chapters.length === 0) {
     list.style.display  = 'none';
+    pager.style.display = 'none';
     empty.style.display = '';
     return;
   }
+
+  const totalPages = Math.max(1, Math.ceil(chapters.length / PAGE_SIZE));
+  if (currentPage >= totalPages) currentPage = totalPages - 1;
 
   empty.style.display = 'none';
   list.style.display  = '';
@@ -810,11 +841,29 @@ function render() {
     if (block.classList.contains('collapsed')) collapsedIds.add(block.dataset.chid);
   });
 
-  list.innerHTML = chapters.map((ch, ci) => renderChapter(ch, ci)).join('');
+  const start = currentPage * PAGE_SIZE;
+  const pageChapters = chapters.slice(start, start + PAGE_SIZE);
+  list.innerHTML = pageChapters.map((ch, pi) => renderChapter(ch, start + pi)).join('');
 
   document.querySelectorAll('.chapter-block').forEach(block => {
     if (collapsedIds.has(block.dataset.chid)) block.classList.add('collapsed');
   });
+
+  if (totalPages <= 1) {
+    pager.style.display = 'none';
+  } else {
+    pager.style.display = 'flex';
+    const end = Math.min(start + PAGE_SIZE, chapters.length);
+    info.textContent = `Chapters ${start + 1}–${end} of ${chapters.length}`;
+    btns.innerHTML = '';
+    for (let i = 0; i < totalPages; i++) {
+      const b = document.createElement('button');
+      b.textContent = i + 1;
+      b.className = 'pg-btn' + (i === currentPage ? ' active' : '');
+      b.addEventListener('click', () => { currentPage = i; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+      btns.appendChild(b);
+    }
+  }
 }
 
 // Collapse toggle — single delegated listener, set up once

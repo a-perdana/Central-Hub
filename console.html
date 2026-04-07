@@ -53,6 +53,46 @@
     .btn-delete { margin-right: auto; }
     .drawer-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
+    /* ACTION TOAST */
+    #actionToast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: var(--ink);
+      color: #fff;
+      padding: 10px 18px 10px 14px;
+      border-radius: 9px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: var(--shadow-lg);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #actionToast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    #actionToast .toast-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    #actionToast.toast-approved .toast-icon { background: #6ee7b7; color: #065f46; }
+    #actionToast.toast-rejected .toast-icon { background: #fca5a5; color: #991b1b; }
+
     /* RESPONSIVE */
     @media (max-width: 768px) {
       .page-header, .page-content { padding-left: 16px; padding-right: 16px; }
@@ -124,6 +164,12 @@
     </div>
   </div>
 
+</div>
+
+<!-- ACTION TOAST -->
+<div id="actionToast" role="status" aria-live="polite">
+  <span class="toast-icon" id="toastIcon"></span>
+  <span id="toastMsg"></span>
 </div>
 
 <!-- EDIT DRAWER -->
@@ -496,14 +542,50 @@
     }
   }
 
+  let toastTimer = null;
+  function showToast(status, userName) {
+    const toast = document.getElementById('actionToast');
+    const icon  = document.getElementById('toastIcon');
+    const msg   = document.getElementById('toastMsg');
+    clearTimeout(toastTimer);
+    toast.classList.remove('toast-approved', 'toast-rejected', 'show');
+    // force reflow so transition re-fires when same class is added again
+    void toast.offsetWidth;
+    if (status === 'approved') {
+      icon.textContent = '✓';
+      msg.textContent  = `${userName} approved for Academic Hub`;
+      toast.classList.add('toast-approved');
+    } else {
+      icon.textContent = '✕';
+      msg.textContent  = `${userName} rejected from Academic Hub`;
+      toast.classList.add('toast-rejected');
+    }
+    toast.classList.add('show');
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 3500);
+  }
+
   async function setApprovalStatus(id, status) {
     try {
       await updateDoc(fsDoc(db, 'users', id), { approval_status_academichub: status });
       const u = allUsers.find(x => x.id === id);
       if (u) u.approval_status_academichub = status;
+      const name = u?.displayName || u?.email?.split('@')[0] || 'User';
+      showToast(status, name);
       applyFilters();
     } catch (e) {
-      alert('Could not update approval status: ' + e.message);
+      // surface error in toast colour, not alert()
+      const toast = document.getElementById('actionToast');
+      const icon  = document.getElementById('toastIcon');
+      const msg   = document.getElementById('toastMsg');
+      clearTimeout(toastTimer);
+      toast.classList.remove('toast-approved', 'toast-rejected', 'show');
+      void toast.offsetWidth;
+      icon.textContent = '!';
+      icon.style.background = '#fca5a5';
+      icon.style.color = '#991b1b';
+      msg.textContent = 'Could not update: ' + e.message;
+      toast.classList.add('show');
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 4500);
     }
   }
 
