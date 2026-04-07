@@ -215,32 +215,50 @@
     /* ===== CHAPTER BODY ===== */
     .ch-body { border-top: 1px solid var(--border); }
 
-    /* ===== TOPICS TABLE ===== */
-    table.topics-tbl { width: 100%; border-collapse: collapse; }
-    table.topics-tbl th {
-      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
-      color: var(--ink-3); padding: 9px 16px; text-align: left;
-      background: var(--paper); border-bottom: 1px solid var(--border);
+    /* ===== TOPIC ROWS ===== */
+    .topics-list { display: flex; flex-direction: column; }
+    .topic-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 0 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--paper-2);
+      transition: background 0.12s;
+      align-items: start;
     }
-    table.topics-tbl td {
-      padding: 11px 16px; border-bottom: 1px solid var(--paper-2); font-size: 0.82rem; vertical-align: top;
+    .topic-row:last-child { border-bottom: none; }
+    .topic-row:hover { background: var(--paper); }
+    .topic-num {
+      font-size: 0.75rem; color: var(--ink-3); padding-top: 2px; text-align: center;
     }
-    table.topics-tbl tr:last-child td { border-bottom: none; }
-    table.topics-tbl tr:hover td { background: var(--paper); }
-    .obj-codes { display: flex; flex-wrap: wrap; gap: 4px; }
-    .obj-rich { font-size: 0.8rem; color: var(--ink-2); line-height: 1.4; }
-    .obj-rich ul { padding-left: 14px; margin: 2px 0; }
-    .obj-code {
-      font-family: 'DM Mono', monospace; font-size: 0.7rem;
-      background: var(--paper-2); color: var(--ink-2); padding: 1px 5px; border-radius: 3px;
+    .topic-main { min-width: 0; }
+    .topic-title {
+      font-size: 0.875rem; font-weight: 600; color: var(--ink); margin-bottom: 5px; line-height: 1.4;
     }
-    .resource-links { display: flex; flex-wrap: wrap; gap: 5px; }
+    .topic-objectives {
+      font-size: 0.8rem; color: var(--ink-2); line-height: 1.5; margin-bottom: 8px;
+    }
+    .topic-objectives ul { padding-left: 14px; margin: 2px 0; }
+    .topic-objectives li { margin: 1px 0; }
+    .topic-meta-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    }
+    .meta-chip {
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      background: var(--paper-2); color: var(--ink-2); white-space: nowrap;
+    }
     .resource-link {
-      font-size: 0.73rem; color: var(--accent); text-decoration: none;
+      font-size: 0.72rem; color: var(--accent); text-decoration: none;
       padding: 2px 8px; background: var(--accent-2); border-radius: 4px; white-space: nowrap;
     }
     .resource-link:hover { background: #a7f3d0; }
-    .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+    .topic-actions {
+      display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; padding-top: 2px;
+    }
+    .activity-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+    .obj-rich { font-size: 0.8rem; color: var(--ink-2); line-height: 1.5; }
+    .obj-rich ul { padding-left: 14px; margin: 2px 0; }
+    .obj-rich li { margin: 1px 0; }
     .ch-footer {
       padding: 11px 16px; border-top: 1px solid var(--paper-2);
       display: flex; justify-content: flex-end; background: var(--paper);
@@ -420,8 +438,7 @@
       .subject-tabs { flex-wrap: wrap; }
       .subj-tab { flex: 0 0 calc(50% - 4px); }
       .action-bar { flex-direction: column; align-items: flex-start; gap: 12px; }
-      table.topics-tbl th:nth-child(4),
-      table.topics-tbl td:nth-child(4) { display: none; }
+      .topic-row { grid-template-columns: 24px 1fr auto; gap: 0 8px; }
       .program-tabs { flex-wrap: wrap; }
     }
     @media (max-width: 520px) {
@@ -1012,21 +1029,10 @@ function renderChapter(ch, ci, q = '', matchedTopics = null) {
   const allTopics = ch.topics || [];
   const displayTopics = matchedTopics ?? allTopics;
   const topicRows = displayTopics.length > 0
-    ? `<table class="topics-tbl">
-        <thead><tr>
-          <th style="width:4%">#</th>
-          <th style="width:28%">Topic</th>
-          <th style="width:8%">Duration</th>
-          <th style="width:8%">Start Wk</th>
-          <th style="width:23%">Objectives</th>
-          <th style="width:17%">Resources</th>
-          <th style="width:12%"></th>
-        </tr></thead>
-        <tbody>${displayTopics.map(t => {
-          const ti = allTopics.indexOf(t);
-          return renderTopic(t, ti, ci, q);
-        }).join('')}</tbody>
-      </table>`
+    ? `<div class="topics-list">${displayTopics.map(t => {
+        const ti = allTopics.indexOf(t);
+        return renderTopic(t, ti, ci, q);
+      }).join('')}</div>`
     : `<div class="no-topics">No topics yet — add one below.</div>`;
 
   return `
@@ -1058,18 +1064,23 @@ function renderChapter(ch, ci, q = '', matchedTopics = null) {
 
 function renderTopic(t, ti, ci, q = '') {
   const objRaw = t.objectives || t.objective || '';
-  let objHtml;
-  if (!objRaw) {
-    objHtml = '';
-  } else if (/<[a-z]/i.test(objRaw)) {
-    objHtml = `<div class="obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
-  } else {
-    objHtml = `<div class="obj-rich">${highlight(objRaw, q)}</div>`;
+  let objHtml = '';
+  if (objRaw) {
+    if (/<[a-z]/i.test(objRaw)) {
+      objHtml = `<div class="topic-objectives obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
+    } else {
+      objHtml = `<div class="topic-objectives">${highlight(objRaw, q)}</div>`;
+    }
   }
 
-  const resources = (t.resources || [])
-    .map(r => `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`)
-    .join('');
+  const dur = t.duration || t.hour;
+  const metaChips = [
+    dur != null ? `<span class="meta-chip">${dur}h</span>` : '',
+    t.week ? `<span class="meta-chip">Wk ${t.week}</span>` : '',
+    ...(t.resources || []).map(r =>
+      `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`
+    ),
+  ].filter(Boolean).join('');
 
   const activityHtml = t.activity
     ? `<a href="${safeUrl(t.activity.url)}" target="_blank" rel="noopener noreferrer"
@@ -1082,23 +1093,25 @@ function renderTopic(t, ti, ci, q = '') {
     : `<button class="btn btn-secondary btn-sm" style="font-size:0.7rem;padding:2px 8px"
          onclick="openAssessmentModal({type:'topic',ci:${ci},ti:${ti}})">+ Activity</button>`;
 
-  const dur = t.duration || t.hour;
-  return `<tr>
-    <td style="color:var(--ink-3);font-size:0.75rem">${ti + 1}</td>
-    <td style="font-weight:500">${highlight(t.title || t.topic || '', q)}</td>
-    <td>${dur != null ? dur + 'h' : '<span style="color:var(--ink-3)">—</span>'}</td>
-    <td>${t.week ? 'Wk ' + t.week : '<span style="color:var(--ink-3)">—</span>'}</td>
-    <td><div class="obj-codes">${objHtml || '<span style="color:var(--ink-3)">—</span>'}</div></td>
-    <td><div class="resource-links">${resources || ''}</div><div style="margin-top:4px">${activityHtml}</div></td>
-    <td>
-      <div class="row-actions">
+  return `<div class="topic-row">
+    <div class="topic-num">${ti + 1}</div>
+    <div class="topic-main">
+      <div class="topic-title">${highlight(t.title || t.topic || '', q)}</div>
+      ${objHtml}
+      <div class="topic-meta-row">
+        ${metaChips}
+        <div class="activity-row">${activityHtml}</div>
+      </div>
+    </div>
+    <div class="topic-actions">
+      <div style="display:flex;gap:3px">
         <button class="btn-reorder" onclick="moveTopic(${ci},${ti},-1)" title="Move up" ${ti===0?'disabled':''}>↑</button>
         <button class="btn-reorder" onclick="moveTopic(${ci},${ti},1)" title="Move down" ${ti===chapters[ci].topics.length-1?'disabled':''}>↓</button>
-        <button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>
-        <button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>
       </div>
-    </td>
-  </tr>`;
+      <button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>
+      <button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>
+    </div>
+  </div>`;
 }
 
 function renderChapterAssessment(ch, ci) {
