@@ -96,7 +96,7 @@
     /* STATS GRID */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 0;
       margin-bottom: 20px;
       background: var(--white);
@@ -112,8 +112,23 @@
       flex-direction: column;
       gap: 10px;
       border-right: 1px solid var(--border);
+      cursor: pointer;
+      transition: background .15s;
+      position: relative;
     }
     .stat-card:last-child { border-right: none; }
+    .stat-card:hover { background: var(--paper); }
+    .stat-card.active {
+      background: var(--paper);
+    }
+    .stat-card.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent);
+      border-radius: 0;
+    }
     .stat-card-head {
       display: flex;
       align-items: center;
@@ -151,10 +166,7 @@
     @media (max-width: 768px) {
       .page-header, .page-content { padding-left: 16px; padding-right: 16px; }
       .user-email { display: none; }
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .stat-card:nth-child(2) { border-right: none; }
-      .stat-card:nth-child(1),
-      .stat-card:nth-child(2) { border-bottom: 1px solid var(--border); }
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 560px) {
       .toolbar { flex-direction: column; align-items: stretch; }
@@ -315,11 +327,12 @@
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
   let db;
-  let allUsers  = [];
-  let editingId = null;
-  let sortCol   = null;
-  let sortDir   = 'asc';
+  let allUsers    = [];
+  let editingId   = null;
+  let sortCol     = null;
+  let sortDir     = 'asc';
   let currentPage = 0;
+  let statFilter  = null; // null = all, or platform key string
   const PAGE_SIZE = 10;
 
   const ROLE_BADGE = {
@@ -370,71 +383,90 @@
     }
   }
 
-  function renderStats() {
-    const platforms = [
-      {
-        key: 'centralhub',
-        label: 'Central Hub',
-        adminVal: 'central_admin',
-        userVal:  'central_user',
-        field: 'role_centralhub',
-        color: '#7c3aed', bg: '#ede9fe',
-        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`,
-      },
-      {
-        key: 'academichub',
-        label: 'Academic Hub',
-        adminVal: 'academic_admin',
-        userVal:  'academic_user',
-        field: 'role_academichub',
-        color: '#b45309', bg: '#fef3c7',
-        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`,
-      },
-      {
-        key: 'teachershub',
-        label: 'Teachers Hub',
-        adminVal: 'teachers_admin',
-        userVal:  'teachers_user',
-        field: 'role_teachershub',
-        color: '#065f46', bg: '#d1fae5',
-        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-      },
-      {
-        key: 'researchhub',
-        label: 'Research Hub',
-        adminVal: 'research_admin',
-        userVal:  'research_user',
-        field: 'role_researchhub',
-        color: '#9d174d', bg: '#fce7f3',
-        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
-      },
-    ];
+  const PLATFORMS = [
+    {
+      key: 'centralhub',
+      label: 'Central Hub',
+      adminVal: 'central_admin',
+      userVal:  'central_user',
+      field: 'role_centralhub',
+      color: '#7c3aed', bg: '#ede9fe',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`,
+    },
+    {
+      key: 'academichub',
+      label: 'Academic Hub',
+      adminVal: 'academic_admin',
+      userVal:  'academic_user',
+      field: 'role_academichub',
+      color: '#b45309', bg: '#fef3c7',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`,
+    },
+    {
+      key: 'teachershub',
+      label: 'Teachers Hub',
+      adminVal: 'teachers_admin',
+      userVal:  'teachers_user',
+      field: 'role_teachershub',
+      color: '#065f46', bg: '#d1fae5',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    },
+    {
+      key: 'researchhub',
+      label: 'Research Hub',
+      adminVal: 'research_admin',
+      userVal:  'research_user',
+      field: 'role_researchhub',
+      color: '#9d174d', bg: '#fce7f3',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+    },
+  ];
 
-    const html = platforms.map(p => {
+  function renderStats() {
+    const userIcon = `<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg>`;
+
+    const totalCard = `
+      <div class="stat-card ${statFilter === null ? 'active' : ''}" data-stat-key="__total">
+        <div class="stat-card-head">
+          <div class="stat-card-icon" style="background:#f1f5f9;color:#475569">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span class="stat-card-label">All Users</span>
+        </div>
+        <div class="stat-card-total">${allUsers.length}</div>
+        <div class="stat-card-breakdown">
+          <span class="stat-chip stat-chip-total">${userIcon} ${allUsers.length} registered</span>
+        </div>
+      </div>`;
+
+    const platformCards = PLATFORMS.map(p => {
       const admins = allUsers.filter(u => u[p.field] === p.adminVal).length;
       const users  = allUsers.filter(u => u[p.field] === p.userVal).length;
       const total  = admins + users;
       return `
-      <div class="stat-card">
+      <div class="stat-card ${statFilter === p.key ? 'active' : ''}" data-stat-key="${p.key}">
         <div class="stat-card-head">
           <div class="stat-card-icon" style="background:${p.bg};color:${p.color}">${p.icon}</div>
           <span class="stat-card-label">${p.label}</span>
         </div>
         <div class="stat-card-total">${total}</div>
         <div class="stat-card-breakdown">
-          <span class="stat-chip stat-chip-admin">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg>
-            ${admins} admin
-          </span>
-          <span class="stat-chip stat-chip-user">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg>
-            ${users} user
-          </span>
+          <span class="stat-chip stat-chip-admin">${userIcon} ${admins} admin</span>
+          <span class="stat-chip stat-chip-user">${userIcon} ${users} user</span>
         </div>
       </div>`;
     }).join('');
 
-    document.getElementById('statsGrid').innerHTML = html;
+    document.getElementById('statsGrid').innerHTML = totalCard + platformCards;
+
+    document.querySelectorAll('.stat-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const key = card.dataset.statKey;
+        statFilter = key === '__total' ? null : key;
+        applyFilters();
+        renderStats(); // re-render to update active state
+      });
+    });
   }
 
   function bindEvents() {
@@ -475,10 +507,12 @@
   function applyFiltersAtPage() {
     const q  = document.getElementById('searchInput').value.toLowerCase();
     const ro = document.getElementById('roleFilter').value;
+    const p  = statFilter ? PLATFORMS.find(x => x.key === statFilter) : null;
     const list = allUsers.filter(u => {
       if (q && !u.displayName?.toLowerCase().includes(q) && !u.email?.toLowerCase().includes(q)) return false;
       if (ro === '__pending_ah') return u.approval_status_academichub === 'pending';
       if (ro && u.role_centralhub !== ro && u.role_academichub !== ro && u.role_teachershub !== ro && u.role_researchhub !== ro) return false;
+      if (p && u[p.field] !== p.adminVal && u[p.field] !== p.userVal) return false;
       return true;
     });
     const sorted = sortList(list);
