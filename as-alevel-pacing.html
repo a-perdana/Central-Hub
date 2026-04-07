@@ -94,6 +94,36 @@
     .subj-tab.active { background: var(--accent); color: #fff; }
     .subj-icon { font-size: 1rem; line-height: 1; }
 
+    /* ===== SEARCH BAR ===== */
+    .pacing-search-wrap {
+      position: relative; margin-bottom: 16px;
+    }
+    .pacing-search-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--ink-3); pointer-events: none;
+    }
+    .pacing-search-input {
+      width: 100%; padding: 9px 36px 9px 36px; border: 1px solid var(--border);
+      border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.875rem;
+      color: var(--ink); background: var(--white); outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .pacing-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(5,150,105,0.12); }
+    .pacing-search-input::placeholder { color: var(--ink-3); }
+    .pacing-search-clear {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      border: none; background: none; cursor: pointer; color: var(--ink-3);
+      padding: 2px 5px; border-radius: 4px; font-size: 1rem; line-height: 1;
+      display: none;
+    }
+    .pacing-search-clear:hover { color: var(--ink); background: var(--paper-2); }
+    .search-result-count {
+      font-size: 0.8rem; color: var(--ink-3); padding: 0 2px; margin-bottom: 12px;
+    }
+    mark.hl {
+      background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px;
+    }
+
     /* ===== ACTION BAR ===== */
     .action-bar {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;
@@ -452,6 +482,14 @@
       </button>
     </div>
 
+    <!-- Search -->
+    <div class="pacing-search-wrap">
+      <svg class="pacing-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="pacing-search-input" id="pacingSearch" type="search" placeholder="Search topics and objectives…" aria-label="Search topics and objectives">
+      <button class="pacing-search-clear" id="pacingSearchClear" aria-label="Clear search">✕</button>
+    </div>
+    <div class="search-result-count" id="searchResultCount" style="display:none"></div>
+
     <!-- Loading -->
     <div id="loadingState" class="loading-state">
       <div class="spinner" aria-hidden="true"></div>
@@ -680,7 +718,11 @@ function loadSubject(subj) {
   document.getElementById('subjTitle').textContent = `Cambridge International AS & A Level ${cfg.label}`;
   document.getElementById('subjSub').textContent   = `${cfg.code} · Year 11–12`;
 
+  searchQuery = '';
   currentPage = 0;
+  const searchInput = document.getElementById('pacingSearch');
+  if (searchInput) { searchInput.value = ''; document.getElementById('pacingSearchClear').style.display = 'none'; }
+
   document.getElementById('loadingState').style.display = '';
   document.getElementById('emptyState').style.display   = 'none';
   document.getElementById('chaptersList').style.display = 'none';
@@ -721,55 +763,139 @@ async function saveChapters() {
 const PAGE_SIZE = 5;
 let currentPage = 0;
 
+// ── Search ────────────────────────────────────────────────────────
+let searchQuery = '';
+
+(function bindSearch() {
+  const input = document.getElementById('pacingSearch');
+  const clear = document.getElementById('pacingSearchClear');
+  input.addEventListener('input', () => {
+    searchQuery = input.value.trim().toLowerCase();
+    clear.style.display = searchQuery ? 'block' : 'none';
+    currentPage = 0;
+    render();
+  });
+  clear.addEventListener('click', () => {
+    input.value = '';
+    searchQuery = '';
+    clear.style.display = 'none';
+    currentPage = 0;
+    render();
+    input.focus();
+  });
+})();
+
+function highlight(text, q) {
+  if (!q) return escHtml(text);
+  const safe = escHtml(text);
+  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp(safeQ, 'gi'), m => `<mark class="hl">${m}</mark>`);
+}
+
+function stripHtml(html) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function highlightInHtml(html, q) {
+  if (!q) return html;
+  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return html.replace(/(<[^>]*>)|([^<]+)/g, (m, tag, text) => {
+    if (tag) return tag;
+    return text.replace(new RegExp(safeQ, 'gi'), m2 => `<mark class="hl">${m2}</mark>`);
+  });
+}
+
+function getFilteredChapters() {
+  if (!searchQuery) return null;
+  const q = searchQuery;
+  const result = [];
+  chapters.forEach((ch, ci) => {
+    const chTitle = (ch.chapter || ch.title || '').toLowerCase();
+    const chMatch = chTitle.includes(q);
+    const matchedTopics = (ch.topics || []).filter(t => {
+      const title = (t.title || t.topic || '').toLowerCase();
+      const obj   = stripHtml(t.objectives || t.objective || '').toLowerCase();
+      return title.includes(q) || obj.includes(q);
+    });
+    if (chMatch || matchedTopics.length > 0) {
+      result.push({ ...ch, _ci: ci, _matchedTopics: chMatch ? (ch.topics || []) : matchedTopics });
+    }
+  });
+  return result;
+}
+
 function render() {
-  const list  = document.getElementById('chaptersList');
-  const empty = document.getElementById('emptyState');
-  const pager = document.getElementById('chapterPager');
-  const info  = document.getElementById('pagerInfo');
-  const btns  = document.getElementById('pagerBtns');
+  const list     = document.getElementById('chaptersList');
+  const empty    = document.getElementById('emptyState');
+  const pager    = document.getElementById('chapterPager');
+  const info     = document.getElementById('pagerInfo');
+  const btns     = document.getElementById('pagerBtns');
+  const resCount = document.getElementById('searchResultCount');
 
   if (chapters.length === 0) {
+    list.style.display     = 'none';
+    pager.style.display    = 'none';
+    empty.style.display    = '';
+    resCount.style.display = 'none';
+    return;
+  }
+
+  const filtered = getFilteredChapters();
+  const workList = filtered ?? chapters.map((ch, i) => ({ ...ch, _ci: i, _matchedTopics: ch.topics || [] }));
+
+  if (filtered !== null) {
+    const topicCount = filtered.reduce((s, ch) => s + ch._matchedTopics.length, 0);
+    resCount.style.display = '';
+    resCount.textContent = filtered.length === 0
+      ? 'No results.'
+      : `${filtered.length} chapter${filtered.length !== 1 ? 's' : ''}, ${topicCount} topic${topicCount !== 1 ? 's' : ''} found`;
+  } else {
+    resCount.style.display = 'none';
+  }
+
+  if (workList.length === 0) {
     list.style.display  = 'none';
     pager.style.display = 'none';
     empty.style.display = '';
     return;
   }
 
-  const totalPages = Math.max(1, Math.ceil(chapters.length / PAGE_SIZE));
-  if (currentPage >= totalPages) currentPage = totalPages - 1;
-
   empty.style.display = 'none';
   list.style.display  = '';
 
-  // Remember collapse state by chapter ID before re-render
-  const collapsedIds = new Set();
-  document.querySelectorAll('.chapter-block').forEach(block => {
-    if (block.classList.contains('collapsed')) collapsedIds.add(block.dataset.chid);
-  });
+  const isSearching = filtered !== null;
 
-  const start = currentPage * PAGE_SIZE;
-  const pageChapters = chapters.slice(start, start + PAGE_SIZE);
-  list.innerHTML = pageChapters.map((ch, pi) => renderChapter(ch, start + pi)).join('');
-
-  // Re-apply collapse state
-  document.querySelectorAll('.chapter-block').forEach(block => {
-    if (collapsedIds.has(block.dataset.chid)) block.classList.add('collapsed');
-  });
-
-  if (totalPages <= 1) {
+  let pageItems;
+  if (isSearching) {
+    pageItems = workList;
     pager.style.display = 'none';
   } else {
-    pager.style.display = 'flex';
-    const end = Math.min(start + PAGE_SIZE, chapters.length);
-    info.textContent = `Chapters ${start + 1}–${end} of ${chapters.length}`;
-    btns.innerHTML = '';
-    for (let i = 0; i < totalPages; i++) {
-      const b = document.createElement('button');
-      b.textContent = i + 1;
-      b.className = 'pg-btn' + (i === currentPage ? ' active' : '');
-      b.addEventListener('click', () => { currentPage = i; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
-      btns.appendChild(b);
+    const totalPages = Math.max(1, Math.ceil(workList.length / PAGE_SIZE));
+    if (currentPage >= totalPages) currentPage = totalPages - 1;
+    const start = currentPage * PAGE_SIZE;
+    pageItems = workList.slice(start, start + PAGE_SIZE);
+
+    if (totalPages <= 1) {
+      pager.style.display = 'none';
+    } else {
+      pager.style.display = 'flex';
+      const end = Math.min(start + PAGE_SIZE, workList.length);
+      info.textContent = `Chapters ${start + 1}–${end} of ${workList.length}`;
+      btns.innerHTML = '';
+      for (let i = 0; i < totalPages; i++) {
+        const b = document.createElement('button');
+        b.textContent = i + 1;
+        b.className = 'pg-btn' + (i === currentPage ? ' active' : '');
+        b.addEventListener('click', () => { currentPage = i; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        btns.appendChild(b);
+      }
     }
+  }
+
+  list.innerHTML = pageItems.map(ch => renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics)).join('');
+
+  if (isSearching) {
+    document.querySelectorAll('.chapter-block').forEach(b => b.classList.remove('collapsed'));
   }
 }
 
@@ -787,9 +913,10 @@ function render() {
   });
 })();
 
-function renderChapter(ch, ci) {
-  const topics   = ch.topics || [];
-  const topicRows = topics.length > 0
+function renderChapter(ch, ci, q = '', matchedTopics = null) {
+  const allTopics = ch.topics || [];
+  const displayTopics = matchedTopics ?? allTopics;
+  const topicRows = displayTopics.length > 0
     ? `<table class="topics-tbl">
         <thead><tr>
           <th style="width:4%">#</th>
@@ -800,19 +927,22 @@ function renderChapter(ch, ci) {
           <th style="width:16%">Resources</th>
           <th style="width:12%"></th>
         </tr></thead>
-        <tbody>${topics.map((t, ti) => renderTopic(t, ti, ci)).join('')}</tbody>
+        <tbody>${displayTopics.map(t => {
+          const ti = allTopics.indexOf(t);
+          return renderTopic(t, ti, ci, q);
+        }).join('')}</tbody>
       </table>`
     : `<div class="no-topics">No topics yet — add one below.</div>`;
 
   return `
-    <div class="chapter-block${ci > 0 ? ' collapsed' : ''}" data-chid="${escHtml(ch.id || ch.chapter || String(ci))}">
+    <div class="chapter-block${ci > 0 && !q ? ' collapsed' : ''}" data-chid="${escHtml(ch.id || ch.chapter || String(ci))}">
       <div class="ch-header">
         <button class="ch-toggle" title="Toggle chapter" aria-label="Toggle chapter">&#8964;</button>
         <div class="ch-num" aria-hidden="true">${ci + 1}</div>
-        <div class="ch-title">${escHtml(ch.chapter || ch.title)}</div>
+        <div class="ch-title">${highlight(ch.chapter || ch.title || '', q)}</div>
         <div class="ch-meta">
           <span class="year-badge">${escHtml(ch.year || '')}</span>
-          <span class="topic-count">${topics.length} topic${topics.length !== 1 ? 's' : ''}</span>
+          <span class="topic-count">${allTopics.length} topic${allTopics.length !== 1 ? 's' : ''}</span>
         </div>
         <div class="ch-actions">
           <button class="btn btn-edit" onclick="editChapter(${ci})" title="Edit chapter">Edit</button>
@@ -829,13 +959,16 @@ function renderChapter(ch, ci) {
     </div>`;
 }
 
-function renderTopic(t, ti, ci) {
+function renderTopic(t, ti, ci, q = '') {
   const objRaw = t.objectives || t.objective || '';
-  const objCodes = objRaw
-    ? (/<[a-z]/i.test(objRaw)
-        ? `<div class="obj-rich">${objRaw}</div>`
-        : `<div class="obj-rich">${escHtml(objRaw)}</div>`)
-    : '';
+  let objHtml;
+  if (!objRaw) {
+    objHtml = '';
+  } else if (/<[a-z]/i.test(objRaw)) {
+    objHtml = `<div class="obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
+  } else {
+    objHtml = `<div class="obj-rich">${highlight(objRaw, q)}</div>`;
+  }
 
   const resources = (t.resources || [])
     .map(r => `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`)
@@ -855,10 +988,10 @@ function renderTopic(t, ti, ci) {
   const dur = t.duration || t.hour;
   return `<tr>
     <td style="color:var(--ink-3);font-size:0.75rem">${ti + 1}</td>
-    <td style="font-weight:500">${escHtml(t.title || t.topic)}</td>
+    <td style="font-weight:500">${highlight(t.title || t.topic || '', q)}</td>
     <td>${dur ? dur + (t.hour ? 'h' : 'w') : '<span style="color:var(--ink-3)">—</span>'}</td>
     <td>${t.week ? 'Wk ' + t.week : '<span style="color:var(--ink-3)">—</span>'}</td>
-    <td><div class="obj-codes">${objCodes || '<span style="color:var(--ink-3)">—</span>'}</div></td>
+    <td><div class="obj-codes">${objHtml || '<span style="color:var(--ink-3)">—</span>'}</div></td>
     <td><div class="resource-links">${resources || ''}</div><div style="margin-top:4px">${activityHtml}</div></td>
     <td>
       <div class="row-actions">
@@ -892,6 +1025,15 @@ function escHtml(str) {
 }
 function safeUrl(url) {
   return /^https?:\/\//i.test(url) ? url : '#';
+}
+
+function highlightInHtml(html, q) {
+  if (!q) return html;
+  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return html.replace(/(<[^>]*>)|([^<]+)/g, (m, tag, text) => {
+    if (tag) return tag;
+    return text.replace(new RegExp(safeQ, 'gi'), m2 => `<mark class="hl">${m2}</mark>`);
+  });
 }
 
 function genId() {
