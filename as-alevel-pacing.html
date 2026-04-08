@@ -219,8 +219,19 @@
       display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
     }
     .meta-chip {
-      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 100px;
       background: var(--paper-2); color: var(--ink-2); white-space: nowrap;
+      cursor: pointer; border: 1px solid transparent; transition: opacity 0.15s;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .meta-chip:hover { opacity: 0.75; }
+    .chip-hours { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+    .chip-week  { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+    .chip-inline-input {
+      font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 600;
+      padding: 1px 6px; border-radius: 100px; border: 2px solid var(--accent);
+      outline: none; width: 72px; text-align: center;
+      color: var(--ink); background: var(--white);
     }
     .resource-link {
       font-size: 0.72rem; color: var(--accent); text-decoration: none;
@@ -578,11 +589,11 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="topDurationInput">Duration (weeks)</label>
-          <input class="form-input" id="topDurationInput" type="number" min="1" max="60" placeholder="e.g. 3">
+          <label class="form-label" for="topDurationInput">Lesson Hours</label>
+          <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 2">
         </div>
         <div class="form-group">
-          <label class="form-label" for="topStartWeekInput">Start Week</label>
+          <label class="form-label" for="topStartWeekInput">Week</label>
           <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5">
         </div>
       </div>
@@ -755,6 +766,35 @@ function loadSubject(subj) {
     document.getElementById('loadingState').style.display = 'none';
     console.error('Pacing snapshot error:', err);
     showToast('Failed to load pacing data.', true);
+  });
+}
+
+// ── Inline chip edit ─────────────────────────────────────────────
+function inlineEditChip(e, field, ci, ti) {
+  e.stopPropagation();
+  const chip = e.currentTarget;
+  const topic = chapters[ci].topics[ti];
+  const current = field === 'hours' ? (topic.duration ?? topic.hour ?? '') : (topic.week ?? '');
+  const placeholder = field === 'hours' ? 'e.g. 2' : 'e.g. 5';
+
+  chip.innerHTML = `<input class="chip-inline-input" type="number" min="1" max="${field === 'hours' ? 60 : 52}"
+    value="${current}" placeholder="${placeholder}" onclick="event.stopPropagation()">`;
+  const inp = chip.querySelector('input');
+  inp.focus(); inp.select();
+
+  function commit() {
+    const val = parseInt(inp.value);
+    if (!isNaN(val) && val > 0) {
+      if (field === 'hours') { topic.duration = val; topic.hour = val; }
+      else                   { topic.week = val; }
+      saveChapters();
+    }
+    render();
+  }
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter')  { ev.preventDefault(); inp.removeEventListener('blur', commit); commit(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); inp.removeEventListener('blur', commit); render(); }
   });
 }
 
@@ -979,8 +1019,8 @@ function renderTopic(t, ti, ci, q = '') {
 
   const dur = t.duration || t.hour;
   const metaChips = [
-    dur ? `<span class="meta-chip">${dur}${t.hour ? 'h' : 'w'}</span>` : '',
-    t.week ? `<span class="meta-chip">Wk ${t.week}</span>` : '',
+    `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur == 1 ? '' : 's') : '—'}</span>`,
+    `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 ${t.week != null ? 'Week ' + t.week : '—'}</span>`,
     ...(t.resources || []).map(r =>
       `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`
     ),

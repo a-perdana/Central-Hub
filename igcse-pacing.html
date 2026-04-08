@@ -78,24 +78,6 @@
     .access-denied h3 { font-size: 1rem; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
     .access-denied p { font-size: 0.875rem; color: var(--ink-3); }
 
-    /* ===== PROGRAM TABS (top level) ===== */
-    .program-tabs {
-      display: flex; gap: 4px; margin-bottom: 20px;
-      border-bottom: 2px solid var(--border); padding-bottom: 0;
-    }
-    .prog-tab {
-      padding: 10px 20px; border: none; background: transparent;
-      font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600;
-      color: var(--ink-3); cursor: pointer; border-radius: 8px 8px 0 0;
-      transition: all 0.18s; position: relative; bottom: -2px;
-      border: 2px solid transparent; border-bottom: none;
-    }
-    .prog-tab:hover { color: var(--ink-2); background: var(--paper-2); }
-    .prog-tab.active {
-      color: var(--accent-dk); background: var(--white);
-      border-color: var(--border); border-bottom-color: var(--white);
-    }
-
     /* ===== SUBJECT TABS ===== */
     .subject-tabs {
       display: flex; gap: 4px; background: var(--white);
@@ -244,8 +226,19 @@
       display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
     }
     .meta-chip {
-      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 100px;
       background: var(--paper-2); color: var(--ink-2); white-space: nowrap;
+      cursor: pointer; border: 1px solid transparent; transition: opacity 0.15s;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .meta-chip:hover { opacity: 0.75; }
+    .chip-hours { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+    .chip-week  { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+    .chip-inline-input {
+      font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 600;
+      padding: 1px 6px; border-radius: 100px; border: 2px solid var(--accent);
+      outline: none; width: 72px; text-align: center;
+      color: var(--ink); background: var(--white);
     }
     .resource-link {
       font-size: 0.72rem; color: var(--accent); text-decoration: none;
@@ -440,7 +433,6 @@
       .subj-tab { flex: 0 0 calc(50% - 4px); }
       .action-bar { flex-direction: column; align-items: flex-start; gap: 12px; }
       .topic-row { grid-template-columns: 24px 1fr auto; gap: 0 8px; }
-      .program-tabs { flex-wrap: wrap; }
     }
     @media (max-width: 520px) {
       .ch-header { flex-wrap: wrap; }
@@ -468,8 +460,8 @@
     </div>
     <div class="hero-text">
       <p class="hero-eyebrow">Academics · CentralHub</p>
-      <h1 class="hero-title">Pacing Guide Management</h1>
-      <p class="hero-desc">Manage chapter and topic structure for all Cambridge programmes. Changes are reflected in the Teachers Hub for all staff.</p>
+      <h1 class="hero-title">IGCSE Pacing Guide</h1>
+      <p class="hero-desc">Manage chapter and topic structure for Cambridge IGCSE (Year 9–10). Changes are reflected in the Teachers Hub for all staff.</p>
     </div>
   </div>
 </section>
@@ -496,14 +488,7 @@
   <!-- Main (shown for central_admin only) -->
   <div id="mainContent" style="display:none">
 
-    <!-- Programme Tabs -->
-    <div class="program-tabs" role="tablist" aria-label="Programme">
-      <button class="prog-tab active" role="tab" data-prog="checkpoint" aria-selected="true">Secondary Checkpoint</button>
-      <button class="prog-tab" role="tab" data-prog="igcse" aria-selected="false">IGCSE</button>
-      <button class="prog-tab" role="tab" data-prog="asalevel" aria-selected="false">AS &amp; A Level</button>
-    </div>
-
-    <!-- Subject Tabs (rebuilt per programme) -->
+    <!-- Subject Tabs -->
     <div class="subject-tabs" id="subjectTabs" role="tablist" aria-label="Subject"></div>
 
     <!-- Action Bar -->
@@ -597,11 +582,11 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label" for="topDurationInput">Duration (hours)</label>
+          <label class="form-label" for="topDurationInput">Lesson Hours</label>
           <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 6" oninput="_modalDirty=true">
         </div>
         <div class="form-group">
-          <label class="form-label" for="topStartWeekInput">Start Week</label>
+          <label class="form-label" for="topStartWeekInput">Week</label>
           <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5" oninput="_modalDirty=true">
         </div>
       </div>
@@ -701,16 +686,6 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
 
 // ── Programme / Subject config ────────────────────────────────────
 const PROGRAMMES = {
-  checkpoint: {
-    label:    'Secondary Checkpoint',
-    years:    ['Year 7', 'Year 8'],
-    docId:    'year7-8',
-    subjects: {
-      math:    { label: 'Mathematics', code: '1112', icon: '∫',  collection: 'checkpoint_math_pacing' },
-      english: { label: 'English',     code: '1111', icon: '📖', collection: 'checkpoint_english_pacing' },
-      science: { label: 'Science',     code: '1113', icon: '🔬', collection: 'checkpoint_science_pacing' },
-    },
-  },
   igcse: {
     label:    'Cambridge IGCSE',
     years:    ['Year 9', 'Year 10'],
@@ -722,21 +697,10 @@ const PROGRAMMES = {
       physics:   { label: 'Physics',     code: '0625', icon: '⚛',  collection: 'physics_pacing' },
     },
   },
-  asalevel: {
-    label:    'AS & A Level',
-    years:    ['Year 11', 'Year 12'],
-    docId:    'year11-12',
-    subjects: {
-      math:      { label: 'Mathematics', code: '9709', icon: '∫',  collection: 'asalevel_math_pacing' },
-      biology:   { label: 'Biology',     code: '9700', icon: '🧬', collection: 'asalevel_biology_pacing' },
-      chemistry: { label: 'Chemistry',   code: '9701', icon: '⚗',  collection: 'asalevel_chemistry_pacing' },
-      physics:   { label: 'Physics',     code: '9702', icon: '⚛',  collection: 'asalevel_physics_pacing' },
-    },
-  },
 };
 
 // ── State ─────────────────────────────────────────────────────────
-let currentProg    = 'checkpoint';
+let currentProg    = 'igcse';
 let currentSubject = 'math';
 let chapters       = [];
 let unsub          = null;
@@ -761,20 +725,7 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
 
   document.getElementById('mainContent').style.display = '';
 
-  // Programme tab clicks
-  document.querySelectorAll('.prog-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.prog-tab').forEach(t => {
-        t.classList.remove('active');
-        t.setAttribute('aria-selected', 'false');
-      });
-      tab.classList.add('active');
-      tab.setAttribute('aria-selected', 'true');
-      switchProgramme(tab.dataset.prog);
-    });
-  });
-
-  switchProgramme('checkpoint');
+  switchProgramme('igcse');
 });
 
 // ── Switch programme ──────────────────────────────────────────────
@@ -850,6 +801,35 @@ function loadSubject(subj) {
     document.getElementById('loadingState').style.display = 'none';
     console.error('Pacing snapshot error:', err);
     showToast('Failed to load pacing data.', true);
+  });
+}
+
+// ── Inline chip edit ─────────────────────────────────────────────
+function inlineEditChip(e, field, ci, ti) {
+  e.stopPropagation();
+  const chip = e.currentTarget;
+  const topic = chapters[ci].topics[ti];
+  const current = field === 'hours' ? (topic.duration ?? topic.hour ?? '') : (topic.week ?? '');
+  const placeholder = field === 'hours' ? 'e.g. 2' : 'e.g. 5';
+
+  chip.innerHTML = `<input class="chip-inline-input" type="number" min="1" max="${field === 'hours' ? 60 : 52}"
+    value="${current}" placeholder="${placeholder}" onclick="event.stopPropagation()">`;
+  const inp = chip.querySelector('input');
+  inp.focus(); inp.select();
+
+  function commit() {
+    const val = parseInt(inp.value);
+    if (!isNaN(val) && val > 0) {
+      if (field === 'hours') { topic.duration = val; topic.hour = val; }
+      else                   { topic.week = val; }
+      saveChapters();
+    }
+    render();
+  }
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter')  { ev.preventDefault(); inp.removeEventListener('blur', commit); commit(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); inp.removeEventListener('blur', commit); render(); }
   });
 }
 
@@ -1076,8 +1056,8 @@ function renderTopic(t, ti, ci, q = '') {
 
   const dur = t.duration || t.hour;
   const metaChips = [
-    dur != null ? `<span class="meta-chip">${dur}h</span>` : '',
-    t.week ? `<span class="meta-chip">Wk ${t.week}</span>` : '',
+    `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur == 1 ? '' : 's') : '—'}</span>`,
+    `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 ${t.week != null ? 'Week ' + t.week : '—'}</span>`,
     ...(t.resources || []).map(r =>
       `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`
     ),
