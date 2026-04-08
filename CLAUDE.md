@@ -208,7 +208,8 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `academic-calendar.html`           | `/academic-calendar`            | Academic calendar (reads Google Apps Script API)  |
 | `igcse-pacing.html`                | `/igcse-pacing`                 | IGCSE pacing guide management                     |
 | `as-alevel-pacing.html`            | `/as-alevel-pacing`             | A-Level pacing guide                              |
-| `secondary-checkpoint-pacing.html` | `/secondary-checkpoint-pacing`  | Secondary checkpoint pacing                       |
+| `primary-checkpoint-pacing.html`   | `/primary-checkpoint-pacing`    | Primary checkpoint pacing (Year 4–6)              |
+| `secondary-checkpoint-pacing.html` | `/secondary-checkpoint-pacing`  | Secondary checkpoint pacing (Year 7–8)            |
 | `console.html`                     | `/console`                      | User management — sets all 4 platform role fields |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
 | `school-appraisals.html`           | `/school-appraisals`            | School-level appraisals                           |
