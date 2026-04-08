@@ -754,14 +754,10 @@
               <input class="form-input" id="objPrefixInput" type="text" placeholder="e.g. C, E">
               <p class="form-hint">Used to detect codes like <strong>C1.1</strong> in objectives. Leave blank to auto-detect.</p>
             </div>
-            <div class="form-group" style="margin-bottom:10px">
-              <label class="form-label" for="termStartInput">Term start date (for pace alerts)</label>
-              <input class="form-input" id="termStartInput" type="date">
-              <p class="form-hint">Applies to all subjects. Teachers Hub uses this to calculate overdue/behind alerts.</p>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label" for="totalWeeksInput">Total teaching weeks per year</label>
-              <input class="form-input" id="totalWeeksInput" type="number" min="1" max="52" placeholder="e.g. 36">
+            <div class="form-hint" style="padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1D4ED8;font-size:12px;line-height:1.5">
+              Term start date and total teaching weeks are managed in
+              <a href="academic-calendar" style="font-weight:700;color:#1D4ED8;text-decoration:underline">Academic Calendar → Year Settings</a>.
+              Teachers Hub reads those values automatically.
             </div>
             <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
               <button class="btn btn-primary btn-sm" onclick="saveObjSettings()">Save Settings</button>
@@ -1275,10 +1271,10 @@ const _IGCSE_SUBJECTS = PROGRAMMES.igcse.subjects; // {math,biology,chemistry,ph
 const _IGCSE_DOC_ID   = 'year9-10';
 
 let settingsData = {
-  math:      { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
-  biology:   { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
-  chemistry: { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
-  physics:   { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
+  math:      { classes: [], objPrefixes: '' },
+  biology:   { classes: [], objPrefixes: '' },
+  chemistry: { classes: [], objPrefixes: '' },
+  physics:   { classes: [], objPrefixes: '' },
 };
 let settingsClassSubj = 'math';
 let settingsObjSubj   = 'math';
@@ -1311,8 +1307,6 @@ function loadAllSettings() {
         settingsData[subj] = {
           classes:    Array.isArray(d.classes)     ? d.classes : [],
           objPrefixes: Array.isArray(d.objPrefixes) ? d.objPrefixes.join(', ') : (settingsData[subj].objPrefixes || ''),
-          termStart:  d.termStart  || '',
-          totalWeeks: d.totalWeeks || '',
         };
       }
       renderClassGroups();
@@ -1376,26 +1370,18 @@ window.saveClassGroups = async function saveClassGroups() {
 function renderObjSettings() {
   const data = settingsData[settingsObjSubj];
   const p = document.getElementById('objPrefixInput');
-  const t = document.getElementById('termStartInput');
-  const w = document.getElementById('totalWeeksInput');
   if (p) p.value = data.objPrefixes || '';
-  if (t) t.value = data.termStart   || '';
-  if (w) w.value = data.totalWeeks  || '';
 }
 
 window.saveObjSettings = async function saveObjSettings() {
   const subj = settingsObjSubj;
-  const prefRaw    = (document.getElementById('objPrefixInput').value || '').trim();
-  const termStart  = (document.getElementById('termStartInput').value  || '').trim();
-  const totalWeeks = parseInt(document.getElementById('totalWeeksInput').value) || null;
-  const prefixes   = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const prefRaw  = (document.getElementById('objPrefixInput').value || '').trim();
+  const prefixes = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
   settingsData[subj].objPrefixes = prefRaw;
-  settingsData[subj].termStart   = termStart;
-  settingsData[subj].totalWeeks  = totalWeeks;
   try {
     const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
     await _setDoc(_doc(window.db, _IGCSE_SUBJECTS[subj].collection, _IGCSE_DOC_ID),
-      { objPrefixes: prefixes, termStart: termStart || null, totalWeeks: totalWeeks || null, updatedAt: _ts() },
+      { objPrefixes: prefixes, updatedAt: _ts() },
       { merge: true });
     showToast(`Settings saved for ${_IGCSE_SUBJECTS[subj].label}.`);
   } catch (err) { console.error(err); showToast('Save failed.', true); }

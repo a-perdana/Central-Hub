@@ -100,13 +100,13 @@
 
 <script type="module">
   // ─── Firestore imports ────────────────────────────────────────────────────────
-  import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy }
+  import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, serverTimestamp, query, orderBy }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   // Expose Firestore helpers to React (Babel/text-babel scope)
   window.__calFS = {
     getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc,
-    doc, serverTimestamp, query, orderBy,
+    doc, getDoc, setDoc, serverTimestamp, query, orderBy,
   };
 
   // ─── Wait for auth then mount React ──────────────────────────────────────────
@@ -127,13 +127,18 @@
   const { useState, useEffect, useCallback, useMemo } = React;
 
   // ─── CONFIG ──────────────────────────────────────────────────────────────────
-  const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec";
-  const FS_COLLECTION  = "calendar_events";
+  const SHEETS_API_URL    = "https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec";
+  const FS_COLLECTION     = "calendar_events";
+  const FS_SETTINGS_DOC   = "calendar_settings";  // collection
+  const FS_SETTINGS_ID    = "current";             // single document
 
-
-  // ─── ACADEMIC YEAR CONFIG ─────────────────────────────────────────────────────
-  // Week 1 = first week of the academic year. Update this date each year.
-  const DEFAULT_YEAR_START_ISO = "2025-07-21"; // 21 Jul 2025 — Start of Semester 1
+  // Fallback used only before Firestore settings are loaded for the first time
+  const DEFAULT_YEAR_START_ISO    = "2025-07-21";
+  const DEFAULT_TOTAL_WEEKS       = 36;
+  const DEFAULT_TERMS = [
+    { label: "Semester 1", start: "2025-07-21", end: "2025-11-28" },
+    { label: "Semester 2", start: "2026-01-05", end: "2026-05-29" },
+  ];
 
   // ─── DEPARTMENT + CATEGORY CONFIG ────────────────────────────────────────────
   const DEPARTMENTS = {
@@ -233,6 +238,93 @@
     borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#374151", fontSize: 13,
   };
 
+  // ─── ACADEMIC YEAR SETTINGS MODAL ───────────────────────────────────────────
+  function AcademicYearSettingsModal({ yearStart, totalWeeks, terms, onSave, onClose }) {
+    const [yStart,  setYStart]  = useState(yearStart);
+    const [weeks,   setWeeks]   = useState(String(totalWeeks));
+    const [termRows, setTermRows] = useState(
+      terms.length ? terms : [{ label: "Semester 1", start: "", end: "" }, { label: "Semester 2", start: "", end: "" }]
+    );
+    const [saving,  setSaving]  = useState(false);
+    const [err,     setErr]     = useState("");
+
+    function setTerm(idx, field, val) {
+      setTermRows(rows => rows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
+    }
+    function addTerm() {
+      setTermRows(rows => [...rows, { label: `Term ${rows.length + 1}`, start: "", end: "" }]);
+    }
+    function removeTerm(idx) {
+      setTermRows(rows => rows.filter((_, i) => i !== idx));
+    }
+
+    async function handleSave() {
+      if (!yStart) { setErr("Academic year start date is required."); return; }
+      const w = parseInt(weeks);
+      if (!w || w < 1 || w > 52) { setErr("Total teaching weeks must be between 1 and 52."); return; }
+      for (const t of termRows) {
+        if (!t.label.trim() || !t.start || !t.end) { setErr("All term fields are required."); return; }
+        if (t.end < t.start) { setErr(`Term "${t.label}": end date must be after start date.`); return; }
+      }
+      setSaving(true);
+      setErr("");
+      await onSave({ academicYearStart: yStart, totalTeachingWeeks: w, terms: termRows });
+      setSaving(false);
+    }
+
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-box" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+          <h3>Academic Year Settings</h3>
+
+          <div className="form-row two-col">
+            <div>
+              <label>Academic Year Start</label>
+              <input type="date" value={yStart} onChange={e => setYStart(e.target.value)} />
+            </div>
+            <div>
+              <label>Total Teaching Weeks</label>
+              <input type="number" min="1" max="52" value={weeks} onChange={e => setWeeks(e.target.value)} placeholder="e.g. 36" />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 18, marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em" }}>Terms / Semesters</span>
+              <button onClick={addTerm} style={{ fontSize: 12, fontWeight: 700, color: "#2563EB", background: "none", border: "none", cursor: "pointer" }}>+ Add Term</button>
+            </div>
+            {termRows.map((t, idx) => (
+              <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
+                <div>
+                  {idx === 0 && <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>Label</label>}
+                  <input value={t.label} onChange={e => setTerm(idx, "label", e.target.value)} placeholder="Semester 1" style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontFamily: "'DM Sans',sans-serif", fontSize: 13 }} />
+                </div>
+                <div>
+                  {idx === 0 && <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>Start</label>}
+                  <input type="date" value={t.start} onChange={e => setTerm(idx, "start", e.target.value)} style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontFamily: "'DM Sans',sans-serif", fontSize: 13 }} />
+                </div>
+                <div>
+                  {idx === 0 && <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>End</label>}
+                  <input type="date" value={t.end} onChange={e => setTerm(idx, "end", e.target.value)} style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontFamily: "'DM Sans',sans-serif", fontSize: 13 }} />
+                </div>
+                <button onClick={() => removeTerm(idx)} title="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: "#DC2626", fontSize: 18, paddingBottom: 2 }}>×</button>
+              </div>
+            ))}
+          </div>
+
+          {err && <div className="form-err visible" style={{ marginBottom: 10 }}>{err}</div>}
+
+          <div className="modal-actions">
+            <button className="btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save Settings"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── EVENT FORM MODAL ────────────────────────────────────────────────────────
   const EMPTY_FORM = { title: "", department: "Academic", category: "Academic", date_start: "", date_end: "" };
 
@@ -317,9 +409,12 @@
     const [view,         setView]         = useState("month");
     const [activeFilters, setActiveFilters] = useState(new Set(["Academic","College Counseling","Admin/Operations"]));
     const [activeCategoryFilters, setActiveCategoryFilters] = useState(new Set(["Public Holiday","Assessment"]));
-    const [formModal,    setFormModal]    = useState(null); // null | { initial } — admin only
-    const [deleteTarget, setDeleteTarget] = useState(null); // null | eventId — admin only
-    const [yearStartIso, setYearStartIso] = useState(DEFAULT_YEAR_START_ISO);
+    const [formModal,       setFormModal]       = useState(null); // null | { initial } — admin only
+    const [deleteTarget,    setDeleteTarget]    = useState(null); // null | eventId — admin only
+    const [yearStartIso,    setYearStartIso]    = useState(DEFAULT_YEAR_START_ISO);
+    const [totalWeeks,      setTotalWeeks]      = useState(DEFAULT_TOTAL_WEEKS);
+    const [terms,           setTerms]           = useState(DEFAULT_TERMS);
+    const [settingsModal,   setSettingsModal]   = useState(false); // admin only
     // sheetsVersionModal: show original Sheets data for an overridden event
     const [sheetsVersionModal, setSheetsVersionModal] = useState(null);
 
@@ -357,6 +452,21 @@
 
       return merged;
     }
+
+    // ─── Load academic year settings from calendar_settings/current ─────────
+    useEffect(() => {
+      async function loadSettings() {
+        const { getFirestore, doc, getDoc } = window.__calFS;
+        const db = getFirestore(window.firebaseApp);
+        const snap = await getDoc(doc(db, FS_SETTINGS_DOC, FS_SETTINGS_ID));
+        if (!snap.exists()) return; // keep defaults
+        const d = snap.data();
+        if (d.academicYearStart) setYearStartIso(d.academicYearStart);
+        if (d.totalTeachingWeeks) setTotalWeeks(d.totalTeachingWeeks);
+        if (Array.isArray(d.terms) && d.terms.length) setTerms(d.terms);
+      }
+      loadSettings();
+    }, []);
 
     // ─── Initial data fetch: Sheets + Firestore in parallel ──────────────────
     useEffect(() => {
@@ -436,6 +546,23 @@
         setDataSource("empty");
       }
     }, [loadFromFirestore]);
+
+    // ─── Admin: save academic year settings ──────────────────────────────────
+    const handleSettingsSave = useCallback(async ({ academicYearStart, totalTeachingWeeks, terms: newTerms }) => {
+      const { getFirestore, doc, setDoc, serverTimestamp } = window.__calFS;
+      const db = getFirestore(window.firebaseApp);
+      await setDoc(doc(db, FS_SETTINGS_DOC, FS_SETTINGS_ID), {
+        academicYearStart,
+        totalTeachingWeeks,
+        terms: newTerms,
+        updatedAt: serverTimestamp(),
+      });
+      setYearStartIso(academicYearStart);
+      setTotalWeeks(totalTeachingWeeks);
+      setTerms(newTerms);
+      setSettingsModal(false);
+      showToast("Academic year settings saved.");
+    }, []);
 
     // ─── Admin: save (create or update) ──────────────────────────────────────
     const handleFormSave = useCallback(async (formData) => {
@@ -626,13 +753,22 @@
             {/* Right side: admin button + view toggle */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
               {isAdmin && (
-                <button onClick={() => setFormModal({ initial: null })} style={{
-                  padding: "9px 18px", background: "#2563EB", color: "#fff",
-                  border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                  cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                }}>
-                  + Add Event
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setSettingsModal(true)} style={{
+                    padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",
+                    border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                  }}>
+                    ⚙ Year Settings
+                  </button>
+                  <button onClick={() => setFormModal({ initial: null })} style={{
+                    padding: "9px 18px", background: "#2563EB", color: "#fff",
+                    border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                  }}>
+                    + Add Event
+                  </button>
+                </div>
               )}
               <div style={{ display: "flex", gap: 6, background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 4 }}>
                 {[["week","Week"],["month","Month"],["list","List"],["all","All Events"]].map(([v, label]) => (
@@ -745,7 +881,10 @@
           <div style={{ padding: "24px 32px 40px", maxWidth: 860 }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0F172A", marginBottom: 4 }}>Academic Year by Week</h2>
             <div style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
-              Week 1 starts {academicYearStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} (Start of Semester 1). Each week shown Mon → Fri.
+              Week 1 starts {academicYearStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {totalWeeks} teaching weeks
+              {terms.length > 0 && (
+                <span> · {terms.map(t => `${t.label}: ${String(t.start).slice(5).replace("-","/")} – ${String(t.end).slice(5).replace("-","/")}`).join("  |  ")}</span>
+              )}
             </div>
 
             {weeklyEvents.length === 0 && (
@@ -1200,6 +1339,16 @@
             initial={formModal.initial}
             onSave={handleFormSave}
             onClose={() => setFormModal(null)}
+          />
+        )}
+
+        {settingsModal && (
+          <AcademicYearSettingsModal
+            yearStart={yearStartIso}
+            totalWeeks={totalWeeks}
+            terms={terms}
+            onSave={handleSettingsSave}
+            onClose={() => setSettingsModal(false)}
           />
         )}
       </div>
