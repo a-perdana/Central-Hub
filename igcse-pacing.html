@@ -253,6 +253,19 @@
     .obj-rich { font-size: 0.8rem; color: var(--ink-2); line-height: 1.5; }
     .obj-rich ul { padding-left: 14px; margin: 2px 0; }
     .obj-rich li { margin: 1px 0; }
+
+    /* ===== SYLLABUS BLOCK (chips + notes combined display) ===== */
+    .topic-syllabus-block { margin-bottom: 8px; }
+    .topic-chips-row {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px;
+    }
+    .topic-notes {
+      font-size: 0.78rem; color: var(--ink-3); line-height: 1.5;
+      padding: 5px 0 0 2px;
+      border-top: 1px solid var(--paper-2); margin-top: 5px;
+    }
+    .topic-notes ul { padding-left: 14px; margin: 2px 0; }
+    .topic-notes li { margin: 1px 0; }
     .ch-footer {
       padding: 11px 16px; border-top: 1px solid var(--paper-2);
       display: flex; justify-content: flex-end; background: var(--paper);
@@ -765,6 +778,20 @@
           <div class="syllabus-dropdown" id="syllabusDropdown"></div>
         </div>
         <p class="form-hint" id="syllabusPickerHint">Loading syllabus…</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes / Objectives <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>
+        <div class="rte-wrap">
+          <div class="rte-toolbar">
+            <button class="rte-btn" type="button" title="Bold" onclick="_rteExec('bold')"><b>B</b></button>
+            <button class="rte-btn" type="button" title="Italic" onclick="_rteExec('italic')"><i>I</i></button>
+            <div class="rte-sep"></div>
+            <button class="rte-btn" type="button" title="Bullet list" onclick="_rteExec('insertUnorderedList')">&#8226; List</button>
+            <div class="rte-sep"></div>
+            <button class="rte-btn" type="button" title="Clear formatting" onclick="_rteClear()">Clear</button>
+          </div>
+          <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="Additional notes, objectives, or context…" oninput="_modalDirty=true"></div>
+        </div>
       </div>
       <!-- Resources -->
       <div>
@@ -1454,25 +1481,39 @@ function renderChapter(ch, ci, q = '', matchedTopics = null) {
 
 function renderTopic(t, ti, ci, q = '') {
   let objHtml = '';
-  if (t.syllabusRefs && t.syllabusRefs.length > 0) {
+  const objRaw = t.objectives || t.objective || '';
+  const hasRefs = t.syllabusRefs && t.syllabusRefs.length > 0;
+
+  if (hasRefs) {
     const prog     = PROGRAMMES[currentProg];
     const subjCfg  = prog.subjects[currentSubject];
     const subjCode = subjCfg ? subjCfg.code : '';
     const chips = t.syllabusRefs.map(code => {
       const entry = syllabusIndex[`${subjCode}_${code}`];
-      const tooltip = entry ? `${entry.title}\n${entry.topicArea}${entry.description ? '\n' + entry.description.slice(0, 120) + (entry.description.length > 120 ? '…' : '') : ''}` : code;
+      const tooltip = entry
+        ? `${entry.title}\n${entry.topicArea}${entry.description ? '\n' + entry.description.slice(0, 120) + (entry.description.length > 120 ? '…' : '') : ''}`
+        : code;
       const displayCode = q ? highlight(code, q) : escHtml(code);
       return `<span class="syllabus-chip-display" title="${escHtml(tooltip)}">${displayCode}</span>`;
     }).join('');
-    objHtml = `<div class="topic-objectives" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">${chips}</div>`;
-  } else {
-    const objRaw = t.objectives || t.objective || '';
+
+    let notesHtml = '';
     if (objRaw) {
-      if (/<[a-z]/i.test(objRaw)) {
-        objHtml = `<div class="topic-objectives obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
-      } else {
-        objHtml = `<div class="topic-objectives">${highlight(objRaw, q)}</div>`;
-      }
+      const rendered = /<[a-z]/i.test(objRaw)
+        ? (q ? highlightInHtml(objRaw, q) : objRaw)
+        : highlight(objRaw, q);
+      notesHtml = `<div class="topic-notes">${rendered}</div>`;
+    }
+
+    objHtml = `<div class="topic-syllabus-block">
+      <div class="topic-chips-row">${chips}</div>
+      ${notesHtml}
+    </div>`;
+  } else if (objRaw) {
+    if (/<[a-z]/i.test(objRaw)) {
+      objHtml = `<div class="topic-objectives obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
+    } else {
+      objHtml = `<div class="topic-objectives">${highlight(objRaw, q)}</div>`;
     }
   }
 
@@ -1660,11 +1701,12 @@ function openAddTopicModal(ci) {
   editTopIdx = null;
   modalResources     = [];
   modalSyllabusRefs  = [];
-  document.getElementById('topModalTitle').textContent = 'Add Topic';
-  document.getElementById('topTitleInput').value       = '';
-  document.getElementById('topDurationInput').value    = '';
-  document.getElementById('topStartWeekInput').value   = '';
-  document.getElementById('syllabusSearchInput').value = '';
+  document.getElementById('topModalTitle').textContent    = 'Add Topic';
+  document.getElementById('topTitleInput').value          = '';
+  document.getElementById('topDurationInput').value       = '';
+  document.getElementById('topStartWeekInput').value      = '';
+  document.getElementById('topObjectivesEditor').innerHTML = '';
+  document.getElementById('syllabusSearchInput').value    = '';
   document.getElementById('syllabusDropdown').classList.remove('open');
   renderSyllabusChips();
   renderModalResources();
@@ -1680,11 +1722,12 @@ function editTopic(ci, ti) {
   const t = chapters[ci].topics[ti];
   modalResources    = (t.resources || []).map(r => ({ ...r }));
   modalSyllabusRefs = (t.syllabusRefs || []).slice();
-  document.getElementById('topModalTitle').textContent = 'Edit Topic';
-  document.getElementById('topTitleInput').value       = t.title    || t.topic || '';
-  document.getElementById('topDurationInput').value    = t.duration || t.hour  || '';
-  document.getElementById('topStartWeekInput').value   = t.week     || '';
-  document.getElementById('syllabusSearchInput').value = '';
+  document.getElementById('topModalTitle').textContent     = 'Edit Topic';
+  document.getElementById('topTitleInput').value           = t.title    || t.topic || '';
+  document.getElementById('topDurationInput').value        = t.duration || t.hour  || '';
+  document.getElementById('topStartWeekInput').value       = t.week     || '';
+  document.getElementById('topObjectivesEditor').innerHTML = t.objectives || t.objective || '';
+  document.getElementById('syllabusSearchInput').value     = '';
   document.getElementById('syllabusDropdown').classList.remove('open');
   renderSyllabusChips();
   renderModalResources();
@@ -1745,8 +1788,9 @@ async function saveTopicModal() {
     return;
   }
 
-  const resources = readModalResourcesFromDOM().filter(r => /^https?:\/\//i.test(r.url));
-  const topic = { topic: title, hour: duration, week: startWeek, syllabusRefs: modalSyllabusRefs.slice(), resources };
+  const resources   = readModalResourcesFromDOM().filter(r => /^https?:\/\//i.test(r.url));
+  const objectives  = document.getElementById('topObjectivesEditor').innerHTML.trim();
+  const topic = { topic: title, hour: duration, week: startWeek, syllabusRefs: modalSyllabusRefs.slice(), objectives, resources };
 
   if (modalMode === 'add-topic') {
     if (!chapters[editChIdx].topics) chapters[editChIdx].topics = [];
