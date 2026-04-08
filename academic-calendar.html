@@ -394,8 +394,6 @@
     const [formModal,    setFormModal]    = useState(null); // null | { initial } — admin only
     const [deleteTarget, setDeleteTarget] = useState(null); // null | eventId — admin only
     const [yearStartIso, setYearStartIso] = useState(DEFAULT_YEAR_START_ISO);
-    const [editingYearStart, setEditingYearStart] = useState(false);
-    const [yearStartDraft,   setYearStartDraft]   = useState(DEFAULT_YEAR_START_ISO);
 
     // ─── Load Firestore events ────────────────────────────────────────────────
     const loadFromFirestore = useCallback(async () => {
@@ -457,22 +455,23 @@
       const { getFirestore, collection, addDoc, updateDoc, doc, serverTimestamp } = window.__calFS;
       const db = getFirestore(window.firebaseApp);
 
-      if (formData.id && !formData.id.startsWith("d")) {
-        // Edit existing Firestore doc
+      const isExistingFirestoreDoc = dataSource === "firestore" && formData.id && !formData.id.startsWith("d");
+      if (isExistingFirestoreDoc) {
+        // Update existing Firestore doc
         const { id, ...fields } = formData;
         await updateDoc(doc(db, FS_COLLECTION, id), { ...fields, updatedAt: serverTimestamp() });
         showToast("Event updated.");
       } else {
-        // New event
-        const { id: _id, ...fields } = formData; // strip any temp id
+        // New doc — covers: new events, Sheets overrides, demo overrides
+        const { id: _id, ...fields } = formData;
         await addDoc(collection(db, FS_COLLECTION), { ...fields, createdAt: serverTimestamp() });
-        showToast("Event added.");
+        showToast(formData.id ? "Event saved to Firestore." : "Event added.");
       }
 
       await reloadFirestore();
       setFormModal(null);
       setSelectedEvent(null);
-    }, [reloadFirestore]);
+    }, [reloadFirestore, dataSource]);
 
     // ─── Admin: delete ────────────────────────────────────────────────────────
     const handleDelete = useCallback(async (eventId) => {
@@ -745,37 +744,7 @@
         {/* ── Week View ── */}
         {view === "week" && (
           <div style={{ padding: "24px 32px 40px", maxWidth: 860 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 16, flexWrap: "wrap" }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0F172A", margin: 0 }}>Academic Year by Week</h2>
-              {isAdmin && !editingYearStart && (
-                <button onClick={() => { setYearStartDraft(yearStartIso); setEditingYearStart(true); }} style={{
-                  padding: "6px 14px", fontSize: 12, fontWeight: 700,
-                  background: "#F1F5F9", color: "#374151",
-                  border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer",
-                  fontFamily: "'DM Sans',sans-serif",
-                }}>Edit Year Start</button>
-              )}
-            </div>
-
-            {/* Admin: edit year start date */}
-            {isAdmin && editingYearStart && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "12px 16px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#1D4ED8" }}>Week 1 start date:</span>
-                <input type="date" value={yearStartDraft} onChange={e => setYearStartDraft(e.target.value)}
-                  style={{ padding: "6px 10px", borderRadius: 7, border: "1.5px solid #BFDBFE", fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
-                <button onClick={() => { setYearStartIso(yearStartDraft); setEditingYearStart(false); }} style={{
-                  padding: "6px 14px", background: "#2563EB", color: "white",
-                  border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer",
-                  fontFamily: "'DM Sans',sans-serif",
-                }}>Apply</button>
-                <button onClick={() => setEditingYearStart(false)} style={{
-                  padding: "6px 14px", background: "#F1F5F9", color: "#374151",
-                  border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer",
-                  fontFamily: "'DM Sans',sans-serif",
-                }}>Cancel</button>
-              </div>
-            )}
-
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0F172A", marginBottom: 4 }}>Academic Year by Week</h2>
             <div style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
               Week 1 starts {academicYearStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} (Start of Semester 1). Each week shown Mon → Fri.
             </div>
@@ -1079,7 +1048,7 @@
                     </div>
 
                     {/* Admin actions */}
-                    {isAdmin && isFirestoreEvent && (
+                    {isAdmin && (
                       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                         <button onClick={() => setFormModal({ initial: selectedEvent })} style={{
                           flex: 1, padding: "8px", background: "#EFF6FF", color: "#2563EB",
@@ -1087,26 +1056,28 @@
                           fontWeight: 700, fontSize: 13, cursor: "pointer",
                           fontFamily: "'DM Sans',sans-serif",
                         }}>Edit</button>
-                        <button
-                          data-confirming={deleteTarget === selectedEvent.id ? "true" : "false"}
-                          onClick={() => {
-                            if (deleteTarget === selectedEvent.id) {
-                              handleDelete(selectedEvent.id);
-                            } else {
-                              setDeleteTarget(selectedEvent.id);
-                              setTimeout(() => setDeleteTarget(null), 3000);
-                            }
-                          }}
-                          style={{
-                            flex: 1, padding: "8px",
-                            background: deleteTarget === selectedEvent.id ? "#DC2626" : "#FEF2F2",
-                            color: deleteTarget === selectedEvent.id ? "#fff" : "#DC2626",
-                            border: `1px solid ${deleteTarget === selectedEvent.id ? "#DC2626" : "#FECACA"}`,
-                            borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer",
-                            fontFamily: "'DM Sans',sans-serif", transition: "all 0.15s",
-                          }}>
-                          {deleteTarget === selectedEvent.id ? "Confirm Delete" : "Delete"}
-                        </button>
+                        {isFirestoreEvent && (
+                          <button
+                            data-confirming={deleteTarget === selectedEvent.id ? "true" : "false"}
+                            onClick={() => {
+                              if (deleteTarget === selectedEvent.id) {
+                                handleDelete(selectedEvent.id);
+                              } else {
+                                setDeleteTarget(selectedEvent.id);
+                                setTimeout(() => setDeleteTarget(null), 3000);
+                              }
+                            }}
+                            style={{
+                              flex: 1, padding: "8px",
+                              background: deleteTarget === selectedEvent.id ? "#DC2626" : "#FEF2F2",
+                              color: deleteTarget === selectedEvent.id ? "#fff" : "#DC2626",
+                              border: `1px solid ${deleteTarget === selectedEvent.id ? "#DC2626" : "#FECACA"}`,
+                              borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                              fontFamily: "'DM Sans',sans-serif", transition: "all 0.15s",
+                            }}>
+                            {deleteTarget === selectedEvent.id ? "Confirm Delete" : "Delete"}
+                          </button>
+                        )}
                       </div>
                     )}
 
