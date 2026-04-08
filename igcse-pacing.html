@@ -266,8 +266,9 @@
       font-size: 0.68rem; font-weight: 700;
       padding: 1px 7px; border-radius: 100px;
       background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.02em; cursor: pointer; transition: background 0.15s;
     }
+    .srl-code:hover { background: #bae6fd; }
     .srl-title {
       color: var(--ink-2); font-weight: 500; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
@@ -278,6 +279,36 @@
       padding: 1px 6px; border-radius: 4px; background: var(--paper-2);
       white-space: nowrap;
     }
+
+    /* ===== SYLLABUS DETAIL MODAL ===== */
+    .syl-detail-header {
+      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px;
+    }
+    .syl-detail-code {
+      font-size: 0.8rem; font-weight: 700; padding: 3px 10px; border-radius: 100px;
+      background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; flex-shrink: 0;
+    }
+    .syl-detail-meta { flex: 1; min-width: 0; }
+    .syl-detail-title { font-size: 1rem; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+    .syl-detail-topic { font-size: 0.8rem; color: var(--ink-3); }
+    .syl-detail-tier {
+      font-size: 0.68rem; font-weight: 600; padding: 2px 8px; border-radius: 100px;
+      background: var(--paper-2); color: var(--ink-2); border: 1px solid var(--border);
+      flex-shrink: 0; white-space: nowrap;
+    }
+    .syl-section-label {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+      color: var(--ink-3); margin-bottom: 8px;
+    }
+    .syl-content-list {
+      padding-left: 18px; margin: 0 0 20px; color: var(--ink-2); font-size: 0.875rem; line-height: 1.7;
+    }
+    .syl-content-list li { margin: 2px 0; }
+    .syl-notes-list {
+      padding-left: 18px; margin: 0; color: var(--ink-3); font-size: 0.82rem; line-height: 1.65;
+    }
+    .syl-notes-list li { margin: 2px 0; }
+    .syl-no-detail { font-size: 0.875rem; color: var(--ink-3); }
     .topic-notes {
       font-size: 0.78rem; color: var(--ink-3); line-height: 1.5;
       padding: 5px 0 0 2px;
@@ -883,6 +914,22 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- ===== SYLLABUS DETAIL MODAL ===== -->
+<div class="modal-bg" id="syllabusDetailModal" role="dialog" aria-modal="true" aria-labelledby="syllabusDetailTitle">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-head">
+      <h3 id="syllabusDetailTitle" style="margin:0">Syllabus Objective</h3>
+      <button class="modal-close" onclick="closeSyllabusDetail()" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="syllabusDetailBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSyllabusDetail()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 
@@ -1040,6 +1087,9 @@ document.addEventListener('click', e => {
     const dd = document.getElementById('syllabusDropdown');
     if (dd) dd.classList.remove('open');
   }
+  // Syllabus chip click → open detail modal
+  const chip = e.target.closest('[data-syl-key]');
+  if (chip) openSyllabusDetail(chip.dataset.sylKey);
 });
 
 // ── Switch programme ──────────────────────────────────────────────
@@ -1512,10 +1562,11 @@ function renderTopic(t, ti, ci, q = '') {
       const displayCode = q ? highlight(code, q) : escHtml(code);
       const titleText   = entry ? (q ? highlight(entry.title, q) : escHtml(entry.title)) : '';
       const topicText   = entry ? escHtml(entry.topicArea) : '';
+      const indexKey    = `${subjCode}_${code}`;
       return `<div class="syllabus-ref-line">
-        <span class="srl-code">${displayCode}</span>
-        ${titleText ? `<span class="srl-title">${titleText}</span>` : ''}
+        <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="View full syllabus detail">${displayCode}</span>
         ${topicText ? `<span class="srl-topic">${topicText}</span>` : ''}
+        ${titleText ? `<span class="srl-title">${titleText}</span>` : ''}
       </div>`;
     }).join('');
 
@@ -1596,6 +1647,61 @@ function renderChapterAssessment(ch, ci) {
       <button class="btn btn-secondary btn-sm" onclick="openAssessmentModal({type:'chapter',ci:${ci}})">+ Add Assessment</button>
     `}
   </div>`;
+}
+
+// ── Syllabus detail modal ─────────────────────────────────────────
+function openSyllabusDetail(indexKey) {
+  const entry = syllabusIndex[indexKey];
+  const modal = document.getElementById('syllabusDetailModal');
+  const body  = document.getElementById('syllabusDetailBody');
+  if (!modal || !body) return;
+
+  if (!entry) {
+    body.innerHTML = `<p class="syl-no-detail">No syllabus data found for <strong>${escHtml(indexKey)}</strong>.</p>`;
+  } else {
+    const code   = entry.code || indexKey.split('_').slice(1).join('_');
+    const title  = entry.title || '';
+    const topic  = entry.topicArea || entry.topic || '';
+    const tier   = entry.tier || '';
+    const content        = entry.content || [];
+    const notesExamples  = entry.notes_examples || entry.notesExamples || [];
+
+    const contentHtml = content.length
+      ? `<p class="syl-section-label">Learning Objectives</p>
+         <ul class="syl-content-list">${content.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>`
+      : '';
+    const notesHtml = notesExamples.length
+      ? `<p class="syl-section-label">Notes &amp; Examples</p>
+         <ul class="syl-notes-list">${notesExamples.map(n => `<li>${escHtml(n)}</li>`).join('')}</ul>`
+      : '';
+    const noDetailHtml = (!contentHtml && !notesHtml)
+      ? `<p class="syl-no-detail">No detailed content available for this objective.</p>`
+      : '';
+
+    body.innerHTML = `
+      <div class="syl-detail-header">
+        <span class="syl-detail-code">${escHtml(code)}</span>
+        <div class="syl-detail-meta">
+          ${title ? `<div class="syl-detail-title">${escHtml(title)}</div>` : ''}
+          ${topic ? `<div class="syl-detail-topic">${escHtml(topic)}</div>` : ''}
+        </div>
+        ${tier ? `<span class="syl-detail-tier">${escHtml(tier)}</span>` : ''}
+      </div>
+      ${contentHtml}${notesHtml}${noDetailHtml}`;
+  }
+
+  modal.classList.add('open');
+  document.addEventListener('keydown', _syllabusDetailEsc);
+}
+
+function closeSyllabusDetail() {
+  const modal = document.getElementById('syllabusDetailModal');
+  if (modal) modal.classList.remove('open');
+  document.removeEventListener('keydown', _syllabusDetailEsc);
+}
+
+function _syllabusDetailEsc(e) {
+  if (e.key === 'Escape') closeSyllabusDetail();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
