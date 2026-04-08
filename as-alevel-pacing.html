@@ -431,6 +431,46 @@
       .ch-header { flex-wrap: wrap; }
       .ch-meta { display: none; }
     }
+
+    /* ===== SETTINGS PANEL ===== */
+    .settings-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 22px;
+      box-shadow: var(--shadow-sm);
+    }
+    .settings-card-head { margin-bottom: 14px; }
+    .settings-card-title { font-size: 0.95rem; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+    .settings-card-desc { font-size: 0.8rem; color: var(--ink-3); line-height: 1.55; }
+    .settings-subj-tabs {
+      display: flex; gap: 3px; margin-bottom: 14px;
+      background: var(--paper); border-radius: 7px; padding: 3px;
+    }
+    .s-stab {
+      flex: 1; padding: 5px 10px; border: none; border-radius: 5px;
+      background: transparent; font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem; font-weight: 500; color: var(--ink-3); cursor: pointer;
+      transition: all 0.15s;
+    }
+    .s-stab:hover { color: var(--ink); }
+    .s-stab.active { background: var(--white); color: var(--ink); box-shadow: var(--shadow-sm); }
+    .class-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.78rem; font-weight: 600;
+      padding: 3px 10px; border-radius: 100px;
+      background: var(--paper-2); border: 1px solid var(--border);
+      color: var(--ink-2); margin: 3px 3px 3px 0;
+    }
+    .class-tag-del {
+      background: none; border: none; cursor: pointer;
+      color: var(--ink-3); font-size: 0.85rem; line-height: 1;
+      padding: 0; margin-left: 2px; transition: color 0.12s;
+    }
+    .class-tag-del:hover { color: #dc2626; }
+    .class-tags-wrap { display: flex; flex-wrap: wrap; margin-bottom: 4px; }
+    .no-classes-hint { font-size: 0.78rem; color: var(--ink-3); padding: 6px 0; }
+    @media (max-width: 768px) {
+      #settingsPanel > div { grid-template-columns: 1fr !important; }
+    }
   </style>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
 </head>
@@ -495,10 +535,79 @@
       <button class="subj-tab" role="tab" data-subj="physics" aria-selected="false">
         <span class="subj-icon">⚛</span> Physics
       </button>
+      <button class="subj-tab" role="tab" data-subj="__settings" aria-selected="false"
+        style="margin-left:auto;flex:0 0 auto;color:var(--ink-3)">
+        <span class="subj-icon">⚙</span> Settings
+      </button>
     </div>
 
-    <!-- Action Bar -->
-    <div class="action-bar">
+    <!-- ===== SETTINGS PANEL ===== -->
+    <div id="settingsPanel" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+        <!-- Class Groups -->
+        <div class="settings-card">
+          <div class="settings-card-head">
+            <h3 class="settings-card-title">Class Groups</h3>
+            <p class="settings-card-desc">Define class groups for each subject. Teachers can switch between groups to track progress independently (e.g. 11A vs 11B).</p>
+          </div>
+          <div class="settings-subj-tabs" id="classSubjTabs">
+            <button class="s-stab active" data-subj="math" onclick="switchClassSubj('math',this)">Math</button>
+            <button class="s-stab" data-subj="biology" onclick="switchClassSubj('biology',this)">Biology</button>
+            <button class="s-stab" data-subj="chemistry" onclick="switchClassSubj('chemistry',this)">Chemistry</button>
+            <button class="s-stab" data-subj="physics" onclick="switchClassSubj('physics',this)">Physics</button>
+          </div>
+          <div id="classGroupsPanel">
+            <div id="classGroupsList" style="min-height:40px"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+              <input class="form-input" id="newClassInput" type="text" placeholder="e.g. 11A" style="max-width:120px"
+                onkeydown="if(event.key==='Enter')addClassGroup()">
+              <button class="btn btn-secondary btn-sm" onclick="addClassGroup()">+ Add</button>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-primary btn-sm" onclick="saveClassGroups()">Save Class Groups</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Objective Code Format -->
+        <div class="settings-card">
+          <div class="settings-card-head">
+            <h3 class="settings-card-title">Objective Code Format</h3>
+            <p class="settings-card-desc">Define the objective code prefixes used for each subject. These appear as filter chips in the Teachers Hub Coverage Report (e.g. <code style="font-size:.75rem;background:var(--paper-2);padding:1px 5px;border-radius:3px">C1.1</code>).</p>
+          </div>
+          <div class="settings-subj-tabs" id="objSubjTabs">
+            <button class="s-stab active" data-subj="math" onclick="switchObjSubj('math',this)">Math</button>
+            <button class="s-stab" data-subj="biology" onclick="switchObjSubj('biology',this)">Biology</button>
+            <button class="s-stab" data-subj="chemistry" onclick="switchObjSubj('chemistry',this)">Chemistry</button>
+            <button class="s-stab" data-subj="physics" onclick="switchObjSubj('physics',this)">Physics</button>
+          </div>
+          <div id="objCodePanel">
+            <div class="form-group" style="margin-bottom:10px">
+              <label class="form-label" for="objPrefixInput">Code prefixes (comma-separated)</label>
+              <input class="form-input" id="objPrefixInput" type="text" placeholder="e.g. C, E">
+              <p class="form-hint">Used to detect codes like <strong>C1.1</strong> in objectives. Leave blank to auto-detect.</p>
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label class="form-label" for="termStartInput">Term start date (for pace alerts)</label>
+              <input class="form-input" id="termStartInput" type="date">
+              <p class="form-hint">Applies to all subjects. Teachers Hub uses this to calculate overdue/behind alerts.</p>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" for="totalWeeksInput">Total teaching weeks per year</label>
+              <input class="form-input" id="totalWeeksInput" type="number" min="1" max="52" placeholder="e.g. 36">
+            </div>
+            <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-primary btn-sm" onclick="saveObjSettings()">Save Settings</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Action Bar (hidden in settings mode) -->
+    <div class="action-bar" id="contentActionBar">
       <div class="action-bar-left">
         <h2 id="subjTitle">Cambridge International AS & A Level Mathematics</h2>
         <p id="subjSub">9709 · Year 11–12</p>
@@ -686,10 +795,13 @@
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, onSnapshot, setDoc, serverTimestamp }
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+// Expose Firestore helpers for settings functions
+window.__firestoreHelpers = { doc, getDoc, setDoc, serverTimestamp };
 
 // ── Subject config ────────────────────────────────────────────────
 const SUBJECTS = {
@@ -730,7 +842,12 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
       });
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
-      loadSubject(tab.dataset.subj);
+      if (tab.dataset.subj === '__settings') {
+        showSettingsPanel();
+      } else {
+        hideSettingsPanel();
+        loadSubject(tab.dataset.subj);
+      }
     });
   });
 
@@ -767,6 +884,134 @@ function loadSubject(subj) {
     console.error('Pacing snapshot error:', err);
     showToast('Failed to load pacing data.', true);
   });
+}
+
+// ── Settings ─────────────────────────────────────────────────────
+let settingsData = {
+  math:      { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
+  biology:   { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
+  chemistry: { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
+  physics:   { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
+};
+let settingsClassSubj = 'math';
+let settingsObjSubj   = 'math';
+
+function showSettingsPanel() {
+  document.getElementById('settingsPanel').style.display    = '';
+  document.getElementById('contentActionBar').style.display = 'none';
+  document.getElementById('loadingState').style.display     = 'none';
+  document.getElementById('emptyState').style.display       = 'none';
+  document.getElementById('chaptersList').style.display     = 'none';
+  document.getElementById('chapterPager').style.display     = 'none';
+  document.getElementById('pacingSearch').closest('.pacing-search-wrap').style.display = 'none';
+  document.getElementById('searchResultCount').style.display = 'none';
+  loadAllSettings();
+}
+
+function hideSettingsPanel() {
+  document.getElementById('settingsPanel').style.display    = 'none';
+  document.getElementById('contentActionBar').style.display = '';
+  document.getElementById('pacingSearch').closest('.pacing-search-wrap').style.display = '';
+}
+
+function loadAllSettings() {
+  const db = window.db;
+  const { getDoc: _getDoc, doc: _doc } = window.__firestoreHelpers;
+  Object.keys(SUBJECTS).forEach(subj => {
+    _getDoc(_doc(db, SUBJECTS[subj].collection, DOC_ID)).then(snap => {
+      if (snap.exists()) {
+        const d = snap.data();
+        settingsData[subj] = {
+          classes:    Array.isArray(d.classes)     ? d.classes : [],
+          objPrefixes: Array.isArray(d.objPrefixes) ? d.objPrefixes.join(', ') : (settingsData[subj].objPrefixes || ''),
+          termStart:  d.termStart  || '',
+          totalWeeks: d.totalWeeks || '',
+        };
+      }
+      renderClassGroups();
+      renderObjSettings();
+    }).catch(err => console.error('Settings load error:', err));
+  });
+}
+
+function switchClassSubj(subj, btn) {
+  settingsClassSubj = subj;
+  document.querySelectorAll('#classSubjTabs .s-stab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderClassGroups();
+}
+
+function switchObjSubj(subj, btn) {
+  settingsObjSubj = subj;
+  document.querySelectorAll('#objSubjTabs .s-stab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderObjSettings();
+}
+
+function renderClassGroups() {
+  const data = settingsData[settingsClassSubj];
+  const wrap = document.getElementById('classGroupsList');
+  if (!wrap) return;
+  wrap.innerHTML = data.classes.length
+    ? `<div class="class-tags-wrap">${data.classes.map((cls, i) =>
+        `<span class="class-tag">${escHtml(cls)}<button class="class-tag-del" onclick="removeClassGroup(${i})" title="Remove">✕</button></span>`
+      ).join('')}</div>`
+    : '<p class="no-classes-hint">No class groups defined yet.</p>';
+}
+
+function addClassGroup() {
+  const inp = document.getElementById('newClassInput');
+  const val = (inp.value || '').trim();
+  if (!val) { inp.focus(); return; }
+  const data = settingsData[settingsClassSubj];
+  if (!data.classes.includes(val)) data.classes.push(val);
+  inp.value = '';
+  renderClassGroups();
+  inp.focus();
+}
+
+function removeClassGroup(i) {
+  settingsData[settingsClassSubj].classes.splice(i, 1);
+  renderClassGroups();
+}
+
+async function saveClassGroups() {
+  const subj = settingsClassSubj;
+  const data = settingsData[subj];
+  try {
+    const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
+    await _setDoc(_doc(window.db, SUBJECTS[subj].collection, DOC_ID),
+      { classes: data.classes, updatedAt: _ts() }, { merge: true });
+    showToast(`Class groups saved for ${SUBJECTS[subj].label}.`);
+  } catch (err) { console.error(err); showToast('Save failed.', true); }
+}
+
+function renderObjSettings() {
+  const data = settingsData[settingsObjSubj];
+  const p = document.getElementById('objPrefixInput');
+  const t = document.getElementById('termStartInput');
+  const w = document.getElementById('totalWeeksInput');
+  if (p) p.value = data.objPrefixes || '';
+  if (t) t.value = data.termStart   || '';
+  if (w) w.value = data.totalWeeks  || '';
+}
+
+async function saveObjSettings() {
+  const subj = settingsObjSubj;
+  const prefRaw    = (document.getElementById('objPrefixInput').value || '').trim();
+  const termStart  = (document.getElementById('termStartInput').value  || '').trim();
+  const totalWeeks = parseInt(document.getElementById('totalWeeksInput').value) || null;
+  const prefixes   = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
+  settingsData[subj].objPrefixes = prefRaw;
+  settingsData[subj].termStart   = termStart;
+  settingsData[subj].totalWeeks  = totalWeeks;
+  try {
+    const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
+    await _setDoc(_doc(window.db, SUBJECTS[subj].collection, DOC_ID),
+      { objPrefixes: prefixes, termStart: termStart || null, totalWeeks: totalWeeks || null, updatedAt: _ts() },
+      { merge: true });
+    showToast(`Settings saved for ${SUBJECTS[subj].label}.`);
+  } catch (err) { console.error(err); showToast('Save failed.', true); }
 }
 
 // ── Inline chip edit ─────────────────────────────────────────────
