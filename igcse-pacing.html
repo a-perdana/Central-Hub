@@ -1651,9 +1651,11 @@ function renderTopic(t, ti, ci, q = '') {
       const titleText   = entry ? (q ? highlight(entry.title, q) : escHtml(entry.title)) : '';
       const topicText   = entry ? escHtml(entry.topicArea) : '';
       const content     = entry?.content || [];
-      const descText    = content.length
-        ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : ''))
-        : '';
+      const descText    = entry?.description
+        ? escHtml(entry.description)
+        : content.length
+          ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : ''))
+          : '';
       const indexKey    = `${subjCode}_${code}`;
       return `<div class="syllabus-ref-line">
         <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
@@ -1770,7 +1772,7 @@ function openSyllabusDetail(indexKey) {
     const topic  = entry.topicArea || entry.topic || '';
     const tier   = entry.tier || '';
     const content       = entry.content || [];
-    const notesExamples = entry.notes_examples || entry.notesExamples || [];
+    const notesExamples = entry.notes || entry.notes_examples || entry.notesExamples || [];
 
     const leftHtml = content.length
       ? `<p class="syl-section-label">Learning Objectives</p>
@@ -1880,8 +1882,9 @@ function renderSylEdForm(key) {
   const title   = entry.title   || '';
   const topic   = entry.topicArea || entry.topic || '';
   const tier    = entry.tier    || '';
+  const description   = entry.description || '';
   const content       = (entry.content || []).join('\n');
-  const notesExamples = (entry.notes_examples || entry.notesExamples || []).join('\n');
+  const notesExamples = (entry.notes || entry.notes_examples || entry.notesExamples || []).join('\n');
 
   form.innerHTML = `
     <div class="syl-ed-entry-head">
@@ -1903,6 +1906,10 @@ function renderSylEdForm(key) {
       <option value="" ${!tier?'selected':''}>— Not set —</option>
     </select>
 
+    <label class="syl-ed-field-label" for="sylEdDesc">Description</label>
+    <input class="form-input" id="sylEdDesc" value="${escHtml(description)}" style="margin-bottom:0">
+    <p class="syl-ed-hint">Short summary shown inline on the pacing guide (e.g. "Identify and use natural numbers; integers…").</p>
+
     <label class="syl-ed-field-label" for="sylEdContent">Learning Objectives</label>
     <textarea class="syl-ed-textarea" id="sylEdContent" rows="8" style="min-height:140px">${escHtml(content)}</textarea>
     <p class="syl-ed-hint">One objective per line.</p>
@@ -1919,9 +1926,10 @@ async function saveSyllabusEntry() {
   if (!_sylEdCurrentKey) return;
   const saveBtn = document.getElementById('syllabusEditorSaveBtn');
 
-  const title   = document.getElementById('sylEdTitle')?.value.trim()   || '';
-  const topic   = document.getElementById('sylEdTopic')?.value.trim()   || '';
-  const tier    = document.getElementById('sylEdTier')?.value           || '';
+  const title       = document.getElementById('sylEdTitle')?.value.trim() || '';
+  const topic       = document.getElementById('sylEdTopic')?.value.trim() || '';
+  const tier        = document.getElementById('sylEdTier')?.value         || '';
+  const description = document.getElementById('sylEdDesc')?.value.trim()  || '';
   const content = (document.getElementById('sylEdContent')?.value || '')
     .split('\n').map(l => l.trim()).filter(Boolean);
   const notesExamples = (document.getElementById('sylEdNotes')?.value || '')
@@ -1930,11 +1938,11 @@ async function saveSyllabusEntry() {
   if (saveBtn) { saveBtn.textContent = 'Saving…'; saveBtn.disabled = true; }
   try {
     const ref = doc(window.db, 'igcse_syllabus', _sylEdCurrentKey);
-    await updateDoc(ref, { title, topicArea: topic, tier, content, notes_examples: notesExamples });
+    await updateDoc(ref, { title, topicArea: topic, tier, description, content, notes: notesExamples });
 
     // Update local index
     syllabusIndex[_sylEdCurrentKey] = {
-      ...syllabusIndex[_sylEdCurrentKey], title, topicArea: topic, tier, content, notes_examples: notesExamples
+      ...syllabusIndex[_sylEdCurrentKey], title, topicArea: topic, tier, description, content, notes: notesExamples
     };
 
     // Refresh list item title
