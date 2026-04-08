@@ -314,6 +314,64 @@
     .field-error { font-size: 0.75rem; color: #dc2626; margin-top: 4px; display: none; }
     .form-input.invalid, .form-select.invalid { border-color: #dc2626; }
 
+    /* ===== SYLLABUS TAG PICKER ===== */
+    .syllabus-picker { border: 1px solid var(--border); border-radius: 8px; background: var(--white); transition: border-color 0.15s; }
+    .syllabus-picker:focus-within { border-color: var(--accent); }
+    .syllabus-chips {
+      display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 12px 5px;
+      min-height: 40px;
+    }
+    .syllabus-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 4px 2px 8px;
+      border-radius: 100px; background: #e0f2fe; color: #0369a1;
+      border: 1px solid #bae6fd; white-space: nowrap; cursor: default;
+    }
+    .syllabus-chip .chip-remove {
+      border: none; background: none; cursor: pointer; color: #0369a1;
+      padding: 0 2px; font-size: 0.8rem; line-height: 1; border-radius: 50%;
+      display: inline-flex; align-items: center;
+    }
+    .syllabus-chip .chip-remove:hover { color: #dc2626; background: #fef2f2; }
+    .syllabus-chip-display {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px;
+      border-radius: 100px; background: #e0f2fe; color: #0369a1;
+      border: 1px solid #bae6fd; white-space: nowrap; cursor: default;
+      position: relative;
+    }
+    .syllabus-chip-display[title]:hover::after {
+      content: attr(title);
+      position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      background: var(--ink); color: #fff; font-size: 0.7rem; font-weight: 400;
+      padding: 5px 8px; border-radius: 6px; white-space: pre-wrap; width: max-content; max-width: 260px;
+      pointer-events: none; z-index: 9999; line-height: 1.4;
+    }
+    .syllabus-search-row {
+      display: flex; align-items: center; padding: 5px 9px 9px; gap: 6px;
+    }
+    .syllabus-search-input {
+      flex: 1; font-family: 'DM Sans', sans-serif; font-size: 0.8rem;
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px;
+      outline: none; transition: border-color 0.15s; color: var(--ink);
+    }
+    .syllabus-search-input:focus { border-color: var(--accent); }
+    .syllabus-dropdown {
+      max-height: 200px; overflow-y: auto; border-top: 1px solid var(--border);
+      display: none;
+    }
+    .syllabus-dropdown.open { display: block; }
+    .syllabus-option {
+      padding: 7px 12px; cursor: pointer; font-size: 0.8rem;
+      display: flex; gap: 8px; align-items: baseline;
+      border-bottom: 1px solid var(--paper-2); transition: background 0.1s;
+    }
+    .syllabus-option:hover { background: var(--paper); }
+    .syllabus-option .opt-code { font-weight: 700; color: var(--accent-dk); flex-shrink: 0; }
+    .syllabus-option .opt-title { color: var(--ink-2); }
+    .syllabus-option .opt-topic { font-size: 0.7rem; color: var(--ink-3); }
+    .syllabus-no-results { padding: 10px 12px; font-size: 0.8rem; color: var(--ink-3); text-align: center; }
+
     /* ===== RICH TEXT EDITOR ===== */
     .rte-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--white); transition: border-color 0.15s; }
     .rte-wrap:focus-within { border-color: var(--accent); }
@@ -696,18 +754,17 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Objectives</label>
-        <div class="rte-wrap">
-          <div class="rte-toolbar">
-            <button class="rte-btn" type="button" title="Bold" onclick="_rteExec('bold')"><b>B</b></button>
-            <button class="rte-btn" type="button" title="Italic" onclick="_rteExec('italic')"><i>I</i></button>
-            <div class="rte-sep"></div>
-            <button class="rte-btn" type="button" title="Bullet list" onclick="_rteExec('insertUnorderedList')">&#8226; List</button>
-            <div class="rte-sep"></div>
-            <button class="rte-btn" type="button" title="Clear formatting" onclick="_rteClear()">Clear</button>
+        <label class="form-label">Syllabus References</label>
+        <div class="syllabus-picker" id="syllabusPicker">
+          <div class="syllabus-chips" id="syllabusChips"></div>
+          <div class="syllabus-search-row">
+            <input class="syllabus-search-input" id="syllabusSearchInput" type="text"
+              placeholder="Search code or topic (e.g. C1.1 or Sets)…" autocomplete="off"
+              oninput="onSyllabusSearch(this.value)" onfocus="onSyllabusSearch(this.value)">
           </div>
-          <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="e.g. C1.1 Estimate and add…"></div>
+          <div class="syllabus-dropdown" id="syllabusDropdown"></div>
         </div>
+        <p class="form-hint" id="syllabusPickerHint">Loading syllabus…</p>
       </div>
       <!-- Resources -->
       <div>
@@ -784,7 +841,7 @@
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, getDoc, onSnapshot, setDoc, serverTimestamp }
+import { doc, getDoc, getDocs, collection, onSnapshot, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -821,6 +878,11 @@ let editTopIdx     = null;
 let modalResources = [];
 let _modalDirty    = false;
 
+// Syllabus index: { "0580_C1.1": { code, tier, topicArea, title, description } }
+let syllabusIndex    = {};
+let syllabusLoaded   = false;
+let modalSyllabusRefs = [];   // codes selected in current modal session
+
 // ── Auth ─────────────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { profile } }) => {
   const isAdmin = profile?.role_centralhub === 'central_admin'
@@ -833,7 +895,105 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
 
   document.getElementById('mainContent').style.display = '';
 
+  loadSyllabus();
   switchProgramme('igcse');
+});
+
+// ── Syllabus loader ──────────────────────────────────────────────
+async function loadSyllabus() {
+  try {
+    const snap = await getDocs(collection(window.db, 'igcse_syllabus'));
+    snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
+    syllabusLoaded = true;
+    const hint = document.getElementById('syllabusPickerHint');
+    if (hint) hint.textContent = '';
+  } catch (e) {
+    console.warn('Could not load igcse_syllabus:', e);
+    const hint = document.getElementById('syllabusPickerHint');
+    if (hint) hint.textContent = 'Syllabus data unavailable.';
+  }
+}
+
+// ── Syllabus picker UI ───────────────────────────────────────────
+function renderSyllabusChips() {
+  const container = document.getElementById('syllabusChips');
+  if (!container) return;
+  if (modalSyllabusRefs.length === 0) {
+    container.innerHTML = '<span style="font-size:0.75rem;color:var(--ink-3);padding:2px 4px">No codes selected</span>';
+    return;
+  }
+  container.innerHTML = modalSyllabusRefs.map(code =>
+    `<span class="syllabus-chip">${escHtml(code)}
+       <button class="chip-remove" type="button" onclick="removeSyllabusChip('${escHtml(code)}')" title="Remove">✕</button>
+     </span>`
+  ).join('');
+}
+
+window.removeSyllabusChip = function(code) {
+  modalSyllabusRefs = modalSyllabusRefs.filter(c => c !== code);
+  renderSyllabusChips();
+};
+
+window.onSyllabusSearch = function(val) {
+  const q = val.trim().toLowerCase();
+  const dropdown = document.getElementById('syllabusDropdown');
+  if (!dropdown) return;
+
+  if (!syllabusLoaded) {
+    dropdown.innerHTML = '<p class="syllabus-no-results">Loading…</p>';
+    dropdown.classList.add('open');
+    return;
+  }
+
+  if (!q) {
+    dropdown.classList.remove('open');
+    return;
+  }
+
+  // Only show entries matching the current subject's subject code
+  const prog    = PROGRAMMES[currentProg];
+  const subj    = prog.subjects[currentSubject];
+  const subjCode = subj ? subj.code : null;
+
+  const matches = Object.entries(syllabusIndex).filter(([id, entry]) => {
+    if (subjCode && !id.startsWith(subjCode + '_')) return false;
+    if (modalSyllabusRefs.includes(entry.code)) return false;
+    const haystack = `${entry.code} ${entry.title} ${entry.topicArea}`.toLowerCase();
+    return haystack.includes(q);
+  }).slice(0, 20);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<p class="syllabus-no-results">No matching syllabus codes.</p>';
+  } else {
+    dropdown.innerHTML = matches.map(([id, entry]) =>
+      `<div class="syllabus-option" onclick="addSyllabusChip('${escHtml(entry.code)}')">
+         <span class="opt-code">${escHtml(entry.code)}</span>
+         <span class="opt-title">${escHtml(entry.title)}</span>
+         <span class="opt-topic">${escHtml(entry.topicArea)}</span>
+       </div>`
+    ).join('');
+  }
+  dropdown.classList.add('open');
+};
+
+window.addSyllabusChip = function(code) {
+  if (!modalSyllabusRefs.includes(code)) {
+    modalSyllabusRefs.push(code);
+    renderSyllabusChips();
+  }
+  const input = document.getElementById('syllabusSearchInput');
+  if (input) { input.value = ''; }
+  document.getElementById('syllabusDropdown').classList.remove('open');
+  _modalDirty = true;
+};
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  const picker = document.getElementById('syllabusPicker');
+  if (picker && !picker.contains(e.target)) {
+    const dd = document.getElementById('syllabusDropdown');
+    if (dd) dd.classList.remove('open');
+  }
 });
 
 // ── Switch programme ──────────────────────────────────────────────
@@ -1152,7 +1312,8 @@ function getFilteredChapters() {
     const matchedTopics = (ch.topics || []).filter(t => {
       const title = (t.title || t.topic || '').toLowerCase();
       const obj   = stripHtml(t.objectives || t.objective || '').toLowerCase();
-      return title.includes(q) || obj.includes(q);
+      const refs  = (t.syllabusRefs || []).join(' ').toLowerCase();
+      return title.includes(q) || obj.includes(q) || refs.includes(q);
     });
     if (chMatch || matchedTopics.length > 0) {
       result.push({ ...ch, _ci: ci, _matchedTopics: chMatch ? (ch.topics || []) : matchedTopics });
@@ -1292,13 +1453,26 @@ function renderChapter(ch, ci, q = '', matchedTopics = null) {
 }
 
 function renderTopic(t, ti, ci, q = '') {
-  const objRaw = t.objectives || t.objective || '';
   let objHtml = '';
-  if (objRaw) {
-    if (/<[a-z]/i.test(objRaw)) {
-      objHtml = `<div class="topic-objectives obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
-    } else {
-      objHtml = `<div class="topic-objectives">${highlight(objRaw, q)}</div>`;
+  if (t.syllabusRefs && t.syllabusRefs.length > 0) {
+    const prog     = PROGRAMMES[currentProg];
+    const subjCfg  = prog.subjects[currentSubject];
+    const subjCode = subjCfg ? subjCfg.code : '';
+    const chips = t.syllabusRefs.map(code => {
+      const entry = syllabusIndex[`${subjCode}_${code}`];
+      const tooltip = entry ? `${entry.title}\n${entry.topicArea}${entry.description ? '\n' + entry.description.slice(0, 120) + (entry.description.length > 120 ? '…' : '') : ''}` : code;
+      const displayCode = q ? highlight(code, q) : escHtml(code);
+      return `<span class="syllabus-chip-display" title="${escHtml(tooltip)}">${displayCode}</span>`;
+    }).join('');
+    objHtml = `<div class="topic-objectives" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">${chips}</div>`;
+  } else {
+    const objRaw = t.objectives || t.objective || '';
+    if (objRaw) {
+      if (/<[a-z]/i.test(objRaw)) {
+        objHtml = `<div class="topic-objectives obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
+      } else {
+        objHtml = `<div class="topic-objectives">${highlight(objRaw, q)}</div>`;
+      }
     }
   }
 
@@ -1484,12 +1658,15 @@ function openAddTopicModal(ci) {
   modalMode  = 'add-topic';
   editChIdx  = ci;
   editTopIdx = null;
-  modalResources = [];
-  document.getElementById('topModalTitle').textContent     = 'Add Topic';
-  document.getElementById('topTitleInput').value           = '';
-  document.getElementById('topDurationInput').value        = '';
-  document.getElementById('topObjectivesEditor').innerHTML = '';
-  document.getElementById('topStartWeekInput').value       = '';
+  modalResources     = [];
+  modalSyllabusRefs  = [];
+  document.getElementById('topModalTitle').textContent = 'Add Topic';
+  document.getElementById('topTitleInput').value       = '';
+  document.getElementById('topDurationInput').value    = '';
+  document.getElementById('topStartWeekInput').value   = '';
+  document.getElementById('syllabusSearchInput').value = '';
+  document.getElementById('syllabusDropdown').classList.remove('open');
+  renderSyllabusChips();
   renderModalResources();
   _modalDirty = false;
   document.getElementById('topicModal').classList.add('open');
@@ -1501,13 +1678,15 @@ function editTopic(ci, ti) {
   editChIdx  = ci;
   editTopIdx = ti;
   const t = chapters[ci].topics[ti];
-  modalResources = (t.resources || []).map(r => ({ ...r }));
-  document.getElementById('topModalTitle').textContent     = 'Edit Topic';
-  document.getElementById('topTitleInput').value           = t.title      || t.topic      || '';
-  document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
-  document.getElementById('topStartWeekInput').value       = t.week  || '';
-  const rawObj = t.objectives || t.objective || '';
-  document.getElementById('topObjectivesEditor').innerHTML = rawObj;
+  modalResources    = (t.resources || []).map(r => ({ ...r }));
+  modalSyllabusRefs = (t.syllabusRefs || []).slice();
+  document.getElementById('topModalTitle').textContent = 'Edit Topic';
+  document.getElementById('topTitleInput').value       = t.title    || t.topic || '';
+  document.getElementById('topDurationInput').value    = t.duration || t.hour  || '';
+  document.getElementById('topStartWeekInput').value   = t.week     || '';
+  document.getElementById('syllabusSearchInput').value = '';
+  document.getElementById('syllabusDropdown').classList.remove('open');
+  renderSyllabusChips();
   renderModalResources();
   _modalDirty = false;
   document.getElementById('topicModal').classList.add('open');
@@ -1555,10 +1734,9 @@ function removeModalResource(i) {
 }
 
 async function saveTopicModal() {
-  const title      = document.getElementById('topTitleInput').value.trim();
-  const duration   = parseInt(document.getElementById('topDurationInput').value) || null;
-  const startWeek  = parseInt(document.getElementById('topStartWeekInput').value) || null;
-  const objectives = document.getElementById('topObjectivesEditor').innerHTML.trim();
+  const title     = document.getElementById('topTitleInput').value.trim();
+  const duration  = parseInt(document.getElementById('topDurationInput').value) || null;
+  const startWeek = parseInt(document.getElementById('topStartWeekInput').value) || null;
   if (!title) {
     document.getElementById('topTitleInput').classList.add('invalid');
     const err = document.getElementById('topTitleError');
@@ -1568,7 +1746,7 @@ async function saveTopicModal() {
   }
 
   const resources = readModalResourcesFromDOM().filter(r => /^https?:\/\//i.test(r.url));
-  const topic = { topic: title, hour: duration, week: startWeek, objective: objectives, resources };
+  const topic = { topic: title, hour: duration, week: startWeek, syllabusRefs: modalSyllabusRefs.slice(), resources };
 
   if (modalMode === 'add-topic') {
     if (!chapters[editChIdx].topics) chapters[editChIdx].topics = [];
