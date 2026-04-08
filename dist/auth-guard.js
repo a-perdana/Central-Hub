@@ -80,7 +80,6 @@ function promptForName() {
         <button id="_nameBtn" style="width:100%;padding:11px;background:linear-gradient(135deg,#7c3aed,#0891b2);color:#fff;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer">Continue →</button>
       </div>`;
     document.body.appendChild(overlay);
-    document.body.style.visibility = 'visible';
 
     const input = overlay.querySelector('#_nameInput');
     const btn   = overlay.querySelector('#_nameBtn');
@@ -91,7 +90,6 @@ function promptForName() {
       const name = input.value.trim();
       if (!name) { err.textContent = 'Please enter your name.'; return; }
       overlay.remove();
-      document.body.style.visibility = 'hidden';
       resolve(name);
     };
     btn.addEventListener('click', submit);
@@ -99,163 +97,7 @@ function promptForName() {
   });
 }
 
-function ensureProfileModalStyles() {
-  if (document.getElementById('profileModalStyles')) return;
-  const style = document.createElement('style');
-  style.id = 'profileModalStyles';
-  style.textContent = `
-    .profile-modal-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 9998;
-      background: rgba(10, 10, 26, 0.55);
-      backdrop-filter: blur(4px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .profile-modal-overlay.open { display: flex; }
-    .profile-modal {
-      width: min(100%, 460px);
-      background: #fff;
-      border: 1px solid #e0ddd6;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
-      overflow: hidden;
-      font-family: 'DM Sans', sans-serif;
-    }
-    .profile-modal-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 18px;
-      border-bottom: 1px solid #efede8;
-    }
-    .profile-modal-head h3 {
-      margin: 0;
-      font-size: 1rem;
-      color: #1c1c2e;
-      font-weight: 600;
-    }
-    .profile-modal-close {
-      border: 0;
-      background: none;
-      font-size: 1.3rem;
-      line-height: 1;
-      color: #8888a8;
-      cursor: pointer;
-      padding: 0;
-    }
-    .profile-modal-body {
-      padding: 16px 18px;
-      display: grid;
-      gap: 12px;
-    }
-    .profile-field {
-      display: grid;
-      gap: 5px;
-    }
-    .profile-field label {
-      font-size: 0.79rem;
-      color: #44445a;
-      font-weight: 500;
-    }
-    .profile-field input {
-      border: 1px solid #e0ddd6;
-      border-radius: 8px;
-      padding: 9px 10px;
-      font-size: 0.9rem;
-      color: #1c1c2e;
-      font-family: inherit;
-      width: 100%;
-    }
-    .profile-field input[readonly] {
-      background: #f7f6f3;
-      color: #666682;
-    }
-    .profile-modal-foot {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      padding: 14px 18px 16px;
-      border-top: 1px solid #efede8;
-    }
-    .profile-btn {
-      border: 1px solid #d8d4ce;
-      background: #fff;
-      color: #44445a;
-      border-radius: 8px;
-      padding: 8px 12px;
-      font-size: 0.84rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .profile-btn-primary {
-      border-color: transparent;
-      color: #fff;
-      background: linear-gradient(135deg, #7c3aed, #0891b2);
-    }
-    .profile-modal-msg {
-      min-height: 18px;
-      font-size: 0.78rem;
-      color: #dc2626;
-      padding: 0 18px 12px;
-    }
-    .profile-modal-msg.ok {
-      color: #166534;
-    }
-    .profile-avatar-editor {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .profile-avatar-preview {
-      width: 46px;
-      height: 46px;
-      border-radius: 50%;
-      border: 1px solid #dcd8d2;
-      background: linear-gradient(135deg, #7c3aed, #0891b2);
-      background-size: cover;
-      background-position: center;
-      color: #fff;
-      display: grid;
-      place-items: center;
-      font-weight: 700;
-      font-size: 0.85rem;
-      overflow: hidden;
-      user-select: none;
-    }
-    .profile-avatar-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .profile-avatar-file {
-      display: none;
-    }
-    .nav-profile-trigger {
-      transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
-    }
-    .nav-user-name.nav-profile-trigger {
-      border-radius: 6px;
-      padding: 4px 6px;
-      margin: -4px -6px;
-    }
-    .nav-user-name.nav-profile-trigger:hover {
-      color: #fff;
-      background: rgba(255, 255, 255, 0.08);
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      cursor: pointer;
-    }
-    .nav-avatar.nav-profile-trigger:hover {
-      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
-      cursor: pointer;
-    }
-  `;
-  document.head.appendChild(style);
-}
+// Profile modal CSS lives in shared-styles.css — no dynamic injection needed.
 
 function formatPhoneInputValue(rawValue) {
   const hasPlus = rawValue.trim().startsWith('+');
@@ -321,17 +163,19 @@ function applyAvatarVisual(avatarEl, displayName, email, photoURL) {
   }
 }
 
+let _profileModalMounted = false;
 function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
-  const navAuth = document.querySelector('.nav-auth');
-  if (!navAuth) return;
+  if (_profileModalMounted) return;
+  if (!navAvatar) return;
+  _profileModalMounted = true;
 
-  ensureProfileModalStyles();
-
-  navUserName.style.cursor = 'pointer';
+  if (navUserName) {
+    navUserName.style.cursor = 'pointer';
+    navUserName.title = 'Open profile';
+    navUserName.classList.add('nav-profile-trigger');
+  }
   navAvatar.style.cursor = 'pointer';
-  navUserName.title = 'Open profile';
   navAvatar.title = 'Open profile';
-  navUserName.classList.add('nav-profile-trigger');
   navAvatar.classList.add('nav-profile-trigger');
 
   const overlay = document.createElement('div');
@@ -373,8 +217,11 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
       </div>
       <p class="profile-modal-msg" id="profileMsg"></p>
       <div class="profile-modal-foot">
-        <button type="button" class="profile-btn" id="profileCancelBtn">Cancel</button>
-        <button type="button" class="profile-btn profile-btn-primary" id="profileSaveBtn">Save</button>
+        <button type="button" class="profile-btn-signout" id="profileSignOutBtn">Sign out</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="profile-btn" id="profileCancelBtn">Cancel</button>
+          <button type="button" class="profile-btn profile-btn-primary" id="profileSaveBtn">Save</button>
+        </div>
       </div>
     </div>
   `;
@@ -385,6 +232,7 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
     close: overlay.querySelector('#profileCloseBtn'),
     cancel: overlay.querySelector('#profileCancelBtn'),
     save: overlay.querySelector('#profileSaveBtn'),
+    signOut: overlay.querySelector('#profileSignOutBtn'),
     msg: overlay.querySelector('#profileMsg'),
     avatarPreview: overlay.querySelector('#profileAvatarPreview'),
     photoPickBtn: overlay.querySelector('#profilePhotoPickBtn'),
@@ -404,7 +252,7 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
 
   const refreshNav = (name, photoURL) => {
     const finalName = (name || '').trim() || user.email;
-    navUserName.textContent = finalName;
+    if (navUserName) navUserName.textContent = finalName;
     applyAvatarVisual(navAvatar, finalName, user.email, photoURL);
   };
 
@@ -436,10 +284,14 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
     overlay.classList.remove('open');
   };
 
-  navUserName.addEventListener('click', open);
+  if (navUserName) navUserName.addEventListener('click', open);
   navAvatar.addEventListener('click', open);
   el.close.addEventListener('click', close);
   el.cancel.addEventListener('click', close);
+  el.signOut.addEventListener('click', async () => {
+    await signOut(auth);
+    window.location.href = 'login';
+  });
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();
   });
@@ -625,23 +477,27 @@ onAuthStateChanged(auth, async (user) => {
   window.currentUser = user;
   window.userProfile = profile;
 
-  // ── Show Console nav link for central_admin (right side of nav) ──
+  // ── Cache shared nav element references ──────────────────────────
+  const navAuth     = document.querySelector('.nav-auth');
+  const navUserName = document.querySelector('.nav-user-name');
+  const navAvatar   = document.getElementById('navAvatar');
+  const logoutBtn   = document.getElementById('logoutBtn');
+  const displayName = profile.displayName || user.displayName;
+
+  // ── Show Console nav link for central_admin (in nav-links) ──
   if (platformRole === 'central_admin') {
-    const navAuth = document.querySelector('.nav-auth');
-    if (navAuth && !navAuth.querySelector('a[href="console"]')) {
+    const navLinks = document.querySelector('.nav-links');
+    if (navLinks && !navLinks.querySelector('a[href="console"]')) {
       const link = document.createElement('a');
       link.href        = 'console';
       link.className   = 'nav-link';
+      link.setAttribute('data-nav-page', 'console');
       link.textContent = 'Console';
-      navAuth.insertBefore(link, navAuth.firstChild);
+      navLinks.appendChild(link);
     }
   }
 
   // ── Populate shared nav elements ─────────────────────────────────
-  const displayName = profile.displayName || user.displayName;
-  const navUserName = document.querySelector('.nav-user-name');
-  const navAvatar   = document.getElementById('navAvatar');
-  const logoutBtn   = document.getElementById('logoutBtn');
 
   if (navUserName) {
     navUserName.textContent = displayName || user.email;
@@ -651,7 +507,7 @@ onAuthStateChanged(auth, async (user) => {
     applyAvatarVisual(navAvatar, displayName, user.email, profile.photoURL || user.photoURL || '');
   }
 
-  if (navUserName && navAvatar) {
+  if (navAvatar) {
     mountProfileModal({ user, profile, userRef, navUserName, navAvatar });
   }
 
