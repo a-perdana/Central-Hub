@@ -205,6 +205,10 @@
     { id: "d61", date_start: "2026-05-30", date_end: "2026-05-30", title: "Finalterm Semester 2 Report Distribution", department: "Academic", category: "Reporting" },
   ];
 
+  // ─── ACADEMIC YEAR CONFIG ─────────────────────────────────────────────────────
+  // Week 1 = first week of the academic year. Update this date each year.
+  const DEFAULT_YEAR_START_ISO = "2025-07-21"; // 21 Jul 2025 — Start of Semester 1
+
   // ─── DEPARTMENT + CATEGORY CONFIG ────────────────────────────────────────────
   const DEPARTMENTS = {
     "Academic":           { color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", dot: "#2563EB",  label: "Academic" },
@@ -389,6 +393,9 @@
     const [activeCategoryFilters, setActiveCategoryFilters] = useState(new Set(["Public Holiday","Assessment"]));
     const [formModal,    setFormModal]    = useState(null); // null | { initial } — admin only
     const [deleteTarget, setDeleteTarget] = useState(null); // null | eventId — admin only
+    const [yearStartIso, setYearStartIso] = useState(DEFAULT_YEAR_START_ISO);
+    const [editingYearStart, setEditingYearStart] = useState(false);
+    const [yearStartDraft,   setYearStartDraft]   = useState(DEFAULT_YEAR_START_ISO);
 
     // ─── Load Firestore events ────────────────────────────────────────────────
     const loadFromFirestore = useCallback(async () => {
@@ -536,6 +543,47 @@
             .sort((a, b) => String(a.date_start).localeCompare(String(b.date_start))),
     [events]);
 
+    // ─── Week view ────────────────────────────────────────────────────────────
+    const academicYearStart = useMemo(() => parseDate(yearStartIso), [yearStartIso]);
+
+    const weeklyEvents = useMemo(() => {
+      const weeks = [];
+      const sorted = events
+        .filter(e => e && e.date_start && e.date_end)
+        .sort((a, b) => String(a.date_start).localeCompare(String(b.date_start)));
+
+      sorted.forEach(ev => {
+        const evStart = parseDate(ev.date_start);
+        const diff = Math.floor((evStart - academicYearStart) / (7 * 24 * 3600 * 1000));
+        if (diff < 0) return; // before academic year
+        const weekNum = diff + 1;
+
+        let weekObj = weeks.find(w => w.weekNum === weekNum);
+        if (!weekObj) {
+          const monDate = new Date(academicYearStart.getTime() + (weekNum - 1) * 7 * 24 * 3600 * 1000);
+          const friDate = new Date(monDate.getTime() + 4 * 24 * 3600 * 1000);
+          weekObj = { weekNum, monDate, friDate, events: [] };
+          weeks.push(weekObj);
+        }
+        weekObj.events.push(ev);
+      });
+
+      return weeks.sort((a, b) => a.weekNum - b.weekNum);
+    }, [events, academicYearStart]);
+
+    // Scroll to current week when week view is activated
+    useEffect(() => {
+      if (view !== "week") return;
+      const now = new Date();
+      const diff = Math.floor((now - academicYearStart) / (7 * 24 * 3600 * 1000));
+      const currentWeekNum = diff + 1;
+      if (currentWeekNum < 1) return;
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`week-${currentWeekNum}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }, [view, academicYearStart]);
+
     const toggleFilter = (key, setFn) => setFn(prev => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
@@ -589,7 +637,7 @@
                 </button>
               )}
               <div style={{ display: "flex", gap: 6, background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 4 }}>
-                {[["month","Month"],["list","List"],["all","All Events"]].map(([v, label]) => (
+                {[["week","Week"],["month","Month"],["list","List"],["all","All Events"]].map(([v, label]) => (
                   <button key={v} onClick={() => setView(v)} style={{
                     padding: "7px 16px", borderRadius: 7, border: "none", cursor: "pointer",
                     background: view === v ? "white" : "transparent",
@@ -691,6 +739,133 @@
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* ── Week View ── */}
+        {view === "week" && (
+          <div style={{ padding: "24px 32px 40px", maxWidth: 860 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, gap: 16, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0F172A", margin: 0 }}>Academic Year by Week</h2>
+              {isAdmin && !editingYearStart && (
+                <button onClick={() => { setYearStartDraft(yearStartIso); setEditingYearStart(true); }} style={{
+                  padding: "6px 14px", fontSize: 12, fontWeight: 700,
+                  background: "#F1F5F9", color: "#374151",
+                  border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}>Edit Year Start</button>
+              )}
+            </div>
+
+            {/* Admin: edit year start date */}
+            {isAdmin && editingYearStart && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "12px 16px", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1D4ED8" }}>Week 1 start date:</span>
+                <input type="date" value={yearStartDraft} onChange={e => setYearStartDraft(e.target.value)}
+                  style={{ padding: "6px 10px", borderRadius: 7, border: "1.5px solid #BFDBFE", fontSize: 13, fontFamily: "'DM Sans',sans-serif", outline: "none" }} />
+                <button onClick={() => { setYearStartIso(yearStartDraft); setEditingYearStart(false); }} style={{
+                  padding: "6px 14px", background: "#2563EB", color: "white",
+                  border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}>Apply</button>
+                <button onClick={() => setEditingYearStart(false)} style={{
+                  padding: "6px 14px", background: "#F1F5F9", color: "#374151",
+                  border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif",
+                }}>Cancel</button>
+              </div>
+            )}
+
+            <div style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
+              Week 1 starts {academicYearStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} (Start of Semester 1). Each week shown Mon → Fri.
+            </div>
+
+            {weeklyEvents.length === 0 && (
+              <div style={{ color: "#94A3B8", textAlign: "center", padding: 40 }}>No events found.</div>
+            )}
+
+            {weeklyEvents.map(({ weekNum, monDate, friDate, events: wevents }) => {
+              const fmtDate = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+              const isCurrent = (() => {
+                const now = new Date();
+                return now >= monDate && now <= new Date(friDate.getTime() + 24 * 3600 * 1000);
+              })();
+              return (
+                <div key={weekNum} id={`week-${weekNum}`} style={{
+                  marginBottom: 12,
+                  border: `1.5px solid ${isCurrent ? "#2563EB" : "#E2E8F0"}`,
+                  borderRadius: 12,
+                  background: isCurrent ? "#EFF6FF" : "white",
+                  overflow: "hidden",
+                }}>
+                  {/* Week header */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 20px",
+                    background: isCurrent ? "#2563EB" : "#F8FAFC",
+                    borderBottom: `1px solid ${isCurrent ? "#1D4ED8" : "#E2E8F0"}`,
+                  }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 900,
+                      color: isCurrent ? "white" : "#0F172A",
+                      minWidth: 72,
+                    }}>
+                      Week {weekNum}
+                    </div>
+                    <div style={{ fontSize: 12, color: isCurrent ? "#BFDBFE" : "#64748B", fontWeight: 600 }}>
+                      {fmtDate(monDate)} – {fmtDate(friDate)}
+                    </div>
+                    {isCurrent && (
+                      <span style={{
+                        marginLeft: "auto", fontSize: 11, fontWeight: 800,
+                        background: "rgba(255,255,255,0.2)", color: "white",
+                        padding: "3px 10px", borderRadius: 20,
+                      }}>Current week</span>
+                    )}
+                    {!isCurrent && (
+                      <span style={{ marginLeft: "auto", fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>
+                        {wevents.length} event{wevents.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Events in this week */}
+                  {wevents.length === 0 ? (
+                    <div style={{ padding: "14px 20px", fontSize: 13, color: "#CBD5E1", fontStyle: "italic" }}>
+                      No scheduled events
+                    </div>
+                  ) : (
+                    <div style={{ padding: "10px 20px 14px" }}>
+                      {wevents.map(e => {
+                        const st = getEventStyle(e);
+                        const ds = String(e.date_start).slice(0, 10);
+                        const de = String(e.date_end).slice(0, 10);
+                        return (
+                          <div key={e.id} onClick={() => setSelectedEvent(e)} style={{
+                            display: "flex", gap: 14, alignItems: "center",
+                            padding: "9px 12px",
+                            borderLeft: `4px solid ${st.dot}`,
+                            borderRadius: 8,
+                            background: st.bg,
+                            marginBottom: 6,
+                            cursor: "pointer",
+                          }}>
+                            <div style={{ minWidth: 90, fontSize: 12, fontWeight: 700, color: st.color }}>
+                              {ds === de ? ds.slice(5).replace("-", " ") : `${ds.slice(5).replace("-"," ")} – ${de.slice(5).replace("-"," ")}`}
+                            </div>
+                            <div style={{ flex: 1, fontWeight: 700, fontSize: 14, color: "#0F172A" }}>{e.title}</div>
+                            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                              <Tag color={st.color} bg="rgba(255,255,255,0.7)">{e.department}</Tag>
+                              <Tag color="#64748B" bg="rgba(255,255,255,0.7)">{e.category}</Tag>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
