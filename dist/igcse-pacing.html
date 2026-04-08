@@ -2409,7 +2409,7 @@ window.inlineEditChip = function(e, field, ci, ti) {
   function commit() {
     const val = parseInt(inp.value);
     if (!isNaN(val) && val > 0) {
-      if (field === 'hours') { topic.duration = val; topic.hour = val; }
+      if (field === 'hours') { topic.duration = val; delete topic.hour; }
       else                   { topic.week = val; }
       saveChapters();
     }
@@ -3188,17 +3188,17 @@ async function saveTopicModal() {
 
   const resources   = readModalResourcesFromDOM().filter(r => /^https?:\/\//i.test(r.url));
   const objectives  = document.getElementById('topObjectivesEditor').innerHTML.trim();
-  const topic = { topic: title, hour: duration, week: startWeek, syllabusRefs: modalSyllabusRefs.slice(), objectives, resources };
+  const topic = { topic: title, duration, week: startWeek, syllabusRefs: modalSyllabusRefs.slice(), objectives, resources };
 
   if (modalMode === 'add-topic') {
     if (!chapters[editChIdx].topics) chapters[editChIdx].topics = [];
     topic.id = genId();
     chapters[editChIdx].topics.push(topic);
   } else {
-    chapters[editChIdx].topics[editTopIdx] = {
-      ...chapters[editChIdx].topics[editTopIdx],
-      ...topic,
-    };
+    const existing = { ...chapters[editChIdx].topics[editTopIdx] };
+    delete existing.objective; // remove legacy field; objectives is the canonical field
+    delete existing.hour;      // remove legacy field; duration is the canonical field
+    chapters[editChIdx].topics[editTopIdx] = { ...existing, ...topic };
   }
 
   _modalDirty = false;
