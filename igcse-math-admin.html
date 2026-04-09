@@ -302,6 +302,15 @@
     .detail-diag.weak   { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
     .detail-diag.review { background: #fef9c3; color: #92400e; border: 1px solid #fde68a; }
 
+    /* ── Paging ───────────────────────────────────────── */
+    .pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-top: 1px solid var(--border); background: #fafaf8; flex-wrap: wrap; gap: 8px; }
+    .pager-info { font-size: .72rem; color: var(--ink-3); }
+    .pager-btns { display: flex; gap: 3px; }
+    .pager-btn { font-family: 'DM Sans', sans-serif; font-size: .75rem; font-weight: 500; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--white); color: var(--ink-2); cursor: pointer; transition: all .12s; min-width: 32px; text-align: center; }
+    .pager-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-2); }
+    .pager-btn:disabled { opacity: .35; cursor: default; }
+    .pager-btn.on { background: var(--accent); color: white; border-color: var(--accent); font-weight: 600; }
+
     /* ── Loading / empty ─────────────────────────────── */
     .loading-wrap { text-align: center; padding: 40px; color: var(--ink-3); font-size: .82rem; }
     .empty-wrap { text-align: center; padding: 40px; color: var(--ink-3); font-size: .82rem; }
@@ -363,13 +372,11 @@
           <span class="section-title">Chapters &amp; Topics</span>
           <button class="btn-add" onclick="openAddChapterModal()">+ Add Chapter</button>
         </div>
-        <div class="section-body">
-          <div id="chapterList" class="ch-list">
+        <div class="section-body" style="padding:0">
+          <div id="chapterList" class="ch-list" style="padding:20px 20px 0">
             <div class="loading-wrap">Loading…</div>
           </div>
-          <div class="add-ch-wrap">
-            <button class="add-ch-btn" onclick="openAddChapterModal()">+ Add Chapter</button>
-          </div>
+          <div id="structurePager" class="pager" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -398,6 +405,7 @@
       <div id="progressList" class="progress-grid">
         <div class="loading-wrap">Loading teacher progress…</div>
       </div>
+      <div id="progressPager" class="pager" style="display:none;border-top:none;margin-top:4px;border-radius:12px;border:1px solid var(--border)"></div>
     </div>
 
     <!-- ═══ TAB: COVERAGE HEATMAP ═══════════════════════════════ -->
@@ -420,9 +428,10 @@
         <div class="section-head">
           <span class="section-title">Planned vs Actual Hours — Per Teacher</span>
         </div>
-        <div class="section-body" style="overflow-x:auto;padding:0">
+        <div style="overflow-x:auto">
           <div id="hoursReportContent"></div>
         </div>
+        <div id="hoursPager" class="pager" style="display:none"></div>
       </div>
     </div>
 
@@ -536,6 +545,43 @@ let progressByTeacher = {};   // uid -> { statuses map }
 let selectedClass = 'default';
 let _editChIdx = null, _editTopIdx = null;
 
+// ── Paging state ──────────────────────────────────────────────
+const PAGE_SIZE = 8;
+let structurePage = 0;
+let progressPage  = 0;
+let hoursPage     = 0;
+
+function renderPager(containerId, currentPage, totalItems, onGo) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  if (totalPages <= 1) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+
+  const start = currentPage * PAGE_SIZE + 1;
+  const end   = Math.min((currentPage + 1) * PAGE_SIZE, totalItems);
+
+  // Build page buttons — show at most 7 around current page
+  const range = [];
+  for (let i = 0; i < totalPages; i++) {
+    if (i === 0 || i === totalPages - 1 || Math.abs(i - currentPage) <= 2) range.push(i);
+    else if (range[range.length - 1] !== '…') range.push('…');
+  }
+
+  const btns = range.map(i => i === '…'
+    ? `<span class="pager-btn" style="border:none;cursor:default;opacity:.4">…</span>`
+    : `<button class="pager-btn${i === currentPage ? ' on' : ''}" onclick="(${onGo})(${i})">${i + 1}</button>`
+  ).join('');
+
+  el.innerHTML = `
+    <span class="pager-info">Showing ${start}–${end} of ${totalItems}</span>
+    <div class="pager-btns">
+      <button class="pager-btn" onclick="(${onGo})(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>‹</button>
+      ${btns}
+      <button class="pager-btn" onclick="(${onGo})(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>›</button>
+    </div>`;
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function safeUrl(u) { return /^https?:\/\//i.test(u||'') ? u : '#'; }
@@ -576,9 +622,13 @@ function renderChapters() {
   const el = document.getElementById('chapterList');
   if (!chapters.length) {
     el.innerHTML = '<div class="empty-wrap">No chapters yet. Click "+ Add Chapter" to start.</div>';
+    document.getElementById('structurePager').style.display = 'none';
     return;
   }
-  el.innerHTML = chapters.map((ch, ci) => {
+  const pageChapters = chapters.slice(structurePage * PAGE_SIZE, (structurePage + 1) * PAGE_SIZE);
+  const pageOffset   = structurePage * PAGE_SIZE;
+  el.innerHTML = pageChapters.map((ch, localCi) => {
+    const ci = localCi + pageOffset;
     const topics = ch.topics || [];
     const yearCls = ch.year === 'Year 9' ? 'yr9' : 'yr10';
     const topicsHtml = topics.length === 0
@@ -640,7 +690,17 @@ function renderChapters() {
         </div>
       </div>`;
   }).join('');
+
+  renderPager('structurePager', structurePage, chapters.length, 'goStructurePage');
 }
+
+window.goStructurePage = function(p) {
+  const total = Math.ceil(chapters.length / PAGE_SIZE);
+  if (p < 0 || p >= total) return;
+  structurePage = p;
+  renderChapters();
+  document.getElementById('chapterList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 
 function toggleCh(ci) {
   document.getElementById(`ch-${ci}`).classList.toggle('collapsed');
@@ -829,8 +889,8 @@ async function loadProgressTab() {
   document.getElementById('progressList').innerHTML = '<div class="loading-wrap">Loading teachers…</div>';
   document.getElementById('aggBanner').innerHTML = '';
 
-  // 1. Load all teachers from users collection
-  const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', 'in', ['teachers_user', 'teachers_admin'])));
+  // 1. Load all teachers — only teachers_user role (teachers_admin is coordinator, not a classroom teacher)
+  const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
   allTeachers = [];
   snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
 
@@ -886,10 +946,12 @@ function renderProgressView() {
     ${aggWeak > 0 ? `<div class="agg-stat accent"><div class="agg-stat-num" style="color:#dc2626">${aggWeak}</div><div class="agg-stat-label">Weak-Flagged</div></div>` : ''}
   `;
 
-  // Render each teacher card
+  // Render each teacher card (paged)
   buildWeakAlerts();
 
-  listEl.innerHTML = allTeachers.map((t, ti) => {
+  const pageTeachers = allTeachers.slice(progressPage * PAGE_SIZE, (progressPage + 1) * PAGE_SIZE);
+  listEl.innerHTML = pageTeachers.map((t, localTi) => {
+    const ti = localTi + progressPage * PAGE_SIZE;
     const statuses = progressByTeacher[t.uid]?.statuses || {};
     const updatedAt = progressByTeacher[t.uid]?.updatedAt;
 
@@ -958,7 +1020,17 @@ function renderProgressView() {
       <div class="teacher-detail" id="teacher-detail-${ti}">${chDetail}</div>
     </div>`;
   }).join('');
+
+  renderPager('progressPager', progressPage, allTeachers.length, 'goProgressPage');
 }
+
+window.goProgressPage = function(p) {
+  const total = Math.ceil(allTeachers.length / PAGE_SIZE);
+  if (p < 0 || p >= total) return;
+  progressPage = p;
+  renderProgressView();
+  document.getElementById('progressList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 
 window.toggleTeacherDetail = function(ti) {
   const el   = document.getElementById(`teacher-detail-${ti}`);
@@ -967,15 +1039,8 @@ window.toggleTeacherDetail = function(ti) {
   if (card) card.classList.toggle('open');
 };
 
-// ── Class selector ────────────────────────────────────────────
-window.selectClass = function(cls, btn) {
-  selectedClass = cls;
-  document.querySelectorAll('.class-chip').forEach(c => c.classList.remove('on'));
-  btn.classList.add('on');
-  loadProgressTab();
-};
-
 window.refreshProgress = function() {
+  progressPage = 0; hoursPage = 0;
   loadProgressTab();
 };
 
@@ -1118,15 +1183,22 @@ function renderHoursReport() {
   const totalPlanned = chapters.reduce((s, ch) =>
     s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0);
 
+  // Compute grand actual across ALL teachers (for agg banner), then page rows
   let grandActual = 0;
+  allTeachers.forEach(t => {
+    const statuses = progressByTeacher[t.uid]?.statuses || {};
+    chapters.forEach(ch => (ch.topics || []).forEach(topic => {
+      grandActual += parseFloat(statuses[`actual.${ch.id}.${topic.id}`]) || 0;
+    }));
+  });
 
-  const rows = allTeachers.map(t => {
+  const pageTeachersH = allTeachers.slice(hoursPage * PAGE_SIZE, (hoursPage + 1) * PAGE_SIZE);
+  const rows = pageTeachersH.map(t => {
     const statuses = progressByTeacher[t.uid]?.statuses || {};
     let actual = 0;
     chapters.forEach(ch => (ch.topics || []).forEach(topic => {
       actual += parseFloat(statuses[`actual.${ch.id}.${topic.id}`]) || 0;
     }));
-    grandActual += actual;
 
     const diff      = Math.round((actual - totalPlanned) * 10) / 10;
     const pillCls   = actual === 0 ? '' : diff > 2 ? 'hours-over' : diff < -2 ? 'hours-under' : 'hours-match';
@@ -1170,6 +1242,8 @@ function renderHoursReport() {
     <tbody>${rows}</tbody>
   </table>`;
 
+  renderPager('hoursPager', hoursPage, allTeachers.length, 'goHoursPage');
+
   const diffTotal = Math.round((grandActual - totalPlanned) * 10) / 10;
   const diffColor = diffTotal > 2 ? '#dc2626' : diffTotal < -2 ? '#d97706' : '#1e7a4a';
   const diffCls   = diffTotal > 2 ? 'accent' : diffTotal < -2 ? 'amber' : 'green';
@@ -1179,6 +1253,23 @@ function renderHoursReport() {
     <div class="agg-stat green"><div class="agg-stat-num">${grandActual > 0 ? grandActual + 'h' : '—'}</div><div class="agg-stat-label">Total Logged</div></div>
     <div class="agg-stat ${diffCls}"><div class="agg-stat-num" style="color:${diffColor}">${grandActual > 0 ? (diffTotal >= 0 ? '+' : '') + diffTotal + 'h' : '—'}</div><div class="agg-stat-label">Difference</div></div>`;
 }
+
+window.goHoursPage = function(p) {
+  const total = Math.ceil(allTeachers.length / PAGE_SIZE);
+  if (p < 0 || p >= total) return;
+  hoursPage = p;
+  renderHoursReport();
+  document.getElementById('hoursReportContent').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+// ── Reset paging on class/data change ────────────────────────
+window.selectClass = function(cls, btn) {
+  selectedClass = cls;
+  progressPage = 0; hoursPage = 0;
+  document.querySelectorAll('.class-chip').forEach(c => c.classList.remove('on'));
+  btn.classList.add('on');
+  loadProgressTab();
+};
 
 // ── Modal close ───────────────────────────────────────────────
 document.getElementById('chapterModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeChapterModal(); });
