@@ -346,6 +346,13 @@
       background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;
       flex-shrink: 0; white-space: nowrap;
     }
+    .syl-tier-badge {
+      font-size: 0.62rem; font-weight: 700; padding: 1px 5px; border-radius: 100px;
+      flex-shrink: 0; white-space: nowrap; letter-spacing: 0.02em;
+    }
+    .syl-tier-badge.core       { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .syl-tier-badge.supplement { background: #fef9c3; color: #a16207; border: 1px solid #fde68a; }
+    .syl-tier-badge.extended   { background: #fef9c3; color: #a16207; border: 1px solid #fde68a; }
     .syl-ed-title { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
     .syl-ed-field-label {
       font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
@@ -1096,6 +1103,18 @@ async function loadSyllabus() {
   }
 }
 
+// Lookup helper: tries exact key first, then _core / _supplement suffixes.
+// Biology/Chemistry/Physics docs are stored as "0610_1.1_core" etc.
+function lookupSyllabus(subjCode, code) {
+  const exact = `${subjCode}_${code}`;
+  if (syllabusIndex[exact]) return { key: exact, entry: syllabusIndex[exact] };
+  for (const suffix of ['_core', '_supplement']) {
+    const k = exact + suffix;
+    if (syllabusIndex[k]) return { key: k, entry: syllabusIndex[k] };
+  }
+  return { key: exact, entry: undefined };
+}
+
 // ── Syllabus picker UI ───────────────────────────────────────────
 function renderSyllabusChips() {
   const container = document.getElementById('syllabusChips');
@@ -1648,7 +1667,7 @@ function renderTopic(t, ti, ci, q = '') {
     const subjCfg  = prog.subjects[currentSubject];
     const subjCode = subjCfg ? subjCfg.code : '';
     const chipLines = t.syllabusRefs.map(code => {
-      const entry       = syllabusIndex[`${subjCode}_${code}`];
+      const { key: indexKey2, entry } = lookupSyllabus(subjCode, code);
       const displayCode = q ? highlight(code, q) : escHtml(code);
       const titleText   = entry ? (q ? highlight(entry.title, q) : escHtml(entry.title)) : '';
       const topicText   = entry ? escHtml(entry.topicArea) : '';
@@ -1658,7 +1677,7 @@ function renderTopic(t, ti, ci, q = '') {
         : content.length
           ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : ''))
           : '';
-      const indexKey    = `${subjCode}_${code}`;
+      const indexKey    = indexKey2;
       return `<div class="syllabus-ref-line">
         <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
         <span class="srl-topic">${topicText || ''}</span>
@@ -1856,12 +1875,18 @@ function openSyllabusEditor(selectKey = null) {
     .filter(([id]) => !subjCode || id.startsWith(subjCode + '_'))
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
 
-  list.innerHTML = entries.map(([id, entry]) =>
-    `<div class="syl-ed-item" data-key="${escHtml(id)}">
+  list.innerHTML = entries.map(([id, entry]) => {
+    const tier = (entry.tier || '').toLowerCase();
+    const tierLabel = tier === 'supplement' ? 'S' : tier === 'core' ? 'C' : tier === 'extended' ? 'E' : '';
+    const tierBadge = tierLabel
+      ? `<span class="syl-tier-badge ${tier}">${tierLabel}</span>`
+      : '';
+    return `<div class="syl-ed-item" data-key="${escHtml(id)}">
        <span class="syl-ed-code">${escHtml(entry.code || id.split('_').slice(1).join('_'))}</span>
+       ${tierBadge}
        <span class="syl-ed-title">${escHtml(entry.title || '')}</span>
-     </div>`
-  ).join('') || `<p style="padding:16px;font-size:0.82rem;color:var(--ink-3)">No syllabus entries loaded.</p>`;
+     </div>`;
+  }).join('') || `<p style="padding:16px;font-size:0.82rem;color:var(--ink-3)">No syllabus entries loaded.</p>`;
 
   // Delegate clicks on list items
   list.onclick = e => {
