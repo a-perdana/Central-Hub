@@ -894,6 +894,19 @@ async function loadProgressTab() {
   allTeachers = [];
   snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
 
+  // 1b. Build class list from teachers' own igcse_classes profile fields (union),
+  //     falling back to admin-defined classList from the pacing structure doc.
+  const profileClassSet = new Set();
+  allTeachers.forEach(t => {
+    (t.igcse_classes || []).forEach(c => profileClassSet.add(c));
+  });
+  if (profileClassSet.size > 0) {
+    // Merge: teacher-defined classes take precedence; keep admin-defined ones too
+    const merged = [...new Set([...profileClassSet, ...classList])].sort();
+    classList = merged;
+    buildClassChips();
+  }
+
   // 2. Load progress for each teacher (parallel)
   progressByTeacher = {};
   await Promise.all(allTeachers.map(async t => {
@@ -1046,10 +1059,12 @@ window.refreshProgress = function() {
 
 function buildClassChips() {
   const el = document.getElementById('classChips');
+  if (!el) return;
   el.innerHTML = classList.map(cls =>
     `<button class="class-chip" data-cls="${escHtml(cls)}" onclick="selectClass('${escHtml(cls)}',this)">${escHtml(cls)}</button>`
   ).join('');
 }
+
 
 // ── Weak Topic Alert ──────────────────────────────────────────
 function buildWeakAlerts() {
@@ -1093,16 +1108,60 @@ window.toggleWeakPanel = function() {
 };
 
 // ── Coverage Heatmap ──────────────────────────────────────────
+// Columns = classes (10A, 9Cam, …), rows = chapters.
+// Each cell = % topics done for that class, aggregated across all
+// teachers who saved progress under that class key.
 async function loadHeatmapTab() {
-  if (!allTeachers.length) await loadProgressTab();
-  renderHeatmap();
+  const el = document.getElementById('heatmapGrid');
+  if (el) el.innerHTML = '<div class="loading-wrap">Loading…</div>';
+
+  // Ensure teachers are loaded
+  if (!allTeachers.length) {
+    const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
+    allTeachers = [];
+    snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
+
+    // Build class list from teacher profiles
+    const profileClassSet = new Set();
+    allTeachers.forEach(t => { (t.igcse_classes || []).forEach(c => profileClassSet.add(c)); });
+    if (profileClassSet.size > 0) {
+      classList = [...new Set([...profileClassSet, ...classList])].sort();
+      buildClassChips();
+    }
+  }
+
+  // Build progressByClass: { className -> { chId.tId -> status } }
+  // A class key exists if ANY teacher saved progress under statuses_ClassName.
+  // We merge all teachers' maps for that class (last-write-wins per topic key).
+  const classCandidates = classList.length ? classList
+    : [...new Set(allTeachers.flatMap(t => t.igcse_classes || []))].sort();
+
+  const progressByClass = {};  // className -> merged statuses map
+  await Promise.all(allTeachers.map(async t => {
+    const progSnap = await getDoc(doc(db, 'userProgress', t.uid));
+    if (!progSnap.exists()) return;
+    const d = progSnap.data();
+    classCandidates.forEach(cls => {
+      const key = `statuses_${cls.replace(/\s/g, '_')}`;
+      if (d[key] && Object.keys(d[key]).length) {
+        if (!progressByClass[cls]) progressByClass[cls] = {};
+        Object.assign(progressByClass[cls], d[key]);
+      }
+    });
+  }));
+
+  // Only show classes that have at least some data
+  const activeCols = classCandidates.filter(cls => progressByClass[cls]);
+
+  renderHeatmap(activeCols, progressByClass);
 }
 
-function renderHeatmap() {
+function renderHeatmap(activeCols, progressByClass) {
   const el = document.getElementById('heatmapGrid');
   if (!el) return;
-  if (!allTeachers.length || !chapters.length) {
-    el.innerHTML = '<p style="color:var(--ink-3);font-size:.82rem;padding:10px">No data. Switch to Teacher Progress tab first.</p>';
+
+  if (!activeCols || !activeCols.length || !chapters.length) {
+    el.innerHTML = '<p style="color:var(--ink-3);font-size:.82rem;padding:10px">No class progress data yet. Teachers need to select a class before saving progress.</p>';
     return;
   }
 
@@ -1115,35 +1174,24 @@ function renderHeatmap() {
     return           { bg: '#059669', fg: '#fff' };
   }
 
-  const headerCells = allTeachers.map(t => {
-    const parts = (t.displayName || t.email || '?').split(' ');
-    const name  = parts.length > 1 ? parts[0] + ' ' + parts[1][0] + '.' : parts[0];
-    return `<th title="${escHtml(t.email)}">${escHtml(name)}</th>`;
-  }).join('');
+  const headerCells = activeCols.map(cls =>
+    `<th title="${escHtml(cls)}">${escHtml(cls)}</th>`
+  ).join('');
 
   const rows = chapters.map((ch, ci) => {
     const chTopics = ch.topics || [];
-    // Chapter aggregate (rightmost summary column)
-    const allDone = allTeachers.reduce((s, t) => {
-      const st = progressByTeacher[t.uid]?.statuses || {};
-      return s + chTopics.filter(tp => st[`${ch.id}.${tp.id}`] === 'done').length;
-    }, 0);
-    const allPossible = chTopics.length * allTeachers.length;
-    const chAvg = allPossible ? Math.round(allDone / allPossible * 100) : 0;
 
-    const cells = allTeachers.map(t => {
-      const statuses = progressByTeacher[t.uid]?.statuses || {};
+    const cells = activeCols.map(cls => {
+      const statuses = progressByClass[cls] || {};
       const done = chTopics.filter(tp => statuses[`${ch.id}.${tp.id}`] === 'done').length;
       const pct  = chTopics.length ? Math.round(done / chTopics.length * 100) : 0;
       const { bg, fg } = heatColor(pct);
-      return `<td><div class="heatmap-cell" style="background:${bg};color:${fg}" title="${escHtml(ch.chapter)}: ${done}/${chTopics.length} done">${pct ? pct + '%' : '—'}</div></td>`;
+      return `<td><div class="heatmap-cell" style="background:${bg};color:${fg}" title="${escHtml(cls)} — ${escHtml(ch.chapter)}: ${done}/${chTopics.length} done">${pct ? pct + '%' : '—'}</div></td>`;
     }).join('');
 
-    const { bg: avgBg, fg: avgFg } = heatColor(chAvg);
     return `<tr>
-      <td class="heatmap-ch-label" title="${escHtml(ch.chapter)}">${ci+1}. ${escHtml(ch.chapter)}</td>
+      <td class="heatmap-ch-label" title="${escHtml(ch.chapter)}">${ci + 1}. ${escHtml(ch.chapter)}</td>
       ${cells}
-      <td><div class="heatmap-cell" style="background:${avgBg};color:${avgFg};font-size:.58rem;opacity:.85" title="Class average">${chAvg ? chAvg+'%' : '—'}</div></td>
     </tr>`;
   }).join('');
 
@@ -1155,14 +1203,12 @@ function renderHeatmap() {
       <div class="heatmap-legend-item"><div class="heatmap-legend-swatch" style="background:#60a5fa"></div>50–74%</div>
       <div class="heatmap-legend-item"><div class="heatmap-legend-swatch" style="background:#34d399"></div>75–89%</div>
       <div class="heatmap-legend-item"><div class="heatmap-legend-swatch" style="background:#059669"></div>≥90%</div>
-      <div class="heatmap-legend-item" style="margin-left:auto;opacity:.7">Rightmost column = class average</div>
     </div>
     <div class="heatmap-wrap">
       <table class="heatmap-table">
         <thead><tr>
           <th style="text-align:left;min-width:180px">Chapter</th>
           ${headerCells}
-          <th style="opacity:.65">Avg</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
