@@ -670,6 +670,34 @@
     .glh-stat.ok .glh-stat-num    { color: var(--accent); }
     .glh-stat.warn .glh-stat-num  { color: #d97706; }
 
+    /* ===== GLH BREAKDOWN CHART ===== */
+    .glh-chart-wrap {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 20px;
+      box-shadow: var(--shadow-sm); overflow: hidden;
+    }
+    .glh-chart-toggle {
+      padding: 10px 18px; font-size: 0.8rem; font-weight: 600; color: var(--ink-2);
+      cursor: pointer; user-select: none; background: var(--paper); transition: background 0.15s;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid transparent;
+    }
+    .glh-chart-toggle:hover { background: var(--paper-2); }
+    .glh-chart-toggle.open { border-bottom-color: var(--border); }
+    .glh-chart-body { padding: 16px 20px; }
+    .glh-bar-row {
+      display: grid; grid-template-columns: 180px 1fr 44px;
+      align-items: center; gap: 10px; margin-bottom: 7px; font-size: 0.75rem;
+    }
+    .glh-bar-label { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .glh-bar-track { height: 9px; background: var(--paper-2); border-radius: 100px; overflow: hidden; }
+    .glh-bar-fill { height: 100%; border-radius: 100px; background: var(--accent); transition: width 0.4s; min-width: 2px; }
+    .glh-bar-val { font-size: 0.7rem; font-family: 'DM Mono', monospace; color: var(--ink-3); text-align: right; }
+
+    /* ===== PRINT VIEW BUTTON ===== */
+    .btn-print { background: var(--white); color: var(--ink-2); border-color: var(--border); }
+    .btn-print:hover { background: var(--paper); color: var(--ink); }
+
     /* ===== TIER FILTER ===== */
     .tier-filter {
       display: flex; gap: 3px; background: var(--paper); border-radius: 7px; padding: 3px;
@@ -854,6 +882,14 @@
     <!-- GLH Banner (hidden in settings mode) -->
     <div id="glhBanner" class="glh-banner" style="display:none"></div>
 
+    <!-- GLH Chapter Breakdown Chart -->
+    <div id="glhChart" class="glh-chart-wrap" style="display:none">
+      <div class="glh-chart-toggle" id="glhChartToggle" onclick="toggleGlhChart()">
+        <span>▸</span> Chapter Hours Breakdown
+      </div>
+      <div class="glh-chart-body" id="glhChartBody" style="display:none"></div>
+    </div>
+
     <!-- Action Bar (hidden in settings mode) -->
     <div class="action-bar" id="contentActionBar">
       <div class="action-bar-left" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
@@ -868,6 +904,14 @@
         </div>
       </div>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-print" onclick="openPrintView()" title="Open print-friendly view">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Print View
+        </button>
         <button class="btn btn-secondary" id="editSyllabusBtn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1386,7 +1430,103 @@ function renderGlhBanner() {
       </div>
     </div>`;
   banner.style.display = '';
+  renderGlhChart();
 }
+
+// ── GLH Chapter Breakdown Chart ───────────────────────────────────
+let _glhChartOpen = false;
+
+function renderGlhChart() {
+  const body = document.getElementById('glhChartBody');
+  const wrap = document.getElementById('glhChart');
+  if (!body || !wrap) return;
+  if (!chapters.length) { wrap.style.display = 'none'; return; }
+
+  const chapterTotals = chapters.map(ch => ({
+    name: ch.chapter || ch.title || 'Chapter',
+    hours: (ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0),
+  }));
+  const maxHours = Math.max(...chapterTotals.map(c => c.hours), 1);
+
+  body.innerHTML = chapterTotals.map(c => {
+    const pct = ((c.hours / maxHours) * 100).toFixed(1);
+    return `<div class="glh-bar-row">
+      <div class="glh-bar-label" title="${escHtml(c.name)}">${escHtml(c.name)}</div>
+      <div class="glh-bar-track"><div class="glh-bar-fill" style="width:${pct}%"></div></div>
+      <div class="glh-bar-val">${c.hours}h</div>
+    </div>`;
+  }).join('');
+
+  wrap.style.display = '';
+}
+
+window.toggleGlhChart = function() {
+  _glhChartOpen = !_glhChartOpen;
+  const body   = document.getElementById('glhChartBody');
+  const toggle = document.getElementById('glhChartToggle');
+  if (!body || !toggle) return;
+  body.style.display = _glhChartOpen ? '' : 'none';
+  toggle.innerHTML = `<span>${_glhChartOpen ? '▾' : '▸'}</span> Chapter Hours Breakdown`;
+  toggle.classList.toggle('open', _glhChartOpen);
+};
+
+// ── Print View ────────────────────────────────────────────────────
+window.openPrintView = function() {
+  const prog      = PROGRAMMES[currentProg];
+  const subj      = prog?.subjects[currentSubject];
+  const subjLabel = subj ? `${prog.label} — ${subj.label} (${subj.code})` : 'Pacing Guide';
+
+  const totalHours = chapters.reduce((s, ch) =>
+    s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0);
+
+  let tableRows = '';
+  chapters.forEach((ch, ci) => {
+    const topics  = ch.topics || [];
+    const chHours = topics.reduce((s, t) => s + (t.duration || t.hour || 0), 0);
+    tableRows += `<tr class="ch-row">
+      <td colspan="5"><strong>Chapter ${ci+1}: ${escHtml(ch.chapter || ch.title || '')}</strong>
+        <span class="ch-meta-print"> — ${escHtml(ch.year || '')} · ${topics.length} topics · ${chHours}h</span>
+      </td></tr>`;
+    topics.forEach((t, ti) => {
+      const refs  = (t.syllabusRefs || []).join(', ') || ((t.objective||'').match(/[A-Z]\d+\.\d+/g)||[]).join(', ') || '—';
+      const hours = (t.duration || t.hour) ?? '—';
+      const week  = t.week ? 'Wk ' + t.week : '—';
+      const note  = t.coordNote ? `<br><em style="font-size:.82em;color:#666">${escHtml(t.coordNote)}</em>` : '';
+      tableRows += `<tr>
+        <td>${ti+1}</td>
+        <td>${escHtml(t.title || t.topic || '')}</td>
+        <td style="font-size:.85em">${escHtml(refs)}</td>
+        <td>${hours}h</td>
+        <td>${week}${note}</td>
+      </tr>`;
+    });
+  });
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>${escHtml(subjLabel)} — Pacing Guide</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:11pt;color:#111;margin:20px}
+  h1{font-size:14pt;margin-bottom:4px}
+  .meta{font-size:9pt;color:#555;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th{font-size:8pt;text-transform:uppercase;letter-spacing:.05em;background:#f3f3f3;padding:6px 8px;border:1px solid #ccc;text-align:left}
+  td{padding:5px 8px;border:1px solid #ddd;vertical-align:top;font-size:10pt}
+  .ch-row td{background:#e8f5e9;font-weight:700;font-size:10pt}
+  .ch-meta-print{font-weight:400;color:#444;font-size:9pt}
+  @media print{body{margin:0}}
+</style></head><body>
+<h1>${escHtml(subjLabel)}</h1>
+<p class="meta">Total planned: ${totalHours}h · GLH target: ${GLH_TARGET}h · ${chapters.length} chapters · Printed ${new Date().toLocaleDateString('en-GB')}</p>
+<table>
+  <thead><tr><th style="width:28px">#</th><th style="width:34%">Topic</th><th style="width:18%">Codes</th><th style="width:7%">Hours</th><th>Week / Notes</th></tr></thead>
+  <tbody>${tableRows}</tbody>
+</table>
+<script>window.print();<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (w) { w.document.write(html); w.document.close(); }
+};
 
 // ── Tier Filter ───────────────────────────────────────────────────
 let currentTierFilter = 'all';
@@ -1612,6 +1752,8 @@ function showSettingsPanel() {
   document.getElementById('pacingSearch').closest('.pacing-search-wrap').style.display = 'none';
   document.getElementById('searchResultCount').style.display = 'none';
   document.getElementById('glhBanner').style.display = 'none';
+  const glhChart = document.getElementById('glhChart');
+  if (glhChart) glhChart.style.display = 'none';
   const mathBanner = document.getElementById('mathAdminBanner');
   if (mathBanner) mathBanner.style.display = 'none';
   loadAllSettings();

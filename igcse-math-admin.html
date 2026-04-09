@@ -95,6 +95,31 @@
     .class-chip:hover { border-color: var(--accent); color: var(--accent); }
     .class-chip.on { background: var(--accent); border-color: var(--accent); color: white; }
 
+    /* ── Weak Alert Panel ─────────────────────────── */
+    .weak-topic-row { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--paper-2); font-size: .78rem; }
+    .weak-topic-row:last-child { border-bottom: none; }
+    .weak-topic-name { font-weight: 600; flex: 1; color: var(--ink); }
+    .weak-teacher-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .weak-teacher-chip { font-size: .65rem; padding: 2px 7px; border-radius: 100px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+
+    /* ── Heatmap ──────────────────────────────────── */
+    .heatmap-table { border-collapse: collapse; font-size: .72rem; min-width: 400px; }
+    .heatmap-table th { padding: 6px 8px; font-size: .6rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); text-align: center; background: #fafaf8; border: 1px solid var(--border); white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+    .heatmap-ch-label { padding: 6px 10px; font-size: .72rem; font-weight: 600; color: var(--ink-2); background: #fafaf8; border: 1px solid var(--border); white-space: nowrap; text-align: left; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    .heatmap-cell { width: 52px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: .62rem; font-weight: 700; border: 1px solid rgba(255,255,255,.4); }
+
+    /* ── Hours Report ─────────────────────────────── */
+    .hours-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .hours-table th { font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); padding: 7px 12px; text-align: left; border-bottom: 1px solid var(--border); background: #fafaf8; }
+    .hours-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .hours-table tr:last-child td { border-bottom: none; }
+    .hours-table tr:hover td { background: var(--paper); }
+    .hours-ratio-bar { height: 6px; border-radius: 100px; background: var(--paper-2); overflow: hidden; width: 80px; display: inline-block; vertical-align: middle; margin-left: 6px; }
+    .hours-ratio-fill { height: 100%; border-radius: 100px; }
+    .hours-over { color: #dc2626; font-weight: 700; }
+    .hours-under { color: #d97706; }
+    .hours-match { color: #1e7a4a; font-weight: 700; }
+
     .progress-grid { display: grid; gap: 14px; }
     .teacher-card { background: white; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; transition: box-shadow .2s; }
     .teacher-card:hover { box-shadow: var(--shadow); }
@@ -191,6 +216,8 @@
     <div class="tab-bar">
       <button class="tab-btn on" onclick="switchTab('structure',this)">Pacing Structure</button>
       <button class="tab-btn" onclick="switchTab('progress',this)">Teacher Progress</button>
+      <button class="tab-btn" onclick="switchTab('heatmap',this)">Coverage Heatmap</button>
+      <button class="tab-btn" onclick="switchTab('hours',this)">Hours Report</button>
     </div>
 
     <!-- ═══ TAB: PACING STRUCTURE ═══════════════════════════════ -->
@@ -220,10 +247,46 @@
         <button class="btn-add" style="margin-left:auto" onclick="refreshProgress()">&#8635; Refresh</button>
       </div>
 
+      <!-- Weak Alert Panel -->
+      <div id="weakAlertPanel" class="section-card" style="display:none;margin-bottom:16px;border-left:3px solid #dc2626">
+        <div class="section-head" style="cursor:pointer;background:#fff5f5" onclick="toggleWeakPanel()">
+          <span class="section-title" style="color:#dc2626">⚠ Weak Topic Alerts</span>
+          <span id="weakAlertCount" style="font-size:.72rem;color:#dc2626;font-family:'DM Mono',monospace;margin-left:8px"></span>
+          <span id="weakAlertToggle" style="font-size:.72rem;color:var(--ink-3);margin-left:auto">▸ Show</span>
+        </div>
+        <div id="weakAlertBody" style="display:none;padding:14px 20px"></div>
+      </div>
+
       <div id="aggBanner" class="agg-banner"></div>
 
       <div id="progressList" class="progress-grid">
         <div class="loading-wrap">Loading teacher progress…</div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: COVERAGE HEATMAP ═══════════════════════════════ -->
+    <div id="tab-heatmap" style="display:none">
+      <div class="section-card">
+        <div class="section-head">
+          <span class="section-title">Chapter × Teacher Coverage Heatmap</span>
+          <span style="font-size:.72rem;color:var(--ink-3)">% topics marked Done per chapter</span>
+        </div>
+        <div class="section-body" style="overflow-x:auto;padding:16px">
+          <div id="heatmapGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: HOURS REPORT ════════════════════════════════════ -->
+    <div id="tab-hours" style="display:none">
+      <div id="aggHoursBanner" class="agg-banner" style="margin-bottom:20px"></div>
+      <div class="section-card">
+        <div class="section-head">
+          <span class="section-title">Planned vs Actual Hours — Per Teacher</span>
+        </div>
+        <div class="section-body" style="overflow-x:auto;padding:0">
+          <div id="hoursReportContent"></div>
+        </div>
       </div>
     </div>
 
@@ -356,7 +419,11 @@ window.switchTab = function(id, btn) {
   btn.classList.add('on');
   document.getElementById('tab-structure').style.display = id === 'structure' ? '' : 'none';
   document.getElementById('tab-progress').style.display  = id === 'progress'  ? '' : 'none';
+  document.getElementById('tab-heatmap').style.display   = id === 'heatmap'   ? '' : 'none';
+  document.getElementById('tab-hours').style.display     = id === 'hours'     ? '' : 'none';
   if (id === 'progress') loadProgressTab();
+  if (id === 'heatmap')  loadHeatmapTab();
+  if (id === 'hours')    loadHoursTab();
 };
 
 // ── Save chapters to Firestore ────────────────────────────────
@@ -684,6 +751,8 @@ function renderProgressView() {
   `;
 
   // Render each teacher card
+  buildWeakAlerts();
+
   listEl.innerHTML = allTeachers.map((t, ti) => {
     const statuses = progressByTeacher[t.uid]?.statuses || {};
     const updatedAt = progressByTeacher[t.uid]?.updatedAt;
@@ -743,8 +812,8 @@ function renderProgressView() {
           <div class="t-stat"><div class="t-stat-num pend">${pending}</div><div class="t-stat-label">Pend</div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">
-          <div class="teacher-prog-bar"><div class="teacher-prog-fill" style="width:${pct}%;background:${pct>=75?'#1e7a4a':pct>=40?'#1a5fa8':'#e5e7eb'}"></div></div>
-          <span style="font-size:.65rem;color:var(--ink-3)">${pct}%</span>
+          <div class="teacher-prog-bar"><div class="teacher-prog-fill" style="width:${pct}%;background:${pct>=75?'#1e7a4a':pct>=40?'#1a5fa8':'#dc2626'}"></div></div>
+          <span style="font-size:.65rem;font-weight:700;color:${pct>=75?'#1e7a4a':pct>=40?'#1a5fa8':'#dc2626'}">${pct}%</span>
         </div>
         <div class="teacher-last-update">${updLabel}</div>
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="4,6 8,10 12,6"/></svg>
@@ -776,6 +845,170 @@ function buildClassChips() {
   el.innerHTML = classList.map(cls =>
     `<button class="class-chip" data-cls="${escHtml(cls)}" onclick="selectClass('${escHtml(cls)}',this)">${escHtml(cls)}</button>`
   ).join('');
+}
+
+// ── Weak Topic Alert ──────────────────────────────────────────
+function buildWeakAlerts() {
+  const weakMap = {};
+  allTeachers.forEach(t => {
+    const statuses = progressByTeacher[t.uid]?.statuses || {};
+    chapters.forEach(ch => (ch.topics || []).forEach(topic => {
+      const k = `${ch.id}.${topic.id}`;
+      if (statuses[`diag.${k}`] === 'weak') {
+        if (!weakMap[k]) weakMap[k] = { topicName: topic.topic, chName: ch.chapter, teachers: [] };
+        weakMap[k].teachers.push(t.displayName || t.email);
+      }
+    }));
+  });
+
+  const panel   = document.getElementById('weakAlertPanel');
+  const body    = document.getElementById('weakAlertBody');
+  const countEl = document.getElementById('weakAlertCount');
+  const entries = Object.values(weakMap);
+
+  if (!entries.length) { panel.style.display = 'none'; return; }
+
+  countEl.textContent = `${entries.length} topic${entries.length !== 1 ? 's' : ''} flagged weak`;
+  body.innerHTML = entries.map(e => `
+    <div class="weak-topic-row">
+      <div class="weak-topic-name">${escHtml(e.topicName)}
+        <span style="font-size:.65rem;font-weight:400;color:var(--ink-3)"> — ${escHtml(e.chName)}</span>
+      </div>
+      <div class="weak-teacher-chips">
+        ${e.teachers.map(n => `<span class="weak-teacher-chip">${escHtml(n)}</span>`).join('')}
+      </div>
+    </div>`).join('');
+  panel.style.display = '';
+}
+
+let _weakPanelOpen = false;
+window.toggleWeakPanel = function() {
+  _weakPanelOpen = !_weakPanelOpen;
+  document.getElementById('weakAlertBody').style.display = _weakPanelOpen ? '' : 'none';
+  document.getElementById('weakAlertToggle').textContent = _weakPanelOpen ? '▾ Hide' : '▸ Show';
+};
+
+// ── Coverage Heatmap ──────────────────────────────────────────
+async function loadHeatmapTab() {
+  if (!allTeachers.length) await loadProgressTab();
+  renderHeatmap();
+}
+
+function renderHeatmap() {
+  const el = document.getElementById('heatmapGrid');
+  if (!el) return;
+  if (!allTeachers.length || !chapters.length) {
+    el.innerHTML = '<p style="color:var(--ink-3);font-size:.82rem;padding:10px">No data. Switch to Teacher Progress tab first.</p>';
+    return;
+  }
+
+  function heatColor(pct) {
+    if (pct === 0)  return { bg: '#f3f4f6', fg: '#9ca3af' };
+    if (pct < 40)   return { bg: `hsl(0,70%,${Math.round(90-pct*0.5)}%)`, fg: '#7f1d1d' };
+    if (pct < 75)   return { bg: `hsl(213,60%,${Math.round(68-pct*0.3)}%)`, fg: '#fff' };
+    return { bg: `hsl(142,55%,${Math.round(55-pct*0.15)}%)`, fg: '#fff' };
+  }
+
+  const headerCells = allTeachers.map(t => {
+    const name = (t.displayName || t.email || '?').split(' ')[0];
+    return `<th title="${escHtml(t.email)}">${escHtml(name)}</th>`;
+  }).join('');
+
+  const rows = chapters.map((ch, ci) => {
+    const cells = allTeachers.map(t => {
+      const statuses = progressByTeacher[t.uid]?.statuses || {};
+      const chTopics = ch.topics || [];
+      const done = chTopics.filter(tp => statuses[`${ch.id}.${tp.id}`] === 'done').length;
+      const pct  = chTopics.length ? Math.round(done / chTopics.length * 100) : 0;
+      const { bg, fg } = heatColor(pct);
+      return `<td><div class="heatmap-cell" style="background:${bg};color:${fg}">${pct ? pct + '%' : '—'}</div></td>`;
+    }).join('');
+    return `<tr>
+      <td class="heatmap-ch-label" title="${escHtml(ch.chapter)}">${ci+1}. ${escHtml(ch.chapter)}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="margin-bottom:10px;font-size:.72rem;color:var(--ink-3)">
+      <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:#f3f4f6;border:1px solid #ddd;vertical-align:middle;margin-right:4px"></span>Not started&nbsp;&nbsp;
+      <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:hsl(0,70%,75%);vertical-align:middle;margin-right:4px"></span>&lt;40%&nbsp;&nbsp;
+      <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:hsl(213,60%,52%);vertical-align:middle;margin-right:4px"></span>40–74%&nbsp;&nbsp;
+      <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:hsl(142,55%,42%);vertical-align:middle;margin-right:4px"></span>≥75%
+    </div>
+    <table class="heatmap-table">
+      <thead><tr><th style="text-align:left">Chapter</th>${headerCells}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── Hours Report ──────────────────────────────────────────────
+async function loadHoursTab() {
+  if (!allTeachers.length) await loadProgressTab();
+  renderHoursReport();
+}
+
+function renderHoursReport() {
+  const content = document.getElementById('hoursReportContent');
+  const aggEl   = document.getElementById('aggHoursBanner');
+  if (!content) return;
+
+  const totalPlanned = chapters.reduce((s, ch) =>
+    s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0);
+
+  let grandActual = 0;
+
+  const rows = allTeachers.map(t => {
+    const statuses = progressByTeacher[t.uid]?.statuses || {};
+    let actual = 0;
+    chapters.forEach(ch => (ch.topics || []).forEach(topic => {
+      actual += parseFloat(statuses[`actual.${ch.id}.${topic.id}`]) || 0;
+    }));
+    grandActual += actual;
+
+    const diff      = Math.round((actual - totalPlanned) * 10) / 10;
+    const cls       = diff > 2 ? 'hours-over' : diff < -2 ? 'hours-under' : 'hours-match';
+    const label     = actual === 0 ? 'No data' : diff === 0 ? 'On track' : diff > 0 ? `+${diff}h over` : `${diff}h under`;
+    const barPct    = totalPlanned ? Math.min(100, Math.round(actual / totalPlanned * 100)) : 0;
+    const barColor  = barPct >= 100 ? '#dc2626' : barPct >= 80 ? '#1e7a4a' : '#1a5fa8';
+    const initials  = (t.displayName || t.email || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="teacher-avatar" style="width:28px;height:28px;font-size:.72rem;flex-shrink:0">${initials}</div>
+          <div>
+            <div style="font-size:.82rem;font-weight:600">${escHtml(t.displayName || t.email)}</div>
+            <div style="font-size:.65rem;color:var(--ink-3)">${escHtml(t.email)}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-family:'DM Mono',monospace">${totalPlanned}h</td>
+      <td style="font-family:'DM Mono',monospace">${actual > 0 ? actual + 'h' : '—'}</td>
+      <td>
+        <span class="${cls}">${label}</span>
+        ${actual > 0 ? `<span class="hours-ratio-bar"><span class="hours-ratio-fill" style="width:${barPct}%;background:${barColor}"></span></span>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  content.innerHTML = `<table class="hours-table">
+    <thead><tr>
+      <th style="width:35%">Teacher</th>
+      <th>Planned Hours</th>
+      <th>Logged Hours</th>
+      <th>Status</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  const diffTotal = Math.round((grandActual - totalPlanned) * 10) / 10;
+  const diffColor = diffTotal > 2 ? '#dc2626' : diffTotal < -2 ? '#d97706' : '#1e7a4a';
+  aggEl.innerHTML = `
+    <div class="agg-stat"><div class="agg-stat-num">${totalPlanned}h</div><div class="agg-stat-label">Planned (total)</div></div>
+    <div class="agg-stat"><div class="agg-stat-num">${grandActual > 0 ? grandActual + 'h' : '—'}</div><div class="agg-stat-label">Logged (total)</div></div>
+    <div class="agg-stat"><div class="agg-stat-num" style="color:${diffColor}">${grandActual > 0 ? (diffTotal >= 0 ? '+' : '') + diffTotal + 'h' : '—'}</div><div class="agg-stat-label">Difference</div></div>
+    <div class="agg-stat"><div class="agg-stat-num">${allTeachers.length}</div><div class="agg-stat-label">Teachers</div></div>`;
 }
 
 // ── Modal close ───────────────────────────────────────────────
