@@ -812,8 +812,14 @@
     <!-- Subject Tabs -->
     <div class="subject-tabs" id="subjectTabs" role="tablist" aria-label="Subject"></div>
 
-    <!-- ===== SETTINGS PANEL ===== -->
-    <div id="settingsPanel" style="display:none">
+    <!-- ===== SETTINGS MODAL ===== -->
+    <div id="settingsPanel" class="modal-overlay" style="display:none" onclick="if(event.target===this)toggleSettingsPanel()">
+      <div class="modal" style="max-width:780px;width:95vw">
+        <div class="modal-head">
+          <span class="modal-title">⚙ Settings</span>
+          <button class="modal-close" onclick="toggleSettingsPanel()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
 
         <!-- Class Groups -->
@@ -871,7 +877,9 @@
         </div>
 
       </div>
-    </div>
+        </div><!-- modal-body -->
+      </div><!-- modal -->
+    </div><!-- settingsPanel overlay -->
 
     <!-- Action Bar (hidden in settings mode) -->
     <div class="action-bar" id="contentActionBar">
@@ -1734,35 +1742,25 @@ let settingsData = {
 let settingsClassSubj = 'math';
 let settingsObjSubj   = 'math';
 
-let _settingsPanelOpen = false;
 window.toggleSettingsPanel = function() {
-  _settingsPanelOpen = !_settingsPanelOpen;
   const panel = document.getElementById('settingsPanel');
-  const btn   = document.getElementById('settingsToggleBtn');
-  panel.style.display = _settingsPanelOpen ? '' : 'none';
-  if (btn) btn.style.background = _settingsPanelOpen ? 'var(--paper-2)' : '';
-  if (_settingsPanelOpen) {
-    // Sync to current subject
-    const mathTab = document.querySelector('#classSubjTabs [data-subj="math"]');
-    if (mathTab) switchClassSubj(settingsClassSubj || 'math', mathTab);
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const open  = panel.style.display === 'none' || panel.style.display === '';
+  // toggle: if currently hidden → show; if shown → hide
+  const willOpen = panel.style.display === 'none';
+  panel.style.display = willOpen ? 'flex' : 'none';
+  if (willOpen) {
+    // Sync subject tabs to current subject
+    const subj = settingsClassSubj || 'math';
+    const tab  = document.querySelector(`#classSubjTabs [data-subj="${subj}"]`);
+    if (tab) switchClassSubj(subj, tab);
+    const objTab = document.querySelector(`#objSubjTabs [data-subj="${subj}"]`);
+    if (objTab) switchObjSubj(subj, objTab);
   }
 };
 
 function showSettingsPanel() {
-  document.getElementById('settingsPanel').style.display    = '';
-  document.getElementById('contentActionBar').style.display = 'none';
-  document.getElementById('loadingState').style.display     = 'none';
-  document.getElementById('emptyState').style.display       = 'none';
-  document.getElementById('chaptersList').style.display     = 'none';
-  document.getElementById('chapterPager').style.display     = 'none';
-  document.getElementById('pacingSearch').closest('.pacing-search-wrap').style.display = 'none';
-  document.getElementById('searchResultCount').style.display = 'none';
-  document.getElementById('glhBanner').style.display = 'none';
-  const glhChart = document.getElementById('glhChart');
-  if (glhChart) glhChart.style.display = 'none';
-  const tpBtn2 = document.getElementById('teacherProgressBtn');
-  if (tpBtn2) tpBtn2.style.display = 'none';
+  // Legacy: now opens as modal instead of replacing content
+  toggleSettingsPanel();
   loadAllSettings();
 }
 
@@ -2479,6 +2477,14 @@ function closeSyllabusEditor() {
 function _sylEdEsc(e) {
   if (e.key === 'Escape') closeSyllabusEditor();
 }
+
+// Close settings modal on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const panel = document.getElementById('settingsPanel');
+    if (panel && panel.style.display === 'flex') toggleSettingsPanel();
+  }
+});
 
 // ── Helpers ───────────────────────────────────────────────────────
 function clearFieldError(inputId, errorId) {
