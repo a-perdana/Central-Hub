@@ -152,7 +152,7 @@ const isAdmin = profile?.role_centralhub === 'central_admin'
 | `biology_pacing/year9-10`           | IGCSE biology pacing — same structure as math_pacing.            | central_admin |
 | `chemistry_pacing/year9-10`         | IGCSE chemistry pacing — same structure as math_pacing.          | central_admin |
 | `physics_pacing/year9-10`           | IGCSE physics pacing — same structure as math_pacing.            | central_admin |
-| `igcse_syllabus/{docId}`            | Syllabus reference items indexed by code (e.g. C1.1). Read-only by Teachers Hub. | central_admin |
+| `igcse_syllabus/{docId}`            | Syllabus reference items. **Doc ID format: `{subjectCode}_{syllabusCode}` e.g. `0580_C1.1`**. Fields: `code` (display code e.g. `C1.1`), `title`, `tier` (`Core`/`Extended`), `topicArea`, `description`, `content`, `notes`. Autocomplete in igcse-math-pacing must search `entry.code` field, NOT the doc ID. | central_admin |
 | `userProgress/{uid}`                | Per-teacher pacing progress written by Teachers Hub. Not read by Central Hub yet. | owner (teacher) |
 
 **Timestamp field:** always `createdAt` (serverTimestamp). Do not use `timestamp` — that was the legacy name.
@@ -214,7 +214,8 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `documents.html`                   | `/documents`                    | Document management (`central_documents` collection) |
 | `academics.html`                   | `/academics`                    | Academics module hub                              |
 | `academic-calendar.html`           | `/academic-calendar`            | Academic calendar (Sheets + Firestore events). Admin: **⚙ Year Settings** modal writes `calendar_settings/current` (academicYearStart, totalTeachingWeeks, terms). This is the single source of truth for all date/term data across the platform. |
-| `igcse-pacing.html`                | `/igcse-pacing`                 | IGCSE pacing guide management                     |
+| `igcse-syllabus.html`              | `/igcse-syllabus`               | IGCSE syllabus guide — view/edit syllabus entries, GLH, chapter hours. Redirects to Teacher Progress (math only). Old URL `/igcse-pacing` redirects here. |
+| `igcse-math-pacing.html`          | `/igcse-math-pacing`            | IGCSE Math pacing admin — chapter/topic structure, inline edit (codes autocomplete from `igcse_syllabus`, hours, week), Teacher Progress, Coverage Heatmap, Hours Report. Old URL `/igcse-math-admin` redirects here. |
 | `as-alevel-pacing.html`            | `/as-alevel-pacing`             | A-Level pacing guide                              |
 | `primary-checkpoint-pacing.html`   | `/primary-checkpoint-pacing`    | Primary checkpoint pacing (Year 4–6)              |
 | `secondary-checkpoint-pacing.html` | `/secondary-checkpoint-pacing`  | Secondary checkpoint pacing (Year 7–8)            |
