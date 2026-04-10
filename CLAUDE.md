@@ -308,7 +308,7 @@ All pages share a single design system file: **`shared-styles.css`**.
 - **Auth guard goes first.** `auth-guard.js` must be the first `<script type="module">` on protected pages.
 - **Use `authReady` event** to gate all Firestore reads — never call `window.db` before the event fires.
 - **Login redirects use clean URLs:** `login`, not `login.html`. Auth guard redirects to `'login'` and `'login?error=access'`.
-- **Role field is `role_centralhub`**, NOT the legacy `role` field. Always check `profile?.role_centralhub` first, with `profile?.role` as a fallback for legacy accounts.
+- **Role field is `role_centralhub`**, NOT the legacy `role` field. Always check `profile?.role_centralhub` only — the legacy `role` field has been fully removed from Firestore data and code.
 - **Shared navbar** lives in `partials/navbar.html`. Every page uses `<!-- SHARED_NAVBAR -->` which gets replaced at build time. Do NOT put nav HTML directly in individual pages.
 - **Calendar fallback** is `window.CAL_DEMO_EVENTS` loaded from `calendar-fallback.js`. Do NOT inline the array inside page scripts — update the standalone file instead.
 - **N+1 Firestore queries are forbidden.** When fetching sub-collections for a list of parents (e.g. tasks for projects), always use a single `where('parentId', 'in', ids)` query and group results in JS. The `in` operator supports up to 30 values.
@@ -343,7 +343,7 @@ Edit, Delete, and any destructive/management buttons must be gated behind `isAdm
 
 **Pattern:**
 ```js
-const isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
+const isAdmin = profile?.role_centralhub === 'central_admin';
 // then in authReady handler, set module-level isAdmin variable
 // then gate: if (isAdmin) { ... render admin buttons ... }
 ```
