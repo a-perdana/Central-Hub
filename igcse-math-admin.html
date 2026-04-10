@@ -173,27 +173,60 @@
 
     /* ── Heatmap ──────────────────────────────────── */
     .heatmap-wrap { overflow-x: auto; padding: 4px 2px 2px; }
-    .heatmap-table { border-collapse: separate; border-spacing: 3px; font-size: .72rem; min-width: 400px; }
-    .heatmap-table th {
-      padding: 7px 10px; font-size: .58rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .08em; color: var(--ink-3); text-align: center;
-      background: var(--paper); border-radius: 6px;
-      white-space: nowrap; max-width: 72px; overflow: hidden; text-overflow: ellipsis;
+    .heatmap-table { border-collapse: separate; border-spacing: 4px; font-size: .72rem; width: auto; }
+    .heatmap-col-header {
+      padding: 0; text-align: center; vertical-align: bottom;
+      background: transparent; border: none; width: 110px; min-width: 110px;
+    }
+    .heatmap-col-card {
+      background: var(--paper); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 8px 8px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .heatmap-col-class {
+      font-size: .9rem; font-weight: 800; color: var(--ink-1);
+      letter-spacing: -.01em; line-height: 1;
+    }
+    .heatmap-col-divider {
+      width: 28px; height: 2px; border-radius: 2px;
+      background: var(--accent); opacity: .5; flex-shrink: 0;
+    }
+    .heatmap-col-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      object-fit: cover; border: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+    .heatmap-col-avatar-placeholder {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: .72rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; border: 2px solid transparent;
+    }
+    .heatmap-col-name {
+      font-size: .62rem; font-weight: 600; color: var(--ink-2);
+      text-align: center; line-height: 1.3; max-width: 94px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .heatmap-col-school {
+      font-size: .56rem; color: var(--ink-3); font-weight: 500;
+      text-align: center; max-width: 94px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .heatmap-ch-label {
       padding: 8px 12px; font-size: .75rem; font-weight: 600; color: var(--ink-2);
       background: var(--paper); border-radius: 6px;
-      white-space: nowrap; text-align: left; max-width: 220px;
-      overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; text-align: left;
     }
     .heatmap-cell {
-      width: 56px; height: 36px; border-radius: 6px;
+      width: 90px; height: 36px; border-radius: 6px;
       display: flex; align-items: center; justify-content: center;
       font-size: .62rem; font-weight: 800; font-family: 'DM Mono', monospace;
       transition: transform .1s, box-shadow .1s;
-      cursor: default;
+      cursor: default; margin: 0 auto;
     }
-    .heatmap-cell:hover { transform: scale(1.12); box-shadow: 0 2px 8px rgba(0,0,0,.18); z-index: 1; position: relative; }
+    .heatmap-cell:hover { transform: scale(1.08); box-shadow: 0 2px 8px rgba(0,0,0,.18); z-index: 1; position: relative; }
     .heatmap-legend { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
     .heatmap-legend-item { display: flex; align-items: center; gap: 5px; font-size: .7rem; color: var(--ink-3); }
     .heatmap-legend-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
@@ -884,28 +917,28 @@ window.moveTopic = function(ci, ti, dir) {
   saveChapters().then(() => renderChapters());
 };
 
+// ── Shared teacher fetch (used by Progress, Heatmap, Hours tabs) ──────────────
+async function fetchTeachers() {
+  const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
+  allTeachers = [];
+  snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
+
+  // Merge teacher-defined igcse_classes into classList
+  const profileClassSet = new Set();
+  allTeachers.forEach(t => { (t.igcse_classes || []).forEach(c => profileClassSet.add(c)); });
+  if (profileClassSet.size > 0) {
+    classList = [...new Set([...profileClassSet, ...classList])].sort();
+  }
+}
+
 // ── Teacher Progress Tab ──────────────────────────────────────
 async function loadProgressTab() {
   document.getElementById('progressList').innerHTML = '<div class="loading-wrap">Loading teachers…</div>';
   document.getElementById('aggBanner').innerHTML = '';
 
-  // 1. Load all teachers — only teachers_user role (teachers_admin is coordinator, not a classroom teacher)
-  const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
-  allTeachers = [];
-  snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
-
-  // 1b. Build class list from teachers' own igcse_classes profile fields (union),
-  //     falling back to admin-defined classList from the pacing structure doc.
-  const profileClassSet = new Set();
-  allTeachers.forEach(t => {
-    (t.igcse_classes || []).forEach(c => profileClassSet.add(c));
-  });
-  if (profileClassSet.size > 0) {
-    // Merge: teacher-defined classes take precedence; keep admin-defined ones too
-    const merged = [...new Set([...profileClassSet, ...classList])].sort();
-    classList = merged;
-    buildClassChips();
-  }
+  // 1. Load all teachers (fetchTeachers also merges igcse_classes into classList)
+  await fetchTeachers();
+  buildClassChips();
 
   // 2. Load progress for each teacher (parallel)
   progressByTeacher = {};
@@ -1109,54 +1142,45 @@ window.toggleWeakPanel = function() {
 
 // ── Coverage Heatmap ──────────────────────────────────────────
 // Columns = classes (10A, 9Cam, …), rows = chapters.
-// Each cell = % topics done for that class, aggregated across all
-// teachers who saved progress under that class key.
+// Each cell = % topics marked Done for that class key.
 async function loadHeatmapTab() {
   const el = document.getElementById('heatmapGrid');
   if (el) el.innerHTML = '<div class="loading-wrap">Loading…</div>';
 
-  // Ensure teachers are loaded
-  if (!allTeachers.length) {
-    const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
-    allTeachers = [];
-    snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
+  // Ensure teacher list is loaded
+  if (!allTeachers.length) await fetchTeachers();
 
-    // Build class list from teacher profiles
-    const profileClassSet = new Set();
-    allTeachers.forEach(t => { (t.igcse_classes || []).forEach(c => profileClassSet.add(c)); });
-    if (profileClassSet.size > 0) {
-      classList = [...new Set([...profileClassSet, ...classList])].sort();
-      buildClassChips();
-    }
-  }
+  // Scan ALL userProgress docs and collect every statuses_* key found.
+  const progressSnap = await getDocs(collection(db, 'userProgress'));
+  const progressByClass = {};   // classKey -> statuses map
+  const teacherByClass  = {};   // classKey -> teacher object
 
-  // Build progressByClass: { className -> { chId.tId -> status } }
-  // A class key exists if ANY teacher saved progress under statuses_ClassName.
-  // We merge all teachers' maps for that class (last-write-wins per topic key).
-  const classCandidates = classList.length ? classList
-    : [...new Set(allTeachers.flatMap(t => t.igcse_classes || []))].sort();
+  // Build classKey -> teacher map from allTeachers profiles
+  allTeachers.forEach(t => {
+    (t.igcse_classes || []).forEach(cls => {
+      const key = cls.replace(/\s/g, '_');
+      teacherByClass[key] = t;
+    });
+  });
 
-  const progressByClass = {};  // className -> merged statuses map
-  await Promise.all(allTeachers.map(async t => {
-    const progSnap = await getDoc(doc(db, 'userProgress', t.uid));
-    if (!progSnap.exists()) return;
-    const d = progSnap.data();
-    classCandidates.forEach(cls => {
-      const key = `statuses_${cls.replace(/\s/g, '_')}`;
-      if (d[key] && Object.keys(d[key]).length) {
-        if (!progressByClass[cls]) progressByClass[cls] = {};
-        Object.assign(progressByClass[cls], d[key]);
+  progressSnap.forEach(d => {
+    const data = d.data();
+    Object.keys(data).forEach(key => {
+      const m = key.match(/^statuses_(.+)$/);
+      if (!m) return;
+      const cls = m[1];
+      if (!progressByClass[cls] ||
+          Object.keys(data[key]).length > Object.keys(progressByClass[cls]).length) {
+        progressByClass[cls] = data[key];
       }
     });
-  }));
+  });
 
-  // Only show classes that have at least some data
-  const activeCols = classCandidates.filter(cls => progressByClass[cls]);
-
-  renderHeatmap(activeCols, progressByClass);
+  const activeCols = Object.keys(progressByClass).sort();
+  renderHeatmap(activeCols, progressByClass, teacherByClass);
 }
 
-function renderHeatmap(activeCols, progressByClass) {
+function renderHeatmap(activeCols, progressByClass, teacherByClass) {
   const el = document.getElementById('heatmapGrid');
   if (!el) return;
 
@@ -1174,9 +1198,46 @@ function renderHeatmap(activeCols, progressByClass) {
     return           { bg: '#059669', fg: '#fff' };
   }
 
-  const headerCells = activeCols.map(cls =>
-    `<th title="${escHtml(cls)}">${escHtml(cls)}</th>`
-  ).join('');
+  function initials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    return parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : parts[0].slice(0, 2).toUpperCase();
+  }
+
+  // Accent colours cycling for avatar placeholders when no photo
+  const accentPalette = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2'];
+
+  const headerCells = activeCols.map((cls, ci) => {
+    const label   = cls.replace(/_/g, ' ');
+    const teacher = teacherByClass[cls];
+    const name    = teacher?.displayName || teacher?.name || null;
+    const school  = teacher?.school || null;
+    const photo   = teacher?.photoURL || null;
+    const accent  = accentPalette[ci % accentPalette.length];
+
+    const avatarHtml = photo
+      ? `<img class="heatmap-col-avatar" src="${escHtml(photo)}" alt="" loading="lazy">`
+      : `<div class="heatmap-col-avatar-placeholder" style="background:${accent}">${escHtml(initials(name || label))}</div>`;
+
+    const nameHtml   = name   ? `<div class="heatmap-col-name">${escHtml(name)}</div>` : '';
+    const schoolHtml = school ? `<div class="heatmap-col-school">${escHtml(school)}</div>` : '';
+
+    const tooltipParts = [label];
+    if (name)   tooltipParts.push(name);
+    if (school) tooltipParts.push(school);
+
+    return `<th class="heatmap-col-header" title="${escHtml(tooltipParts.join(' · '))}">
+      <div class="heatmap-col-card">
+        <div class="heatmap-col-class">${escHtml(label)}</div>
+        <div class="heatmap-col-divider" style="background:${accent}"></div>
+        ${avatarHtml}
+        ${nameHtml}
+        ${schoolHtml}
+      </div>
+    </th>`;
+  }).join('');
 
   const rows = chapters.map((ch, ci) => {
     const chTopics = ch.topics || [];
@@ -1186,7 +1247,8 @@ function renderHeatmap(activeCols, progressByClass) {
       const done = chTopics.filter(tp => statuses[`${ch.id}.${tp.id}`] === 'done').length;
       const pct  = chTopics.length ? Math.round(done / chTopics.length * 100) : 0;
       const { bg, fg } = heatColor(pct);
-      return `<td><div class="heatmap-cell" style="background:${bg};color:${fg}" title="${escHtml(cls)} — ${escHtml(ch.chapter)}: ${done}/${chTopics.length} done">${pct ? pct + '%' : '—'}</div></td>`;
+      const label = cls.replace(/_/g, ' ');
+      return `<td style="text-align:center"><div class="heatmap-cell" style="background:${bg};color:${fg}" title="${escHtml(label)} — ${escHtml(ch.chapter)}: ${done}/${chTopics.length} done">${pct ? pct + '%' : '—'}</div></td>`;
     }).join('');
 
     return `<tr>
@@ -1207,7 +1269,7 @@ function renderHeatmap(activeCols, progressByClass) {
     <div class="heatmap-wrap">
       <table class="heatmap-table">
         <thead><tr>
-          <th style="text-align:left;min-width:180px">Chapter</th>
+          <th style="text-align:left;width:auto;min-width:200px;max-width:360px;background:transparent;border:none;vertical-align:bottom;padding:0 6px 4px"></th>
           ${headerCells}
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -1217,7 +1279,7 @@ function renderHeatmap(activeCols, progressByClass) {
 
 // ── Hours Report ──────────────────────────────────────────────
 async function loadHoursTab() {
-  if (!allTeachers.length) await loadProgressTab();
+  if (!allTeachers.length) await fetchTeachers();
   renderHoursReport();
 }
 
