@@ -226,8 +226,12 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     drop.style.display = 'none';
     const objective = [...confirmedCodes].join(' ');
     topic.objective = objective;
-    await saveChapters();
-    showToast('Codes saved ✓');
+    try {
+      await saveChapters();
+      showToast('Codes saved ✓');
+    } catch (e) {
+      // saveChapters already showed error toast
+    }
     renderChapters();
   }
 
