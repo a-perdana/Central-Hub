@@ -96,8 +96,12 @@ window.inlineSave = async function(ci, ti, field, value, inputEl) {
   if (!topic) return;
   topic[field] = value;
   inputEl.classList.add('saving');
-  await saveChapters();
-  setTimeout(() => inputEl.classList.remove('saving'), 800);
+  try {
+    await saveChapters();
+    showToast('Saved ✓');
+  } finally {
+    setTimeout(() => inputEl.classList.remove('saving'), 800);
+  }
 };
 
 // Codes cell: inline input with autocomplete from igcse_syllabus
@@ -223,6 +227,7 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     const objective = [...confirmedCodes].join(' ');
     topic.objective = objective;
     await saveChapters();
+    showToast('Codes saved ✓');
     restorePills(objective);
   }
 
@@ -362,11 +367,18 @@ function initModalCodesAC(initialObjective) {
 
 // ── Save chapters to Firestore ────────────────────────────────
 async function saveChapters() {
+  if (!db) { console.error('saveChapters: db not ready'); showToast('Not authenticated'); return; }
   const structureOnly = chapters.map(ch => ({
     ...ch,
     topics: (ch.topics || []).map(({ status, note, diag, actualHour, ...rest }) => rest),
   }));
-  await setDoc(doc(db, COLLECTION, DOC_ID), { chapters: structureOnly, updatedAt: serverTimestamp() }, { merge: true });
+  try {
+    await setDoc(doc(db, COLLECTION, DOC_ID), { chapters: structureOnly, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (e) {
+    console.error('saveChapters failed:', e);
+    showToast('Save failed — check console');
+    throw e; // re-throw so callers know it failed
+  }
 }
 
 // ── Render chapter list ───────────────────────────────────────
