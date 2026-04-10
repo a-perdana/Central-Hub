@@ -161,6 +161,9 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
       span.style.cursor = 'pointer';
       span.title = `Click to remove ${c}`;
       span.textContent = `${c} ✕`;
+      span.addEventListener('mousedown', e => {
+        e.preventDefault(); // prevent inp blur before click registers
+      });
       span.addEventListener('click', e => {
         e.stopPropagation();
         confirmedCodes.delete(c);
