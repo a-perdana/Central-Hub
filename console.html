@@ -71,6 +71,11 @@
     .user-name-link { cursor: pointer; text-decoration: none; color: inherit; }
     .user-name-link:hover .user-name { text-decoration: underline; color: var(--accent); }
 
+    /* Teaching profile summary chips */
+    .tp-chip { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 100px; font-size: 0.72rem; font-weight: 600; background: var(--paper-2, #f1f5f9); color: var(--ink-2); border: 1px solid var(--border); margin: 2px 3px 2px 0; }
+    .tp-classes-row { font-size: 0.8rem; color: var(--ink-2); margin-bottom: 4px; }
+    .tp-classes-row strong { color: var(--ink); }
+
     /* ACTION TOAST */
     #actionToast {
       position: fixed;
@@ -305,20 +310,23 @@
           <input class="form-input" id="fieldSchool" type="text" placeholder="e.g. Pakar Belia Secondary School">
         </div>
         <div class="form-group">
-          <label class="form-label" for="fieldDepartment">Department</label>
-          <input class="form-input" id="fieldDepartment" type="text" placeholder="e.g. Science, Humanities, Languages">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="fieldSubject">Subject(s)</label>
-          <input class="form-input" id="fieldSubject" type="text" placeholder="e.g. Mathematics, Biology">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="fieldClasses">Classes Taught</label>
-          <input class="form-input" id="fieldClasses" type="text" placeholder="e.g. Year 9A, Year 10B, AS Chemistry">
-        </div>
-        <div class="form-group">
           <label class="form-label" for="fieldPosition">Position / Title</label>
           <input class="form-input" id="fieldPosition" type="text" placeholder="e.g. Head of Department, Class Teacher">
+        </div>
+
+        <!-- Teaching profile summary — read from Teachers Hub fields -->
+        <div id="teachingProfileSummary" style="display:none">
+          <hr class="drawer-divider" style="margin:8px 0 12px">
+          <div style="font-size:0.72rem;font-weight:600;letter-spacing:.04em;color:var(--ink-3);text-transform:uppercase;margin-bottom:8px">Teaching Profile <span style="font-weight:400;text-transform:none;color:var(--ink-3);opacity:.6">(set by teacher)</span></div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label">Subjects</label>
+            <div id="fieldSubjectsSummary" class="field-meta"></div>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label">Curriculum Levels</label>
+            <div id="fieldLevelsSummary" class="field-meta"></div>
+          </div>
+          <div id="fieldClassesSummary" style="margin-bottom:4px"></div>
         </div>
       </div>
 
@@ -708,10 +716,44 @@
     document.getElementById('fieldName').value       = u.displayName   || '';
     document.getElementById('fieldEmail').value      = u.email         || '';
     document.getElementById('fieldSchool').value     = u.school        || '';
-    document.getElementById('fieldDepartment').value = u.department    || '';
-    document.getElementById('fieldSubject').value    = u.subject       || '';
-    document.getElementById('fieldClasses').value    = u.classes       || '';
     document.getElementById('fieldPosition').value   = u.position      || '';
+
+    // Teaching profile summary (read-only — set by teacher in Teachers Hub)
+    const SUBJ_LABELS = { math:'Mathematics', biology:'Biology', chemistry:'Chemistry', physics:'Physics', english:'English', science:'Science' };
+    const LEVEL_LABELS = { igcse:'IGCSE (Year 9–10)', checkpoint:'Checkpoint (Year 7–8)', asalevel:'AS & A Level (Year 11–12)' };
+    const subjects = Array.isArray(u.subjects) ? u.subjects : [];
+    const levels   = Array.isArray(u.classes)  ? u.classes  : [];
+    const summaryEl = document.getElementById('teachingProfileSummary');
+    if (subjects.length || levels.length || u.school) {
+      summaryEl.style.display = '';
+      const subjEl = document.getElementById('fieldSubjectsSummary');
+      subjEl.innerHTML = subjects.length
+        ? subjects.map(s => `<span class="tp-chip">${SUBJ_LABELS[s] || s}</span>`).join('')
+        : '<span style="color:var(--ink-3);font-size:0.82rem">— not set —</span>';
+      const lvlEl = document.getElementById('fieldLevelsSummary');
+      lvlEl.innerHTML = levels.length
+        ? levels.map(l => `<span class="tp-chip">${LEVEL_LABELS[l] || l}</span>`).join('')
+        : '<span style="color:var(--ink-3);font-size:0.82rem">— not set —</span>';
+      const clsEl = document.getElementById('fieldClassesSummary');
+      clsEl.innerHTML = '';
+      if (levels.length && subjects.length) {
+        levels.forEach(lv => {
+          subjects.forEach(sv => {
+            const key = `${lv}_${sv}_classes`;
+            const cls = Array.isArray(u[key]) ? u[key] : [];
+            if (cls.length) {
+              const row = document.createElement('div');
+              row.className = 'tp-classes-row form-group';
+              row.style.marginBottom = '4px';
+              row.innerHTML = `<label class="form-label" style="margin-bottom:4px">${LEVEL_LABELS[lv]||lv} — ${SUBJ_LABELS[sv]||sv}</label><div class="field-meta">${cls.map(c=>`<span class="tp-chip">${esc(c)}</span>`).join('')}</div>`;
+              clsEl.appendChild(row);
+            }
+          });
+        });
+      }
+    } else {
+      summaryEl.style.display = 'none';
+    }
 
     // Roles tab fields
     document.getElementById('fieldRoleCH').value     = u.role_centralhub              || '';
@@ -744,9 +786,6 @@
     const displayName  = document.getElementById('fieldName').value.trim();
     const email        = document.getElementById('fieldEmail').value.trim();
     const school       = document.getElementById('fieldSchool').value.trim();
-    const department   = document.getElementById('fieldDepartment').value.trim();
-    const subject      = document.getElementById('fieldSubject').value.trim();
-    const classes      = document.getElementById('fieldClasses').value.trim();
     const position     = document.getElementById('fieldPosition').value.trim();
     const roleCH       = document.getElementById('fieldRoleCH').value;
     const roleAH       = document.getElementById('fieldRoleAH').value;
@@ -761,9 +800,6 @@
         displayName,
         email,
         school,
-        department,
-        subject,
-        classes,
         position,
         role_centralhub:              roleCH,
         role_academichub:             roleAH,
@@ -774,8 +810,7 @@
       const u = allUsers.find(x => x.id === editingId);
       if (u) {
         u.displayName = displayName; u.email = email;
-        u.school = school; u.department = department;
-        u.subject = subject; u.classes = classes; u.position = position;
+        u.school = school; u.position = position;
         u.role_centralhub = roleCH; u.role_academichub = roleAH;
         u.approval_status_academichub = approvalAH;
         u.role_teachershub = roleTH; u.role_researchhub = roleRH;
