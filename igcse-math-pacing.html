@@ -155,7 +155,26 @@
     .inline-input.saving { border-color: #6ee7b7; background: #f0fdf4; }
     .inline-input-num { width: 52px; text-align: center; }
     .inline-codes-wrap { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; min-height: 22px; cursor: text; }
-    .inline-codes-input { border: 1.5px solid var(--accent); border-radius: 5px; padding: 2px 6px; font-family: 'DM Mono', monospace; font-size: .68rem; background: var(--white); outline: none; min-width: 80px; }
+    .inline-codes-input { border: 1.5px solid var(--accent); border-radius: 5px; padding: 2px 6px; font-family: 'DM Mono', monospace; font-size: .68rem; background: var(--white); outline: none; min-width: 120px; }
+    .codes-ac-wrap { position: relative; display: inline-flex; align-items: center; }
+    .codes-ac-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; z-index: 999;
+      background: var(--white); border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 260px; max-height: 220px;
+      overflow-y: auto; padding: 4px 0;
+    }
+    .codes-ac-item {
+      display: flex; align-items: baseline; gap: 8px;
+      padding: 6px 12px; cursor: pointer; transition: background .1s;
+    }
+    .codes-ac-item:hover, .codes-ac-item.active { background: var(--paper); }
+    .codes-ac-code { font-family: 'DM Mono', monospace; font-size: .68rem; font-weight: 700; color: #1a5fa8; flex-shrink: 0; }
+    .codes-ac-title { font-size: .72rem; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .codes-ac-tier { font-size: .58rem; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; margin-left: auto; }
+    .codes-ac-tier.Core { background: #d1fae5; color: #065f46; }
+    .codes-ac-tier.Extended { background: #dbeafe; color: #1e40af; }
+    .codes-ac-empty { padding: 8px 12px; font-size: .72rem; color: var(--ink-3); font-style: italic; }
+    .codes-ac-invalid { border-color: #dc2626 !important; background: #fff5f5 !important; }
     .res-chip { font-size: .62rem; font-family: 'DM Mono', monospace; padding: 2px 6px; border-radius: 4px; background: var(--paper-2); border: 1px solid var(--border); color: var(--ink-2); display: inline-flex; align-items: center; gap: 3px; text-decoration: none; }
     .res-chip:hover { background: #e8f0fb; color: #1a5fa8; border-color: #c2d8f5; }
     .add-topic-btn { display: flex; align-items: center; gap: 6px; font-size: .75rem; padding: 6px 14px; border: 1.5px dashed var(--border); border-radius: 6px; background: none; color: var(--ink-3); cursor: pointer; width: 100%; transition: all .12s; margin: 8px 14px; width: calc(100% - 28px); }
@@ -608,6 +627,7 @@ const DOC_ID     = 'year9-10';
 let db, isAdmin = false;
 let chapters = [];
 let classList = [];
+let syllabusIndex = {};   // code → { title, tier, topicArea }
 let allTeachers = [];         // [{uid, name, email, photoURL}]
 let progressByTeacher = {};   // uid -> { statuses map }
 let selectedClass = 'default';
@@ -686,36 +706,136 @@ window.inlineSave = async function(ci, ti, field, value, inputEl) {
   setTimeout(() => inputEl.classList.remove('saving'), 800);
 };
 
-// Codes cell: replace pills with a text input, commit on blur/Enter
+// Codes cell: inline input with autocomplete from igcse_syllabus
 window.activateCodesInput = function(wrapEl, ci, ti) {
-  if (wrapEl.querySelector('.inline-codes-input')) return; // already active
+  if (wrapEl.querySelector('.inline-codes-input')) return;
   const topic = chapters[ci]?.topics?.[ti];
   if (!topic) return;
-  const current = topic.objective || '';
-  wrapEl.innerHTML = `<input class="inline-codes-input" type="text"
-    value="${escHtml(current)}"
-    placeholder="e.g. C1.1 E1.2"
-    title="Space-separated syllabus codes">`;
-  const inp = wrapEl.querySelector('input');
+
+  // Build current set of confirmed codes
+  const confirmedCodes = new Set(_parseObjCodes(topic.objective || ''));
+  let acIndex = -1; // keyboard nav
+
+  // Replace cell content with input + dropdown wrapper
+  wrapEl.innerHTML = `
+    <div class="codes-ac-wrap">
+      <input class="inline-codes-input" type="text" placeholder="Type code e.g. C1.1" autocomplete="off" spellcheck="false">
+      <div class="codes-ac-dropdown" id="acDrop_${ci}_${ti}" style="display:none"></div>
+    </div>
+    <div id="acPills_${ci}_${ti}" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px"></div>`;
+
+  const inp  = wrapEl.querySelector('.inline-codes-input');
+  const drop = wrapEl.querySelector('.codes-ac-dropdown');
+  const pillsEl = wrapEl.querySelector(`#acPills_${ci}_${ti}`);
+
+  function renderPills() {
+    pillsEl.innerHTML = [...confirmedCodes].map(c =>
+      `<span class="obj-code" data-remove="${escHtml(c)}" style="cursor:pointer" title="Click to remove ${escHtml(c)}">${escHtml(c)} ✕</span>`
+    ).join('');
+  }
+  pillsEl.addEventListener('click', e => {
+    const code = e.target.dataset.remove;
+    if (code) { confirmedCodes.delete(code); renderPills(); }
+  });
+  renderPills();
   inp.focus();
-  const commit = async () => {
-    const val = inp.value.trim();
-    topic.objective = val;
+
+  function getMatches(q) {
+    if (!q) return [];
+    const ql = q.toLowerCase();
+    return Object.entries(syllabusIndex)
+      .filter(([code]) => code.toLowerCase().startsWith(ql) && !confirmedCodes.has(code))
+      .sort(([a],[b]) => a.localeCompare(b))
+      .slice(0, 12);
+  }
+
+  function renderDrop(matches) {
+    acIndex = -1;
+    if (!matches.length) {
+      drop.innerHTML = `<div class="codes-ac-empty">No matches</div>`;
+    } else {
+      drop.innerHTML = matches.map(([code, d]) =>
+        `<div class="codes-ac-item" data-code="${escHtml(code)}">
+          <span class="codes-ac-code">${escHtml(code)}</span>
+          <span class="codes-ac-title">${escHtml(d.title || '')}</span>
+          <span class="codes-ac-tier ${escHtml(d.tier||'')}">${escHtml(d.tier||'')}</span>
+         </div>`
+      ).join('');
+      drop.querySelectorAll('.codes-ac-item').forEach(item => {
+        item.addEventListener('mousedown', e => {
+          e.preventDefault();
+          selectCode(item.dataset.code);
+        });
+      });
+    }
+    drop.style.display = '';
+  }
+
+  function selectCode(code) {
+    if (!syllabusIndex[code]) return; // invalid — reject
+    confirmedCodes.add(code);
+    inp.value = '';
+    drop.style.display = 'none';
+    renderPills();
+    inp.focus();
+  }
+
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim();
+    inp.classList.remove('codes-ac-invalid');
+    if (!q) { drop.style.display = 'none'; return; }
+    renderDrop(getMatches(q));
+  });
+
+  inp.addEventListener('keydown', e => {
+    const items = drop.querySelectorAll('.codes-ac-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      acIndex = Math.min(acIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === acIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      acIndex = Math.max(acIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === acIndex));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (acIndex >= 0 && items[acIndex]) {
+        selectCode(items[acIndex].dataset.code);
+      } else {
+        // Try exact match on typed value
+        const typed = inp.value.trim().toUpperCase();
+        const match = Object.keys(syllabusIndex).find(k => k.toUpperCase() === typed);
+        if (match) { selectCode(match); }
+        else if (typed) {
+          inp.classList.add('codes-ac-invalid');
+          showToast('Invalid code — choose from the dropdown');
+        }
+      }
+    } else if (e.key === 'Escape') {
+      if (drop.style.display !== 'none') { drop.style.display = 'none'; return; }
+      restorePills(topic.objective || ''); // cancel edit
+    }
+  });
+
+  async function commit() {
+    // Close dropdown
+    drop.style.display = 'none';
+    // If input has leftover typed text that isn't a valid code, ignore it
+    const objective = [...confirmedCodes].join(' ');
+    topic.objective = objective;
     await saveChapters();
-    // Re-render just this cell
-    const codes = _parseObjCodes(val);
+    restorePills(objective);
+  }
+
+  function restorePills(objective) {
+    const codes = _parseObjCodes(objective);
     wrapEl.innerHTML = codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')
       + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
-  };
-  inp.addEventListener('blur', commit);
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    if (e.key === 'Escape') {
-      // Restore without saving
-      const codes = _parseObjCodes(topic.objective || '');
-      wrapEl.innerHTML = codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')
-        + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
-    }
+  }
+
+  inp.addEventListener('blur', () => {
+    // Small delay so mousedown on dropdown item fires first
+    setTimeout(commit, 150);
   });
 };
 
@@ -1558,6 +1678,11 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
 
   db = window.db;
   document.getElementById('mainContent').style.display = '';
+
+  // Load syllabus index for autocomplete (background — don't block render)
+  getDocs(collection(db, 'igcse_syllabus')).then(snap => {
+    snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
+  }).catch(e => console.warn('igcse_syllabus load failed:', e));
 
   // Real-time listener for structure
   onSnapshot(doc(db, COLLECTION, DOC_ID), snap => {
