@@ -756,10 +756,15 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   function getMatches(q) {
     if (!q) return [];
     const ql = q.toLowerCase();
+    // syllabusIndex keys are doc IDs like "0580_C1.1"; entry.code is the display code "C1.1"
     return Object.entries(syllabusIndex)
-      .filter(([code]) => code.toLowerCase().startsWith(ql) && !confirmedCodes.has(code))
-      .sort(([a],[b]) => a.localeCompare(b))
-      .slice(0, 12);
+      .filter(([, d]) => {
+        const displayCode = (d.code || '').toLowerCase();
+        return displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
+      })
+      .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
+      .slice(0, 12)
+      .map(([, d]) => [d.code || '', d]); // return [displayCode, data] pairs
   }
 
   function renderDrop(matches, loading) {
@@ -786,9 +791,11 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     drop.style.display = '';
   }
 
-  function selectCode(code) {
-    if (!syllabusIndex[code]) return; // invalid — reject
-    confirmedCodes.add(code);
+  function selectCode(displayCode) {
+    // displayCode is the entry.code field (e.g. "C1.1"), not the Firestore doc ID
+    const valid = Object.values(syllabusIndex).some(d => d.code === displayCode);
+    if (!valid) return; // invalid — reject
+    confirmedCodes.add(displayCode);
     inp.value = '';
     drop.style.display = 'none';
     renderPills();
@@ -818,10 +825,10 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
       if (acIndex >= 0 && items[acIndex]) {
         selectCode(items[acIndex].dataset.code);
       } else {
-        // Try exact match on typed value
+        // Try exact match on typed value (match against entry.code, not doc ID)
         const typed = inp.value.trim().toUpperCase();
-        const match = Object.keys(syllabusIndex).find(k => k.toUpperCase() === typed);
-        if (match) { selectCode(match); }
+        const match = Object.values(syllabusIndex).find(d => (d.code||'').toUpperCase() === typed);
+        if (match) { selectCode(match.code); }
         else if (typed) {
           inp.classList.add('codes-ac-invalid');
           showToast('Invalid code — choose from the dropdown');
