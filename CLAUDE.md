@@ -107,7 +107,7 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
 
 ## Role System
 
-Each platform has its **own** Firestore role field — there is no single shared `role` field. The legacy `role` field still exists on old documents but is no longer the source of truth.
+Each platform has its **own** Firestore role field — there is no single shared `role` field. **The legacy `role` field is no longer read by any app** — `auth-guard.js` and all pages use only `role_<platform>` fields.
 
 | Platform      | Firestore field       | Allowed values                          |
 |---------------|-----------------------|-----------------------------------------|
@@ -116,16 +116,22 @@ Each platform has its **own** Firestore role field — there is no single shared
 | Teachers Hub  | `role_teachershub`    | `'teachers_user'` \| `'teachers_admin'`|
 | Research Hub  | `role_researchhub`    | `'research_user'` \| `'research_admin'`|
 
-**CentralHub allowed values:** `'central_user'` (read access) | `'central_admin'` (full management access).
+**Sub-role arrays** (managed in `console.html`, optional per user):
 
-`auth-guard.js` also accepts the legacy `role === 'central_admin'` for backwards compatibility with accounts that have not logged in since the migration.
+| Platform     | Firestore field  | Values                                                                        |
+|--------------|------------------|-------------------------------------------------------------------------------|
+| Academic Hub | `ah_sub_roles[]` | `'foundation_representative'`, `'school_principal'`, `'academic_coordinator'` |
+| Teachers Hub | `th_sub_roles[]` | `'subject_teacher'`, `'subject_leader'`                                       |
+
+Sub-roles control tab visibility in weekly-checklist pages and `visible_to[]` filtering on dashboard category documents. A user can hold multiple sub-roles simultaneously.
+
+**CentralHub allowed values:** `'central_user'` (read access) | `'central_admin'` (full management access).
 
 Access is restricted to `@eduversal.org` email addresses (enforced in both `login.html` and `auth-guard.js`). Email/password accounts created manually in Firebase Console bypass the domain check. First login auto-assigns `central_user` via `setDoc` with `{ merge: true }`. `central_admin` must be set manually via `console.html`.
 
-**isAdmin check pattern (always use both for safety):**
+**isAdmin check pattern:**
 ```js
-const isAdmin = profile?.role_centralhub === 'central_admin'
-             || profile?.role === 'central_admin'; // legacy fallback
+const isAdmin = profile?.role_centralhub === 'central_admin';
 ```
 
 ---
