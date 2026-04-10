@@ -282,8 +282,12 @@
       overflow: hidden; transition: box-shadow .2s, border-color .2s;
     }
     .teacher-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.09); border-color: #d0cec8; }
-    .teacher-card-head { display: flex; align-items: center; gap: 14px; padding: 14px 20px; cursor: pointer; transition: background .15s; }
-    .teacher-card-head:hover { background: #fafaf8; }
+
+    /* Teacher identity header (name + email + avatar) — not clickable itself */
+    .teacher-card-identity {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 20px 10px; border-bottom: 1px solid var(--paper-2);
+    }
     .teacher-avatar {
       width: 38px; height: 38px; border-radius: 50%;
       background: linear-gradient(135deg, var(--accent-2), #fde8e6);
@@ -293,6 +297,21 @@
     }
     .teacher-name { font-size: .875rem; font-weight: 600; color: var(--ink); }
     .teacher-email { font-size: .7rem; color: var(--ink-3); margin-top: 1px; }
+
+    /* Per-class row inside the card */
+    .teacher-class-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 10px 20px; cursor: pointer; transition: background .15s;
+      border-bottom: 1px solid var(--paper-2);
+    }
+    .teacher-class-row:last-of-type { border-bottom: none; }
+    .teacher-class-row:hover { background: #fafaf8; }
+    .teacher-class-row.open { background: #f8f7f5; }
+    .class-row-badge {
+      font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 100px;
+      background: var(--paper-2); color: var(--ink-2); border: 1px solid var(--border);
+      white-space: nowrap; flex-shrink: 0; min-width: 48px; text-align: center;
+    }
     .teacher-stats { display: flex; gap: 14px; flex-shrink: 0; align-items: center; margin-left: auto; }
     .t-stat { text-align: center; min-width: 32px; }
     .t-stat-num { font-size: .95rem; font-weight: 700; font-family: 'DM Mono', monospace; }
@@ -305,9 +324,9 @@
     .teacher-prog-fill { height: 100%; border-radius: 100px; transition: width .5s ease; }
     .teacher-last-update { font-size: .63rem; color: var(--ink-3); flex-shrink: 0; white-space: nowrap; }
     .teacher-expand-icon { color: var(--ink-3); flex-shrink: 0; transition: transform .2s; }
-    .teacher-card.open .teacher-expand-icon { transform: rotate(180deg); }
+    .teacher-class-row.open .teacher-expand-icon { transform: rotate(180deg); }
 
-    /* Teacher detail expand */
+    /* Teacher detail expand — per class row */
     .teacher-detail { display: none; border-top: 1px solid var(--border); }
     .teacher-detail.open { display: block; }
     .detail-chapter { border-bottom: 1px solid var(--paper-2); }
@@ -940,18 +959,25 @@ async function loadProgressTab() {
   await fetchTeachers();
   buildClassChips();
 
-  // 2. Load progress for each teacher (parallel)
+  // 2. Load ALL class statuses per teacher (parallel)
   progressByTeacher = {};
   await Promise.all(allTeachers.map(async t => {
     const progSnap = await getDoc(doc(db, 'userProgress', t.uid));
     if (progSnap.exists()) {
       const d = progSnap.data();
-      const key = selectedClass && selectedClass !== 'default'
-        ? `statuses_${selectedClass.replace(/\s/g,'_')}`
-        : 'statuses';
-      progressByTeacher[t.uid] = { statuses: d[key] || {}, updatedAt: d.updatedAt };
+      // Collect every statuses_<cls> key — keyed by class name (spaces restored)
+      const classSections = {};
+      Object.keys(d).forEach(key => {
+        const m = key.match(/^statuses_(.+)$/);
+        if (m) classSections[m[1].replace(/_/g, ' ')] = d[key];
+      });
+      // Also include bare 'statuses' as a fallback for teachers who never set a class
+      if (d.statuses && !Object.keys(classSections).length) {
+        classSections['—'] = d.statuses;
+      }
+      progressByTeacher[t.uid] = { classSections, updatedAt: d.updatedAt };
     } else {
-      progressByTeacher[t.uid] = { statuses: {}, updatedAt: null };
+      progressByTeacher[t.uid] = { classSections: {}, updatedAt: null };
     }
   }));
 
@@ -968,11 +994,35 @@ function renderProgressView() {
     return;
   }
 
-  // Compute aggregate stats across all teachers
   const totalTopics = chapters.reduce((n, ch) => n + (ch.topics||[]).length, 0);
-  let aggDone = 0, aggProg = 0, aggWeak = 0;
+  const filterCls   = selectedClass && selectedClass !== 'default' ? selectedClass : null;
+
+  // Build flat list of {teacher, className, statuses} pairs — one per class per teacher.
+  // If a class filter is active, only include teachers who have data for that class.
+  const rows = [];
   allTeachers.forEach(t => {
-    const statuses = progressByTeacher[t.uid]?.statuses || {};
+    const { classSections, updatedAt } = progressByTeacher[t.uid] || { classSections: {}, updatedAt: null };
+    if (filterCls) {
+      // Normalise: stored key may use underscores or spaces
+      const key = Object.keys(classSections).find(k => k === filterCls || k.replace(/_/g,' ') === filterCls);
+      if (key) rows.push({ t, cls: filterCls, statuses: classSections[key], updatedAt });
+      // Teacher has no data for this class — still show them grayed out
+      else rows.push({ t, cls: filterCls, statuses: {}, updatedAt: null });
+    } else {
+      const keys = Object.keys(classSections);
+      if (keys.length) {
+        keys.forEach(cls => rows.push({ t, cls: cls.replace(/_/g,' '), statuses: classSections[cls], updatedAt }));
+      } else {
+        rows.push({ t, cls: null, statuses: {}, updatedAt: null });
+      }
+    }
+  });
+
+  // Aggregate across all rows (class-teacher pairs)
+  let aggDone = 0, aggProg = 0, aggWeak = 0, aggPairs = 0;
+  rows.forEach(({ statuses }) => {
+    if (!Object.keys(statuses).length) return;
+    aggPairs++;
     chapters.forEach(ch => (ch.topics||[]).forEach(topic => {
       const k = `${ch.id}.${topic.id}`;
       const s = statuses[k];
@@ -981,108 +1031,125 @@ function renderProgressView() {
       if (statuses[`diag.${k}`] === 'weak') aggWeak++;
     }));
   });
-  const avgPct = totalTopics && allTeachers.length
-    ? Math.round(aggDone / (totalTopics * allTeachers.length) * 100) : 0;
+  const avgPct = totalTopics && aggPairs
+    ? Math.round(aggDone / (totalTopics * aggPairs) * 100) : 0;
+  const teacherCount = new Set(rows.map(r => r.t.uid)).size;
 
   aggEl.innerHTML = `
-    <div class="agg-stat blue"><div class="agg-stat-num">${allTeachers.length}</div><div class="agg-stat-label">Teachers</div></div>
+    <div class="agg-stat blue"><div class="agg-stat-num">${teacherCount}</div><div class="agg-stat-label">Teachers</div></div>
     <div class="agg-stat"><div class="agg-stat-num">${totalTopics}</div><div class="agg-stat-label">Total Topics</div></div>
     <div class="agg-stat green"><div class="agg-stat-num" style="color:#1e7a4a">${avgPct}%</div><div class="agg-stat-label">Avg Completion</div></div>
     <div class="agg-stat"><div class="agg-stat-num" style="color:#1a5fa8">${aggProg}</div><div class="agg-stat-label">In Progress</div></div>
     ${aggWeak > 0 ? `<div class="agg-stat accent"><div class="agg-stat-num" style="color:#dc2626">${aggWeak}</div><div class="agg-stat-label">Weak-Flagged</div></div>` : ''}
   `;
 
-  // Render each teacher card (paged)
   buildWeakAlerts();
 
-  const pageTeachers = allTeachers.slice(progressPage * PAGE_SIZE, (progressPage + 1) * PAGE_SIZE);
-  listEl.innerHTML = pageTeachers.map((t, localTi) => {
-    const ti = localTi + progressPage * PAGE_SIZE;
-    const statuses = progressByTeacher[t.uid]?.statuses || {};
+  // Group rows by teacher for card rendering — each card has identity header + per-class rows
+  const teacherCards = [];
+  const seen = new Map();
+  rows.forEach(row => {
+    if (!seen.has(row.t.uid)) { seen.set(row.t.uid, []); teacherCards.push({ t: row.t, rows: seen.get(row.t.uid) }); }
+    seen.get(row.t.uid).push(row);
+  });
+
+  // Paging operates on teacher cards
+  const pageCards = teacherCards.slice(progressPage * PAGE_SIZE, (progressPage + 1) * PAGE_SIZE);
+
+  listEl.innerHTML = pageCards.map((card, ci) => {
+    const { t, rows: classRows } = card;
+    const ti = ci + progressPage * PAGE_SIZE;
+    const initials = (t.displayName || t.email || '?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const updatedAt = progressByTeacher[t.uid]?.updatedAt;
+    const updLabel  = updatedAt?.toDate ? updatedAt.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '';
 
-    let done = 0, prog = 0, pending = 0;
-    chapters.forEach(ch => (ch.topics||[]).forEach(topic => {
-      const s = statuses[`${ch.id}.${topic.id}`];
-      if (s === 'done') done++;
-      else if (s === 'inprogress') prog++;
-      else pending++;
-    }));
-    const pct = totalTopics ? Math.round(done / totalTopics * 100) : 0;
-    const initials = (t.displayName || t.email || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    const updLabel = updatedAt ? updatedAt.toDate ? updatedAt.toDate().toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) : '' : 'No data';
+    // Render one row per class
+    const classRowsHtml = classRows.map((row, ri) => {
+      const { cls, statuses } = row;
+      let done = 0, prog = 0, pending = 0;
+      chapters.forEach(ch => (ch.topics||[]).forEach(topic => {
+        const s = statuses[`${ch.id}.${topic.id}`];
+        if (s === 'done') done++;
+        else if (s === 'inprogress') prog++;
+        else pending++;
+      }));
+      const pct      = totalTopics ? Math.round(done / totalTopics * 100) : 0;
+      const barColor = pct >= 75 ? '#1e7a4a' : pct >= 40 ? '#1a5fa8' : '#dc2626';
+      const rowId    = `tcr-${ti}-${ri}`;
 
-    // Chapter breakdown (collapsed by default)
-    const chDetail = chapters.map((ch, ci) => {
-      const chTopics = ch.topics || [];
-      let chDone = 0;
-      chTopics.forEach(topic => {
-        if (statuses[`${ch.id}.${topic.id}`] === 'done') chDone++;
-      });
-      const chPct = chTopics.length ? Math.round(chDone/chTopics.length*100) : 0;
+      // Chapter breakdown for this class
+      const chDetail = chapters.map((ch, chi) => {
+        const chTopics = ch.topics || [];
+        let chDone = 0;
+        chTopics.forEach(topic => { if (statuses[`${ch.id}.${topic.id}`] === 'done') chDone++; });
+        const chPct = chTopics.length ? Math.round(chDone/chTopics.length*100) : 0;
 
-      const topicRows = chTopics.map(topic => {
-        const k = `${ch.id}.${topic.id}`;
-        const s = statuses[k] || 'pending';
-        const diag = statuses[`diag.${k}`] || '';
-        const actualHour = statuses[`actual.${k}`] || null;
-        return `<div class="detail-topic-row">
-          <div class="status-dot ${s}"></div>
-          <div class="detail-topic-name">${escHtml(topic.topic)}</div>
-          ${actualHour !== null ? `<div class="detail-actual-hours">${actualHour}h actual</div>` : ''}
-          ${diag ? `<span class="detail-diag ${diag}">${diag === 'weak' ? '⚠ Weak' : '↻ Review'}</span>` : ''}
+        const topicRows = chTopics.map(topic => {
+          const k = `${ch.id}.${topic.id}`;
+          const s = statuses[k] || 'pending';
+          const diag = statuses[`diag.${k}`] || '';
+          const actualHour = statuses[`actual.${k}`] || null;
+          return `<div class="detail-topic-row">
+            <div class="status-dot ${s}"></div>
+            <div class="detail-topic-name">${escHtml(topic.topic)}</div>
+            ${actualHour !== null ? `<div class="detail-actual-hours">${actualHour}h actual</div>` : ''}
+            ${diag ? `<span class="detail-diag ${diag}">${diag==='weak'?'⚠ Weak':'↻ Review'}</span>` : ''}
+          </div>`;
+        }).join('');
+
+        return `<div class="detail-chapter">
+          <div class="detail-ch-head" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+            <div class="detail-ch-name">Ch ${chi+1} — ${escHtml(ch.chapter)}</div>
+            <div class="detail-ch-pct">${chDone}/${chTopics.length} done (${chPct}%)</div>
+          </div>
+          <div style="display:none">${topicRows}</div>
         </div>`;
       }).join('');
 
-      return `<div class="detail-chapter">
-        <div class="detail-ch-head" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
-          <div class="detail-ch-name">Ch ${ci+1} — ${escHtml(ch.chapter)}</div>
-          <div class="detail-ch-pct">${chDone}/${chTopics.length} done (${chPct}%)</div>
+      return `
+        <div class="teacher-class-row" id="${rowId}" onclick="toggleClassRow('${rowId}')">
+          ${cls ? `<span class="class-row-badge">${escHtml(cls)}</span>` : ''}
+          <div class="teacher-stats">
+            <div class="t-stat"><div class="t-stat-num done">${done}</div><div class="t-stat-label">Done</div></div>
+            <div class="t-stat"><div class="t-stat-num prog">${prog}</div><div class="t-stat-label">In prog</div></div>
+            <div class="t-stat"><div class="t-stat-num pend">${pending}</div><div class="t-stat-label">Pending</div></div>
+          </div>
+          <div class="teacher-prog-wrap">
+            <div class="teacher-prog-bar"><div class="teacher-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
+            <span style="font-size:.65rem;font-weight:700;color:${barColor}">${pct}%</span>
+          </div>
+          ${ri === 0 ? `<div class="teacher-last-update">${updLabel}</div>` : '<div class="teacher-last-update"></div>'}
+          <svg class="teacher-expand-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="4,6 8,10 12,6"/></svg>
         </div>
-        <div style="display:none">${topicRows}</div>
-      </div>`;
+        <div class="teacher-detail" id="${rowId}-detail">${chDetail}</div>`;
     }).join('');
 
-    const barColor = pct >= 75 ? '#1e7a4a' : pct >= 40 ? '#1a5fa8' : '#dc2626';
     return `<div class="teacher-card" id="teacher-card-${ti}">
-      <div class="teacher-card-head" onclick="toggleTeacherDetail(${ti})">
+      <div class="teacher-card-identity">
         <div class="teacher-avatar">${initials}</div>
         <div style="flex:1;min-width:0">
           <div class="teacher-name">${escHtml(t.displayName || t.email)}</div>
           <div class="teacher-email">${escHtml(t.email)}</div>
         </div>
-        <div class="teacher-stats">
-          <div class="t-stat"><div class="t-stat-num done">${done}</div><div class="t-stat-label">Done</div></div>
-          <div class="t-stat"><div class="t-stat-num prog">${prog}</div><div class="t-stat-label">In prog</div></div>
-          <div class="t-stat"><div class="t-stat-num pend">${pending}</div><div class="t-stat-label">Pending</div></div>
-        </div>
-        <div class="teacher-prog-wrap">
-          <div class="teacher-prog-bar"><div class="teacher-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
-          <span style="font-size:.65rem;font-weight:700;color:${barColor}">${pct}%</span>
-        </div>
-        <div class="teacher-last-update">${updLabel}</div>
-        <svg class="teacher-expand-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="4,6 8,10 12,6"/></svg>
       </div>
-      <div class="teacher-detail" id="teacher-detail-${ti}">${chDetail}</div>
+      ${classRowsHtml}
     </div>`;
   }).join('');
 
-  renderPager('progressPager', progressPage, allTeachers.length, 'goProgressPage');
+  renderPager('progressPager', progressPage, teacherCards.length, 'goProgressPage');
 }
 
 window.goProgressPage = function(p) {
-  const total = Math.ceil(allTeachers.length / PAGE_SIZE);
-  if (p < 0 || p >= total) return;
   progressPage = p;
   renderProgressView();
   document.getElementById('progressList').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
-window.toggleTeacherDetail = function(ti) {
-  const el   = document.getElementById(`teacher-detail-${ti}`);
-  const card = document.getElementById(`teacher-card-${ti}`);
-  if (el)   el.classList.toggle('open');
-  if (card) card.classList.toggle('open');
+window.toggleClassRow = function(rowId) {
+  const row    = document.getElementById(rowId);
+  const detail = document.getElementById(`${rowId}-detail`);
+  if (row)    row.classList.toggle('open');
+  if (detail) detail.classList.toggle('open');
 };
 
 window.refreshProgress = function() {
@@ -1103,14 +1170,17 @@ function buildClassChips() {
 function buildWeakAlerts() {
   const weakMap = {};
   allTeachers.forEach(t => {
-    const statuses = progressByTeacher[t.uid]?.statuses || {};
-    chapters.forEach(ch => (ch.topics || []).forEach(topic => {
-      const k = `${ch.id}.${topic.id}`;
-      if (statuses[`diag.${k}`] === 'weak') {
-        if (!weakMap[k]) weakMap[k] = { topicName: topic.topic, chName: ch.chapter, teachers: [] };
-        weakMap[k].teachers.push(t.displayName || t.email);
-      }
-    }));
+    const { classSections } = progressByTeacher[t.uid] || { classSections: {} };
+    Object.values(classSections).forEach(statuses => {
+      chapters.forEach(ch => (ch.topics || []).forEach(topic => {
+        const k = `${ch.id}.${topic.id}`;
+        if (statuses[`diag.${k}`] === 'weak') {
+          if (!weakMap[k]) weakMap[k] = { topicName: topic.topic, chName: ch.chapter, teachers: [] };
+          const name = t.displayName || t.email;
+          if (!weakMap[k].teachers.includes(name)) weakMap[k].teachers.push(name);
+        }
+      }));
+    });
   });
 
   const panel   = document.getElementById('weakAlertPanel');
