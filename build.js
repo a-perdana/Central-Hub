@@ -65,6 +65,9 @@ const htmlFiles = [
   "igcse-syllabus.html",
   "igcse-math-admin.html",
   "igcse-math-pacing.html",
+  "igcse-biology-pacing.html",
+  "igcse-chemistry-pacing.html",
+  "igcse-physics-pacing.html",
   "as-alevel-pacing.html",
   "assessment-management.html",
   "assessments.html",
@@ -131,4 +134,13 @@ if (fs.existsSync("calendar-fallback.js")) {
 if (fs.existsSync("shared-styles.css")) {
   fs.copyFileSync("shared-styles.css", path.join("dist", "shared-styles.css"));
   console.log("Copied: shared-styles.css");
+}
+
+// Copy partials/igcse-pacing-core.js
+const partialsDistDir = path.join("dist", "partials");
+if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
+const pacingCoreJs = path.join("partials", "igcse-pacing-core.js");
+if (fs.existsSync(pacingCoreJs)) {
+  fs.copyFileSync(pacingCoreJs, path.join(partialsDistDir, "igcse-pacing-core.js"));
+  console.log("Copied: partials/igcse-pacing-core.js");
 }
