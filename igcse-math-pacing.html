@@ -200,6 +200,14 @@
     .codes-ac-tier.Core { background: #d1fae5; color: #065f46; }
     .codes-ac-tier.Extended { background: #dbeafe; color: #1e40af; }
     .codes-ac-empty { padding: 8px 12px; font-size: .72rem; color: var(--ink-3); font-style: italic; }
+    /* Modal codes widget */
+    .modal-codes-widget { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--white); cursor: text; }
+    .modal-codes-widget:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-2); }
+    .modal-codes-input { border: none; outline: none; font-family: 'DM Mono', monospace; font-size: .78rem; width: 100%; background: transparent; color: var(--ink); padding: 2px 0; }
+    .modal-codes-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; min-height: 0; }
+    .modal-obj-pill { font-size: .62rem; font-family: 'DM Mono', monospace; padding: 3px 7px; border-radius: 4px; background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; cursor: default; }
+    .modal-obj-pill-remove { cursor: pointer; opacity: .6; font-size: .7rem; line-height: 1; }
+    .modal-obj-pill-remove:hover { opacity: 1; color: #dc2626; }
     .codes-ac-invalid { border-color: #dc2626 !important; background: #fff5f5 !important; }
     .res-chip { font-size: .62rem; font-family: 'DM Mono', monospace; padding: 2px 6px; border-radius: 4px; background: var(--paper-2); border: 1px solid var(--border); color: var(--ink-2); display: inline-flex; align-items: center; gap: 3px; text-decoration: none; }
     .res-chip:hover { background: #e8f0fb; color: #1a5fa8; border-color: #c2d8f5; }
@@ -623,8 +631,18 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Objective codes (e.g. C1.1, E2.3)</label>
-        <input class="form-input" id="topObjInput" placeholder="C1.1 C1.2 E1.3">
+        <label class="form-label">Objective codes</label>
+        <!-- Hidden field — holds the saved space-separated codes for saveTopicModal() -->
+        <input type="hidden" id="topObjInput">
+        <!-- Autocomplete widget — populated by initModalCodesAC() -->
+        <div id="modalCodesWidget" class="modal-codes-widget">
+          <div class="codes-ac-wrap" style="width:100%">
+            <input class="modal-codes-input" id="modalCodesRawInput" type="text"
+              placeholder="Type code e.g. C1.1…" autocomplete="off" spellcheck="false">
+            <div class="codes-ac-dropdown" id="modalCodesDrop" style="display:none"></div>
+          </div>
+          <div id="modalCodesPills" class="modal-codes-pills"></div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Coordinator note <span style="font-size:.65rem;color:var(--ink-3);font-weight:400">(shared with all teachers)</span></label>
@@ -902,6 +920,126 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   });
 };
 
+// ── Modal codes autocomplete widget ──────────────────────────
+// Called every time the topic modal opens (add or edit).
+// Reads initial codes from topObjInput hidden field, renders pills,
+// handles typing/autocomplete the same way as inline activateCodesInput.
+let _modalConfirmedCodes = new Set();
+
+function initModalCodesAC(initialObjective) {
+  _modalConfirmedCodes = new Set(_parseObjCodes(initialObjective || ''));
+
+  const inp     = document.getElementById('modalCodesRawInput');
+  const drop    = document.getElementById('modalCodesDrop');
+  const pillsEl = document.getElementById('modalCodesPills');
+  const hidden  = document.getElementById('topObjInput');
+
+  let acIndex = -1;
+
+  function renderPills() {
+    pillsEl.innerHTML = [..._modalConfirmedCodes].map(c => {
+      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+      const tip   = entry ? `${entry.tier ? '['+entry.tier+'] ' : ''}${entry.title||''}` : '';
+      return `<span class="modal-obj-pill" title="${escHtml(tip)}">
+        ${escHtml(c)}
+        <span class="modal-obj-pill-remove" data-remove="${escHtml(c)}">✕</span>
+      </span>`;
+    }).join('');
+    // Keep hidden field in sync
+    hidden.value = [..._modalConfirmedCodes].join(' ');
+  }
+
+  pillsEl.addEventListener('click', e => {
+    const code = e.target.dataset.remove;
+    if (code) { _modalConfirmedCodes.delete(code); renderPills(); }
+  });
+
+  renderPills();
+  inp.value = '';
+  drop.style.display = 'none';
+
+  function getMatches(q) {
+    if (!q || !syllabusReady) return { loading: !syllabusReady, matches: [] };
+    const ql = q.toLowerCase();
+    const matches = Object.entries(syllabusIndex)
+      .filter(([, d]) => (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||''))
+      .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
+      .slice(0, 12)
+      .map(([, d]) => [d.code||'', d]);
+    return { loading: false, matches };
+  }
+
+  function renderDrop({ loading, matches }) {
+    acIndex = -1;
+    if (loading) {
+      drop.innerHTML = `<div class="codes-ac-empty" style="color:var(--ink-3)">Loading syllabus…</div>`;
+    } else if (!matches.length) {
+      drop.innerHTML = `<div class="codes-ac-empty">No matches</div>`;
+    } else {
+      drop.innerHTML = matches.map(([code, d]) =>
+        `<div class="codes-ac-item" data-code="${escHtml(code)}">
+          <span class="codes-ac-code">${escHtml(code)}</span>
+          <span class="codes-ac-title">${escHtml(d.title||'')}</span>
+          <span class="codes-ac-tier ${escHtml(d.tier||'')}">${escHtml(d.tier||'')}</span>
+        </div>`
+      ).join('');
+      drop.querySelectorAll('.codes-ac-item').forEach(item => {
+        item.addEventListener('mousedown', e => { e.preventDefault(); selectCode(item.dataset.code); });
+      });
+    }
+    drop.style.display = '';
+  }
+
+  function selectCode(displayCode) {
+    const valid = Object.values(syllabusIndex).some(d => d.code === displayCode);
+    if (!valid) return;
+    _modalConfirmedCodes.add(displayCode);
+    inp.value = '';
+    drop.style.display = 'none';
+    renderPills();
+    inp.focus();
+  }
+
+  // Remove old listeners by cloning the input
+  const newInp = inp.cloneNode(true);
+  inp.parentNode.replaceChild(newInp, inp);
+  const activeInp = document.getElementById('modalCodesRawInput');
+
+  activeInp.addEventListener('input', () => {
+    const q = activeInp.value.trim();
+    activeInp.style.borderColor = '';
+    if (!q) { drop.style.display = 'none'; return; }
+    renderDrop(getMatches(q));
+  });
+
+  activeInp.addEventListener('keydown', e => {
+    const items = drop.querySelectorAll('.codes-ac-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      acIndex = Math.min(acIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === acIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      acIndex = Math.max(acIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === acIndex));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (acIndex >= 0 && items[acIndex]) {
+        selectCode(items[acIndex].dataset.code);
+      } else {
+        const typed = activeInp.value.trim().toUpperCase();
+        const match = Object.values(syllabusIndex).find(d => (d.code||'').toUpperCase() === typed);
+        if (match) selectCode(match.code);
+        else if (typed) { activeInp.style.outline = '2px solid #dc2626'; showToast('Invalid code — choose from the dropdown'); }
+      }
+    } else if (e.key === 'Escape') {
+      drop.style.display = 'none';
+    }
+  });
+
+  activeInp.addEventListener('blur', () => { setTimeout(() => { drop.style.display = 'none'; }, 150); });
+}
+
 // ── Save chapters to Firestore ────────────────────────────────
 async function saveChapters() {
   const structureOnly = chapters.map(ch => ({
@@ -1119,6 +1257,7 @@ window.openAddTopicModal = function(ci) {
   document.getElementById('topAoInput').value = '';
   renderModalResources();
   document.getElementById('topicModal').style.display = 'flex';
+  initModalCodesAC('');
   setTimeout(() => document.getElementById('topNameInput').focus(), 50);
 };
 
@@ -1136,6 +1275,7 @@ window.editTopic = function(ci, ti) {
   document.getElementById('topAoInput').value = t.ao || '';
   renderModalResources();
   document.getElementById('topicModal').style.display = 'flex';
+  initModalCodesAC(t.objective || '');
   setTimeout(() => document.getElementById('topNameInput').focus(), 50);
 };
 
