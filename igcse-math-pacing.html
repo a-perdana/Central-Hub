@@ -130,6 +130,12 @@
     .icon-btn { background: none; border: 1px solid var(--border); border-radius: 5px; padding: 3px 7px; cursor: pointer; font-size: .72rem; color: var(--ink-3); transition: all .12s; line-height: 1; }
     .icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-2); }
     .icon-btn.danger:hover { border-color: #dc2626; color: #dc2626; background: #fee2e2; }
+    .icon-btn.edit { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; }
+    .icon-btn.edit:hover { border-color: #3b82f6; background: #dbeafe; }
+    .icon-btn.del { border-color: #fecaca; color: #dc2626; background: #fff5f5; }
+    .icon-btn.del:hover { border-color: #ef4444; background: #fee2e2; }
+    .icon-btn.move { border-color: #e5e7eb; color: #6b7280; }
+    .icon-btn.move:hover { border-color: #9ca3af; background: #f9fafb; color: #374151; }
     .ch-caret { font-size: .72rem; color: var(--ink-3); transition: transform .2s; flex-shrink: 0; }
     .ch-item.collapsed .ch-caret { transform: rotate(-90deg); }
     .ch-item.collapsed .ch-body { display: none; }
@@ -141,8 +147,8 @@
     .topic-tbl td { padding: 7px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     .topic-tbl tr:last-child td { border-bottom: none; }
     .topic-tbl tr:hover td { background: var(--paper); }
-    .obj-code { font-size: .6rem; font-family: 'DM Mono', monospace; padding: 1px 5px; border-radius: 3px; background: #e8f0fb; color: #1a5fa8; border: 1px solid #c2d8f5; display: inline-block; margin: 1px; white-space: nowrap; }
-    .dur-badge { font-size: .65rem; font-family: 'DM Mono', monospace; background: #fef8e7; color: #b07800; border: 1px solid #f0dea0; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+    .obj-code { font-size: .6rem; font-family: 'DM Mono', monospace; padding: 2px 6px; border-radius: 4px; background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; display: inline-block; margin: 1px; white-space: nowrap; font-weight: 600; letter-spacing: .01em; }
+    .dur-badge { font-size: .65rem; font-family: 'DM Mono', monospace; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
     /* Inline quick-edit inputs */
     .inline-input {
       font-family: 'DM Mono', monospace; font-size: .72rem; font-weight: 500;
@@ -154,6 +160,12 @@
     .inline-input:focus { border-color: var(--accent); background: var(--white); box-shadow: 0 0 0 2px var(--accent-2); }
     .inline-input.saving { border-color: #6ee7b7; background: #f0fdf4; }
     .inline-input-num { width: 52px; text-align: center; }
+    .inline-input-hours { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+    .inline-input-hours:hover { background: #fef9c3 !important; border-color: #f59e0b !important; }
+    .inline-input-hours:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; background: #fffbeb; }
+    .inline-input-week  { background: #f0fdf4; border-color: #86efac; color: #166534; }
+    .inline-input-week:hover  { background: #dcfce7 !important; border-color: #4ade80 !important; }
+    .inline-input-week:focus  { border-color: #22c55e; box-shadow: 0 0 0 2px #dcfce7; background: #f0fdf4; }
     .inline-codes-wrap { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; min-height: 22px; cursor: text; }
     .inline-codes-input { border: 1.5px solid var(--accent); border-radius: 5px; padding: 2px 6px; font-family: 'DM Mono', monospace; font-size: .68rem; background: var(--white); outline: none; min-width: 120px; }
     .codes-ac-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -628,6 +640,7 @@ let db, isAdmin = false;
 let chapters = [];
 let classList = [];
 let syllabusIndex = {};   // code → { title, tier, topicArea }
+let syllabusReady = false; // true once igcse_syllabus has finished loading
 let allTeachers = [];         // [{uid, name, email, photoURL}]
 let progressByTeacher = {};   // uid -> { statuses map }
 let selectedClass = 'default';
@@ -749,9 +762,11 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
       .slice(0, 12);
   }
 
-  function renderDrop(matches) {
+  function renderDrop(matches, loading) {
     acIndex = -1;
-    if (!matches.length) {
+    if (loading) {
+      drop.innerHTML = `<div class="codes-ac-empty" style="color:var(--ink-3)">Loading syllabus…</div>`;
+    } else if (!matches.length) {
       drop.innerHTML = `<div class="codes-ac-empty">No matches</div>`;
     } else {
       drop.innerHTML = matches.map(([code, d]) =>
@@ -784,6 +799,7 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     const q = inp.value.trim();
     inp.classList.remove('codes-ac-invalid');
     if (!q) { drop.style.display = 'none'; return; }
+    if (!syllabusReady) { renderDrop([], true); return; }
     renderDrop(getMatches(q));
   });
 
@@ -867,9 +883,9 @@ function renderChapters() {
       : `<table class="topic-tbl">
           <thead><tr>
             <th style="width:36%">Topic</th>
-            <th style="width:15%">Codes</th>
-            <th style="width:8%">Hours</th>
-            <th style="width:8%">Week</th>
+            <th style="width:15%;color:#1d4ed8">Codes</th>
+            <th style="width:8%;color:#92400e">Hours</th>
+            <th style="width:8%;color:#166534">Week</th>
             <th style="width:20%">Notes &amp; Tags</th>
             <th style="width:13%">Actions</th>
           </tr></thead>
@@ -891,13 +907,13 @@ function renderChapters() {
                   </div>
                 </td>
                 <td>
-                  <input class="inline-input inline-input-num" type="number" min="0" max="99"
+                  <input class="inline-input inline-input-num inline-input-hours" type="number" min="0" max="99"
                     value="${escHtml(String(dur))}" placeholder="—"
                     onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
                     title="Hours for this topic">
                 </td>
                 <td>
-                  <input class="inline-input inline-input-num" type="number" min="1" max="99"
+                  <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
                     value="${escHtml(String(wk))}" placeholder="—"
                     onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
                     title="School week number">
@@ -908,10 +924,10 @@ function renderChapters() {
                 </td>
                 <td>
                   <div style="display:flex;gap:4px;flex-wrap:wrap">
-                    <button class="icon-btn" onclick="editTopic(${ci},${ti})" title="Edit topic">&#9998;</button>
-                    <button class="icon-btn danger" onclick="deleteTopic(${ci},${ti})" title="Delete topic">&#215;</button>
-                    ${ti > 0 ? `<button class="icon-btn" onclick="moveTopic(${ci},${ti},-1)" title="Move up">&#8593;</button>` : ''}
-                    ${ti < topics.length-1 ? `<button class="icon-btn" onclick="moveTopic(${ci},${ti},1)" title="Move down">&#8595;</button>` : ''}
+                    <button class="icon-btn edit" onclick="editTopic(${ci},${ti})" title="Edit topic">✎</button>
+                    <button class="icon-btn del" onclick="deleteTopic(${ci},${ti})" title="Delete topic">✕</button>
+                    ${ti > 0 ? `<button class="icon-btn move" onclick="moveTopic(${ci},${ti},-1)" title="Move up">↑</button>` : ''}
+                    ${ti < topics.length-1 ? `<button class="icon-btn move" onclick="moveTopic(${ci},${ti},1)" title="Move down">↓</button>` : ''}
                   </div>
                 </td>
               </tr>`;
@@ -927,10 +943,10 @@ function renderChapters() {
           <span class="ch-year-badge ${yearCls}">${escHtml(ch.year||'')}</span>
           <span style="font-size:.65rem;color:var(--ink-3);font-family:'DM Mono',monospace">${topics.length} topics</span>
           <div class="ch-actions" onclick="event.stopPropagation()">
-            <button class="icon-btn" onclick="editChapter(${ci})" title="Edit chapter">&#9998;</button>
-            <button class="icon-btn danger" onclick="deleteChapter(${ci})" title="Delete chapter">&#215;</button>
-            ${ci > 0 ? `<button class="icon-btn" onclick="moveChapter(${ci},-1)" title="Move up">&#8593;</button>` : ''}
-            ${ci < chapters.length-1 ? `<button class="icon-btn" onclick="moveChapter(${ci},1)" title="Move down">&#8595;</button>` : ''}
+            <button class="icon-btn edit" onclick="editChapter(${ci})" title="Edit chapter">✎</button>
+            <button class="icon-btn del" onclick="deleteChapter(${ci})" title="Delete chapter">✕</button>
+            ${ci > 0 ? `<button class="icon-btn move" onclick="moveChapter(${ci},-1)" title="Move up">↑</button>` : ''}
+            ${ci < chapters.length-1 ? `<button class="icon-btn move" onclick="moveChapter(${ci},1)" title="Move down">↓</button>` : ''}
           </div>
           <span class="ch-caret">▾</span>
         </div>
@@ -1682,6 +1698,8 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
   // Load syllabus index for autocomplete (background — don't block render)
   getDocs(collection(db, 'igcse_syllabus')).then(snap => {
     snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
+    syllabusReady = true;
+    console.log(`Syllabus index loaded: ${Object.keys(syllabusIndex).length} codes`);
   }).catch(e => console.warn('igcse_syllabus load failed:', e));
 
   // Real-time listener for structure
