@@ -129,8 +129,8 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
       `<span class="obj-code" data-remove="${escHtml(c)}" style="cursor:pointer" title="Click to remove ${escHtml(c)}">${escHtml(c)} ✕</span>`
     ).join('');
   }
-  pillsEl.addEventListener('click', e => {
-    const code = e.target.dataset.remove;
+  wrapEl.addEventListener('click', e => {
+    const code = e.target.closest('[data-remove]')?.dataset.remove;
     if (code) { confirmedCodes.delete(code); renderPills(); }
   });
   renderPills();
