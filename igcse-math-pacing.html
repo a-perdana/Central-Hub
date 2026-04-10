@@ -813,13 +813,14 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     const ql = q.toLowerCase();
     // syllabusIndex keys are doc IDs like "0580_C1.1"; entry.code is the display code "C1.1"
     return Object.entries(syllabusIndex)
-      .filter(([, d]) => {
+      .filter(([docId, d]) => {
         const displayCode = (d.code || '').toLowerCase();
-        return displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
+        const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
+        return subjectMatch && displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
       })
       .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
       .slice(0, 12)
-      .map(([, d]) => [d.code || '', d]); // return [displayCode, data] pairs
+      .map(([, d]) => [d.code || '', d]);
   }
 
   function renderDrop(matches, loading) {
@@ -848,7 +849,8 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
 
   function selectCode(displayCode) {
     // displayCode is the entry.code field (e.g. "C1.1"), not the Firestore doc ID
-    const valid = Object.values(syllabusIndex).some(d => d.code === displayCode);
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
+      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
     if (!valid) return; // invalid — reject
     confirmedCodes.add(displayCode);
     inp.value = '';
@@ -962,7 +964,10 @@ function initModalCodesAC(initialObjective) {
     if (!q || !syllabusReady) return { loading: !syllabusReady, matches: [] };
     const ql = q.toLowerCase();
     const matches = Object.entries(syllabusIndex)
-      .filter(([, d]) => (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||''))
+      .filter(([docId, d]) => {
+        const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
+        return subjectMatch && (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||'');
+      })
       .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
       .slice(0, 12)
       .map(([, d]) => [d.code||'', d]);
@@ -991,7 +996,8 @@ function initModalCodesAC(initialObjective) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.values(syllabusIndex).some(d => d.code === displayCode);
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
+      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
     if (!valid) return;
     _modalConfirmedCodes.add(displayCode);
     inp.value = '';
@@ -1353,7 +1359,8 @@ window.moveTopic = function(ci, ti, dir) {
 
 // ── Shared teacher fetch (used by Progress, Heatmap, Hours tabs) ──────────────
 // Only includes teachers whose `subjects` array contains the current subject key.
-const SUBJECT_KEY = 'math'; // used to filter teachers by subjects field
+const SUBJECT_KEY   = 'math'; // used to filter teachers by subjects field
+const SYLLABUS_CODE = '0580'; // used to filter igcse_syllabus by subject code prefix
 async function fetchTeachers() {
   const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
   allTeachers = [];

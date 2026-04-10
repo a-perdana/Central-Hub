@@ -12,9 +12,10 @@ import {
   setDoc, onSnapshot, serverTimestamp, query, where,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-const COLLECTION   = window.PACING_CONFIG.collection;
-const DOC_ID       = window.PACING_CONFIG.docId;
-const SUBJECT_KEY  = window.PACING_CONFIG.subjectKey;
+const COLLECTION    = window.PACING_CONFIG.collection;
+const DOC_ID        = window.PACING_CONFIG.docId;
+const SUBJECT_KEY   = window.PACING_CONFIG.subjectKey;
+const SYLLABUS_CODE = window.PACING_CONFIG.syllabusCode || ''; // e.g. '0610', '0620', '0625'
 
 let db, isAdmin = false;
 let chapters = [];
@@ -135,9 +136,10 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     if (!q) return [];
     const ql = q.toLowerCase();
     return Object.entries(syllabusIndex)
-      .filter(([, d]) => {
+      .filter(([docId, d]) => {
         const displayCode = (d.code || '').toLowerCase();
-        return displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
+        const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
+        return subjectMatch && displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
       })
       .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
       .slice(0, 12)
@@ -169,7 +171,8 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.values(syllabusIndex).some(d => d.code === displayCode);
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
+      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
     if (!valid) return;
     confirmedCodes.add(displayCode);
     inp.value = '';
@@ -275,7 +278,10 @@ function initModalCodesAC(initialObjective) {
     if (!q || !syllabusReady) return { loading: !syllabusReady, matches: [] };
     const ql = q.toLowerCase();
     const matches = Object.entries(syllabusIndex)
-      .filter(([, d]) => (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||''))
+      .filter(([docId, d]) => {
+        const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
+        return subjectMatch && (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||'');
+      })
       .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
       .slice(0, 12)
       .map(([, d]) => [d.code||'', d]);
@@ -304,7 +310,8 @@ function initModalCodesAC(initialObjective) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.values(syllabusIndex).some(d => d.code === displayCode);
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
+      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
     if (!valid) return;
     _modalConfirmedCodes.add(displayCode);
     inp.value = '';
