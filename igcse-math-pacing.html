@@ -1657,7 +1657,8 @@ async function loadHeatmapTab() {
   // Ensure teacher list is loaded
   if (!allTeachers.length) await fetchTeachers();
 
-  // Scan ALL userProgress docs and collect every statuses_* key found.
+  // Scan userProgress docs — only for teachers in allTeachers (already subject-filtered).
+  const allowedUids = new Set(allTeachers.map(t => t.uid));
   const progressSnap = await getDocs(collection(db, 'userProgress'));
   const progressByClass = {};   // classKey -> statuses map
   const teacherByClass  = {};   // classKey -> teacher object
@@ -1671,6 +1672,7 @@ async function loadHeatmapTab() {
   });
 
   progressSnap.forEach(d => {
+    if (!allowedUids.has(d.id)) return; // skip teachers not in this subject
     const data = d.data();
     Object.keys(data).forEach(key => {
       const m = key.match(/^statuses_(.+)$/);

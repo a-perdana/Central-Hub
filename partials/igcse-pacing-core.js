@@ -947,6 +947,8 @@ async function loadHeatmapTab() {
 
   if (!allTeachers.length) await fetchTeachers();
 
+  // Only include progress from teachers in allTeachers (already subject-filtered).
+  const allowedUids = new Set(allTeachers.map(t => t.uid));
   const progressSnap = await getDocs(collection(db, 'userProgress'));
   const progressByClass = {};
   const teacherByClass  = {};
@@ -959,6 +961,7 @@ async function loadHeatmapTab() {
   });
 
   progressSnap.forEach(d => {
+    if (!allowedUids.has(d.id)) return; // skip teachers not in this subject
     const data = d.data();
     Object.keys(data).forEach(key => {
       const m = key.match(/^statuses_(.+)$/);
