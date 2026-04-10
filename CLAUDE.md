@@ -125,6 +125,15 @@ Each platform has its **own** Firestore role field — there is no single shared
 
 Sub-roles control tab visibility in weekly-checklist pages and `visible_to[]` filtering on dashboard category documents. A user can hold multiple sub-roles simultaneously.
 
+**Approval status fields** (managed in `console.html`; shown as inline Approve/Reject buttons for pending users):
+
+| Platform     | Firestore field                  | Values                                     |
+|--------------|----------------------------------|--------------------------------------------|
+| Academic Hub | `approval_status_academichub`    | `'pending'` (default) \| `'approved'` \| `'rejected'` |
+| Teachers Hub | `approval_status_teachershub`    | `'pending'` (default) \| `'approved'` \| `'rejected'` |
+
+`console.html` shows a banner at the top and a stat card when there are pending users. Clicking either filters the user list to pending users. `academic_admin` and `teachers_admin` bypass the approval check.
+
 **CentralHub allowed values:** `'central_user'` (read access) | `'central_admin'` (full management access).
 
 Access is restricted to `@eduversal.org` email addresses (enforced in both `login.html` and `auth-guard.js`). Email/password accounts created manually in Firebase Console bypass the domain check. First login auto-assigns `central_user` via `setDoc` with `{ merge: true }`. `central_admin` must be set manually via `console.html`.
@@ -225,7 +234,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `as-alevel-pacing.html`            | `/as-alevel-pacing`             | A-Level pacing guide                              |
 | `primary-checkpoint-pacing.html`   | `/primary-checkpoint-pacing`    | Primary checkpoint pacing (Year 4–6)              |
 | `secondary-checkpoint-pacing.html` | `/secondary-checkpoint-pacing`  | Secondary checkpoint pacing (Year 7–8)            |
-| `console.html`                     | `/console`                      | User management — sets all 4 platform role fields |
+| `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
 | `school-appraisals.html`           | `/school-appraisals`            | School-level appraisals                           |
 | `teacher-appraisals.html`          | `/teacher-appraisals`           | Teacher appraisals                                |
