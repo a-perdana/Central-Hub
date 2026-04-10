@@ -310,8 +310,14 @@
     .class-row-badge {
       font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 100px;
       background: var(--paper-2); color: var(--ink-2); border: 1px solid var(--border);
-      white-space: nowrap; flex-shrink: 0; min-width: 48px; text-align: center;
+      white-space: nowrap; flex-shrink: 0; width: 58px; text-align: center;
     }
+    .teacher-no-data-row {
+      padding: 12px 20px; font-size: .75rem; color: var(--ink-3);
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: none; font-style: italic;
+    }
+    .no-data-icon { font-style: normal; font-size: .85rem; }
     .teacher-stats { display: flex; gap: 14px; flex-shrink: 0; align-items: center; margin-left: auto; }
     .t-stat { text-align: center; min-width: 32px; }
     .t-stat-num { font-size: .95rem; font-weight: 700; font-family: 'DM Mono', monospace; }
@@ -322,7 +328,7 @@
     .teacher-prog-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
     .teacher-prog-bar { height: 6px; background: var(--border); border-radius: 100px; overflow: hidden; width: 96px; }
     .teacher-prog-fill { height: 100%; border-radius: 100px; transition: width .5s ease; }
-    .teacher-last-update { font-size: .63rem; color: var(--ink-3); flex-shrink: 0; white-space: nowrap; }
+    .teacher-last-update { font-size: .63rem; color: var(--ink-3); flex-shrink: 0; white-space: nowrap; width: 44px; text-align: right; }
     .teacher-expand-icon { color: var(--ink-3); flex-shrink: 0; transition: transform .2s; }
     .teacher-class-row.open .teacher-expand-icon { transform: rotate(180deg); }
 
@@ -436,9 +442,10 @@
     <!-- ═══ TAB: TEACHER PROGRESS ════════════════════════════════ -->
     <div id="tab-progress" style="display:none">
       <div class="class-selector-bar">
-        <span class="class-label">Class:</span>
-        <button class="class-chip on" data-cls="default" onclick="selectClass('default',this)">All Classes</button>
-        <span id="classChips"></span>
+        <span class="class-label">Year:</span>
+        <button class="class-chip on" data-cls="default" onclick="selectClass('default',this)">All Years</button>
+        <button class="class-chip" data-cls="year9"  onclick="selectClass('year9',this)">Year 9</button>
+        <button class="class-chip" data-cls="year10" onclick="selectClass('year10',this)">Year 10</button>
         <button class="btn-add" style="margin-left:auto" onclick="refreshProgress()">&#8635; Refresh</button>
       </div>
 
@@ -957,7 +964,6 @@ async function loadProgressTab() {
 
   // 1. Load all teachers (fetchTeachers also merges igcse_classes into classList)
   await fetchTeachers();
-  buildClassChips();
 
   // 2. Load ALL class statuses per teacher (parallel)
   progressByTeacher = {};
@@ -995,26 +1001,26 @@ function renderProgressView() {
   }
 
   const totalTopics = chapters.reduce((n, ch) => n + (ch.topics||[]).length, 0);
-  const filterCls   = selectedClass && selectedClass !== 'default' ? selectedClass : null;
+
+  // Year filter: 'year9' matches class names containing '9', 'year10' matches '10'
+  function classMatchesYear(cls) {
+    if (!selectedClass || selectedClass === 'default') return true;
+    const n = cls.replace(/\s/g, '').toLowerCase();
+    if (selectedClass === 'year9')  return /\b9/.test(n) && !/10/.test(n);
+    if (selectedClass === 'year10') return /10/.test(n);
+    return true;
+  }
 
   // Build flat list of {teacher, className, statuses} pairs — one per class per teacher.
-  // If a class filter is active, only include teachers who have data for that class.
   const rows = [];
   allTeachers.forEach(t => {
     const { classSections, updatedAt } = progressByTeacher[t.uid] || { classSections: {}, updatedAt: null };
-    if (filterCls) {
-      // Normalise: stored key may use underscores or spaces
-      const key = Object.keys(classSections).find(k => k === filterCls || k.replace(/_/g,' ') === filterCls);
-      if (key) rows.push({ t, cls: filterCls, statuses: classSections[key], updatedAt });
-      // Teacher has no data for this class — still show them grayed out
-      else rows.push({ t, cls: filterCls, statuses: {}, updatedAt: null });
+    const keys = Object.keys(classSections).filter(k => classMatchesYear(k));
+    if (keys.length) {
+      keys.forEach(cls => rows.push({ t, cls: cls.replace(/_/g,' '), statuses: classSections[cls], updatedAt }));
     } else {
-      const keys = Object.keys(classSections);
-      if (keys.length) {
-        keys.forEach(cls => rows.push({ t, cls: cls.replace(/_/g,' '), statuses: classSections[cls], updatedAt }));
-      } else {
-        rows.push({ t, cls: null, statuses: {}, updatedAt: null });
-      }
+      // Teacher visible but no data for this year filter (or no data at all)
+      rows.push({ t, cls: null, statuses: {}, updatedAt: null, noData: true });
     }
   });
 
@@ -1063,8 +1069,23 @@ function renderProgressView() {
     const updatedAt = progressByTeacher[t.uid]?.updatedAt;
     const updLabel  = updatedAt?.toDate ? updatedAt.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '';
 
-    // Render one row per class
-    const classRowsHtml = classRows.map((row, ri) => {
+    // Determine teacher state for empty-state messaging
+    const hasClasses   = t.igcse_classes && t.igcse_classes.length > 0;
+    const hasAnyData   = Object.keys(progressByTeacher[t.uid]?.classSections || {}).length > 0;
+    const firstRow     = classRows[0];
+    const isNoDataCard = firstRow?.noData;
+
+    // Render one row per class (or a single empty-state row)
+    const classRowsHtml = isNoDataCard
+      ? `<div class="teacher-no-data-row">
+           ${!hasClasses
+             ? `<span class="no-data-icon">📋</span> No classes assigned — teacher has not selected a class in Teachers Hub`
+             : !hasAnyData
+               ? `<span class="no-data-icon">📝</span> Classes assigned (${t.igcse_classes.join(', ')}) but no progress saved yet`
+               : `<span class="no-data-icon">🔍</span> No data for selected year filter`
+           }
+         </div>`
+      : classRows.map((row, ri) => {
       const { cls, statuses } = row;
       let done = 0, prog = 0, pending = 0;
       chapters.forEach(ch => (ch.topics||[]).forEach(topic => {
@@ -1076,6 +1097,9 @@ function renderProgressView() {
       const pct      = totalTopics ? Math.round(done / totalTopics * 100) : 0;
       const barColor = pct >= 75 ? '#1e7a4a' : pct >= 40 ? '#1a5fa8' : '#dc2626';
       const rowId    = `tcr-${ti}-${ri}`;
+      const rowUpd   = row.updatedAt?.toDate
+        ? row.updatedAt.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
+        : '—';
 
       // Chapter breakdown for this class
       const chDetail = chapters.map((ch, chi) => {
@@ -1108,17 +1132,17 @@ function renderProgressView() {
 
       return `
         <div class="teacher-class-row" id="${rowId}" onclick="toggleClassRow('${rowId}')">
-          ${cls ? `<span class="class-row-badge">${escHtml(cls)}</span>` : ''}
+          <span class="class-row-badge">${escHtml(cls || '—')}</span>
           <div class="teacher-stats">
             <div class="t-stat"><div class="t-stat-num done">${done}</div><div class="t-stat-label">Done</div></div>
-            <div class="t-stat"><div class="t-stat-num prog">${prog}</div><div class="t-stat-label">In prog</div></div>
+            <div class="t-stat"><div class="t-stat-num prog">${prog}</div><div class="t-stat-label">In Prog</div></div>
             <div class="t-stat"><div class="t-stat-num pend">${pending}</div><div class="t-stat-label">Pending</div></div>
           </div>
           <div class="teacher-prog-wrap">
             <div class="teacher-prog-bar"><div class="teacher-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
             <span style="font-size:.65rem;font-weight:700;color:${barColor}">${pct}%</span>
           </div>
-          ${ri === 0 ? `<div class="teacher-last-update">${updLabel}</div>` : '<div class="teacher-last-update"></div>'}
+          <div class="teacher-last-update">${rowUpd}</div>
           <svg class="teacher-expand-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="4,6 8,10 12,6"/></svg>
         </div>
         <div class="teacher-detail" id="${rowId}-detail">${chDetail}</div>`;
@@ -1157,13 +1181,6 @@ window.refreshProgress = function() {
   loadProgressTab();
 };
 
-function buildClassChips() {
-  const el = document.getElementById('classChips');
-  if (!el) return;
-  el.innerHTML = classList.map(cls =>
-    `<button class="class-chip" data-cls="${escHtml(cls)}" onclick="selectClass('${escHtml(cls)}',this)">${escHtml(cls)}</button>`
-  ).join('');
-}
 
 
 // ── Weak Topic Alert ──────────────────────────────────────────
@@ -1446,7 +1463,7 @@ window.selectClass = function(cls, btn) {
   progressPage = 0; hoursPage = 0;
   document.querySelectorAll('.class-chip').forEach(c => c.classList.remove('on'));
   btn.classList.add('on');
-  loadProgressTab();
+  renderProgressView(); // no Firestore refetch needed — just re-filter in memory
 };
 
 // ── Modal close ───────────────────────────────────────────────
@@ -1480,7 +1497,6 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
       chapters = [];
       classList = [];
     }
-    buildClassChips();
     renderChapters();
   });
 });
