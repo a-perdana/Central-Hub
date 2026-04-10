@@ -121,7 +121,7 @@ Each platform has its **own** Firestore role field — there is no single shared
 | Platform     | Firestore field  | Values                                                                        |
 |--------------|------------------|-------------------------------------------------------------------------------|
 | Central Hub  | `ch_sub_roles[]` | `'director'`, `'coordinator'`                                                 |
-| Academic Hub | `ah_sub_roles[]` | `'foundation_representative'`, `'school_principal'`, `'academic_coordinator'` |
+| Academic Hub | `ah_sub_roles[]` | `'foundation_representative'`, `'school_principal'`, `'academic_coordinator'`, `'cambridge_coordinator'` |
 | Teachers Hub | `th_sub_roles[]` | `'subject_teacher'`, `'subject_leader'`                                       |
 
 Sub-roles control tab visibility in weekly-checklist pages and `visible_to[]` filtering on dashboard category documents. A user can hold multiple sub-roles simultaneously.
