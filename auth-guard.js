@@ -20,7 +20,7 @@ import { initializeApp, getApps }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -463,6 +463,14 @@ onAuthStateChanged(auth, async (user) => {
   // 6. All checks passed — expose globals
   window.currentUser = user;
   window.userProfile = profile;
+
+  // Log platform usage event (fire-and-forget, non-blocking)
+  addDoc(collection(db, 'platform_usage'), {
+    uid:      user.uid,
+    platform: 'centralhub',
+    role:     profile[PLATFORM_KEY] || '',
+    ts:       serverTimestamp(),
+  }).catch(() => {});  // silently ignore if rules block or offline
 
   // ── Cache shared nav element references ──────────────────────────
   const navAuth     = document.querySelector('.nav-auth');
