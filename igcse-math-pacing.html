@@ -147,7 +147,21 @@
     .topic-tbl td { padding: 7px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     .topic-tbl tr:last-child td { border-bottom: none; }
     .topic-tbl tr:hover td { background: var(--paper); }
-    .obj-code { font-size: .6rem; font-family: 'DM Mono', monospace; padding: 2px 6px; border-radius: 4px; background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; display: inline-block; margin: 1px; white-space: nowrap; font-weight: 600; letter-spacing: .01em; }
+    .obj-code { font-size: .6rem; font-family: 'DM Mono', monospace; padding: 2px 6px; border-radius: 4px; background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; display: inline-block; margin: 1px; white-space: nowrap; font-weight: 600; letter-spacing: .01em; position: relative; cursor: default; }
+    .obj-code:hover { background: #bfdbfe; border-color: #60a5fa; }
+    .obj-code[data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      background: #1e3a5f; color: #fff; font-size: .65rem; font-weight: 400;
+      padding: 5px 9px; border-radius: 6px; white-space: nowrap; z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0,0,0,.18); font-family: 'DM Sans', sans-serif;
+      letter-spacing: 0; max-width: 220px; white-space: normal; text-align: center;
+      pointer-events: none;
+    }
+    .obj-code[data-tip]:hover::before {
+      content: ''; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+      border: 4px solid transparent; border-top-color: #1e3a5f; z-index: 9999;
+    }
     .dur-badge { font-size: .65rem; font-family: 'DM Mono', monospace; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
     /* Inline quick-edit inputs */
     .inline-input {
@@ -196,6 +210,24 @@
     .diag-badge.weak { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
     .diag-badge.review { background: #fef9c3; color: #92400e; border: 1px solid #fde68a; }
     .diag-badge.good { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+
+    /* ── Week date label ─────────────────────────────── */
+    .week-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .week-date-lbl { font-size: .55rem; color: var(--ink-3); white-space: nowrap; font-family: 'DM Mono', monospace; letter-spacing: -.01em; }
+    .week-date-lbl.term-lbl { color: #166534; font-weight: 600; }
+
+    /* ── Academic year strip (below hero) ────────────── */
+    .cal-strip {
+      background: #f0fdf4; border-bottom: 1px solid #bbf7d0;
+      padding: 8px 40px; display: flex; align-items: center; gap: 20px;
+      flex-wrap: wrap; font-size: .72rem; color: #166534;
+    }
+    .cal-strip-item { display: flex; align-items: center; gap: 5px; }
+    .cal-strip-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+    .cal-strip-term { padding: 2px 8px; border-radius: 100px; background: #dcfce7; border: 1px solid #86efac; font-weight: 600; }
+    .cal-strip-link { margin-left: auto; color: #15803d; text-decoration: none; font-weight: 600; font-size: .68rem; }
+    .cal-strip-link:hover { text-decoration: underline; }
+    #calStrip { display: none; }
 
     /* ── Add chapter button ─────────────────────────── */
     .add-ch-wrap { text-align: center; padding: 16px 0; }
@@ -285,6 +317,7 @@
     }
     .hours-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     .hours-table tr:last-child td { border-bottom: none; }
+    .hours-teacher-row:hover td { background: #f0fdf4 !important; }
     .hours-table tbody tr:hover td { background: #fafaf8; }
     .hours-ratio-bar {
       height: 6px; border-radius: 100px; background: var(--paper-2);
@@ -446,6 +479,9 @@
     </div>
   </div>
 </div>
+
+<!-- Academic year info strip — populated after calendar_settings loads -->
+<div id="calStrip" class="cal-strip"></div>
 
 <div class="page-wrap">
   <div id="accessDenied" class="access-denied" style="display:none">
@@ -644,6 +680,7 @@ let syllabusReady = false; // true once igcse_syllabus has finished loading
 let allTeachers = [];         // [{uid, name, email, photoURL}]
 let progressByTeacher = {};   // uid -> { statuses map }
 let selectedClass = 'default';
+let calSettings = null;   // calendar_settings/current doc data
 let _editChIdx = null, _editTopIdx = null;
 
 // ── Paging state ──────────────────────────────────────────────
@@ -852,8 +889,11 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
 
   function restorePills(objective) {
     const codes = _parseObjCodes(objective);
-    wrapEl.innerHTML = codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')
-      + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
+    wrapEl.innerHTML = codes.map(c => {
+      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+      const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
+      return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
+    }).join('') + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
   }
 
   inp.addEventListener('blur', () => {
@@ -909,7 +949,11 @@ function renderChapters() {
                 </td>
                 <td>
                   <div class="inline-codes-wrap" onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes">
-                    ${codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')}
+                    ${codes.map(c => {
+                      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+                      const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
+                      return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
+                    }).join('')}
                     ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : ''}
                   </div>
                 </td>
@@ -920,10 +964,20 @@ function renderChapters() {
                     title="Hours for this topic">
                 </td>
                 <td>
-                  <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
-                    value="${escHtml(String(wk))}" placeholder="—"
-                    onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
-                    title="School week number">
+                  ${(() => {
+                    const info = wk ? weekInfo(wk) : null;
+                    const lbl  = info
+                      ? `${fmtShortDate(info.monDate)}–${fmtShortDate(info.friDate)}${info.termLabel ? ` · ${info.termLabel}` : ''}`
+                      : '';
+                    const termCls = info?.termLabel ? ' term-lbl' : '';
+                    return `<div class="week-cell">
+                      <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
+                        value="${escHtml(String(wk))}" placeholder="—"
+                        onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
+                        title="${lbl ? `Week ${wk}: ${lbl}` : 'School week number'}">
+                      ${lbl ? `<span class="week-date-lbl${termCls}">${escHtml(lbl)}</span>` : ''}
+                    </div>`;
+                  })()}
                 </td>
                 <td>
                   ${t.coordNote ? `<div class="coord-note-text">${escHtml(t.coordNote)}</div>` : ''}
@@ -1432,6 +1486,9 @@ function buildWeakAlerts() {
       </div>
     </div>`).join('');
   panel.style.display = '';
+  // Restore toggle state (panel re-renders on filter change — keep it open if it was open)
+  document.getElementById('weakAlertBody').style.display = _weakPanelOpen ? '' : 'none';
+  document.getElementById('weakAlertToggle').textContent = _weakPanelOpen ? '▾ Hide' : '▸ Show';
 }
 
 let _weakPanelOpen = false;
@@ -1584,41 +1641,119 @@ async function loadHoursTab() {
   renderHoursReport();
 }
 
+// Merge all classSections statuses for a teacher into one combined map
+function _mergedStatuses(uid) {
+  const { classSections = {} } = progressByTeacher[uid] || {};
+  const merged = {};
+  Object.values(classSections).forEach(s => {
+    Object.entries(s).forEach(([k, v]) => {
+      // For actual hours: sum across classes; for status: 'done' wins
+      if (k.startsWith('actual.')) {
+        merged[k] = (merged[k] || 0) + (parseFloat(v) || 0);
+      } else if (!merged[k]) {
+        merged[k] = v;
+      }
+    });
+  });
+  return merged;
+}
+
+const _hoursExpanded = new Set(); // teacher UIDs with drill-down open
+
+window.toggleHoursDrilldown = function(uid) {
+  if (_hoursExpanded.has(uid)) _hoursExpanded.delete(uid);
+  else _hoursExpanded.add(uid);
+  renderHoursReport();
+};
+
 function renderHoursReport() {
   const content = document.getElementById('hoursReportContent');
   const aggEl   = document.getElementById('aggHoursBanner');
   if (!content) return;
 
   const totalPlanned = chapters.reduce((s, ch) =>
-    s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0);
+    s + (ch.topics || []).reduce((ts, t) => ts + (+(t.duration ?? t.hour) || 0), 0), 0);
 
-  // Compute grand actual across ALL teachers (for agg banner), then page rows
+  // Grand actual across all teachers (agg banner)
   let grandActual = 0;
   allTeachers.forEach(t => {
-    const statuses = progressByTeacher[t.uid]?.statuses || {};
+    const st = _mergedStatuses(t.uid);
     chapters.forEach(ch => (ch.topics || []).forEach(topic => {
-      grandActual += parseFloat(statuses[`actual.${ch.id}.${topic.id}`]) || 0;
+      grandActual += parseFloat(st[`actual.${ch.id}.${topic.id}`]) || 0;
     }));
   });
+  grandActual = Math.round(grandActual * 10) / 10;
 
   const pageTeachersH = allTeachers.slice(hoursPage * PAGE_SIZE, (hoursPage + 1) * PAGE_SIZE);
+
   const rows = pageTeachersH.map(t => {
-    const statuses = progressByTeacher[t.uid]?.statuses || {};
-    let actual = 0;
+    const st       = _mergedStatuses(t.uid);
+    let actual     = 0;
     chapters.forEach(ch => (ch.topics || []).forEach(topic => {
-      actual += parseFloat(statuses[`actual.${ch.id}.${topic.id}`]) || 0;
+      actual += parseFloat(st[`actual.${ch.id}.${topic.id}`]) || 0;
     }));
+    actual = Math.round(actual * 10) / 10;
 
-    const diff      = Math.round((actual - totalPlanned) * 10) / 10;
-    const pillCls   = actual === 0 ? '' : diff > 2 ? 'hours-over' : diff < -2 ? 'hours-under' : 'hours-match';
-    const label     = actual === 0 ? '—' : diff === 0 ? '✓ On track' : diff > 0 ? `+${diff}h over` : `${Math.abs(diff)}h under`;
-    const barPct    = totalPlanned ? Math.min(100, Math.round(actual / totalPlanned * 100)) : 0;
-    const barColor  = barPct >= 100 ? '#dc2626' : barPct >= 80 ? '#1e7a4a' : '#3b82f6';
-    const initials  = (t.displayName || t.email || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const diff     = Math.round((actual - totalPlanned) * 10) / 10;
+    const pillCls  = actual === 0 ? '' : diff > 2 ? 'hours-over' : diff < -2 ? 'hours-under' : 'hours-match';
+    const label    = actual === 0 ? '—' : diff === 0 ? '✓ On track' : diff > 0 ? `+${diff}h over` : `${Math.abs(diff)}h under`;
+    const barPct   = totalPlanned ? Math.min(100, Math.round(actual / totalPlanned * 100)) : 0;
+    const barColor = barPct >= 100 ? '#dc2626' : barPct >= 80 ? '#1e7a4a' : '#3b82f6';
+    const initials = (t.displayName || t.email || '?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const expanded = _hoursExpanded.has(t.uid);
 
-    return `<tr>
+    // Drill-down rows: one per chapter that has any logged hours
+    let drillHtml = '';
+    if (expanded) {
+      const chRows = chapters.map(ch => {
+        const planned = (ch.topics||[]).reduce((s,tp) => s + (+(tp.duration??tp.hour)||0), 0);
+        let logged = 0;
+        (ch.topics||[]).forEach(tp => {
+          logged += parseFloat(st[`actual.${ch.id}.${tp.id}`]) || 0;
+        });
+        logged = Math.round(logged * 10) / 10;
+
+        // Per-topic rows (only those with logged hours or planned > 0)
+        const topicRows = (ch.topics||[]).map(tp => {
+          const tPlan = +(tp.duration ?? tp.hour) || 0;
+          const tLog  = Math.round((parseFloat(st[`actual.${ch.id}.${tp.id}`]) || 0) * 10) / 10;
+          if (!tPlan && !tLog) return '';
+          const tDiff = Math.round((tLog - tPlan) * 10) / 10;
+          const tColor = tLog === 0 ? 'var(--ink-3)' : tDiff > 1 ? '#dc2626' : tDiff < -1 ? '#d97706' : '#15803d';
+          return `<tr style="background:#fafaf8">
+            <td style="padding:4px 14px 4px 36px;font-size:.72rem;color:var(--ink-2)">${escHtml(tp.topic)}</td>
+            <td style="padding:4px 14px;font-size:.68rem;color:var(--ink-3);font-family:'DM Mono',monospace">${tPlan ? tPlan+'h' : '—'}</td>
+            <td style="padding:4px 14px;font-size:.68rem;font-family:'DM Mono',monospace;color:${tLog?'var(--ink)':'var(--ink-3)'};font-weight:${tLog?'600':'400'}">${tLog ? tLog+'h' : '—'}</td>
+            <td style="padding:4px 14px;font-size:.65rem;color:${tColor}">${tLog > 0 ? (tDiff >= 0 ? '+'+tDiff : tDiff)+'h' : ''}</td>
+          </tr>`;
+        }).join('');
+
+        const chDiff = Math.round((logged - planned) * 10) / 10;
+        const chColor = logged === 0 ? 'var(--ink-3)' : chDiff > 2 ? '#dc2626' : chDiff < -2 ? '#d97706' : '#15803d';
+        return `<tr style="background:#f8f8f6;border-top:1px solid var(--border)">
+          <td style="padding:6px 14px 6px 20px;font-size:.75rem;font-weight:600;color:var(--ink)">${escHtml(ch.chapter)}</td>
+          <td style="padding:6px 14px;font-size:.72rem;font-family:'DM Mono',monospace;color:var(--ink-2)">${planned ? planned+'h' : '—'}</td>
+          <td style="padding:6px 14px;font-size:.72rem;font-family:'DM Mono',monospace;font-weight:600;color:${logged?'var(--ink)':'var(--ink-3)'}">${logged ? logged+'h' : '—'}</td>
+          <td style="padding:6px 14px;font-size:.7rem;color:${chColor}">${logged > 0 ? (chDiff >= 0 ? '+'+chDiff : chDiff)+'h' : ''}</td>
+        </tr>${topicRows}`;
+      }).join('');
+      drillHtml = `<tr><td colspan="4" style="padding:0;border-top:1px solid #e5e7eb">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f1f5f9">
+            <th style="padding:5px 14px 5px 20px;font-size:.6rem;text-align:left;color:var(--ink-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Chapter / Topic</th>
+            <th style="padding:5px 14px;font-size:.6rem;text-align:left;color:#92400e;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Planned</th>
+            <th style="padding:5px 14px;font-size:.6rem;text-align:left;color:#166534;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Logged</th>
+            <th style="padding:5px 14px;font-size:.6rem;text-align:left;color:var(--ink-3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Diff</th>
+          </tr></thead>
+          <tbody>${chRows}</tbody>
+        </table>
+      </td></tr>`;
+    }
+
+    return `<tr class="hours-teacher-row" onclick="toggleHoursDrilldown('${escHtml(t.uid)}')" style="cursor:pointer" title="Click to ${expanded ? 'collapse' : 'expand'} topic breakdown">
       <td>
         <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:.6rem;color:var(--ink-3);flex-shrink:0">${expanded ? '▾' : '▸'}</span>
           <div class="teacher-avatar" style="width:32px;height:32px;font-size:.72rem;flex-shrink:0">${initials}</div>
           <div>
             <div style="font-size:.84rem;font-weight:600;color:var(--ink)">${escHtml(t.displayName || t.email)}</div>
@@ -1627,25 +1762,25 @@ function renderHoursReport() {
         </div>
       </td>
       <td><span style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:600">${totalPlanned}h</span></td>
-      <td><span style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:${actual>0?'700':'400'};color:${actual>0?'var(--ink)':'var(--ink-3)'}">${actual > 0 ? actual + 'h' : '—'}</span></td>
+      <td><span style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:${actual>0?'700':'400'};color:${actual>0?'var(--ink)':'var(--ink-3)'}">${actual > 0 ? actual+'h' : '—'}</span></td>
       <td>
         ${actual > 0 ? `
           <div style="display:flex;align-items:center;gap:8px">
             <span class="hours-pill ${pillCls}">${label}</span>
             <div style="flex:1;max-width:120px">
-              <div class="hours-ratio-bar" style="width:100%"><div class="hours-ratio-fill" style="width:${barPct}%;background:${barColor}"></div></div>
+              <div class="hours-ratio-bar"><div class="hours-ratio-fill" style="width:${barPct}%;background:${barColor}"></div></div>
               <div style="font-size:.58rem;color:var(--ink-3);margin-top:2px">${barPct}% of planned</div>
             </div>
           </div>` : '<span style="font-size:.75rem;color:var(--ink-3)">No hours logged</span>'}
       </td>
-    </tr>`;
+    </tr>${drillHtml}`;
   }).join('');
 
   content.innerHTML = `<table class="hours-table">
     <thead><tr>
       <th style="width:35%">Teacher</th>
-      <th>Planned Hours</th>
-      <th>Logged Hours</th>
+      <th style="color:#92400e">Planned Hours</th>
+      <th style="color:#166534">Logged Hours</th>
       <th>Status</th>
     </tr></thead>
     <tbody>${rows}</tbody>
@@ -1659,8 +1794,8 @@ function renderHoursReport() {
   aggEl.innerHTML = `
     <div class="agg-stat blue"><div class="agg-stat-num">${allTeachers.length}</div><div class="agg-stat-label">Teachers</div></div>
     <div class="agg-stat"><div class="agg-stat-num">${totalPlanned}h</div><div class="agg-stat-label">Total Planned</div></div>
-    <div class="agg-stat green"><div class="agg-stat-num">${grandActual > 0 ? grandActual + 'h' : '—'}</div><div class="agg-stat-label">Total Logged</div></div>
-    <div class="agg-stat ${diffCls}"><div class="agg-stat-num" style="color:${diffColor}">${grandActual > 0 ? (diffTotal >= 0 ? '+' : '') + diffTotal + 'h' : '—'}</div><div class="agg-stat-label">Difference</div></div>`;
+    <div class="agg-stat green"><div class="agg-stat-num">${grandActual > 0 ? grandActual+'h' : '—'}</div><div class="agg-stat-label">Total Logged</div></div>
+    <div class="agg-stat ${diffCls}"><div class="agg-stat-num" style="color:${diffColor}">${grandActual > 0 ? (diffTotal >= 0 ? '+' : '')+diffTotal+'h' : '—'}</div><div class="agg-stat-label">Difference</div></div>`;
 }
 
 window.goHoursPage = function(p) {
@@ -1690,6 +1825,69 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Academic calendar helpers ─────────────────────────────────
+function _calParseDate(str) {
+  if (!str) return null;
+  const d = new Date(str + 'T00:00:00');
+  return isNaN(d) ? null : d;
+}
+
+// Returns { monDate, friDate, termLabel } for a given teaching week number.
+// Week 1 = first week of academicYearStart.
+function weekInfo(weekNum) {
+  if (!calSettings || !calSettings.academicYearStart || !weekNum) return null;
+  const yearStart = _calParseDate(calSettings.academicYearStart);
+  if (!yearStart) return null;
+  const MS_WEEK = 7 * 24 * 3600 * 1000;
+  const monDate = new Date(yearStart.getTime() + (weekNum - 1) * MS_WEEK);
+  const friDate = new Date(monDate.getTime() + 4 * 24 * 3600 * 1000);
+
+  // Find which term this week falls in
+  let termLabel = '';
+  const terms = calSettings.terms || [];
+  for (const term of terms) {
+    const ts = _calParseDate(term.start);
+    const te = _calParseDate(term.end);
+    if (ts && te && monDate >= ts && monDate <= te) {
+      termLabel = term.label || '';
+      break;
+    }
+  }
+  return { monDate, friDate, termLabel };
+}
+
+function fmtShortDate(d) {
+  if (!d) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+// Render the green academic year strip below the hero
+function renderCalStrip() {
+  const strip = document.getElementById('calStrip');
+  if (!strip || !calSettings) return;
+  const yearStart = _calParseDate(calSettings.academicYearStart);
+  const totalWeeks = calSettings.totalTeachingWeeks || '?';
+  const terms = calSettings.terms || [];
+
+  let html = `
+    <div class="cal-strip-item">
+      <span class="cal-strip-dot"></span>
+      Academic year starts <strong>${yearStart ? fmtShortDate(yearStart) : '—'}</strong>
+    </div>
+    <div class="cal-strip-item">Total <strong>${totalWeeks}</strong> teaching weeks</div>`;
+
+  terms.forEach(t => {
+    const ts = _calParseDate(t.start), te = _calParseDate(t.end);
+    if (ts && te) {
+      html += `<div class="cal-strip-item"><span class="cal-strip-term">${escHtml(t.label||'Term')}</span> ${fmtShortDate(ts)} – ${fmtShortDate(te)}</div>`;
+    }
+  });
+
+  html += `<a class="cal-strip-link" href="academic-calendar">⚙ Year Settings →</a>`;
+  strip.innerHTML = html;
+  strip.style.display = 'flex';
+}
+
 // ── authReady ─────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { user, profile } }) => {
   isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
@@ -1701,6 +1899,15 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
 
   db = window.db;
   document.getElementById('mainContent').style.display = '';
+
+  // Load academic calendar settings for week→date mapping (background)
+  getDoc(doc(db, 'calendar_settings', 'current')).then(snap => {
+    if (snap.exists()) {
+      calSettings = snap.data();
+      renderCalStrip();
+      renderChapters(); // re-render so week date labels appear
+    }
+  }).catch(e => console.warn('calendar_settings load failed:', e));
 
   // Load syllabus index for autocomplete (background — don't block render)
   getDocs(collection(db, 'igcse_syllabus')).then(snap => {

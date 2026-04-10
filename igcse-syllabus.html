@@ -887,6 +887,12 @@
         </div>
       </div>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" id="settingsToggleBtn" onclick="toggleSettingsPanel()" title="Class groups &amp; code settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Settings
+        </button>
         <button class="btn btn-print" onclick="openPrintView()" title="Open print-friendly view">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <polyline points="6 9 6 2 18 2 18 9"/>
@@ -1501,10 +1507,20 @@ window.openPrintView = function() {
 };
 
 // ── Tier Filter ───────────────────────────────────────────────────
-let currentTierFilter = 'all';
+let currentTierFilter = sessionStorage.getItem('igcse_tier') || 'all';
+
+// Apply stored tier filter on load
+(function() {
+  if (currentTierFilter !== 'all') {
+    document.querySelectorAll('#tierFilter .tier-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tier === currentTierFilter);
+    });
+  }
+})();
 
 window.setTierFilter = function(tier, btn) {
   currentTierFilter = tier;
+  sessionStorage.setItem('igcse_tier', tier);
   document.querySelectorAll('#tierFilter .tier-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentPage = 0;
@@ -1676,8 +1692,9 @@ function loadSubject(subj) {
 
   searchQuery = '';
   currentPage = 0;
-  currentTierFilter = 'all';
-  document.querySelectorAll('#tierFilter .tier-btn').forEach(b => b.classList.toggle('active', b.dataset.tier === 'all'));
+  // Restore tier filter from sessionStorage (don't reset on subject change)
+  currentTierFilter = sessionStorage.getItem('igcse_tier') || 'all';
+  document.querySelectorAll('#tierFilter .tier-btn').forEach(b => b.classList.toggle('active', b.dataset.tier === currentTierFilter));
   const searchInput = document.getElementById('pacingSearch');
   if (searchInput) { searchInput.value = ''; document.getElementById('pacingSearchClear').style.display = 'none'; }
 
@@ -1686,7 +1703,10 @@ function loadSubject(subj) {
   document.getElementById('chaptersList').style.display = 'none';
 
   const tpBtn = document.getElementById('teacherProgressBtn');
-  if (tpBtn) tpBtn.style.display = (subj === 'math') ? '' : 'none';
+  if (tpBtn) {
+    tpBtn.href = `igcse-${subj}-pacing`;
+    tpBtn.style.display = '';
+  }
 
   const ref = doc(window.db, cfg.collection, programme.docId);
   unsub = onSnapshot(ref, snap => {
@@ -1713,6 +1733,21 @@ let settingsData = {
 };
 let settingsClassSubj = 'math';
 let settingsObjSubj   = 'math';
+
+let _settingsPanelOpen = false;
+window.toggleSettingsPanel = function() {
+  _settingsPanelOpen = !_settingsPanelOpen;
+  const panel = document.getElementById('settingsPanel');
+  const btn   = document.getElementById('settingsToggleBtn');
+  panel.style.display = _settingsPanelOpen ? '' : 'none';
+  if (btn) btn.style.background = _settingsPanelOpen ? 'var(--paper-2)' : '';
+  if (_settingsPanelOpen) {
+    // Sync to current subject
+    const mathTab = document.querySelector('#classSubjTabs [data-subj="math"]');
+    if (mathTab) switchClassSubj(settingsClassSubj || 'math', mathTab);
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+};
 
 function showSettingsPanel() {
   document.getElementById('settingsPanel').style.display    = '';
