@@ -160,7 +160,12 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   }
   wrapEl.addEventListener('click', e => {
     const code = e.target.closest('[data-remove]')?.dataset.remove;
-    if (code) { confirmedCodes.delete(code); renderPills(); }
+    if (code) {
+      e.stopPropagation();
+      confirmedCodes.delete(code);
+      renderPills();
+      commit();
+    }
   });
   renderPills();
   inp.focus();
