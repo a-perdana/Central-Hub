@@ -1352,10 +1352,19 @@ window.moveTopic = function(ci, ti, dir) {
 };
 
 // ── Shared teacher fetch (used by Progress, Heatmap, Hours tabs) ──────────────
+// Only includes teachers whose `subjects` array contains the current subject key.
+const SUBJECT_KEY = 'math'; // used to filter teachers by subjects field
 async function fetchTeachers() {
   const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
   allTeachers = [];
-  snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
+  snap.forEach(d => {
+    const data = d.data();
+    // Filter: teacher must have this subject in their subjects array (or no subjects field = legacy, include them)
+    const teacherSubjects = data.subjects;
+    if (!teacherSubjects || teacherSubjects.length === 0 || teacherSubjects.includes(SUBJECT_KEY)) {
+      allTeachers.push({ uid: d.id, ...data });
+    }
+  });
 
   // Merge teacher-defined igcse_classes into classList
   const profileClassSet = new Set();

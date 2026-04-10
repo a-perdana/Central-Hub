@@ -12,7 +12,7 @@ import {
   setDoc, onSnapshot, serverTimestamp, query, where,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-const { collection: COLLECTION, docId: DOC_ID } = window.PACING_CONFIG;
+const { collection: COLLECTION, docId: DOC_ID, subjectKey: SUBJECT_KEY } = window.PACING_CONFIG;
 
 let db, isAdmin = false;
 let chapters = [];
@@ -663,10 +663,18 @@ window.moveTopic = function(ci, ti, dir) {
 };
 
 // ── Shared teacher fetch ──────────────────────────────────────
+// Only includes teachers whose `subjects` array contains SUBJECT_KEY.
+// Legacy teachers with no subjects field are always included.
 async function fetchTeachers() {
   const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
   allTeachers = [];
-  snap.forEach(d => { allTeachers.push({ uid: d.id, ...d.data() }); });
+  snap.forEach(d => {
+    const data = d.data();
+    const teacherSubjects = data.subjects;
+    if (!teacherSubjects || teacherSubjects.length === 0 || (SUBJECT_KEY && teacherSubjects.includes(SUBJECT_KEY))) {
+      allTeachers.push({ uid: d.id, ...data });
+    }
+  });
 
   const profileClassSet = new Set();
   allTeachers.forEach(t => { (t.igcse_classes || []).forEach(c => profileClassSet.add(c)); });
