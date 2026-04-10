@@ -104,6 +104,35 @@ window.inlineSave = async function(ci, ti, field, value, inputEl) {
   }
 };
 
+// Topic name inline edit
+window.activateTopicNameInput = function(el, ci, ti) {
+  if (el.querySelector('input')) return;
+  const topic = chapters[ci]?.topics?.[ti];
+  if (!topic) return;
+  const orig = topic.topic || '';
+  el.innerHTML = `<input class="inline-input" type="text" value="${escHtml(orig)}"
+    style="width:100%;font-weight:500;font-size:.82rem;padding:2px 4px"
+    onkeydown="if(event.key==='Enter'){this.blur()}else if(event.key==='Escape'){this.dataset.cancel=1;this.blur()}"
+    onblur="commitTopicName(this,${ci},${ti})">`;
+  const inp = el.querySelector('input');
+  inp.focus();
+  inp.select();
+};
+window.commitTopicName = async function(inp, ci, ti) {
+  if (inp.dataset.cancel) { renderChapters(); return; }
+  const val = inp.value.trim();
+  if (!val) { renderChapters(); return; }
+  const topic = chapters[ci]?.topics?.[ti];
+  if (!topic) return;
+  topic.topic = val;
+  inp.classList.add('saving');
+  try {
+    await saveChapters();
+    showToast('Saved ✓');
+  } catch(e) { /* error toast shown by saveChapters */ }
+  renderChapters();
+};
+
 // Codes cell: inline input with autocomplete from igcse_syllabus
 window.activateCodesInput = function(wrapEl, ci, ti) {
   if (wrapEl.querySelector('.inline-codes-input')) return;
@@ -418,7 +447,9 @@ function renderChapters() {
               return `
               <tr>
                 <td>
-                  <div style="font-weight:500;font-size:.82rem">${escHtml(t.topic)}</div>
+                  <div class="topic-name-cell" style="font-weight:500;font-size:.82rem;cursor:text"
+                    title="Double-click to edit"
+                    ondblclick="activateTopicNameInput(this,${ci},${ti})">${escHtml(t.topic)}</div>
                   ${t.resources && t.resources.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${t.resources.map(r => `<a class="res-chip" href="${safeUrl(r.url)}" target="_blank" rel="noopener">&#128279; ${escHtml(r.name||r.url)}</a>`).join('')}</div>` : ''}
                 </td>
                 <td>
