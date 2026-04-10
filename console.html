@@ -389,12 +389,19 @@
             <option value="teachers_user">teachers_user</option>
           </select>
         </div>
-        <div class="form-group" id="subjectLeaderGroup" style="display:none">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
-            <input type="checkbox" id="fieldIsSubjectLeader" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
-            <span class="form-label" style="margin:0">Subject Leader</span>
-          </label>
-          <p style="font-size:0.75rem;color:var(--ink-3);margin-top:4px">This teacher will see a Subject Leader tab in their weekly checklist.</p>
+        <div class="form-group" id="thSubRolesGroup" style="display:none">
+          <span class="form-label">Teachers Hub Sub-roles</span>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+              <input type="checkbox" id="fieldThSubjectTeacher" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.875rem;color:var(--ink)">Subject Teacher</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+              <input type="checkbox" id="fieldThSubjectLeader" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.875rem;color:var(--ink)">Subject Leader</span>
+            </label>
+          </div>
+          <p style="font-size:0.75rem;color:var(--ink-3);margin-top:6px">Subject Leader tab visible in weekly checklist if checked.</p>
         </div>
         <div class="form-group">
           <label class="form-label" for="fieldRoleRH">Research Hub Role</label>
@@ -813,13 +820,18 @@
       }
     });
     document.getElementById('fieldRoleTH').value     = u.role_teachershub             || '';
-    // Subject Leader checkbox — visible only when user has a Teachers Hub role
-    const slGroup = document.getElementById('subjectLeaderGroup');
-    slGroup.style.display = u.role_teachershub ? '' : 'none';
-    document.getElementById('fieldIsSubjectLeader').checked = !!u.is_subject_leader;
+    // TH sub-roles — visible only when user has a Teachers Hub role
+    const thSubRolesGroup = document.getElementById('thSubRolesGroup');
+    thSubRolesGroup.style.display = u.role_teachershub ? '' : 'none';
+    const thSubs = Array.isArray(u.th_sub_roles) ? u.th_sub_roles : [];
+    document.getElementById('fieldThSubjectTeacher').checked = thSubs.includes('subject_teacher');
+    document.getElementById('fieldThSubjectLeader').checked  = thSubs.includes('subject_leader');
     document.getElementById('fieldRoleTH').addEventListener('change', function() {
-      slGroup.style.display = this.value ? '' : 'none';
-      if (!this.value) document.getElementById('fieldIsSubjectLeader').checked = false;
+      thSubRolesGroup.style.display = this.value ? '' : 'none';
+      if (!this.value) {
+        document.getElementById('fieldThSubjectTeacher').checked = false;
+        document.getElementById('fieldThSubjectLeader').checked  = false;
+      }
     });
     document.getElementById('fieldRoleRH').value     = u.role_researchhub             || '';
 
@@ -856,9 +868,12 @@
       document.getElementById('fieldAhSchoolPrincipal').checked     ? 'school_principal'          : null,
       document.getElementById('fieldAhAcademicCoordinator').checked ? 'academic_coordinator'      : null,
     ].filter(Boolean) : [];
-    const roleTH          = document.getElementById('fieldRoleTH').value;
-    const roleRH          = document.getElementById('fieldRoleRH').value;
-    const isSubjectLeader = document.getElementById('fieldIsSubjectLeader').checked && !!roleTH;
+    const roleTH       = document.getElementById('fieldRoleTH').value;
+    const roleRH       = document.getElementById('fieldRoleRH').value;
+    const thSubRoles   = roleTH ? [
+      document.getElementById('fieldThSubjectTeacher').checked ? 'subject_teacher' : null,
+      document.getElementById('fieldThSubjectLeader').checked  ? 'subject_leader'  : null,
+    ].filter(Boolean) : [];
     if (!displayName) { showErr('Name is required.'); document.querySelectorAll('.drawer-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'profile')); document.querySelectorAll('.drawer-panel').forEach(p => p.classList.remove('active')); document.getElementById('panelProfile').classList.add('active'); return; }
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
@@ -873,8 +888,8 @@
         approval_status_academichub:  approvalAH,
         ah_sub_roles:                 ahSubRoles,
         role_teachershub:             roleTH,
+        th_sub_roles:                 thSubRoles,
         role_researchhub:             roleRH,
-        is_subject_leader:            isSubjectLeader,
       });
       const u = allUsers.find(x => x.id === editingId);
       if (u) {
@@ -882,8 +897,8 @@
         u.school = school; u.position = position;
         u.role_centralhub = roleCH; u.role_academichub = roleAH;
         u.approval_status_academichub = approvalAH; u.ah_sub_roles = ahSubRoles;
-        u.role_teachershub = roleTH; u.role_researchhub = roleRH;
-        u.is_subject_leader = isSubjectLeader;
+        u.role_teachershub = roleTH; u.th_sub_roles = thSubRoles;
+        u.role_researchhub = roleRH;
       }
       closeDrawer();
       applyFilters();

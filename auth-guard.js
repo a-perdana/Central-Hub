@@ -433,20 +433,9 @@ onAuthStateChanged(auth, async (user) => {
       profile = newProfile;
     } else {
       profile = userSnap.data();
-      // Legacy role mapping: old 'admin' → 'central_admin'
-      const LEGACY_MAP = { 'admin': 'central_admin' };
-      const legacyRole = profile.role;
       if (profile[PLATFORM_KEY] == null) {
-        // First visit with new system — assign correct role
-        const assignRole = LEGACY_MAP[legacyRole]
-          || (ALLOWED_ROLES.includes(legacyRole) ? legacyRole : DEFAULT_ROLE);
-        await setDoc(userRef, { [PLATFORM_KEY]: assignRole }, { merge: true });
-        profile = { ...profile, [PLATFORM_KEY]: assignRole };
-      } else if (profile[PLATFORM_KEY] === DEFAULT_ROLE && LEGACY_MAP[legacyRole]) {
-        // Correct a previously wrong mapping (e.g. 'admin' was assigned 'central_user')
-        const correctRole = LEGACY_MAP[legacyRole];
-        await setDoc(userRef, { [PLATFORM_KEY]: correctRole }, { merge: true });
-        profile = { ...profile, [PLATFORM_KEY]: correctRole };
+        await setDoc(userRef, { [PLATFORM_KEY]: DEFAULT_ROLE }, { merge: true });
+        profile = { ...profile, [PLATFORM_KEY]: DEFAULT_ROLE };
       }
     }
   } catch (err) {
@@ -463,8 +452,6 @@ onAuthStateChanged(auth, async (user) => {
     window.location.replace('login?error=access');
     return;
   }
-  // Set profile.role for backward compat with page-level checks
-  profile.role = platformRole;
 
   // 5. Name prompt if missing
   if (!profile.displayName) {
