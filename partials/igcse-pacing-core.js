@@ -12,7 +12,9 @@ import {
   setDoc, onSnapshot, serverTimestamp, query, where,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-const { collection: COLLECTION, docId: DOC_ID, subjectKey: SUBJECT_KEY } = window.PACING_CONFIG;
+const COLLECTION   = window.PACING_CONFIG.collection;
+const DOC_ID       = window.PACING_CONFIG.docId;
+const SUBJECT_KEY  = window.PACING_CONFIG.subjectKey;
 
 let db, isAdmin = false;
 let chapters = [];
