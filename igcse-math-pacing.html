@@ -138,11 +138,24 @@
     /* Topic table */
     .topic-tbl { width: 100%; border-collapse: collapse; font-size: .8rem; }
     .topic-tbl th { font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); padding: 7px 14px; text-align: left; border-bottom: 1px solid var(--border); background: #fafaf8; white-space: nowrap; }
-    .topic-tbl td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .topic-tbl td { padding: 7px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     .topic-tbl tr:last-child td { border-bottom: none; }
     .topic-tbl tr:hover td { background: var(--paper); }
     .obj-code { font-size: .6rem; font-family: 'DM Mono', monospace; padding: 1px 5px; border-radius: 3px; background: #e8f0fb; color: #1a5fa8; border: 1px solid #c2d8f5; display: inline-block; margin: 1px; white-space: nowrap; }
     .dur-badge { font-size: .65rem; font-family: 'DM Mono', monospace; background: #fef8e7; color: #b07800; border: 1px solid #f0dea0; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+    /* Inline quick-edit inputs */
+    .inline-input {
+      font-family: 'DM Mono', monospace; font-size: .72rem; font-weight: 500;
+      border: 1.5px solid transparent; border-radius: 5px; padding: 3px 6px;
+      background: transparent; color: var(--ink); width: 100%;
+      transition: border-color .12s, background .12s; outline: none;
+    }
+    .inline-input:hover { border-color: var(--border); background: var(--white); }
+    .inline-input:focus { border-color: var(--accent); background: var(--white); box-shadow: 0 0 0 2px var(--accent-2); }
+    .inline-input.saving { border-color: #6ee7b7; background: #f0fdf4; }
+    .inline-input-num { width: 52px; text-align: center; }
+    .inline-codes-wrap { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; min-height: 22px; cursor: text; }
+    .inline-codes-input { border: 1.5px solid var(--accent); border-radius: 5px; padding: 2px 6px; font-family: 'DM Mono', monospace; font-size: .68rem; background: var(--white); outline: none; min-width: 80px; }
     .res-chip { font-size: .62rem; font-family: 'DM Mono', monospace; padding: 2px 6px; border-radius: 4px; background: var(--paper-2); border: 1px solid var(--border); color: var(--ink-2); display: inline-flex; align-items: center; gap: 3px; text-decoration: none; }
     .res-chip:hover { background: #e8f0fb; color: #1a5fa8; border-color: #c2d8f5; }
     .add-topic-btn { display: flex; align-items: center; gap: 6px; font-size: .75rem; padding: 6px 14px; border: 1.5px dashed var(--border); border-radius: 6px; background: none; color: var(--ink-3); cursor: pointer; width: 100%; transition: all .12s; margin: 8px 14px; width: calc(100% - 28px); }
@@ -663,6 +676,49 @@ window.switchTab = function(id, btn) {
   if (id === 'hours')    loadHoursTab();
 };
 
+// ── Inline quick-edit ─────────────────────────────────────────
+window.inlineSave = async function(ci, ti, field, value, inputEl) {
+  const topic = chapters[ci]?.topics?.[ti];
+  if (!topic) return;
+  topic[field] = value;
+  inputEl.classList.add('saving');
+  await saveChapters();
+  setTimeout(() => inputEl.classList.remove('saving'), 800);
+};
+
+// Codes cell: replace pills with a text input, commit on blur/Enter
+window.activateCodesInput = function(wrapEl, ci, ti) {
+  if (wrapEl.querySelector('.inline-codes-input')) return; // already active
+  const topic = chapters[ci]?.topics?.[ti];
+  if (!topic) return;
+  const current = topic.objective || '';
+  wrapEl.innerHTML = `<input class="inline-codes-input" type="text"
+    value="${escHtml(current)}"
+    placeholder="e.g. C1.1 E1.2"
+    title="Space-separated syllabus codes">`;
+  const inp = wrapEl.querySelector('input');
+  inp.focus();
+  const commit = async () => {
+    const val = inp.value.trim();
+    topic.objective = val;
+    await saveChapters();
+    // Re-render just this cell
+    const codes = _parseObjCodes(val);
+    wrapEl.innerHTML = codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')
+      + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') {
+      // Restore without saving
+      const codes = _parseObjCodes(topic.objective || '');
+      wrapEl.innerHTML = codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')
+        + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
+    }
+  });
+};
+
 // ── Save chapters to Firestore ────────────────────────────────
 async function saveChapters() {
   const structureOnly = chapters.map(ch => ({
@@ -698,15 +754,34 @@ function renderChapters() {
             <th style="width:13%">Actions</th>
           </tr></thead>
           <tbody>
-            ${topics.map((t, ti) => `
+            ${topics.map((t, ti) => {
+              const codes = _parseObjCodes(t.objective);
+              const dur   = t.duration ?? t.hour ?? '';
+              const wk    = t.week ?? '';
+              return `
               <tr>
                 <td>
                   <div style="font-weight:500;font-size:.82rem">${escHtml(t.topic)}</div>
                   ${t.resources && t.resources.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${t.resources.map(r => `<a class="res-chip" href="${safeUrl(r.url)}" target="_blank" rel="noopener">&#128279; ${escHtml(r.name||r.url)}</a>`).join('')}</div>` : ''}
                 </td>
-                <td>${_parseObjCodes(t.objective).map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')}</td>
-                <td><span class="dur-badge">${t.duration ?? t.hour ?? '—'}h</span></td>
-                <td><span style="font-size:.72rem;color:var(--ink-3)">${t.week ? 'Wk ' + escHtml(String(t.week)) : '—'}</span></td>
+                <td>
+                  <div class="inline-codes-wrap" onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes">
+                    ${codes.map(c => `<span class="obj-code">${escHtml(c)}</span>`).join('')}
+                    ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : ''}
+                  </div>
+                </td>
+                <td>
+                  <input class="inline-input inline-input-num" type="number" min="0" max="99"
+                    value="${escHtml(String(dur))}" placeholder="—"
+                    onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
+                    title="Hours for this topic">
+                </td>
+                <td>
+                  <input class="inline-input inline-input-num" type="number" min="1" max="99"
+                    value="${escHtml(String(wk))}" placeholder="—"
+                    onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
+                    title="School week number">
+                </td>
                 <td>
                   ${t.coordNote ? `<div class="coord-note-text">${escHtml(t.coordNote)}</div>` : ''}
                   ${t.diag ? `<span class="diag-badge ${escHtml(t.diag)}">${t.diag === 'weak' ? '⚠ Weak' : t.diag === 'review' ? '↻ Review' : '✓ Good'}</span>` : ''}
@@ -719,8 +794,8 @@ function renderChapters() {
                     ${ti < topics.length-1 ? `<button class="icon-btn" onclick="moveTopic(${ci},${ti},1)" title="Move down">&#8595;</button>` : ''}
                   </div>
                 </td>
-              </tr>
-            `).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>`;
 
