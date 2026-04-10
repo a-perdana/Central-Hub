@@ -153,20 +153,18 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   const drop = wrapEl.querySelector('.codes-ac-dropdown');
   const pillsEl = wrapEl.querySelector(`#acPills_${ci}_${ti}`);
 
+  function removeCode(c) {
+    confirmedCodes.delete(c);
+    renderPills();
+  }
   function renderPills() {
     pillsEl.innerHTML = [...confirmedCodes].map(c =>
-      `<span class="obj-code" data-remove="${escHtml(c)}" style="cursor:pointer" title="Click to remove ${escHtml(c)}">${escHtml(c)} ✕</span>`
+      `<span class="obj-code" style="cursor:pointer" title="Click to remove ${escHtml(c)}"
+        onclick="event.stopPropagation();window._removeCode_${ci}_${ti}(${JSON.stringify(c)})"
+      >${escHtml(c)} ✕</span>`
     ).join('');
   }
-  wrapEl.addEventListener('click', e => {
-    const code = e.target.closest('[data-remove]')?.dataset.remove;
-    if (code) {
-      e.stopPropagation();
-      confirmedCodes.delete(code);
-      renderPills();
-      commit();
-    }
-  });
+  window[`_removeCode_${ci}_${ti}`] = removeCode;
   renderPills();
   inp.focus();
 
