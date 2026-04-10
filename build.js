@@ -64,6 +64,7 @@ const htmlFiles = [
   "igcse-pacing.html",
   "igcse-syllabus.html",
   "igcse-math-admin.html",
+  "igcse-math-pacing.html",
   "as-alevel-pacing.html",
   "assessment-management.html",
   "assessments.html",
