@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KPI Admin — CentralHub</title>
+  <title>Performance — CentralHub</title>
 
   <script src="firebase-config.js"></script>
   <script type="module" src="auth-guard.js"></script>
@@ -307,7 +307,7 @@
     <div class="sidebar-brand">
       <div class="sidebar-brand-icon">📊</div>
       <div>
-        <div class="sidebar-brand-text">KPI Admin</div>
+        <div class="sidebar-brand-text">Performance</div>
         <div class="sidebar-brand-sub">centralhub-8727b</div>
       </div>
     </div>
@@ -332,7 +332,7 @@
     <div class="page-hero">
       <div class="page-hero-inner">
         <div>
-          <h1>KPI Admin</h1>
+          <h1>Performance</h1>
           <p>Manage KPI definitions, partner schools, and evaluation periods for the School &amp; Teacher performance systems.</p>
         </div>
         <div class="page-hero-stats">
@@ -364,7 +364,6 @@
         <div class="toolbar">
           <span class="toolbar-title">KPI Configuration</span>
           <div class="toolbar-right">
-            <button class="btn-ghost" id="loadDefaultsBtn">↺ Load Defaults</button>
             <button class="btn-teal" id="addKpiBtn">+ Add KPI</button>
           </div>
         </div>
@@ -391,7 +390,6 @@
         <div class="toolbar">
           <span class="toolbar-title">Partner Schools</span>
           <div class="toolbar-right">
-            <button class="btn-ghost" id="loadDefaultSchoolsBtn">↺ Load Defaults</button>
             <button class="btn-teal" id="addSchoolBtn">+ Add School</button>
           </div>
         </div>
@@ -423,7 +421,6 @@
         <div class="toolbar">
           <span class="toolbar-title">Teacher KPI Configuration</span>
           <div class="toolbar-right">
-            <button class="btn-ghost" id="loadDefaultTeacherKpisBtn">↺ Load Defaults</button>
             <button class="btn-teal" id="addTeacherKpiBtn">+ Add KPI</button>
           </div>
         </div>
@@ -958,15 +955,12 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
 
   // Button wires
   document.getElementById('addKpiBtn').addEventListener('click', () => openKpiModal(null));
-  document.getElementById('loadDefaultsBtn').addEventListener('click', loadDefaultKPIs);
   document.getElementById('addSchoolBtn').addEventListener('click', () => openSchoolModal(null));
-  document.getElementById('loadDefaultSchoolsBtn').addEventListener('click', loadDefaultSchools);
   document.getElementById('addSemesterBtn').addEventListener('click', () => openSemesterModal(null));
   document.getElementById('kpiSaveBtn').addEventListener('click', saveKPI);
   document.getElementById('schoolSaveBtn').addEventListener('click', saveSchool);
   document.getElementById('semesterSaveBtn').addEventListener('click', saveSemester);
   document.getElementById('addTeacherKpiBtn').addEventListener('click', () => openTeacherKpiModal(null));
-  document.getElementById('loadDefaultTeacherKpisBtn').addEventListener('click', loadDefaultTeacherKPIs);
   document.getElementById('addTeacherPeriodBtn').addEventListener('click', () => openTeacherPeriodModal(null));
   document.getElementById('teacherKpiSaveBtn').addEventListener('click', saveTeacherKPI);
   document.getElementById('teacherPeriodSaveBtn').addEventListener('click', saveTeacherPeriod);
@@ -1025,7 +1019,7 @@ async function loadKPIs() {
 function renderKPIs() {
   const tbody = document.getElementById('kpiTableBody');
   if (!kpis.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:2rem;">No KPIs yet. Click "Load Defaults" to get started.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:2rem;">No KPIs yet. Click "+ Add KPI" to get started.</td></tr>';
     updateWeightTotal();
     return;
   }
@@ -1126,24 +1120,6 @@ async function deleteKPI(kpiId) {
   } catch (err) { alert(err.message); }
 }
 
-async function loadDefaultKPIs() {
-  const btn = document.getElementById('loadDefaultsBtn');
-  if (!btn.dataset.confirming) {
-    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm? Click again';
-    setTimeout(() => { btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }, 3000);
-    return;
-  }
-  btn.disabled = true; btn.textContent = 'Loading…';
-  try {
-    for (const kpi of DEFAULT_KPIS) {
-      const { id, ...data } = kpi;
-      await setDoc(doc(db, 'kpi_config', id), data);
-    }
-    await loadKPIs(); renderKPIs();
-  } catch (err) { alert(err.message); }
-  finally { btn.disabled = false; btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }
-}
-
 // ─── SCHOOLS ─────────────────────────────────────────────────
 async function loadSchools() {
   const snap = await getDocs(collection(db, 'partner_schools'));
@@ -1154,7 +1130,7 @@ async function loadSchools() {
 function renderSchools() {
   const tbody = document.getElementById('schoolsTableBody');
   if (!schools.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:2rem;">No schools yet. Click "Load Defaults" to start.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:2rem;">No schools yet. Click "+ Add School" to start.</td></tr>';
     return;
   }
   tbody.innerHTML = schools.map(s => {
@@ -1217,23 +1193,6 @@ async function deleteSchool(schoolId) {
     await deleteDoc(doc(db, 'partner_schools', schoolId));
     await loadSchools(); renderSchools();
   } catch (err) { alert(err.message); }
-}
-
-async function loadDefaultSchools() {
-  const btn = document.getElementById('loadDefaultSchoolsBtn');
-  if (!btn.dataset.confirming) {
-    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm?';
-    setTimeout(() => { btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }, 3000);
-    return;
-  }
-  btn.disabled = true; btn.textContent = 'Loading…';
-  try {
-    for (const s of DEFAULT_SCHOOLS) {
-      await addDoc(collection(db, 'partner_schools'), { ...s, createdAt: serverTimestamp() });
-    }
-    await loadSchools(); renderSchools();
-  } catch (err) { alert(err.message); }
-  finally { btn.disabled = false; btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }
 }
 
 // ─── SEMESTERS ────────────────────────────────────────────────
@@ -1376,7 +1335,7 @@ async function loadTeacherKPIs() {
 function renderTeacherKPIs() {
   const tbody = document.getElementById('teacherKpiTableBody');
   if (!teacherKpis.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:2rem;">No Teacher KPIs yet. Click "Load Defaults" to get started.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:2rem;">No Teacher KPIs yet. Click "+ Add KPI" to get started.</td></tr>';
     updateTeacherWeightTotal();
     return;
   }
@@ -1465,24 +1424,6 @@ async function deleteTeacherKPI(kpiId) {
     await deleteDoc(doc(db, 'teacher_kpi_config', kpiId));
     await loadTeacherKPIs(); renderTeacherKPIs();
   } catch (err) { alert(err.message); }
-}
-
-async function loadDefaultTeacherKPIs() {
-  const btn = document.getElementById('loadDefaultTeacherKpisBtn');
-  if (!btn.dataset.confirming) {
-    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm? Click again';
-    setTimeout(() => { btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }, 3000);
-    return;
-  }
-  btn.disabled = true; btn.textContent = 'Loading…';
-  try {
-    for (const kpi of DEFAULT_TEACHER_KPIS) {
-      const { id, ...data } = kpi;
-      await setDoc(doc(db, 'teacher_kpi_config', id), data);
-    }
-    await loadTeacherKPIs(); renderTeacherKPIs();
-  } catch (err) { alert(err.message); }
-  finally { btn.disabled = false; btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }
 }
 
 // ─── TEACHER PERIODS ─────────────────────────────────────────
