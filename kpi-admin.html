@@ -141,6 +141,7 @@
       <div class="sidebar-label">Teacher KPI</div>
       <button class="sidebar-btn" data-panel="panel-teacher-kpi"><span class="sidebar-icon">🗒️</span> Teacher KPIs</button>
       <button class="sidebar-btn" data-panel="panel-teacher-semesters"><span class="sidebar-icon">📅</span> Teacher Periods</button>
+      <button class="sidebar-btn" data-panel="panel-teacher-results"><span class="sidebar-icon">📈</span> Submission Results</button>
     </div>
   </aside>
 
@@ -251,6 +252,52 @@
           </div>
         </div>
         <div class="sem-grid" id="teacherPeriodGrid"></div>
+      </div>
+
+      <!-- ════ PANEL: TEACHER SUBMISSION RESULTS ════ -->
+      <div class="panel" id="panel-teacher-results">
+        <div class="toolbar">
+          <span class="toolbar-title">Submission Results</span>
+          <div class="toolbar-right">
+            <select class="form-select" id="resultsPeriodSelect" style="min-width:200px;font-size:0.85rem;">
+              <option value="">— Select Period —</option>
+            </select>
+            <button class="btn-add" id="refreshResultsBtn">↻ Refresh</button>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div id="resultsStats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem;"></div>
+
+        <!-- Summary table -->
+        <div id="resultsTableWrap" class="table-wrap" style="display:none;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Teacher</th>
+                <th>School</th>
+                <th>Subjects</th>
+                <th>Avg Self-Rating</th>
+                <th>Avg Admin Rating</th>
+                <th>Overall</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="resultsTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="resultsEmpty" class="empty-state" style="display:none;">
+          <div style="font-size:2rem">📋</div>
+          <div class="empty-state-title">No submissions yet</div>
+          <div class="empty-state-body">Select an active period to see teacher submissions.</div>
+        </div>
+
+        <div id="resultsLoading" class="empty-state">
+          <div style="font-size:2rem">⏳</div>
+          <div class="empty-state-title">Select a period above</div>
+        </div>
       </div>
 
     </div><!-- /pageContent -->
@@ -568,7 +615,7 @@
 <script type="module">
 import {
   collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  serverTimestamp, query, orderBy
+  serverTimestamp, query, orderBy, where
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // ─── State ────────────────────────────────────────────────────
@@ -669,6 +716,7 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
 
   await Promise.all([loadKPIs(), loadSchools(), loadSemesters(), loadTeacherKPIs(), loadTeacherPeriods()]);
   renderKPIs();
+  populateResultsPeriodSelect();
   renderSchools();
   renderSemesters();
   renderTeacherKPIs();
@@ -706,6 +754,13 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   document.getElementById('addTeacherPeriodBtn').addEventListener('click', () => openTeacherPeriodModal(null));
   document.getElementById('teacherKpiSaveBtn').addEventListener('click', saveTeacherKPI);
   document.getElementById('teacherPeriodSaveBtn').addEventListener('click', saveTeacherPeriod);
+  document.getElementById('refreshResultsBtn').addEventListener('click', () => {
+    const pid = document.getElementById('resultsPeriodSelect').value;
+    if (pid) loadResults(pid);
+  });
+  document.getElementById('resultsPeriodSelect').addEventListener('change', e => {
+    if (e.target.value) loadResults(e.target.value);
+  });
 
   // Delegated table buttons
   document.getElementById('kpiTableBody').addEventListener('click', e => {
@@ -1326,6 +1381,140 @@ async function toggleTeacherPeriodPublish(periodId) {
     await updateDoc(doc(db, 'teacher_kpi_settings', periodId), { published: !p.published });
     await loadTeacherPeriods(); renderTeacherPeriods();
   } catch (err) { alert(err.message); }
+}
+
+// ─── TEACHER SUBMISSION RESULTS ───────────────────────────────
+function populateResultsPeriodSelect() {
+  const sel = document.getElementById('resultsPeriodSelect');
+  while (sel.options.length > 1) sel.remove(1);
+  for (const p of teacherPeriods) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name || p.id;
+    sel.appendChild(opt);
+  }
+  // Auto-select active period
+  const active = teacherPeriods.find(p => p.active);
+  if (active) { sel.value = active.id; loadResults(active.id); }
+}
+
+async function loadResults(periodId) {
+  const loading = document.getElementById('resultsLoading');
+  const empty   = document.getElementById('resultsEmpty');
+  const tableWrap = document.getElementById('resultsTableWrap');
+  const tbody   = document.getElementById('resultsTableBody');
+  const statsEl = document.getElementById('resultsStats');
+
+  loading.style.display = 'block';
+  empty.style.display   = 'none';
+  tableWrap.style.display = 'none';
+  statsEl.innerHTML = '';
+  tbody.innerHTML = '';
+
+  try {
+    // Load submissions for this period
+    const submSnap = await getDocs(query(collection(db, 'teacher_kpi_submissions'), where('periodId', '==', periodId)));
+    const subs = submSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Load evaluations for these submissions (fetch individually to avoid __name__ in operator issues)
+    let evalMap = {};
+    await Promise.all(subs.map(async sub => {
+      try {
+        const evalSnap = await getDoc(doc(db, 'teacher_kpi_evaluations', sub.id));
+        if (evalSnap.exists()) evalMap[sub.id] = evalSnap.data();
+      } catch (_) {}
+    }));
+
+    loading.style.display = 'none';
+    if (!subs.length) { empty.style.display = 'block'; return; }
+
+    // Calculate stats
+    const submitted  = subs.filter(s => s.status === 'submitted').length;
+    const evaluated  = subs.filter(s => s.status === 'evaluated' || s.status === 'finalized').length;
+    const finalized  = subs.filter(s => s.status === 'finalized').length;
+    const total      = subs.length;
+
+    // Average self-rating across all
+    let allSelfRatings = [];
+    let allAdminRatings = [];
+    subs.forEach(sub => {
+      Object.values(sub.assessments || {}).forEach(a => {
+        if (a.selfRating) allSelfRatings.push(Number(a.selfRating));
+      });
+      const ev = evalMap[sub.id];
+      if (ev) {
+        Object.values(ev.kpiEvaluations || {}).forEach(k => {
+          if (k.administratorRating) allAdminRatings.push(Number(k.administratorRating));
+        });
+      }
+    });
+    const avgSelf  = allSelfRatings.length  ? (allSelfRatings.reduce((a,b)=>a+b,0)/allSelfRatings.length).toFixed(1) : '—';
+    const avgAdmin = allAdminRatings.length ? (allAdminRatings.reduce((a,b)=>a+b,0)/allAdminRatings.length).toFixed(1) : '—';
+
+    statsEl.innerHTML = `
+      <div class="sem-card" style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:var(--accent)">${total}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:3px;">Total Submissions</div>
+      </div>
+      <div class="sem-card" style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:#1d4ed8">${submitted}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:3px;">Awaiting Evaluation</div>
+      </div>
+      <div class="sem-card" style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:#15803d">${evaluated}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:3px;">Evaluated</div>
+      </div>
+      <div class="sem-card" style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:#6b7280">${finalized}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:3px;">Finalized</div>
+      </div>
+      <div class="sem-card" style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:#457b9d">${avgSelf !== '—' ? avgSelf + '/5' : '—'}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:3px;">Avg Self-Rating</div>
+      </div>
+      <div class="sem-card" style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:#2a9d8f">${avgAdmin !== '—' ? avgAdmin + '/5' : '—'}</div>
+        <div style="font-size:.78rem;color:#6b7280;margin-top:3px;">Avg Admin Rating</div>
+      </div>
+    `;
+
+    // Build table rows
+    tbody.innerHTML = subs.map(sub => {
+      const info = sub.teacherInfo || {};
+      const ev   = evalMap[sub.id];
+
+      // Self avg
+      const selfVals = Object.values(sub.assessments || {}).map(a => Number(a.selfRating)).filter(Boolean);
+      const selfAvg  = selfVals.length ? (selfVals.reduce((a,b)=>a+b,0)/selfVals.length).toFixed(1) : '—';
+
+      // Admin avg
+      const adminVals = ev ? Object.values(ev.kpiEvaluations || {}).map(k => Number(k.administratorRating)).filter(Boolean) : [];
+      const adminAvg  = adminVals.length ? (adminVals.reduce((a,b)=>a+b,0)/adminVals.length).toFixed(1) : '—';
+
+      const overall = ev?.overallRecommendation || '—';
+      const overallColor = overall === 'Excellent' ? '#15803d' : overall === 'Good' ? '#1d4ed8' : overall === 'Satisfactory' ? '#b45309' : overall === 'Needs Improvement' ? '#dc2626' : '#9ca3af';
+
+      const statusLabel = sub.status === 'finalized' ? 'Finalized' : sub.status === 'evaluated' ? 'Evaluated' : sub.status === 'submitted' ? 'Submitted' : sub.status === 'draft' ? 'Draft' : sub.status;
+      const statusClass = sub.status === 'finalized' ? 'badge-active' : sub.status === 'evaluated' ? 'badge-info' : sub.status === 'submitted' ? 'badge-warning' : 'badge-inactive';
+
+      return `<tr>
+        <td style="font-weight:600;">${(info.displayName || sub.email || '—').replace(/</g,'&lt;')}</td>
+        <td style="font-size:.82rem;color:#6b7280;">${(info.school || '—').replace(/</g,'&lt;')}</td>
+        <td style="font-size:.82rem;">${(info.subjects || '—').replace(/</g,'&lt;')}</td>
+        <td style="font-weight:700;color:#457b9d;">${selfAvg !== '—' ? selfAvg + '/5' : '—'}</td>
+        <td style="font-weight:700;color:#2a9d8f;">${adminAvg !== '—' ? adminAvg + '/5' : '—'}</td>
+        <td style="font-weight:700;color:${overallColor};">${overall}</td>
+        <td><span class="badge ${statusClass}">${statusLabel}</span></td>
+        <td style="font-size:.78rem;color:#6b7280;">${(sub.email || '').replace(/</g,'&lt;')}</td>
+      </tr>`;
+    }).join('');
+
+    tableWrap.style.display = 'block';
+  } catch (err) {
+    loading.style.display = 'none';
+    console.error(err);
+    alert('Error loading results: ' + err.message);
+  }
 }
 </script>
 </body>
