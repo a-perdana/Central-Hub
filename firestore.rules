@@ -450,18 +450,23 @@ service cloud.firestore {
     }
 
     // -- partner_schools (School Performance KPI) ------------
+    // Read: any Academic Hub user (for school selector in KPI form)
+    //       also Central Hub users (console schoolId dropdown)
+    // Write: isAHAdmin() already covers central_admin + academic_admin
     match /partner_schools/{schoolId} {
-      allow read:  if isAcademicUser();
+      allow read:  if isAcademicUser() || isCentralUser();
       allow write: if isAHAdmin();
     }
 
     // -- kpi_config (School Performance KPI - criteria definitions) --
+    // Write: isAHAdmin() covers central_admin (kpi-admin.html) + academic_admin
     match /kpi_config/{kpiId} {
       allow read:  if isAcademicUser();
       allow write: if isAHAdmin();
     }
 
     // -- kpi_settings (School Performance KPI - semester settings) ---
+    // Write: isAHAdmin() covers central_admin (kpi-admin.html) + academic_admin
     match /kpi_settings/{semId} {
       allow read:  if isAcademicUser();
       allow write: if isAHAdmin();
@@ -469,11 +474,15 @@ service cloud.firestore {
 
     // -- school_performance_kpi (KPI data submissions) -------
     // Structure: school_performance_kpi/{semId}/schools/{schoolId}
+    // Read:  academic_admin sees all; academic_user sees only their own school
+    // Write: academic_admin always; academic_user only if their schoolId matches
     match /school_performance_kpi/{semId}/schools/{schoolId} {
       allow read: if isAHAdmin()
                   || (isAcademicUser()
                       && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId);
-      allow write: if isAcademicUser();
+      allow write: if isAHAdmin()
+                   || (isAcademicUser()
+                       && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId);
     }
 
     // -- ah_categories (Academic Hub dashboard category config) --

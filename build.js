@@ -79,6 +79,7 @@ const htmlFiles = [
   "certificate-verify.html",
   "checklist-admin.html",
   "curriculum-map.html",
+  "kpi-admin.html",
 ];
 
 htmlFiles.forEach((file) => {

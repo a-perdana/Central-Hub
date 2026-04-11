@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KPI Admin — CentralHub</title>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+  <!-- SHARED_NAVBAR -->
+
+  <style>
+    /* ── PAGE ACCENT ── */
+    :root { --accent: #0f766e; --accent-dk: #0d6460; --accent-2: #ccfbf1; }
+
+    .page-layout { display: flex; min-height: calc(100vh - 62px); }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 220px; flex-shrink: 0;
+      background: var(--white); border-right: 1px solid var(--border);
+      padding: 1.5rem 0; position: sticky; top: 62px; height: calc(100vh - 62px); overflow-y: auto;
+    }
+    .sidebar-section { padding: 0 1rem; margin-bottom: 1.5rem; }
+    .sidebar-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 0 0.5rem; margin-bottom: 0.4rem; }
+    .sidebar-btn {
+      display: flex; align-items: center; gap: 0.6rem; width: 100%;
+      padding: 0.55rem 0.75rem; border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+      color: var(--ink-2); background: none; border: none; cursor: pointer;
+      font-family: inherit; transition: background 0.15s, color 0.15s; text-align: left;
+    }
+    .sidebar-btn:hover { background: var(--accent-2); color: var(--accent-dk); }
+    .sidebar-btn.active { background: var(--accent-2); color: var(--accent-dk); font-weight: 700; }
+    .sidebar-btn .sidebar-icon { font-size: 1rem; width: 18px; text-align: center; }
+
+    /* ── MAIN ── */
+    .main { flex: 1; padding: 2rem; min-width: 0; }
+    .main-header { margin-bottom: 1.75rem; }
+    .main-header h1 { font-size: 1.45rem; font-weight: 800; color: var(--ink); }
+    .main-header p { font-size: 0.88rem; color: var(--ink-3); margin-top: 3px; }
+
+    /* ── PANEL ── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── TOOLBAR ── */
+    .toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem; }
+    .toolbar-left  { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .toolbar-right { display: flex; align-items: center; gap: 0.75rem; }
+    .toolbar-title { font-size: 1rem; font-weight: 700; color: var(--ink); }
+
+    /* ── WEIGHT BAR ── */
+    .weight-bar {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.6rem 1rem; background: var(--accent-2);
+      border-radius: 8px; font-size: 0.82rem; font-weight: 600; color: var(--accent-dk);
+      margin-bottom: 1rem;
+    }
+    .weight-val { font-weight: 800; font-size: 1rem; }
+    .weight-val.ok   { color: var(--accent-dk); }
+    .weight-val.warn { color: #b45309; }
+
+    /* ── TABLE WRAP ── */
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th {
+      padding: 0.65rem 1rem; text-align: left; font-size: 0.72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3);
+      background: #f9fafb; border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 0.75rem 1rem; font-size: 0.85rem;
+      border-bottom: 1px solid #f3f4f6; vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #fafafa; }
+
+    /* ── SEMESTER CARDS ── */
+    .sem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .sem-card {
+      background: var(--white); border-radius: 12px; border: 1px solid var(--border);
+      padding: 1.25rem; box-shadow: var(--shadow-sm);
+    }
+    .sem-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 0.75rem; }
+    .sem-card-name { font-size: 0.95rem; font-weight: 700; color: var(--ink); }
+    .sem-card-meta { font-size: 0.78rem; color: var(--ink-3); margin-top: 3px; }
+    .sem-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+
+    /* ── MODAL OVERRIDES ── */
+    .modal { max-width: 560px; }
+    .modal-lg { max-width: 680px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .full-col { grid-column: 1 / -1; }
+
+    /* ── SECTION PILL ── */
+    .spill {
+      display: inline-flex; align-items: center; padding: 2px 9px;
+      border-radius: 20px; font-size: 0.72rem; font-weight: 700;
+    }
+    .spill.smp { background: #e8f4fb; color: #1d6fa0; }
+    .spill.sma { background: #fef3ec; color: #c05621; }
+    .spill.sd  { background: #f3eeff; color: #7c3aed; }
+    .spill.all { background: #f3f4f6; color: #374151; }
+
+    /* ── CAMBRIDGE PILL ── */
+    .cam-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; }
+    .cam-pill.cam { background: #e0f2fe; color: #0369a1; }
+    .cam-pill.non { background: #f3f4f6; color: #6b7280; }
+
+    /* ── CHECKBOX LIST ── */
+    .check-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+    .check-row  { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.875rem; color: var(--ink); }
+    .check-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+    /* ── SECTION CHECKBOXES (inline) ── */
+    .section-checks { display: flex; gap: 1.25rem; margin-top: 6px; }
+    .section-check  { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--ink); cursor: pointer; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .form-row { grid-template-columns: 1fr; }
+      .form-row.three { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">School KPI</div>
+      <button class="sidebar-btn active" data-panel="panel-kpi"><span class="sidebar-icon">📊</span> KPI Configuration</button>
+      <button class="sidebar-btn" data-panel="panel-schools"><span class="sidebar-icon">🏫</span> Partner Schools</button>
+      <button class="sidebar-btn" data-panel="panel-semesters"><span class="sidebar-icon">📅</span> Semesters</button>
+    </div>
+    <div class="sidebar-section" style="border-top:1px solid var(--border);padding-top:1rem;">
+      <div class="sidebar-label">Teacher KPI</div>
+      <button class="sidebar-btn" disabled style="opacity:.45;cursor:not-allowed;"><span class="sidebar-icon">🗒️</span> Teacher KPIs <span style="font-size:0.68rem;margin-left:auto;background:#f3f4f6;padding:1px 7px;border-radius:10px;">Soon</span></button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+    <div class="main-header">
+      <h1>KPI Admin</h1>
+      <p>Manage KPI definitions, partner schools, and semester settings for the School Performance evaluation system.</p>
+    </div>
+
+    <!-- Loading -->
+    <div id="pageLoading" class="empty-state"><div style="font-size:2rem">⏳</div><div class="empty-state-title">Loading…</div></div>
+
+    <!-- Content -->
+    <div id="pageContent" style="display:none;">
+
+      <!-- ════ PANEL: KPI CONFIG ════ -->
+      <div class="panel active" id="panel-kpi">
+        <div class="toolbar">
+          <span class="toolbar-title">KPI Configuration</span>
+          <div class="toolbar-right">
+            <button class="btn-add" id="loadDefaultsBtn">↺ Load Defaults</button>
+            <button class="btn-add" id="addKpiBtn">+ Add KPI</button>
+          </div>
+        </div>
+        <div class="weight-bar">
+          Total weight of active KPIs: &nbsp;<span class="weight-val" id="weightTotal">0.00</span> / 1.00
+          &nbsp;<span id="weightStatus"></span>
+        </div>
+        <div id="kpiLoading" class="empty-state" style="display:none;"><div class="empty-state-title">Loading KPIs…</div></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th><th>KPI Name</th><th>Section</th><th>Type</th>
+                <th>Weight</th><th>Cambridge Only</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="kpiTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════ PANEL: SCHOOLS ════ -->
+      <div class="panel" id="panel-schools">
+        <div class="toolbar">
+          <span class="toolbar-title">Partner Schools</span>
+          <div class="toolbar-right">
+            <button class="btn-add" id="loadDefaultSchoolsBtn">↺ Load Defaults</button>
+            <button class="btn-add" id="addSchoolBtn">+ Add School</button>
+          </div>
+        </div>
+        <div id="schoolsLoading" class="empty-state" style="display:none;"><div class="empty-state-title">Loading schools…</div></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>School Name</th><th>Sections</th><th>Cambridge SMP</th><th>Cambridge SMA</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="schoolsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════ PANEL: SEMESTERS ════ -->
+      <div class="panel" id="panel-semesters">
+        <div class="toolbar">
+          <span class="toolbar-title">Semesters / Evaluation Periods</span>
+          <div class="toolbar-right">
+            <button class="btn-add" id="addSemesterBtn">+ Add Semester</button>
+          </div>
+        </div>
+        <div id="semestersLoading" class="empty-state" style="display:none;"><div class="empty-state-title">Loading semesters…</div></div>
+        <div class="sem-grid" id="semGrid"></div>
+      </div>
+
+    </div><!-- /pageContent -->
+  </main>
+</div><!-- /page-layout -->
+
+<!-- ═══ MODAL: KPI ═══ -->
+<div class="modal-overlay" id="kpiModal">
+  <div class="modal modal-lg">
+    <div class="modal-head">
+      <span id="kpiModalTitle">Add KPI</span>
+      <button class="modal-close" data-close="kpiModal">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group full-col">
+          <label class="form-label">KPI Name *</label>
+          <input class="form-input" id="kpiName" type="text" placeholder="e.g. Department Meetings" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Section</label>
+          <select class="form-select" id="kpiSection">
+            <option value="All">All sections</option>
+            <option value="SD">SD</option>
+            <option value="SMP">SMP</option>
+            <option value="SMA">SMA</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Input Type</label>
+          <select class="form-select" id="kpiInputType">
+            <option value="percentage">percentage (0–100%)</option>
+            <option value="number">number</option>
+            <option value="boolean">boolean (yes/no toggle)</option>
+            <option value="select_boolean">select_boolean (dropdown)</option>
+            <option value="ratio">ratio (value / total)</option>
+            <option value="threshold_boolean">threshold_boolean</option>
+            <option value="capped_ratio">capped_ratio</option>
+            <option value="boolean_threshold">boolean_threshold</option>
+            <option value="multi_number">multi_number (subfields)</option>
+            <option value="multi_average">multi_average (subfields)</option>
+            <option value="multi_boolean">multi_boolean (checkboxes)</option>
+            <option value="ease">ease (EASE I & II avg)</option>
+            <option value="cambridge_lower">cambridge_lower</option>
+            <option value="cambridge_igcse">cambridge_igcse</option>
+            <option value="cambridge_aslevel">cambridge_aslevel</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight (decimal, e.g. 0.06 = 6%)</label>
+          <input class="form-input" id="kpiWeight" type="number" step="0.01" min="0" max="1" placeholder="0.06" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Max Value</label>
+          <input class="form-input" id="kpiMaxValue" type="number" placeholder="100" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Threshold</label>
+          <input class="form-input" id="kpiThreshold" type="number" placeholder="75" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Denominator Type</label>
+          <select class="form-select" id="kpiDenominatorType">
+            <option value="none">None</option>
+            <option value="total_students">Total Students</option>
+            <option value="total_staff">Total Staff</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Per Teacher</label>
+          <input class="form-input" id="kpiTargetPerTeacher" type="number" placeholder="3" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Order</label>
+          <input class="form-input" id="kpiOrder" type="number" placeholder="1" />
+        </div>
+        <div class="form-group full-col">
+          <label class="form-label">Sub-Fields (comma-separated)</label>
+          <input class="form-input" id="kpiSubFields" placeholder="Math, English, Science" />
+          <span class="form-hint">For multi_number, multi_average, multi_boolean</span>
+        </div>
+        <div class="form-group full-col">
+          <label class="form-label">Options (comma-separated)</label>
+          <input class="form-input" id="kpiOptions" placeholder="GoGuardian, Securly, Other" />
+          <span class="form-hint">For select_boolean</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Null Option Label</label>
+          <input class="form-input" id="kpiNullOption" placeholder="No Filter" />
+        </div>
+        <div class="form-group full-col">
+          <label class="form-label">Description</label>
+          <input class="form-input" id="kpiDescription" placeholder="Brief description…" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cambridge Only</label>
+          <div class="check-list">
+            <label class="check-row"><input type="checkbox" id="kpiCambridgeOnly"> Cambridge schools only</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <div class="check-list">
+            <label class="check-row"><input type="checkbox" id="kpiActive" checked> Active</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" data-close="kpiModal">Cancel</button>
+      <button class="btn-save" id="kpiSaveBtn">Save KPI</button>
+    </div>
+    <div class="modal-error" id="kpiError"></div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SCHOOL ═══ -->
+<div class="modal-overlay" id="schoolModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span id="schoolModalTitle">Add School</span>
+      <button class="modal-close" data-close="schoolModal">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label">School Name *</label>
+        <input class="form-input" id="schoolName" type="text" placeholder="School name" />
+      </div>
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label">Sections</label>
+        <div class="section-checks">
+          <label class="section-check"><input type="checkbox" id="schoolSD"> SD</label>
+          <label class="section-check"><input type="checkbox" id="schoolSMP"> SMP</label>
+          <label class="section-check"><input type="checkbox" id="schoolSMA"> SMA</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Cambridge SMP</label>
+          <select class="form-select" id="schoolCambridgeSMP">
+            <option value="Cambridge">Cambridge</option>
+            <option value="Non-Cambridge">Non-Cambridge</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cambridge SMA</label>
+          <select class="form-select" id="schoolCambridgeSMA">
+            <option value="Cambridge">Cambridge</option>
+            <option value="Non-Cambridge">Non-Cambridge</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" data-close="schoolModal">Cancel</button>
+      <button class="btn-save" id="schoolSaveBtn">Save School</button>
+    </div>
+    <div class="modal-error" id="schoolError"></div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SEMESTER ═══ -->
+<div class="modal-overlay" id="semesterModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span id="semesterModalTitle">Add Semester</span>
+      <button class="modal-close" data-close="semesterModal">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label">Semester Name *</label>
+        <input class="form-input" id="semesterName" type="text" placeholder="e.g. Semester II 2025/2026" />
+      </div>
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label">Submission Deadline</label>
+        <input class="form-input" id="semesterDeadline" type="datetime-local" />
+        <span class="form-hint">After this date/time, school principals can no longer edit their data.</span>
+      </div>
+      <div class="form-row" style="margin-bottom:1rem;">
+        <div class="form-group">
+          <label class="form-label">Network Avg — EASE I</label>
+          <input class="form-input" id="semesterEaseI" type="number" step="0.01" placeholder="0.00" />
+          <span class="form-hint">Used for EASE Performance KPI scoring</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Network Avg — EASE II</label>
+          <input class="form-input" id="semesterEaseII" type="number" step="0.01" placeholder="0.00" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Visibility</label>
+        <div class="check-list">
+          <label class="check-row"><input type="checkbox" id="semesterActive"> Set as active semester (schools will see this)</label>
+          <label class="check-row"><input type="checkbox" id="semesterPublished"> Published (schools can see their own score)</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" data-close="semesterModal">Cancel</button>
+      <button class="btn-save" id="semesterSaveBtn">Save Semester</button>
+    </div>
+    <div class="modal-error" id="semesterError"></div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
+  serverTimestamp, query, orderBy
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// ─── State ────────────────────────────────────────────────────
+let db;
+let kpis      = [];
+let schools   = [];
+let semesters = [];
+let editingKpiId = null, editingSchoolId = null, editingSemesterId = null;
+
+// ─── Default KPI data (same as before, used for "Load Defaults") ───
+const DEFAULT_KPIS = [
+  { id:'dept_meetings',       name:'Department Meetings',            section:'All', inputType:'multi_average',     subFields:['Meeting 1 (%)','Meeting 2 (%)','Meeting 3 (%)'], maxValue:100, weight:0.06, description:'Attendance % for 3 meeting dates', order:1,  active:true, cambridgeOnly:false },
+  { id:'subject_depts',       name:'Subject Departments',            section:'All', inputType:'multi_average',     subFields:['Mathematics','English','Religion','Physics','Biology','Chemistry'], maxValue:100, weight:0.06, description:'Performance score for 6 core subjects (avg)', order:2,  active:true, cambridgeOnly:false },
+  { id:'content_filtering',   name:'Content Filtering',              section:'All', inputType:'select_boolean',    options:['GoGuardian','Securly','Jamf Safe Internet','Other'], nullOption:'No Filter', weight:0.04, description:'Content filtering solution implemented', order:3,  active:true, cambridgeOnly:false },
+  { id:'domains_completion',  name:'Domains Completion',             section:'All', inputType:'threshold_boolean', threshold:75, weight:0.03, description:'Domains completed (full points if > 75)', order:4,  active:true, cambridgeOnly:false },
+  { id:'website_score',       name:'Website Score',                  section:'All', inputType:'percentage',        maxValue:100, weight:0.04, description:'School website quality rating (0–100)', order:5,  active:true, cambridgeOnly:false },
+  { id:'aease_participation', name:'A-EASE Participation',           section:'All', inputType:'percentage',        maxValue:100, weight:0.05, description:'Student participation rate in A-EASE (%)', order:6,  active:true, cambridgeOnly:false },
+  { id:'club_activities',     name:'Club Activities',                section:'All', inputType:'multi_boolean',     subFields:['Makerspace & STEAM Lab','AI & Robotics Club','Leadership Club','Business Club','STEAM Expo'], weight:0.05, description:'Active extracurricular clubs (5 possible)', order:7,  active:true, cambridgeOnly:false },
+  { id:'parent_survey',       name:'Parent Survey',                  section:'All', inputType:'ratio',             denominatorType:'total_students', weight:0.06, description:'Parent survey respondents / total students', order:8,  active:true, cambridgeOnly:false },
+  { id:'student_survey',      name:'Student Survey',                 section:'All', inputType:'ratio',             denominatorType:'total_students', weight:0.06, description:'Student survey respondents / total students', order:9,  active:true, cambridgeOnly:false },
+  { id:'portfolio_system',    name:'Portfolio System',               section:'All', inputType:'boolean',           weight:0.03, description:'Student portfolio system implemented', order:10, active:true, cambridgeOnly:false },
+  { id:'emc_competition',     name:'EMC Competition',                section:'All', inputType:'ratio',             denominatorType:'total_students', weight:0.04, description:'EMC participants / total students', order:11, active:true, cambridgeOnly:false },
+  { id:'komodo_competition',  name:'KOMODO Competition',             section:'All', inputType:'ratio',             denominatorType:'total_students', weight:0.02, description:'KOMODO participants / total students', order:12, active:true, cambridgeOnly:false },
+  { id:'staff_survey',        name:'Staff Survey',                   section:'All', inputType:'ratio',             denominatorType:'total_staff', weight:0.05, description:'Staff survey respondents / total staff', order:13, active:true, cambridgeOnly:false },
+  { id:'observations',        name:'Observations & Walkthroughs',    section:'All', inputType:'capped_ratio',      denominatorType:'total_staff', targetPerTeacher:3, weight:0.06, description:'Total obs+walkthroughs / staff / 3 (capped 100%)', order:14, active:true, cambridgeOnly:false },
+  { id:'mentor_mentee',       name:'Mentor-Mentee Program',          section:'All', inputType:'boolean_threshold', threshold:0, weight:0.02, description:'Active mentoring pairs (any > 0 = full points)', order:15, active:true, cambridgeOnly:false },
+  { id:'device_management',   name:'Device Management',              section:'All', inputType:'select_boolean',    options:['Google Workspace','Jamf School','Other'], nullOption:'No Management', weight:0.03, description:'Device management solution implemented', order:16, active:true, cambridgeOnly:false },
+  { id:'wifi_safety',         name:'WiFi Safety Tests',              section:'All', inputType:'multi_average',     subFields:['Quick Test Score (0-100)','Full Test Score (0-100)'], maxValue:100, weight:0.04, description:'Quick Test + Full Test scores (avg)', order:17, active:true, cambridgeOnly:false },
+  { id:'ease_performance',    name:'EASE Performance',               section:'All', inputType:'ease',              weight:0.05, description:'School avg vs network avg for EASE I & II', order:18, active:true, cambridgeOnly:false },
+  { id:'lower_secondary',     name:'Lower Secondary Exams',          section:'SMP', inputType:'cambridge_lower',   weight:0.05, description:'Cambridge Lower Secondary: subjects (max 3) + avg score', order:19, active:true, cambridgeOnly:true },
+  { id:'igcse_exams',         name:'IGCSE Examinations',             section:'SMA', inputType:'cambridge_igcse',   weight:0.06, description:'IGCSE: exams count (max 10) + avg score', order:20, active:true, cambridgeOnly:true },
+  { id:'aslevel_exams',       name:'AS/A Level Examinations',        section:'SMA', inputType:'cambridge_aslevel', weight:0.05, description:'AS/A: subjects (max 4, 60%) + enrollment rate (40%)', order:21, active:true, cambridgeOnly:true },
+];
+
+const DEFAULT_SCHOOLS = [
+  { name:'Cahaya Rancamaya Islamic School',         sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+  { name:'Emer Islamic Boarding School',            sections:['SMP','SMA'], cambridge_smp:'Non-Cambridge', cambridge_sma:'Non-Cambridge' },
+  { name:'Fatih Bilingual School',                  sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+  { name:'Global Cahaya Bangsa',                    sections:['SMP','SMA'], cambridge_smp:'Non-Cambridge', cambridge_sma:'Non-Cambridge' },
+  { name:'Kesatuan Bangsa School',                  sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+  { name:'Kharisma Bangsa School',                  sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+  { name:'Mega Islamic School',                     sections:['SMP','SMA'], cambridge_smp:'Non-Cambridge', cambridge_sma:'Non-Cambridge' },
+  { name:'Pakar Belia Islamic Boarding School',     sections:['SMP','SMA'], cambridge_smp:'Non-Cambridge', cambridge_sma:'Non-Cambridge' },
+  { name:'Prestige Bilingual School',               sections:['SMP'],       cambridge_smp:'Non-Cambridge', cambridge_sma:'' },
+  { name:'Pribadi Bandung School',                  sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+  { name:'Pribadi Depok School',                    sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Non-Cambridge' },
+  { name:'Pribadi Premiere School',                 sections:['SMP','SMA'], cambridge_smp:'Non-Cambridge', cambridge_sma:'Non-Cambridge' },
+  { name:'Semesta Gunung Pati',                     sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+  { name:'Semesta Jangli',                          sections:['SMP'],       cambridge_smp:'Non-Cambridge', cambridge_sma:'' },
+  { name:'TNA Fatih Bilingual School',              sections:['SMP','SMA'], cambridge_smp:'Cambridge',     cambridge_sma:'Cambridge' },
+];
+
+// ─── Helpers ─────────────────────────────────────────────────
+function showErr(modalId, msg) {
+  const el = document.getElementById(modalId + 'Error');
+  if (el) { el.textContent = msg; el.classList.add('visible'); }
+}
+function clearErr(modalId) {
+  const el = document.getElementById(modalId + 'Error');
+  if (el) { el.textContent = ''; el.classList.remove('visible'); }
+}
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); clearErr(id); }
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+// ─── Auth Ready ───────────────────────────────────────────────
+document.addEventListener('authReady', async ({ detail: { profile } }) => {
+  if (profile.role_centralhub !== 'central_admin') {
+    window.location.replace('index');
+    return;
+  }
+  db = window.db;
+  document.getElementById('pageLoading').style.display = 'none';
+  document.getElementById('pageContent').style.display = 'block';
+
+  await Promise.all([loadKPIs(), loadSchools(), loadSemesters()]);
+  renderKPIs();
+  renderSchools();
+  renderSemesters();
+
+  // Sidebar nav
+  document.querySelectorAll('.sidebar-btn[data-panel]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(btn.dataset.panel).classList.add('active');
+    });
+  });
+
+  // Modal close buttons
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeModal(btn.dataset.close));
+  });
+  document.querySelectorAll('.modal-overlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) closeModal(o.id); });
+  });
+
+  // Button wires
+  document.getElementById('addKpiBtn').addEventListener('click', () => openKpiModal(null));
+  document.getElementById('loadDefaultsBtn').addEventListener('click', loadDefaultKPIs);
+  document.getElementById('addSchoolBtn').addEventListener('click', () => openSchoolModal(null));
+  document.getElementById('loadDefaultSchoolsBtn').addEventListener('click', loadDefaultSchools);
+  document.getElementById('addSemesterBtn').addEventListener('click', () => openSemesterModal(null));
+  document.getElementById('kpiSaveBtn').addEventListener('click', saveKPI);
+  document.getElementById('schoolSaveBtn').addEventListener('click', saveSchool);
+  document.getElementById('semesterSaveBtn').addEventListener('click', saveSemester);
+
+  // Delegated table buttons
+  document.getElementById('kpiTableBody').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.editKpi)   openKpiModal(btn.dataset.editKpi);
+    if (btn.dataset.deleteKpi) deleteKPI(btn.dataset.deleteKpi);
+  });
+  document.getElementById('schoolsTableBody').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.editSchool)   openSchoolModal(btn.dataset.editSchool);
+    if (btn.dataset.deleteSchool) deleteSchool(btn.dataset.deleteSchool);
+  });
+  document.getElementById('semGrid').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.editSem)       openSemesterModal(btn.dataset.editSem);
+    if (btn.dataset.deleteSem)     deleteSemester(btn.dataset.deleteSem);
+    if (btn.dataset.setActive)     setActiveSemester(btn.dataset.setActive);
+    if (btn.dataset.togglePublish) togglePublish(btn.dataset.togglePublish);
+  });
+});
+
+// ─── KPIs ─────────────────────────────────────────────────────
+async function loadKPIs() {
+  const snap = await getDocs(query(collection(db, 'kpi_config'), orderBy('order')));
+  kpis = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+function renderKPIs() {
+  const tbody = document.getElementById('kpiTableBody');
+  if (!kpis.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:2rem;">No KPIs yet. Click "Load Defaults" to get started.</td></tr>';
+    updateWeightTotal();
+    return;
+  }
+  tbody.innerHTML = kpis.map(k => `
+    <tr>
+      <td style="color:#9ca3af;">${k.order ?? '—'}</td>
+      <td style="font-weight:600;">${k.name}</td>
+      <td><span class="spill ${(k.section||'all').toLowerCase()}">${k.section}</span></td>
+      <td style="font-size:0.78rem;color:#6b7280;">${k.inputType}</td>
+      <td style="font-weight:700;">${((k.weight||0)*100).toFixed(0)}%</td>
+      <td>${k.cambridgeOnly ? '<span class="badge badge-info">Yes</span>' : '<span style="color:#9ca3af;">—</span>'}</td>
+      <td>${k.active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-inactive">Inactive</span>'}</td>
+      <td>
+        <button class="btn-icon" data-edit-kpi="${k.id}" title="Edit">✏️</button>
+        <button class="btn-icon" data-delete-kpi="${k.id}" title="Delete" style="margin-left:4px;">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+  updateWeightTotal();
+}
+
+function updateWeightTotal() {
+  const total = kpis.filter(k => k.active).reduce((s,k) => s+(k.weight||0), 0);
+  const el = document.getElementById('weightTotal');
+  el.textContent = total.toFixed(2);
+  el.className = 'weight-val ' + (Math.abs(total - 1) < 0.01 ? 'ok' : 'warn');
+  document.getElementById('weightStatus').textContent = Math.abs(total - 1) < 0.01 ? '✓ Balanced' : '⚠ Weights should sum to 1.00';
+}
+
+function openKpiModal(kpiId) {
+  editingKpiId = kpiId;
+  const k = kpiId ? kpis.find(x => x.id === kpiId) : null;
+  document.getElementById('kpiModalTitle').textContent = k ? 'Edit KPI' : 'Add KPI';
+  document.getElementById('kpiName').value           = k?.name        || '';
+  document.getElementById('kpiSection').value        = k?.section     || 'All';
+  document.getElementById('kpiInputType').value      = k?.inputType   || 'percentage';
+  document.getElementById('kpiWeight').value         = k?.weight      != null ? k.weight : '';
+  document.getElementById('kpiMaxValue').value       = k?.maxValue    || '';
+  document.getElementById('kpiThreshold').value      = k?.threshold   != null ? k.threshold : '';
+  document.getElementById('kpiDenominatorType').value = k?.denominatorType || 'none';
+  document.getElementById('kpiTargetPerTeacher').value = k?.targetPerTeacher || '';
+  document.getElementById('kpiSubFields').value      = (k?.subFields || []).join(', ');
+  document.getElementById('kpiOptions').value        = (k?.options   || []).join(', ');
+  document.getElementById('kpiNullOption').value     = k?.nullOption  || '';
+  document.getElementById('kpiOrder').value          = k?.order       != null ? k.order : '';
+  document.getElementById('kpiDescription').value   = k?.description || '';
+  document.getElementById('kpiCambridgeOnly').checked = k?.cambridgeOnly || false;
+  document.getElementById('kpiActive').checked        = k?.active !== false;
+  clearErr('kpi');
+  openModal('kpiModal');
+}
+
+async function saveKPI() {
+  const name = document.getElementById('kpiName').value.trim();
+  if (!name) { showErr('kpi', 'KPI name is required.'); return; }
+  const data = {
+    name,
+    section:            document.getElementById('kpiSection').value,
+    inputType:          document.getElementById('kpiInputType').value,
+    weight:             parseFloat(document.getElementById('kpiWeight').value) || 0,
+    maxValue:           parseFloat(document.getElementById('kpiMaxValue').value) || 100,
+    threshold:          parseFloat(document.getElementById('kpiThreshold').value) || 0,
+    denominatorType:    document.getElementById('kpiDenominatorType').value,
+    targetPerTeacher:   parseFloat(document.getElementById('kpiTargetPerTeacher').value) || 3,
+    subFields: document.getElementById('kpiSubFields').value.split(',').map(s=>s.trim()).filter(Boolean),
+    options:   document.getElementById('kpiOptions').value.split(',').map(s=>s.trim()).filter(Boolean),
+    nullOption:         document.getElementById('kpiNullOption').value.trim(),
+    order:              parseInt(document.getElementById('kpiOrder').value) || 99,
+    description:        document.getElementById('kpiDescription').value.trim(),
+    cambridgeOnly:      document.getElementById('kpiCambridgeOnly').checked,
+    active:             document.getElementById('kpiActive').checked,
+  };
+  try {
+    if (editingKpiId) {
+      await setDoc(doc(db, 'kpi_config', editingKpiId), data);
+    } else {
+      const genId = name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/(^_|_$)/g,'');
+      await setDoc(doc(db, 'kpi_config', genId), data);
+    }
+    await loadKPIs(); renderKPIs(); closeModal('kpiModal');
+  } catch (err) { showErr('kpi', err.message); }
+}
+
+async function deleteKPI(kpiId) {
+  const btn = document.querySelector(`[data-delete-kpi="${kpiId}"]`);
+  if (!btn) return;
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm?';
+    setTimeout(() => { btn.textContent = '🗑️'; delete btn.dataset.confirming; }, 3000);
+    return;
+  }
+  try {
+    await deleteDoc(doc(db, 'kpi_config', kpiId));
+    await loadKPIs(); renderKPIs();
+  } catch (err) { alert(err.message); }
+}
+
+async function loadDefaultKPIs() {
+  const btn = document.getElementById('loadDefaultsBtn');
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm? Click again';
+    setTimeout(() => { btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }, 3000);
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Loading…';
+  try {
+    for (const kpi of DEFAULT_KPIS) {
+      const { id, ...data } = kpi;
+      await setDoc(doc(db, 'kpi_config', id), data);
+    }
+    await loadKPIs(); renderKPIs();
+  } catch (err) { alert(err.message); }
+  finally { btn.disabled = false; btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }
+}
+
+// ─── SCHOOLS ─────────────────────────────────────────────────
+async function loadSchools() {
+  const snap = await getDocs(collection(db, 'partner_schools'));
+  schools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  schools.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function renderSchools() {
+  const tbody = document.getElementById('schoolsTableBody');
+  if (!schools.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:2rem;">No schools yet. Click "Load Defaults" to start.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = schools.map(s => {
+    const pills = (s.sections||[]).map(sec =>
+      `<span class="spill ${sec.toLowerCase()}">${sec}</span>`).join(' ');
+    return `<tr>
+      <td style="font-weight:600;">${s.name}</td>
+      <td>${pills}</td>
+      <td><span class="cam-pill ${s.cambridge_smp === 'Cambridge' ? 'cam' : 'non'}">${s.cambridge_smp || '—'}</span></td>
+      <td><span class="cam-pill ${s.cambridge_sma === 'Cambridge' ? 'cam' : 'non'}">${s.cambridge_sma || '—'}</span></td>
+      <td>
+        <button class="btn-icon" data-edit-school="${s.id}" title="Edit">✏️</button>
+        <button class="btn-icon" data-delete-school="${s.id}" title="Delete" style="margin-left:4px;">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openSchoolModal(schoolId) {
+  editingSchoolId = schoolId;
+  const s = schoolId ? schools.find(x => x.id === schoolId) : null;
+  document.getElementById('schoolModalTitle').textContent = s ? 'Edit School' : 'Add School';
+  document.getElementById('schoolName').value       = s?.name        || '';
+  document.getElementById('schoolSD').checked       = (s?.sections||[]).includes('SD');
+  document.getElementById('schoolSMP').checked      = (s?.sections||[]).includes('SMP');
+  document.getElementById('schoolSMA').checked      = (s?.sections||[]).includes('SMA');
+  document.getElementById('schoolCambridgeSMP').value = s?.cambridge_smp || 'Non-Cambridge';
+  document.getElementById('schoolCambridgeSMA').value = s?.cambridge_sma || 'Non-Cambridge';
+  clearErr('school'); openModal('schoolModal');
+}
+
+async function saveSchool() {
+  const name = document.getElementById('schoolName').value.trim();
+  if (!name) { showErr('school', 'School name is required.'); return; }
+  const sections = ['SD','SMP','SMA'].filter(sec => document.getElementById(`school${sec}`).checked);
+  const data = {
+    name, sections,
+    cambridge_smp: document.getElementById('schoolCambridgeSMP').value,
+    cambridge_sma: document.getElementById('schoolCambridgeSMA').value,
+  };
+  try {
+    if (editingSchoolId) {
+      await updateDoc(doc(db, 'partner_schools', editingSchoolId), data);
+    } else {
+      await addDoc(collection(db, 'partner_schools'), { ...data, createdAt: serverTimestamp() });
+    }
+    await loadSchools(); renderSchools(); closeModal('schoolModal');
+  } catch (err) { showErr('school', err.message); }
+}
+
+async function deleteSchool(schoolId) {
+  const btn = document.querySelector(`[data-delete-school="${schoolId}"]`);
+  if (!btn) return;
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm?';
+    setTimeout(() => { btn.textContent = '🗑️'; delete btn.dataset.confirming; }, 3000);
+    return;
+  }
+  try {
+    await deleteDoc(doc(db, 'partner_schools', schoolId));
+    await loadSchools(); renderSchools();
+  } catch (err) { alert(err.message); }
+}
+
+async function loadDefaultSchools() {
+  const btn = document.getElementById('loadDefaultSchoolsBtn');
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm?';
+    setTimeout(() => { btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }, 3000);
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Loading…';
+  try {
+    for (const s of DEFAULT_SCHOOLS) {
+      await addDoc(collection(db, 'partner_schools'), { ...s, createdAt: serverTimestamp() });
+    }
+    await loadSchools(); renderSchools();
+  } catch (err) { alert(err.message); }
+  finally { btn.disabled = false; btn.textContent = '↺ Load Defaults'; delete btn.dataset.confirming; }
+}
+
+// ─── SEMESTERS ────────────────────────────────────────────────
+async function loadSemesters() {
+  const snap = await getDocs(collection(db, 'kpi_settings'));
+  semesters = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  semesters.sort((a,b) => {
+    const ta = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(0);
+    const tb = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(0);
+    return tb - ta;
+  });
+}
+
+function renderSemesters() {
+  const grid = document.getElementById('semGrid');
+  if (!semesters.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-state-title">No semesters yet.</div><div class="empty-state-body">Click "+ Add Semester" to create an evaluation period.</div></div>';
+    return;
+  }
+  grid.innerHTML = semesters.map(s => {
+    const dl  = s.deadline ? fmtDate(s.deadline) : '—';
+    const past = s.deadline && (s.deadline.toDate ? s.deadline.toDate() : new Date(s.deadline)) < new Date();
+    return `
+      <div class="sem-card">
+        <div class="sem-card-header">
+          <div>
+            <div class="sem-card-name">${s.name}</div>
+            <div class="sem-card-meta">Deadline: ${dl} ${past ? '· <span style="color:#ef4444;">Passed</span>' : ''}</div>
+            ${s.network_avg_ease_i  ? `<div class="sem-card-meta">EASE I avg: ${s.network_avg_ease_i}</div>` : ''}
+            ${s.network_avg_ease_ii ? `<div class="sem-card-meta">EASE II avg: ${s.network_avg_ease_ii}</div>` : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+            ${s.active    ? '<span class="badge badge-active">Active</span>'  : ''}
+            ${s.published ? '<span class="badge badge-success">Published</span>' : ''}
+          </div>
+        </div>
+        <div class="sem-card-actions">
+          ${!s.active    ? `<button class="btn-add btn-sm" data-set-active="${s.id}">Set Active</button>` : ''}
+          <button class="btn-add btn-sm" data-toggle-publish="${s.id}">${s.published ? 'Unpublish' : 'Publish Scores'}</button>
+          <button class="btn-icon" data-edit-sem="${s.id}" title="Edit">✏️ Edit</button>
+          <button class="btn-icon" data-delete-sem="${s.id}" title="Delete" style="margin-left:auto;">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openSemesterModal(semId) {
+  editingSemesterId = semId;
+  const s = semId ? semesters.find(x => x.id === semId) : null;
+  document.getElementById('semesterModalTitle').textContent = s ? 'Edit Semester' : 'Add Semester';
+  document.getElementById('semesterName').value      = s?.name || '';
+  document.getElementById('semesterEaseI').value     = s?.network_avg_ease_i  ?? '';
+  document.getElementById('semesterEaseII').value    = s?.network_avg_ease_ii ?? '';
+  document.getElementById('semesterActive').checked  = s?.active    || false;
+  document.getElementById('semesterPublished').checked = s?.published || false;
+  if (s?.deadline) {
+    const d = s.deadline.toDate ? s.deadline.toDate() : new Date(s.deadline);
+    // datetime-local needs "YYYY-MM-DDTHH:MM"
+    const pad = n => String(n).padStart(2,'0');
+    document.getElementById('semesterDeadline').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } else {
+    document.getElementById('semesterDeadline').value = '';
+  }
+  clearErr('semester'); openModal('semesterModal');
+}
+
+async function saveSemester() {
+  const name = document.getElementById('semesterName').value.trim();
+  if (!name) { showErr('semester', 'Semester name is required.'); return; }
+  const dlVal = document.getElementById('semesterDeadline').value;
+  const data = {
+    name,
+    active:              document.getElementById('semesterActive').checked,
+    published:           document.getElementById('semesterPublished').checked,
+    network_avg_ease_i:  parseFloat(document.getElementById('semesterEaseI').value)  || null,
+    network_avg_ease_ii: parseFloat(document.getElementById('semesterEaseII').value) || null,
+    deadline:            dlVal ? new Date(dlVal) : null,
+  };
+  // If setting as active, deactivate others
+  if (data.active) {
+    for (const s of semesters) {
+      if (s.id !== editingSemesterId && s.active) {
+        await updateDoc(doc(db, 'kpi_settings', s.id), { active: false });
+      }
+    }
+  }
+  try {
+    if (editingSemesterId) {
+      await updateDoc(doc(db, 'kpi_settings', editingSemesterId), data);
+    } else {
+      await addDoc(collection(db, 'kpi_settings'), { ...data, createdAt: serverTimestamp() });
+    }
+    await loadSemesters(); renderSemesters(); closeModal('semesterModal');
+  } catch (err) { showErr('semester', err.message); }
+}
+
+async function deleteSemester(semId) {
+  const btn = document.querySelector(`[data-delete-sem="${semId}"]`);
+  if (!btn) return;
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1'; btn.textContent = '⚠ Confirm?';
+    setTimeout(() => { btn.textContent = '🗑️'; delete btn.dataset.confirming; }, 3000);
+    return;
+  }
+  try {
+    await deleteDoc(doc(db, 'kpi_settings', semId));
+    await loadSemesters(); renderSemesters();
+  } catch (err) { alert(err.message); }
+}
+
+async function setActiveSemester(semId) {
+  try {
+    for (const s of semesters) {
+      await updateDoc(doc(db, 'kpi_settings', s.id), { active: s.id === semId });
+    }
+    await loadSemesters(); renderSemesters();
+  } catch (err) { alert(err.message); }
+}
+
+async function togglePublish(semId) {
+  const s = semesters.find(x => x.id === semId);
+  if (!s) return;
+  try {
+    await updateDoc(doc(db, 'kpi_settings', semId), { published: !s.published });
+    await loadSemesters(); renderSemesters();
+  } catch (err) { alert(err.message); }
+}
+</script>
+</body>
+</html>

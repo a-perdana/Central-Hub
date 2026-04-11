@@ -325,8 +325,15 @@
           <input class="form-input" id="fieldEmail" type="email" placeholder="user@eduversal.org">
         </div>
         <div class="form-group">
-          <label class="form-label" for="fieldSchool">School</label>
+          <label class="form-label" for="fieldSchool">School (display name)</label>
           <input class="form-input" id="fieldSchool" type="text" placeholder="e.g. Pakar Belia Secondary School">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="fieldSchoolId">Assigned Partner School <span style="font-size:0.75rem;font-weight:400;color:var(--ink-3)">(for KPI data entry)</span></label>
+          <select class="form-select" id="fieldSchoolId">
+            <option value="">— not assigned —</option>
+          </select>
+          <p class="form-hint" style="margin-top:4px;font-size:0.75rem;color:var(--ink-3)">Required for School Principal users to enter KPI data in Academic Hub.</p>
         </div>
         <div class="form-group">
           <label class="form-label" for="fieldPosition">Position / Title</label>
@@ -462,12 +469,13 @@
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
-  import { collection, getDocs, updateDoc, deleteDoc, doc as fsDoc, query, where }
+  import { collection, getDocs, updateDoc, deleteDoc, doc as fsDoc, query, where, orderBy }
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
   let db;
-  let allUsers    = [];
-  let editingId   = null;
+  let allUsers       = [];
+  let partnerSchools = []; // [{id, name}] loaded from partner_schools collection
+  let editingId      = null;
   let sortCol     = null;
   let sortDir     = 'asc';
   let currentPage = 0;
@@ -504,9 +512,26 @@
       return;
     }
     db = window.db;
-    await loadUsers();
+    await Promise.all([loadUsers(), loadPartnerSchools()]);
     bindEvents();
   });
+
+  async function loadPartnerSchools() {
+    try {
+      const snap = await getDocs(query(collection(db, 'partner_schools'), orderBy('name')));
+      partnerSchools = snap.docs.map(d => ({ id: d.id, name: d.data().name }));
+    } catch (_) {
+      partnerSchools = [];
+    }
+  }
+
+  function populateSchoolIdSelect(currentSchoolId) {
+    const sel = document.getElementById('fieldSchoolId');
+    sel.innerHTML = '<option value="">— not assigned —</option>' +
+      partnerSchools.map(s =>
+        `<option value="${s.id}"${s.id === currentSchoolId ? ' selected' : ''}>${s.name}</option>`
+      ).join('');
+  }
 
   async function loadUsers() {
     try {
@@ -855,6 +880,7 @@
     document.getElementById('fieldEmail').value      = u.email         || '';
     document.getElementById('fieldSchool').value     = u.school        || '';
     document.getElementById('fieldPosition').value   = u.position      || '';
+    populateSchoolIdSelect(u.schoolId || '');
 
     // Teaching profile summary (read-only — set by teacher in Teachers Hub)
     const SUBJ_LABELS = { math:'Mathematics', biology:'Biology', chemistry:'Chemistry', physics:'Physics', english:'English', science:'Science' };
@@ -969,6 +995,7 @@
     const email        = document.getElementById('fieldEmail').value.trim();
     const school       = document.getElementById('fieldSchool').value.trim();
     const position     = document.getElementById('fieldPosition').value.trim();
+    const schoolId     = document.getElementById('fieldSchoolId').value || null;
     const roleCH       = document.getElementById('fieldRoleCH').value;
     const chSubRoles   = roleCH ? [
       document.getElementById('fieldChDirector').checked    ? 'director'    : null,
@@ -998,6 +1025,7 @@
         email,
         school,
         position,
+        schoolId,
         role_centralhub:              roleCH,
         ch_sub_roles:                 chSubRoles,
         role_academichub:             roleAH,
@@ -1011,7 +1039,7 @@
       const u = allUsers.find(x => x.id === editingId);
       if (u) {
         u.displayName = displayName; u.email = email;
-        u.school = school; u.position = position;
+        u.school = school; u.position = position; u.schoolId = schoolId;
         u.role_centralhub = roleCH; u.ch_sub_roles = chSubRoles; u.role_academichub = roleAH;
         u.approval_status_academichub = approvalAH; u.ah_sub_roles = ahSubRoles;
         u.role_teachershub = roleTH; u.approval_status_teachershub = approvalTH;
