@@ -858,6 +858,7 @@
   <div class="nav-links">
     <a href="https://academichub.eduversal.org" class="nav-link" id="navAcademicHub" target="_blank" rel="noopener">Academic Hub</a>
     <a href="https://teachershub.eduversal.org" class="nav-link" id="navTeachersHub" target="_blank" rel="noopener">Teachers Hub</a>
+    <a href="kpi-admin" class="nav-link" id="navKpiAdmin">KPI Admin</a>
   </div>
 
   <button class="nav-hamburger" id="navHamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNavOverlay">
@@ -955,6 +956,8 @@
       <a href="survey-console"     class="mobile-nav-link" data-mob-page="survey-console">Surveys</a>
       <a href="schools"            class="mobile-nav-link" data-mob-page="schools">Schools</a>
       <a href="staff"              class="mobile-nav-link" data-mob-page="staff">Staff</a>
+      <a href="console"            class="mobile-nav-link" data-mob-page="console">User Console</a>
+      <a href="kpi-admin"          class="mobile-nav-link" data-mob-page="kpi-admin">KPI Admin</a>
     </nav>
   </div>
 </div>
@@ -974,7 +977,8 @@
       "ease-system": "assessments",
       "school-appraisals": "appraisals",
       "teacher-appraisals": "appraisals",
-      "console": "console"
+      "console":   "console",
+      "kpi-admin": "kpi-admin"
     };
 
     const rawPath = window.location.pathname.split("/").pop() || "index";
@@ -1264,8 +1268,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     <!-- Platform Tabs -->
     <div class="platform-tabs">
-      <button class="plat-tab active" data-plat="teachers">Teachers Hub</button>
-      <button class="plat-tab" data-plat="leadership">Academic Leadership</button>
+      <button class="plat-tab active" data-plat="teachers">Subject Teacher</button>
+      <button class="plat-tab" data-plat="subject_leader">Subject Leader</button>
+      <button class="plat-tab" data-plat="academic_coordinator">Academic Coordinator</button>
+      <button class="plat-tab" data-plat="school_principal">School Principal</button>
+      <button class="plat-tab" data-plat="foundation_representative">Foundation Representative</button>
     </div>
 
     <!-- Week Navigator -->
@@ -1417,10 +1424,25 @@ const PLATFORM_CATS = {
     'Planning', 'Assessment', 'Communication',
     'Professional Development', 'Administration', 'Other',
   ],
-  leadership: [
-    'Staff Meeting', 'Lesson Observation', 'Subject Leader Meeting',
-    'Data Review', 'Parent Communication', 'Reporting',
-    'Professional Development', 'Other',
+  subject_leader: [
+    'Planning', 'Assessment', 'Communication',
+    'Subject Leader Meeting', 'Data Review',
+    'Professional Development', 'Administration', 'Other',
+  ],
+  academic_coordinator: [
+    'Planning', 'Assessment', 'Data Review',
+    'Staff Meeting', 'Parent Communication', 'Reporting',
+    'Professional Development', 'Administration', 'Other',
+  ],
+  school_principal: [
+    'Staff Meeting', 'Lesson Observation', 'Data Review',
+    'Parent Communication', 'Reporting', 'Planning',
+    'Professional Development', 'Administration', 'Other',
+  ],
+  foundation_representative: [
+    'Planning', 'Data Review', 'Reporting',
+    'Staff Meeting', 'Parent Communication',
+    'Professional Development', 'Administration', 'Other',
   ],
 };
 
@@ -1453,8 +1475,7 @@ let unsubEssentials = null;
 
 // ── Auth ──────────────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { profile } }) => {
-  const isAdmin = profile?.role_centralhub === 'central_admin'
-               || profile?.role === 'central_admin';
+  const isAdmin = profile?.role_centralhub === 'central_admin';
 
   if (!isAdmin) {
     document.getElementById('accessDenied').style.display = '';
@@ -1537,8 +1558,7 @@ function updateWeekUI() {
   document.getElementById('templatePanelTitle').textContent = `Week ${currentWeek} Tasks`;
   const jumpSel = document.getElementById('weekJumpSelect');
   if (jumpSel) jumpSel.value = currentWeek;
-  const platformLabel = currentPlatform === 'teachers' ? 'Teachers Hub' : 'Academic Leadership';
-  document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${platformLabel}`;
+  document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${getPlatformLabel(currentPlatform)}`;
 }
 
 // ── Load week ─────────────────────────────────────────────────────
@@ -1630,9 +1650,19 @@ async function loadProgress() {
     usersSnap.forEach(d => {
       const data = d.data();
       // Filter by platform role
+      const thSubs = Array.isArray(data.th_sub_roles) ? data.th_sub_roles : [];
+      const ahSubs = Array.isArray(data.ah_sub_roles) ? data.ah_sub_roles : [];
       const hasRole = currentPlatform === 'teachers'
-        ? data.role_teachershub === 'teachers_user'
-        : data.role_academichub === 'academic_user';
+        ? data.role_teachershub === 'teachers_user' && !thSubs.includes('subject_leader')
+        : currentPlatform === 'subject_leader'
+        ? thSubs.includes('subject_leader')
+        : currentPlatform === 'academic_coordinator'
+        ? ahSubs.includes('academic_coordinator')
+        : currentPlatform === 'school_principal'
+        ? ahSubs.includes('school_principal')
+        : currentPlatform === 'foundation_representative'
+        ? ahSubs.includes('foundation_representative')
+        : false;
       if (hasRole) users.push({ uid: d.id, displayName: data.displayName || data.email, email: data.email });
     });
   } catch (err) {
@@ -1819,10 +1849,21 @@ async function deleteTask(taskId) {
   showToast('Task deleted.');
 }
 
+// ── Platform label helper ─────────────────────────────────────────
+function getPlatformLabel(plat) {
+  const LABELS = {
+    teachers:                  'Subject Teacher',
+    subject_leader:            'Subject Leader',
+    academic_coordinator:      'Academic Coordinator',
+    school_principal:          'School Principal',
+    foundation_representative: 'Foundation Representative',
+  };
+  return LABELS[plat] || plat;
+}
+
 // ── Weekly Essentials ─────────────────────────────────────────────
 function loadEssentials() {
-  const platformLabel = currentPlatform === 'teachers' ? 'Teachers Hub' : 'Academic Leadership';
-  document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${platformLabel}`;
+  document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${getPlatformLabel(currentPlatform)}`;
 
   if (unsubEssentials) { unsubEssentials(); unsubEssentials = null; }
 
