@@ -523,6 +523,29 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- kpi_meeting_proposals (Evaluator proposes meeting date to teacher) --
+    // Doc ID: auto
+    // Fields: submissionId, teacherUid, proposedDate, time, location, note, status (pending/confirmed/declined)
+    // Read:  evaluators (AH admin/user), the teacher whose submission it is, teachers_admin
+    // Write: evaluators create/update; teacher updates status only
+    match /kpi_meeting_proposals/{proposalId} {
+      allow read: if isAdmin()
+                  || isAHAdmin()
+                  || isTeachersAdmin()
+                  || (isAcademicUser() && resource.data.evaluatorUid == request.auth.uid)
+                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid);
+      allow create: if isAHAdmin()
+                    || (isAcademicUser()
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator']));
+      allow update: if isAHAdmin()
+                    || (isAcademicUser()
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator']))
+                    || (isTeachersUser()
+                        && resource.data.teacherUid == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt', 'respondedBy']));
+      allow delete: if isAdmin();
+    }
+
     // -- school_performance_kpi (KPI data submissions) -------
     // Structure: school_performance_kpi/{semId}/schools/{schoolId}
     // Read:  academic_admin sees all; academic_user sees only their own school
