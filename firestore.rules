@@ -488,6 +488,23 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // -- teacher_kpi_evaluations (Admin evaluations of teacher submissions) --
+    // Doc ID = submissionId (same as teacher_kpi_submissions for 1-1 relationship)
+    // Read:  central_admin, academic_admin/user (AH evaluators), teachers_admin
+    // Write: academic_admin OR academic_user with school_principal/academic_coordinator sub-role
+    // Teacher: read only their own evaluation
+    match /teacher_kpi_evaluations/{submissionId} {
+      allow read: if isAdmin()
+                  || isAHAdmin()
+                  || isTeachersAdmin()
+                  || (isAcademicUser() && userProfile().uid == resource.data.evaluatorInfo.evaluatorUid)
+                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid);
+      allow create, update: if isAHAdmin()
+                            || (isAcademicUser()
+                                && (userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator'])));
+      allow delete: if isAdmin();
+    }
+
     // -- teacher_kpi_submissions (Teacher self-assessment submissions) --
     // Doc ID format: {uid}_{periodId}
     // Read:  teacher who owns it OR central_admin / teachers_admin
