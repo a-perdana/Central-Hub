@@ -488,6 +488,23 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // -- teacher_kpi_submissions (Teacher self-assessment submissions) --
+    // Doc ID format: {uid}_{periodId}
+    // Read:  teacher who owns it OR central_admin / teachers_admin
+    // Write: teacher who owns it (create + update their own submission)
+    // Delete: central_admin only
+    match /teacher_kpi_submissions/{submissionId} {
+      allow read: if isAdmin()
+                  || isTeachersAdmin()
+                  || (isTeachersUser()
+                      && resource.data.uid == request.auth.uid);
+      allow create: if isTeachersUser()
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if isTeachersUser()
+                    && resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     // -- school_performance_kpi (KPI data submissions) -------
     // Structure: school_performance_kpi/{semId}/schools/{schoolId}
     // Read:  academic_admin sees all; academic_user sees only their own school
