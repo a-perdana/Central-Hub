@@ -20,7 +20,7 @@ import { initializeApp, getApps }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -433,20 +433,9 @@ onAuthStateChanged(auth, async (user) => {
       profile = newProfile;
     } else {
       profile = userSnap.data();
-      // Legacy role mapping: old 'admin' → 'central_admin'
-      const LEGACY_MAP = { 'admin': 'central_admin' };
-      const legacyRole = profile.role;
       if (profile[PLATFORM_KEY] == null) {
-        // First visit with new system — assign correct role
-        const assignRole = LEGACY_MAP[legacyRole]
-          || (ALLOWED_ROLES.includes(legacyRole) ? legacyRole : DEFAULT_ROLE);
-        await setDoc(userRef, { [PLATFORM_KEY]: assignRole }, { merge: true });
-        profile = { ...profile, [PLATFORM_KEY]: assignRole };
-      } else if (profile[PLATFORM_KEY] === DEFAULT_ROLE && LEGACY_MAP[legacyRole]) {
-        // Correct a previously wrong mapping (e.g. 'admin' was assigned 'central_user')
-        const correctRole = LEGACY_MAP[legacyRole];
-        await setDoc(userRef, { [PLATFORM_KEY]: correctRole }, { merge: true });
-        profile = { ...profile, [PLATFORM_KEY]: correctRole };
+        await setDoc(userRef, { [PLATFORM_KEY]: DEFAULT_ROLE }, { merge: true });
+        profile = { ...profile, [PLATFORM_KEY]: DEFAULT_ROLE };
       }
     }
   } catch (err) {
@@ -463,8 +452,6 @@ onAuthStateChanged(auth, async (user) => {
     window.location.replace('login?error=access');
     return;
   }
-  // Set profile.role for backward compat with page-level checks
-  profile.role = platformRole;
 
   // 5. Name prompt if missing
   if (!profile.displayName) {
@@ -476,6 +463,14 @@ onAuthStateChanged(auth, async (user) => {
   // 6. All checks passed — expose globals
   window.currentUser = user;
   window.userProfile = profile;
+
+  // Log platform usage event (fire-and-forget, non-blocking)
+  addDoc(collection(db, 'platform_usage'), {
+    uid:      user.uid,
+    platform: 'centralhub',
+    role:     profile[PLATFORM_KEY] || '',
+    ts:       serverTimestamp(),
+  }).catch(() => {});  // silently ignore if rules block or offline
 
   // ── Cache shared nav element references ──────────────────────────
   const navAuth     = document.querySelector('.nav-auth');
