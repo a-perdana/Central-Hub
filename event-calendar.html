@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Calendar — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(130deg, #1a0a2e 0%, #2d1b4e 40%, #4a2d6e 72%, #7c3aed 100%);
+      padding: 36px 40px 0; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse at 8% 80%, rgba(124,58,237,0.18) 0%, transparent 55%),
+        radial-gradient(ellipse at 90% 10%, rgba(255,255,255,0.04) 0%, transparent 45%),
+        radial-gradient(ellipse at 55% 50%, rgba(0,0,0,0.12) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 30%, rgba(124,58,237,0.4) 55%, rgba(255,255,255,0.12) 80%, transparent 100%);
+    }
+    .hero-inner { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding-bottom: 28px; }
+    .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 8px; }
+    .hero-text .eyebrow {
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(255,255,255,0.42); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .hero-text .eyebrow::before {
+      content: ''; display: inline-block; width: 18px; height: 1.5px;
+      background: rgba(124,58,237,0.7); border-radius: 2px; flex-shrink: 0;
+    }
+    .hero-text h1 {
+      font-family: 'Lora', serif; font-size: 1.9rem; font-weight: 600;
+      color: #fff; line-height: 1.2; margin-bottom: 8px; letter-spacing: -0.01em;
+    }
+    .hero-text .sub { font-size: 0.875rem; color: rgba(255,255,255,0.55); line-height: 1.5; }
+
+    /* ── Year selector in hero ── */
+    .year-select-wrap { display: flex; align-items: center; gap: 8px; }
+    .year-select-wrap label { font-size: 0.8rem; color: rgba(255,255,255,0.6); font-weight: 600; }
+    .year-select {
+      padding: 6px 10px; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+      background: rgba(255,255,255,0.1); color: #fff;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600; cursor: pointer; outline: none;
+    }
+    .year-select option { background: #2d1b4e; color: #fff; }
+
+    /* ── Category tabs in hero ── */
+    .cat-tabs {
+      display: flex; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; position: relative; z-index: 2;
+    }
+    .cat-tabs::-webkit-scrollbar { display: none; }
+    .cat-tab {
+      padding: 11px 22px; border: none; background: transparent;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600;
+      color: rgba(255,255,255,0.5); cursor: pointer;
+      border-radius: 10px 10px 0 0; transition: color 0.2s, background 0.2s;
+      position: relative; white-space: nowrap;
+    }
+    .cat-tab::after {
+      content: ''; position: absolute; bottom: 0; left: 14px; right: 14px; height: 2.5px;
+      background: rgba(255,255,255,0.2); border-radius: 2px 2px 0 0; transition: background 0.2s;
+    }
+    .cat-tab:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.06); }
+    .cat-tab.active { color: #fff; background: rgba(255,255,255,0.1); font-weight: 700; }
+    .cat-tab.active::after { background: #a78bfa; }
+
+    /* ── PAGE WRAP ── */
+    .page-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 40px 72px; }
+
+    /* ── FILTER BAR ── */
+    .filter-bar-ev {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .school-filter {
+      padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; color: var(--ink);
+      background: var(--white); cursor: pointer; outline: none; min-width: 180px;
+    }
+    .school-filter:focus { border-color: #7c3aed; }
+    .search-ev {
+      padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; color: var(--ink);
+      background: var(--white); outline: none; flex: 1; min-width: 160px; max-width: 300px;
+    }
+    .search-ev:focus { border-color: #7c3aed; }
+    .btn-add-ev {
+      padding: 7px 16px; border: none; border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600;
+      background: #7c3aed; color: #fff; cursor: pointer; transition: background 0.18s;
+      display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+    }
+    .btn-add-ev:hover { background: #6d28d9; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--ink-3); margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── MONTH CARDS ── */
+    .months-grid { display: flex; flex-direction: column; gap: 20px; }
+    .month-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
+    }
+    .month-card.past { opacity: 0.62; }
+    .month-card.current { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.15), var(--shadow-sm); }
+
+    .month-head {
+      padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); background: var(--paper);
+      cursor: pointer; user-select: none;
+    }
+    .month-head-left { display: flex; align-items: center; gap: 12px; }
+    .month-name { font-size: 1rem; font-weight: 700; color: var(--ink); }
+    .month-current-pill {
+      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      background: rgba(124,58,237,0.12); color: #7c3aed; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .month-event-count {
+      font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      background: #ede9fe; color: #5b21b6;
+    }
+    .month-chevron {
+      font-size: 1rem; color: var(--ink-3); transition: transform 0.2s;
+    }
+    .month-card.collapsed .month-chevron { transform: rotate(-90deg); }
+    .month-body { padding: 0; }
+    .month-card.collapsed .month-body { display: none; }
+
+    /* ── EVENT LIST inside month ── */
+    .ev-list { padding: 0; }
+    .ev-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 20px; border-bottom: 1px solid var(--paper-2);
+      transition: background 0.12s;
+    }
+    .ev-item:last-child { border-bottom: none; }
+    .ev-item:hover { background: var(--paper); }
+
+    .ev-school-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .ev-date-col {
+      font-family: 'DM Mono', monospace; font-size: 0.75rem; font-weight: 500;
+      color: var(--ink-3); white-space: nowrap; min-width: 90px; flex-shrink: 0;
+    }
+    .ev-date-col.upcoming { color: #ea580c; font-weight: 600; }
+    .ev-date-col.urgent { color: #dc2626; font-weight: 700; }
+    .ev-date-col.past { color: var(--ink-3); }
+
+    .ev-body { flex: 1; min-width: 0; }
+    .ev-title { font-size: 0.875rem; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+    .ev-school-name { font-size: 0.75rem; color: var(--ink-3); }
+    .ev-desc { font-size: 0.78rem; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
+
+    .ev-cat-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; white-space: nowrap;
+    }
+    .cat-workshop   { background: #dbeafe; color: #1e40af; }
+    .cat-open_day   { background: #dcfce7; color: #166534; }
+    .cat-fair       { background: #fef3c7; color: #92400e; }
+    .cat-sports     { background: #ffe4e6; color: #9f1239; }
+    .cat-cultural   { background: #f3e8ff; color: #6b21a8; }
+    .cat-academic   { background: #e0f2fe; color: #075985; }
+    .cat-ceremony   { background: #fce7f3; color: #9d174d; }
+    .cat-other      { background: #f1f5f9; color: #475569; }
+
+    .ev-actions {
+      display: flex; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s;
+    }
+    .ev-item:hover .ev-actions { opacity: 1; }
+    .ev-act-btn {
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; border: 1px solid var(--border); background: var(--white);
+      color: var(--ink-3); cursor: pointer; font-family: 'DM Sans', sans-serif;
+      transition: background 0.12s, color 0.12s;
+    }
+    .ev-act-btn:hover { background: var(--paper); color: var(--ink); }
+    .ev-act-btn.del:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+
+    /* ── EMPTY MONTH ── */
+    .ev-empty { padding: 20px; text-align: center; font-size: 0.82rem; color: var(--ink-3); font-style: italic; }
+
+    /* ── MODAL ── */
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(28,28,46,0.55);
+      backdrop-filter: blur(4px); z-index: 9000;
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-bg.open { display: flex; }
+    .modal-box {
+      background: var(--white); border-radius: 14px; width: 100%; max-width: 480px;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); }
+    .modal-head h3 { font-size: 1rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+    .modal-head p { font-size: 0.8rem; color: var(--ink-3); }
+    .modal-body { padding: 20px 24px; }
+    .modal-footer {
+      padding: 14px 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+      background: var(--paper); border-radius: 0 0 14px 14px;
+    }
+    .form-group { margin-bottom: 14px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink);
+      outline: none; transition: border-color 0.15s; background: var(--white);
+    }
+    .form-textarea { resize: vertical; min-height: 60px; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #7c3aed; }
+
+    /* ── Buttons ── */
+    .btn {
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
+      padding: 9px 18px; border-radius: 8px; border: 1px solid transparent;
+      cursor: pointer; transition: all 0.18s; display: inline-flex; align-items: center; gap: 6px; line-height: 1;
+    }
+    .btn-primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+    .btn-primary:hover { background: #6d28d9; border-color: #6d28d9; }
+    .btn-secondary { background: var(--white); color: var(--ink-2); border-color: var(--border); }
+    .btn-secondary:hover { background: var(--paper); }
+    .btn-ghost { background: transparent; color: var(--ink-2); border-color: transparent; }
+    .btn-ghost:hover { background: var(--paper); }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; font-size: 0.875rem;
+      padding: 12px 20px; border-radius: 10px; z-index: 9999;
+      opacity: 0; transform: translateY(8px); transition: all 0.28s;
+      pointer-events: none; background: var(--ink); color: #fff;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { background: #dc2626; }
+
+    /* ── Loading ── */
+    .loading-state { text-align: center; padding: 56px; color: var(--ink-3); }
+    .spinner {
+      width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: #7c3aed;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .stat-chip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; background: var(--white); border: 1px solid var(--border);
+      border-radius: 10px; font-size: 0.78rem; color: var(--ink-2);
+    }
+    .stat-chip strong { font-weight: 700; color: var(--ink); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .hero { padding: 24px 20px 0; }
+      .hero-text h1 { font-size: 1.4rem; }
+      .hero-top { flex-direction: column; gap: 14px; }
+      .page-wrap { padding: 20px 16px 56px; }
+      .filter-bar-ev { flex-direction: column; align-items: stretch; }
+      .search-ev { max-width: none; }
+      .btn-add-ev { margin-left: 0; justify-content: center; }
+      .ev-item { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+      .ev-date-col { min-width: auto; }
+      .ev-actions { opacity: 1; }
+      .stats-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<!-- SHARED_NAVBAR -->
+
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="hero-text">
+        <div class="eyebrow">Partner Schools Network</div>
+        <h1>Event Calendar</h1>
+        <p class="sub">Activities and events across the Eduversal Partner Schools Network. See what each school is doing throughout the year.</p>
+      </div>
+      <div class="year-select-wrap" id="yearSelectWrap" style="display:none">
+        <label for="yearSelect">Year</label>
+        <select class="year-select" id="yearSelect">
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+        </select>
+      </div>
+    </div>
+    <nav class="cat-tabs" id="catTabs">
+      <button class="cat-tab active" data-cat="all">All Events</button>
+      <button class="cat-tab" data-cat="workshop">Workshop</button>
+      <button class="cat-tab" data-cat="open_day">Open Day</button>
+      <button class="cat-tab" data-cat="fair">Fair</button>
+      <button class="cat-tab" data-cat="sports">Sports</button>
+      <button class="cat-tab" data-cat="cultural">Cultural</button>
+      <button class="cat-tab" data-cat="academic">Academic</button>
+      <button class="cat-tab" data-cat="ceremony">Ceremony</button>
+      <button class="cat-tab" data-cat="other">Other</button>
+    </nav>
+  </div>
+</section>
+
+<div class="page-wrap">
+
+  <!-- Loading -->
+  <div id="loadingState" class="loading-state">
+    <div class="spinner"></div>
+    Loading events...
+  </div>
+
+  <!-- Main content -->
+  <div id="mainContent" style="display:none">
+
+    <!-- Filter bar -->
+    <div class="filter-bar-ev">
+      <select class="school-filter" id="schoolFilter">
+        <option value="">All Schools</option>
+      </select>
+      <input class="search-ev" id="searchInput" type="text" placeholder="Search events...">
+      <button class="btn-add-ev" id="addEventBtn">+ Add Event</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <!-- Month cards -->
+    <div class="section-label" id="yearLabel">Events 2026</div>
+    <div class="months-grid" id="monthsGrid"></div>
+
+  </div>
+
+</div>
+
+<!-- ── ADD / EDIT EVENT MODAL ── -->
+<div class="modal-bg" id="eventModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="modalTitle">Add Event</h3>
+      <p id="modalDesc">Add a new school event to the calendar.</p>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="evSchoolSelect">School *</label>
+        <select class="form-select" id="evSchoolSelect"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="evTitle">Event Title *</label>
+        <input class="form-input" id="evTitle" type="text" placeholder="e.g. Science Fair 2026">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="evCategory">Category *</label>
+        <select class="form-select" id="evCategory">
+          <option value="workshop">Workshop</option>
+          <option value="open_day">Open Day</option>
+          <option value="fair">Fair</option>
+          <option value="sports">Sports</option>
+          <option value="cultural">Cultural</option>
+          <option value="academic">Academic</option>
+          <option value="ceremony">Ceremony</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="evDateStart">Start Date *</label>
+        <input class="form-input" id="evDateStart" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="evDateEnd">End Date <span style="color:var(--ink-3);font-weight:400">(optional — for multi-day events)</span></label>
+        <input class="form-input" id="evDateEnd" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="evDesc">Description <span style="color:var(--ink-3);font-weight:400">(optional)</span></label>
+        <textarea class="form-textarea" id="evDesc" rows="2" placeholder="Brief description of the event..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="cancelModalBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveEventBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM MODAL ── -->
+<div class="modal-bg" id="deleteModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Delete Event</h3>
+      <p id="deleteModalDesc">Are you sure you want to delete this event? This cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+      <button class="btn btn-primary" id="confirmDeleteBtn" style="background:#dc2626;border-color:#dc2626">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+import {
+  collection, query, where, orderBy, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const CAT_LABELS = {
+  workshop: 'Workshop', open_day: 'Open Day', fair: 'Fair', sports: 'Sports',
+  cultural: 'Cultural', academic: 'Academic', ceremony: 'Ceremony', other: 'Other'
+};
+
+// Deterministic color for each school (based on name hash)
+function schoolColor(name) {
+  const colors = ['#dc2626','#ea580c','#d97706','#65a30d','#16a34a','#0891b2','#2563eb','#7c3aed','#c026d3','#db2777','#0d9488','#4f46e5','#9333ea','#e11d48','#0284c7'];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return colors[Math.abs(h) % colors.length];
+}
+
+// ── State ──
+let currentYear = 2026;
+let currentCat  = 'all';
+let schoolFilterId = '';
+let searchTerm  = '';
+let allEvents   = [];
+let allSchools  = [];
+let editingId   = null;
+let deletingId  = null;
+
+// ── Auth ──
+document.addEventListener('authReady', ({ detail: { user, profile } }) => {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('mainContent').style.display  = '';
+  document.getElementById('yearSelectWrap').style.display = '';
+
+  // Category tabs
+  document.querySelectorAll('.cat-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentCat = tab.dataset.cat;
+      renderPage();
+    });
+  });
+
+  // Year switching
+  document.getElementById('yearSelect').addEventListener('change', e => {
+    currentYear = Number(e.target.value);
+    loadAndRender();
+  });
+
+  // School filter
+  document.getElementById('schoolFilter').addEventListener('change', e => {
+    schoolFilterId = e.target.value;
+    renderPage();
+  });
+
+  // Search
+  let searchTimer;
+  document.getElementById('searchInput').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { searchTerm = e.target.value.trim().toLowerCase(); renderPage(); }, 200);
+  });
+
+  // Add event
+  document.getElementById('addEventBtn').addEventListener('click', () => openModal());
+
+  // Modal buttons
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+  document.getElementById('saveEventBtn').addEventListener('click', saveEvent);
+  document.getElementById('cancelDeleteBtn').addEventListener('click', closeDeleteModal);
+  document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
+
+  // Close modals on backdrop
+  document.getElementById('eventModal').addEventListener('click', e => { if (e.target === document.getElementById('eventModal')) closeModal(); });
+  document.getElementById('deleteModal').addEventListener('click', e => { if (e.target === document.getElementById('deleteModal')) closeDeleteModal(); });
+
+  loadAndRender();
+});
+
+// ── Firestore ──
+async function loadSchools() {
+  const snap = await getDocs(query(collection(window.db, 'schools'), orderBy('name')));
+  allSchools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Populate filter dropdown
+  const sel = document.getElementById('schoolFilter');
+  sel.innerHTML = '<option value="">All Schools</option>';
+  allSchools.forEach(s => {
+    sel.innerHTML += `<option value="${escHtml(s.id)}">${escHtml(s.name)}</option>`;
+  });
+
+  // Populate modal school select
+  const msel = document.getElementById('evSchoolSelect');
+  msel.innerHTML = '';
+  allSchools.forEach(s => {
+    msel.innerHTML += `<option value="${escHtml(s.id)}" data-name="${escHtml(s.name)}">${escHtml(s.name)}</option>`;
+  });
+}
+
+async function loadEvents() {
+  const yearStart = `${currentYear}-01-01`;
+  const yearEnd   = `${currentYear}-12-31`;
+  const snap = await getDocs(
+    query(
+      collection(window.db, 'school_events'),
+      where('date_start', '>=', yearStart),
+      where('date_start', '<=', yearEnd),
+      orderBy('date_start')
+    )
+  );
+  allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function loadAndRender() {
+  await Promise.all([loadSchools(), loadEvents()]);
+  renderPage();
+}
+
+// ── Filtering ──
+function filteredEvents() {
+  return allEvents.filter(ev => {
+    if (currentCat !== 'all' && ev.category !== currentCat) return false;
+    if (schoolFilterId && ev.schoolId !== schoolFilterId) return false;
+    if (searchTerm && !ev.title.toLowerCase().includes(searchTerm) && !(ev.schoolName || '').toLowerCase().includes(searchTerm)) return false;
+    return true;
+  });
+}
+
+// ── Render ──
+function renderPage() {
+  document.getElementById('yearLabel').textContent = `Events ${currentYear}`;
+
+  const events = filteredEvents();
+
+  // Stats
+  const statsRow = document.getElementById('statsRow');
+  const schoolSet = new Set(events.map(e => e.schoolId));
+  statsRow.innerHTML = `
+    <div class="stat-chip"><strong>${events.length}</strong> event${events.length !== 1 ? 's' : ''}</div>
+    <div class="stat-chip"><strong>${schoolSet.size}</strong> school${schoolSet.size !== 1 ? 's' : ''}</div>
+  `;
+
+  // Group by month
+  const byMonth = {};
+  for (let m = 1; m <= 12; m++) byMonth[m] = [];
+  events.forEach(ev => {
+    const m = parseInt(ev.date_start.split('-')[1], 10);
+    if (m >= 1 && m <= 12) byMonth[m].push(ev);
+  });
+
+  const grid = document.getElementById('monthsGrid');
+  const todayM = new Date().getMonth() + 1;
+  const todayY = new Date().getFullYear();
+  grid.innerHTML = '';
+
+  for (let m = 1; m <= 12; m++) {
+    const monthEvents = byMonth[m];
+    const isPast = (currentYear < todayY) || (currentYear === todayY && m < todayM);
+    const isCurr = (currentYear === todayY && m === todayM);
+
+    const card = document.createElement('div');
+    card.className = `month-card${isPast ? ' past' : ''}${isCurr ? ' current' : ''}`;
+    card.id = `month-${m}`;
+
+    // Head
+    const head = document.createElement('div');
+    head.className = 'month-head';
+    let headHTML = `<div class="month-head-left"><span class="month-name">${MONTH_NAMES[m-1]}</span>`;
+    if (isCurr) headHTML += `<span class="month-current-pill">Current</span>`;
+    if (monthEvents.length > 0) headHTML += `<span class="month-event-count">${monthEvents.length} event${monthEvents.length > 1 ? 's' : ''}</span>`;
+    headHTML += `</div><span class="month-chevron">▾</span>`;
+    head.innerHTML = headHTML;
+    head.addEventListener('click', () => card.classList.toggle('collapsed'));
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'month-body';
+
+    if (monthEvents.length === 0) {
+      body.innerHTML = '<div class="ev-empty">No events this month.</div>';
+    } else {
+      const list = document.createElement('div');
+      list.className = 'ev-list';
+
+      monthEvents.forEach(ev => {
+        const item = document.createElement('div');
+        item.className = 'ev-item';
+
+        const dateDisplay = formatDateRange(ev.date_start, ev.date_end);
+        const urgCls = urgencyDateClass(ev.date_start);
+        const sColor = schoolColor(ev.schoolName || '');
+        const catCls = `cat-${ev.category || 'other'}`;
+
+        item.innerHTML = `
+          <span class="ev-school-dot" style="background:${sColor}"></span>
+          <span class="ev-date-col ${urgCls}">${dateDisplay}</span>
+          <div class="ev-body">
+            <div class="ev-title">${escHtml(ev.title)}</div>
+            <div class="ev-school-name">${escHtml(ev.schoolName || 'Unknown School')}</div>
+            ${ev.description ? `<div class="ev-desc">${escHtml(ev.description)}</div>` : ''}
+          </div>
+          <span class="ev-cat-badge ${catCls}">${escHtml(CAT_LABELS[ev.category] || ev.category || 'Other')}</span>
+          <div class="ev-actions">
+            <button class="ev-act-btn edit-btn">Edit</button>
+            <button class="ev-act-btn del del-btn">Del</button>
+          </div>
+        `;
+
+        item.querySelector('.edit-btn').addEventListener('click', e => { e.stopPropagation(); openModal(ev); });
+        item.querySelector('.del-btn').addEventListener('click', e => { e.stopPropagation(); openDeleteModal(ev.id, ev.title); });
+
+        list.appendChild(item);
+      });
+
+      body.appendChild(list);
+    }
+
+    card.appendChild(head);
+    card.appendChild(body);
+    grid.appendChild(card);
+
+    // Collapse past months
+    if (isPast && !isCurr) card.classList.add('collapsed');
+  }
+
+  // Scroll to current month
+  const currCard = document.getElementById(`month-${todayM}`);
+  if (currCard && currentYear === todayY) {
+    requestAnimationFrame(() => currCard.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+}
+
+// ── Date helpers ──
+function formatDateRange(start, end) {
+  if (!start) return 'TBC';
+  const [, sm, sd] = start.split('-').map(Number);
+  const startStr = `${sd} ${MONTH_NAMES[sm - 1].slice(0, 3)}`;
+  if (!end || end === start) return startStr;
+  const [, em, ed] = end.split('-').map(Number);
+  const endStr = `${ed} ${MONTH_NAMES[em - 1].slice(0, 3)}`;
+  return `${startStr} – ${endStr}`;
+}
+
+function daysDiff(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = new Date(y, m - 1, d);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+
+function urgencyDateClass(dateStr) {
+  const diff = daysDiff(dateStr);
+  if (diff === null) return '';
+  if (diff < 0) return 'past';
+  if (diff <= 7) return 'urgent';
+  if (diff <= 30) return 'upcoming';
+  return '';
+}
+
+// ── Modal ──
+function openModal(ev) {
+  editingId = ev ? ev.id : null;
+  document.getElementById('modalTitle').textContent = ev ? 'Edit Event' : 'Add Event';
+  document.getElementById('modalDesc').textContent = ev ? 'Update the event details.' : 'Add a new school event to the calendar.';
+
+  document.getElementById('evSchoolSelect').value = ev ? ev.schoolId : (allSchools[0]?.id || '');
+  document.getElementById('evTitle').value = ev ? ev.title : '';
+  document.getElementById('evCategory').value = ev ? (ev.category || 'other') : 'workshop';
+  document.getElementById('evDateStart').value = ev ? ev.date_start : '';
+  document.getElementById('evDateEnd').value = ev ? (ev.date_end || '') : '';
+  document.getElementById('evDesc').value = ev ? (ev.description || '') : '';
+
+  document.getElementById('eventModal').classList.add('open');
+  document.getElementById('evTitle').focus();
+}
+
+function closeModal() {
+  document.getElementById('eventModal').classList.remove('open');
+  editingId = null;
+}
+
+async function saveEvent() {
+  const schoolSel = document.getElementById('evSchoolSelect');
+  const schoolId = schoolSel.value;
+  const schoolName = schoolSel.options[schoolSel.selectedIndex]?.dataset.name || '';
+  const title = document.getElementById('evTitle').value.trim();
+  const category = document.getElementById('evCategory').value;
+  const dateStart = document.getElementById('evDateStart').value;
+  const dateEnd = document.getElementById('evDateEnd').value;
+  const description = document.getElementById('evDesc').value.trim();
+
+  if (!schoolId || !title || !dateStart) {
+    showToast('Please fill in School, Title and Start Date.', true);
+    return;
+  }
+
+  const data = {
+    schoolId,
+    schoolName,
+    title,
+    category,
+    date_start: dateStart,
+    date_end: dateEnd || null,
+    description: description || null,
+  };
+
+  const btn = document.getElementById('saveEventBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    if (editingId) {
+      await updateDoc(doc(window.db, 'school_events', editingId), { ...data, updatedAt: serverTimestamp() });
+      showToast('Event updated.');
+    } else {
+      data.createdBy = window.currentUser.uid;
+      data.createdAt = serverTimestamp();
+      await addDoc(collection(window.db, 'school_events'), data);
+      showToast('Event added.');
+    }
+    closeModal();
+    await loadEvents();
+    renderPage();
+  } catch (e) {
+    console.error(e);
+    showToast('Error saving event.', true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+}
+
+// ── Delete ──
+function openDeleteModal(id, title) {
+  deletingId = id;
+  document.getElementById('deleteModalDesc').textContent = `Are you sure you want to delete "${title}"? This cannot be undone.`;
+  document.getElementById('deleteModal').classList.add('open');
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').classList.remove('open');
+  deletingId = null;
+}
+
+async function confirmDelete() {
+  if (!deletingId) return;
+  const btn = document.getElementById('confirmDeleteBtn');
+  btn.disabled = true; btn.textContent = 'Deleting...';
+  try {
+    await deleteDoc(doc(window.db, 'school_events', deletingId));
+    showToast('Event deleted.');
+    closeDeleteModal();
+    await loadEvents();
+    renderPage();
+  } catch (e) {
+    console.error(e);
+    showToast('Error deleting event.', true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Delete';
+  }
+}
+
+// ── Utilities ──
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast show${isError ? ' error' : ''}`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

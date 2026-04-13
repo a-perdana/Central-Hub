@@ -170,6 +170,7 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 | `physics_pacing/year9-10`           | IGCSE physics pacing — same structure as math_pacing.            | central_admin |
 | `igcse_syllabus/{docId}`            | Syllabus reference items. **Doc ID format: `{subjectCode}_{syllabusCode}` e.g. `0580_C1.1`**. Fields: `code` (display code e.g. `C1.1`), `title`, `tier` (`Core`/`Extended`), `topicArea`, `description`, `content`, `notes`. Autocomplete in igcse-math-pacing must search `entry.code` field, NOT the doc ID. | central_admin |
 | `userProgress/{uid}`                | Per-teacher pacing progress written by Teachers Hub. Not read by Central Hub yet. | owner (teacher) |
+| `school_events/{eventId}`           | Partner Schools Event Calendar events. Fields: `schoolId`, `schoolName`, `title`, `category`, `date_start` (YYYY-MM-DD), `date_end`, `description`, `createdBy`, `createdAt`. | any central hub user |
 
 **Timestamp field:** always `createdAt` (serverTimestamp). Do not use `timestamp` — that was the legacy name.
 
@@ -246,6 +247,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `survey-console.html`              | `/survey-console`               | Survey creation & management                      |
 | `certificates.html`                | `/certificates`                 | Workshop certificate tracking                     |
 | `certificate-verify.html`          | `/certificate-verify`           | Public certificate verification (no auth guard)   |
+| `event-calendar.html`              | `/event-calendar`               | Partner Schools Event Calendar — school activities by month. All Central Hub users can add/edit/delete events. Firestore: `school_events` collection. |
 
 ---
 
