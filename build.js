@@ -83,6 +83,9 @@ const htmlFiles = [
   "event-calendar.html",
   "curriculum-map.html",
   "kpi-admin.html",
+  "reports.html",
+  "school-visits.html",
+  "notifications.html",
 ];
 
 htmlFiles.forEach((file) => {
