@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mail Composer — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Quill rich text editor -->
+  <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    :root {
+      --accent:    #0891b2;
+      --accent-dk: #0e7490;
+      --accent-2:  #cffafe;
+    }
+
+    /* HERO */
+    .hero {
+      background: linear-gradient(140deg, #0c4a6e 0%, #0369a1 45%, #0891b2 100%);
+      padding: 52px 40px; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle at 12% 70%, rgba(255,255,255,.07) 0%, transparent 50%),
+                  radial-gradient(circle at 85% 20%, rgba(0,0,0,.15) 0%, transparent 50%);
+    }
+    .hero-inner {
+      position: relative; z-index: 1; max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: flex-start; gap: 24px;
+    }
+    .hero-icon {
+      width: 64px; height: 64px; border-radius: 18px;
+      background: rgba(255,255,255,.15);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; flex-shrink: 0; margin-top: 4px;
+    }
+    .hero-eyebrow { font-size: .78rem; font-weight: 500; color: rgba(255,255,255,.55); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+    .hero-title   { font-family: 'Lora', serif; font-size: 2.1rem; font-weight: 600; color: #fff; margin-bottom: 10px; line-height: 1.2; }
+    .hero-desc    { font-size: .925rem; color: rgba(255,255,255,.68); max-width: 520px; line-height: 1.6; }
+
+    /* LAYOUT */
+    .page-wrap {
+      max-width: 1100px; margin: 0 auto;
+      padding: 36px 40px 72px;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .page-wrap { grid-template-columns: 1fr; }
+      .hero { padding: 36px 24px; }
+      .hero-title { font-size: 1.7rem; }
+      .hero-inner { flex-direction: column; gap: 16px; }
+    }
+    @media (max-width: 640px) {
+      .page-wrap { padding: 20px 16px 48px; }
+    }
+
+    /* BACK LINK */
+    .back-link {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: .875rem; font-weight: 500; color: var(--ink-2);
+      text-decoration: none; margin-bottom: 24px; transition: color .2s;
+    }
+    .back-link:hover { color: var(--ink); }
+
+    /* CARD */
+    .card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: .95rem; font-weight: 700; color: var(--ink);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .card-title svg { color: var(--accent); flex-shrink: 0; }
+
+    /* RECIPIENT SECTION */
+    .school-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 8px; margin-top: 10px;
+    }
+    .school-chip {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 12px;
+      border: 1px solid var(--border); border-radius: 8px;
+      cursor: pointer; transition: all .15s ease;
+      background: var(--white);
+    }
+    .school-chip:hover { border-color: var(--accent); background: var(--accent-2); }
+    .school-chip.selected { border-color: var(--accent); background: var(--accent-2); }
+    .school-chip input[type="checkbox"] { accent-color: var(--accent); flex-shrink: 0; }
+    .school-chip-name { font-size: .84rem; font-weight: 500; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .school-chip-count { font-size: .72rem; color: var(--ink-3); flex-shrink: 0; }
+
+    .all-schools-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 8px;
+      background: var(--paper); border: 1px solid var(--border);
+      margin-bottom: 12px; cursor: pointer;
+    }
+    .all-schools-row input[type="checkbox"] { accent-color: var(--accent); }
+    .all-schools-label { font-size: .875rem; font-weight: 600; color: var(--ink); }
+    .all-schools-sub   { font-size: .78rem; color: var(--ink-3); margin-left: auto; }
+
+    /* QUILL EDITOR */
+    .quill-wrap { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .ql-toolbar { border: none !important; border-bottom: 1px solid var(--border) !important; background: var(--paper); }
+    .ql-container { border: none !important; font-family: 'DM Sans', sans-serif; font-size: 15px; min-height: 280px; }
+    .ql-editor { min-height: 280px; color: var(--ink); }
+    .ql-editor.ql-blank::before { color: var(--ink-3); font-style: normal; }
+
+    /* CHAR COUNT */
+    .editor-meta { display: flex; justify-content: flex-end; margin-top: 6px; }
+    .editor-words { font-size: .78rem; color: var(--ink-3); }
+
+    /* SIDEBAR */
+    .sidebar-panel { position: sticky; top: 82px; }
+
+    /* RECIPIENT SUMMARY */
+    .recip-summary {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+      padding: 20px 22px; margin-bottom: 16px;
+    }
+    .recip-num {
+      font-size: 2.4rem; font-weight: 800; color: var(--accent); line-height: 1;
+      margin-bottom: 4px;
+    }
+    .recip-label { font-size: .82rem; color: var(--ink-3); margin-bottom: 14px; }
+    .recip-breakdown { list-style: none; }
+    .recip-breakdown li {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 0; border-bottom: 1px solid var(--paper-2);
+      font-size: .82rem; color: var(--ink-2);
+    }
+    .recip-breakdown li:last-child { border-bottom: none; }
+    .recip-breakdown li strong { color: var(--ink); }
+
+    /* ACTION BUTTONS */
+    .btn-send {
+      width: 100%; height: 46px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: .95rem; font-weight: 700;
+      cursor: pointer; transition: background .2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-bottom: 10px;
+    }
+    .btn-send:hover:not(:disabled) { background: var(--accent-dk); }
+    .btn-send:disabled { opacity: .55; cursor: not-allowed; }
+
+    .btn-test {
+      width: 100%; height: 40px;
+      background: var(--white); color: var(--ink-2);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: .855rem; font-weight: 500;
+      cursor: pointer; transition: all .2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      margin-bottom: 10px;
+    }
+    .btn-test:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-preview {
+      width: 100%; height: 40px;
+      background: var(--white); color: var(--ink-2);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: .855rem; font-weight: 500;
+      cursor: pointer; transition: all .2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .btn-preview:hover { border-color: var(--ink); color: var(--ink); }
+
+    /* STATUS BANNER */
+    .status-banner {
+      margin-top: 14px; padding: 12px 16px; border-radius: 8px;
+      font-size: .84rem; font-weight: 500;
+      display: none; align-items: center; gap: 10px;
+    }
+    .status-banner.sending { background: #dbeafe; color: #1e40af; display: flex; }
+    .status-banner.success { background: #d1fae5; color: #065f46; display: flex; }
+    .status-banner.error   { background: #fee2e2; color: #991b1b; display: flex; }
+
+    /* HISTORY TABLE */
+    .history-wrap {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+      overflow: hidden; margin-top: 20px;
+    }
+    .history-table { width: 100%; border-collapse: collapse; }
+    .history-table thead th {
+      padding: 10px 14px; font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3);
+      background: var(--paper); border-bottom: 1px solid var(--border); text-align: left;
+    }
+    .history-table tbody tr { border-bottom: 1px solid var(--paper-2); }
+    .history-table tbody tr:last-child { border-bottom: none; }
+    .history-table tbody tr:hover { background: var(--paper); }
+    .history-table td { padding: 11px 14px; font-size: .84rem; color: var(--ink); vertical-align: top; }
+    .history-campaign-name { font-weight: 600; }
+    .history-subject { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
+    .status-pill {
+      display: inline-block; font-size: .7rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .sp-sent    { background: #d1fae5; color: #065f46; }
+    .sp-sending { background: #dbeafe; color: #1e40af; }
+    .sp-partial { background: #fef3c7; color: #92400e; }
+    .sp-failed  { background: #fee2e2; color: #991b1b; }
+
+    /* PREVIEW MODAL */
+    .preview-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.55); z-index: 9999;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .preview-overlay.open { display: flex; }
+    .preview-modal {
+      background: #fff; border-radius: 12px; max-width: 680px; width: 100%;
+      max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 24px 64px rgba(0,0,0,.25);
+    }
+    .preview-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid #e5e7eb;
+    }
+    .preview-head h3 { font-size: 1rem; font-weight: 700; color: #1c1c2e; }
+    .preview-close {
+      width: 30px; height: 30px; border-radius: 6px;
+      border: 1px solid #e5e7eb; background: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; color: #6b7280;
+    }
+    .preview-close:hover { background: #f3f4f6; }
+    .preview-iframe-wrap { flex: 1; overflow: auto; padding: 20px; background: #f4f4f5; }
+    .preview-iframe {
+      width: 100%; min-height: 500px; border: none; border-radius: 8px;
+      background: #fff;
+    }
+
+    /* TEST MODAL */
+    .test-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 9999;
+      align-items: center; justify-content: center;
+    }
+    .test-modal-overlay.open { display: flex; }
+    .test-modal {
+      background: #fff; border-radius: 12px; padding: 28px;
+      max-width: 400px; width: 100%; margin: 20px;
+      box-shadow: 0 16px 48px rgba(0,0,0,.2);
+    }
+    .test-modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
+    .test-modal-footer { display: flex; gap: 10px; margin-top: 18px; }
+    .btn-cancel-sm {
+      flex: 1; height: 38px; border: 1px solid var(--border); border-radius: 7px;
+      background: var(--white); font-size: .875rem; cursor: pointer;
+    }
+    .btn-send-sm {
+      flex: 1; height: 38px; border: none; border-radius: 7px;
+      background: var(--accent); color: #fff; font-size: .875rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-send-sm:hover { background: var(--accent-dk); }
+
+    /* SKEL */
+    .skel { background: var(--paper-2); border-radius: 6px; animation: shimmer 1.4s ease-in-out infinite; }
+    @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.5} }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+</head>
+<body>
+
+<!-- SHARED_NAVBAR -->
+
+<section class="hero" aria-label="Mail Composer header">
+  <div class="hero-inner">
+    <div class="hero-icon" aria-hidden="true">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+        <polyline points="22,6 12,13 2,6"/>
+      </svg>
+    </div>
+    <div class="hero-text">
+      <p class="hero-eyebrow">Communications · CentralHub</p>
+      <h1 class="hero-title">Mail Composer</h1>
+      <p class="hero-desc">Send newsletters and announcements to teachers across the network. Filter by school, preview before sending, and track campaign history.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Admin-only guard message -->
+<div id="accessDenied" style="display:none;max-width:520px;margin:60px auto;text-align:center;padding:0 20px">
+  <p style="font-size:1rem;font-weight:600;color:var(--ink)">Access Restricted</p>
+  <p style="font-size:.875rem;color:var(--ink-3);margin-top:6px">Mail Composer is available to central_admin only.</p>
+  <a href="index" style="display:inline-block;margin-top:18px;font-size:.875rem;color:var(--accent)">← Back to Dashboard</a>
+</div>
+
+<!-- Main content (hidden until auth) -->
+<div id="mainContent" style="display:none">
+<div class="page-wrap">
+
+  <!-- ═══ LEFT COLUMN ═══ -->
+  <div>
+    <a href="index" class="back-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back to Dashboard
+    </a>
+
+    <!-- Recipients -->
+    <div class="card">
+      <p class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Recipients
+      </p>
+
+      <div class="all-schools-row" id="allSchoolsRow" onclick="toggleAllSchools()">
+        <input type="checkbox" id="chkAllSchools" checked onchange="toggleAllSchools()" onclick="event.stopPropagation()">
+        <label class="all-schools-label" for="chkAllSchools">All Schools</label>
+        <span class="all-schools-sub" id="totalRecipLabel">Loading…</span>
+      </div>
+
+      <div class="school-grid" id="schoolGrid">
+        <!-- populated by JS -->
+        <div class="skel" style="height:44px;border-radius:8px"></div>
+        <div class="skel" style="height:44px;border-radius:8px"></div>
+        <div class="skel" style="height:44px;border-radius:8px"></div>
+        <div class="skel" style="height:44px;border-radius:8px"></div>
+      </div>
+    </div>
+
+    <!-- Subject -->
+    <div class="card">
+      <p class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+        Subject Line
+      </p>
+      <input class="form-input" type="text" id="fSubject" placeholder="e.g. Monthly Newsletter — April 2026" maxlength="150" style="font-size:.95rem">
+      <div style="display:flex;justify-content:space-between;margin-top:6px">
+        <span style="font-size:.78rem;color:var(--ink-3)">Appears as the email subject in the inbox</span>
+        <span style="font-size:.78rem;color:var(--ink-3)" id="subjectCount">0 / 150</span>
+      </div>
+    </div>
+
+    <!-- Campaign name -->
+    <div class="card">
+      <p class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        Campaign Name <span style="font-size:.75rem;font-weight:400;color:var(--ink-3)">(internal label for history)</span>
+      </p>
+      <input class="form-input" type="text" id="fCampaignName" placeholder="e.g. April 2026 Newsletter" maxlength="100">
+    </div>
+
+    <!-- Body -->
+    <div class="card">
+      <p class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Email Body
+      </p>
+      <div class="quill-wrap">
+        <div id="quillEditor"></div>
+      </div>
+      <div class="editor-meta">
+        <span class="editor-words" id="wordCount">0 words</span>
+      </div>
+    </div>
+
+    <!-- Campaign History -->
+    <div id="historySection">
+      <p style="font-size:.95rem;font-weight:700;color:var(--ink);margin-bottom:14px">
+        Campaign History
+      </p>
+      <div class="history-wrap">
+        <table class="history-table" aria-label="Campaign history">
+          <thead>
+            <tr>
+              <th>Campaign</th>
+              <th>Sent</th>
+              <th>Recipients</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="historyTbody">
+            <tr><td colspan="4" style="text-align:center;color:var(--ink-3);padding:24px">Loading history…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT SIDEBAR ═══ -->
+  <div class="sidebar-panel">
+    <!-- Recipient count -->
+    <div class="recip-summary">
+      <div class="recip-num" id="recipCount">—</div>
+      <div class="recip-label">recipients selected</div>
+      <ul class="recip-breakdown" id="recipBreakdown">
+        <li><span>Registered teachers</span> <strong id="brRegistered">—</strong></li>
+        <li><span>Manual contacts</span>     <strong id="brManual">—</strong></li>
+      </ul>
+    </div>
+
+    <!-- Buttons -->
+    <button class="btn-send" id="btnSend" disabled>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Send Campaign
+    </button>
+
+    <button class="btn-test" id="btnTest">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Send Test Email
+    </button>
+
+    <button class="btn-preview" id="btnPreview">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Preview Email
+    </button>
+
+    <div class="status-banner" id="statusBanner"></div>
+
+    <!-- Tips -->
+    <div class="card" style="margin-top:20px;background:var(--paper)">
+      <p style="font-size:.78rem;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Tips</p>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:7px">
+        <li style="font-size:.8rem;color:var(--ink-3);display:flex;gap:7px"><span style="color:var(--accent)">✓</span> Use Preview before sending</li>
+        <li style="font-size:.8rem;color:var(--ink-3);display:flex;gap:7px"><span style="color:var(--accent)">✓</span> Send Test to yourself first</li>
+        <li style="font-size:.8rem;color:var(--ink-3);display:flex;gap:7px"><span style="color:var(--accent)">✓</span> Select specific schools for targeted campaigns</li>
+        <li style="font-size:.8rem;color:var(--ink-3);display:flex;gap:7px"><span style="color:var(--accent)">✓</span> Add unregistered teachers via Teacher Contacts</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</div><!-- /mainContent -->
+
+<!-- Preview Modal -->
+<div class="preview-overlay" id="previewOverlay">
+  <div class="preview-modal">
+    <div class="preview-head">
+      <h3>Email Preview</h3>
+      <button class="preview-close" id="previewClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="preview-iframe-wrap">
+      <iframe class="preview-iframe" id="previewIframe" title="Email preview"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- Test Email Modal -->
+<div class="test-modal-overlay" id="testModal">
+  <div class="test-modal">
+    <h3>Send Test Email</h3>
+    <div class="form-group">
+      <label class="form-label" for="testEmail">Send to address</label>
+      <input class="form-input" type="email" id="testEmail" placeholder="your@email.com">
+    </div>
+    <div class="test-modal-footer">
+      <button class="btn-cancel-sm" id="testCancel">Cancel</button>
+      <button class="btn-send-sm"   id="testSend">Send Test</button>
+    </div>
+  </div>
+</div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+
+<!-- Quill -->
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
+<script type="module">
+/* ================================================================
+   CONFIG — update MAIL_SERVICE_URL after Railway deploy
+   ================================================================ */
+const MAIL_SERVICE_URL = (window.ENV?.MAIL_SERVICE_URL || '').replace(/\/$/, '');
+// Fallback for local dev — set window.ENV.MAIL_SERVICE_URL in firebase-config.js
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let quill;
+let schoolList    = [];   // [{ id, name }]
+let recipientData = null; // full /recipients response
+let selectedSchoolIds = new Set(); // empty = all schools
+let isAllSchools  = true;
+
+/* ================================================================
+   QUILL INIT
+   ================================================================ */
+function initQuill() {
+  quill = new Quill('#quillEditor', {
+    theme: 'snow',
+    placeholder: 'Write your newsletter here…',
+    modules: {
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ color: [] }, { background: [] }],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ align: [] }],
+        ['link', 'image'],
+        ['blockquote', 'code-block'],
+        ['clean'],
+      ],
+    },
+  });
+
+  quill.on('text-change', () => {
+    const words = quill.getText().trim().split(/\s+/).filter(Boolean).length;
+    document.getElementById('wordCount').textContent = `${words} word${words !== 1 ? 's' : ''}`;
+    validateForm();
+  });
+}
+
+/* ================================================================
+   AUTH READY
+   ================================================================ */
+document.addEventListener('authReady', async ({ detail: { profile } }) => {
+  if (profile?.role_centralhub !== 'central_admin') {
+    document.getElementById('accessDenied').style.display = 'block';
+    return;
+  }
+  document.getElementById('mainContent').style.display = 'block';
+  initQuill();
+  await Promise.all([loadSchools(), loadHistory()]);
+  await loadRecipients();
+});
+
+/* ================================================================
+   SCHOOLS
+   ================================================================ */
+async function loadSchools() {
+  try {
+    const res  = await apiGet('/schools');
+    schoolList = res.schools || [];
+    renderSchoolGrid();
+  } catch (err) {
+    console.error('loadSchools error:', err);
+    document.getElementById('schoolGrid').innerHTML =
+      '<p style="font-size:.84rem;color:var(--ink-3);padding:8px 0">Could not load schools.</p>';
+  }
+}
+
+function renderSchoolGrid() {
+  const grid = document.getElementById('schoolGrid');
+  if (!schoolList.length) {
+    grid.innerHTML = '<p style="font-size:.84rem;color:var(--ink-3);padding:8px 0">No schools found.</p>';
+    return;
+  }
+  grid.innerHTML = schoolList.map(s => `
+    <div class="school-chip" id="chip-${escAttr(s.id)}" onclick="toggleSchool('${escAttr(s.id)}')">
+      <input type="checkbox" id="chk-${escAttr(s.id)}" onchange="toggleSchool('${escAttr(s.id)}')" onclick="event.stopPropagation()">
+      <span class="school-chip-name" title="${escHtml(s.name)}">${escHtml(s.name)}</span>
+      <span class="school-chip-count" id="cnt-${escAttr(s.id)}">—</span>
+    </div>
+  `).join('');
+}
+
+/* ================================================================
+   RECIPIENTS
+   ================================================================ */
+async function loadRecipients(schoolId) {
+  document.getElementById('recipCount').textContent = '…';
+  try {
+    const url = schoolId ? `/recipients?schoolId=${encodeURIComponent(schoolId)}` : '/recipients';
+    recipientData = await apiGet(url);
+    updateRecipientDisplay(recipientData.recipients || []);
+  } catch (err) {
+    console.error('loadRecipients error:', err);
+    document.getElementById('recipCount').textContent = '—';
+  }
+}
+
+async function loadAllRecipientsAndCounts() {
+  // Load per-school counts for the grid
+  try {
+    const full = await apiGet('/recipients');
+    const allRecips = full.recipients || [];
+    document.getElementById('totalRecipLabel').textContent = `${allRecips.length} teachers`;
+
+    // Count per school
+    const countMap = {};
+    allRecips.forEach(r => {
+      if (r.schoolId) countMap[r.schoolId] = (countMap[r.schoolId] || 0) + 1;
+    });
+    schoolList.forEach(s => {
+      const el = document.getElementById(`cnt-${s.id}`);
+      if (el) el.textContent = `${countMap[s.id] || 0}`;
+    });
+
+    recipientData = full;
+    updateRecipientDisplay(allRecips);
+  } catch (err) {
+    console.error('loadAllRecipientsAndCounts error:', err);
+  }
+}
+
+function updateRecipientDisplay(recipients) {
+  const registered = recipients.filter(r => r.source === 'registered').length;
+  const manual     = recipients.filter(r => r.source === 'manual').length;
+  document.getElementById('recipCount').textContent = recipients.length;
+  document.getElementById('brRegistered').textContent = registered;
+  document.getElementById('brManual').textContent     = manual;
+  validateForm();
+}
+
+/* ================================================================
+   SCHOOL TOGGLE
+   ================================================================ */
+window.toggleAllSchools = function() {
+  isAllSchools = true;
+  selectedSchoolIds.clear();
+  document.getElementById('chkAllSchools').checked = true;
+  // Uncheck all school chips
+  schoolList.forEach(s => {
+    const chk  = document.getElementById(`chk-${s.id}`);
+    const chip = document.getElementById(`chip-${s.id}`);
+    if (chk)  chk.checked = false;
+    if (chip) chip.classList.remove('selected');
+  });
+  loadAllRecipientsAndCounts();
+};
+
+window.toggleSchool = function(id) {
+  const chk  = document.getElementById(`chk-${id}`);
+  const chip = document.getElementById(`chip-${id}`);
+  if (!chk) return;
+
+  // Toggle selection
+  if (selectedSchoolIds.has(id)) {
+    selectedSchoolIds.delete(id);
+    chk.checked = false;
+    chip?.classList.remove('selected');
+  } else {
+    selectedSchoolIds.add(id);
+    chk.checked = true;
+    chip?.classList.add('selected');
+  }
+
+  // Uncheck "All Schools" once a specific school is chosen
+  isAllSchools = selectedSchoolIds.size === 0;
+  document.getElementById('chkAllSchools').checked = isAllSchools;
+
+  refreshSelectedRecipients();
+};
+
+async function refreshSelectedRecipients() {
+  if (isAllSchools || selectedSchoolIds.size === 0) {
+    loadAllRecipientsAndCounts();
+    return;
+  }
+  document.getElementById('recipCount').textContent = '…';
+  try {
+    // Fetch recipients for each selected school and merge
+    const results = await Promise.all(
+      [...selectedSchoolIds].map(id => apiGet(`/recipients?schoolId=${encodeURIComponent(id)}`))
+    );
+    const map = new Map();
+    results.forEach(r => {
+      (r.recipients || []).forEach(rec => map.set(rec.email.toLowerCase(), rec));
+    });
+    updateRecipientDisplay([...map.values()]);
+  } catch (err) {
+    console.error('refreshSelectedRecipients error:', err);
+  }
+}
+
+/* ================================================================
+   SUBJECT COUNTER
+   ================================================================ */
+document.getElementById('fSubject').addEventListener('input', function() {
+  document.getElementById('subjectCount').textContent = `${this.value.length} / 150`;
+  validateForm();
+});
+
+/* ================================================================
+   FORM VALIDATION
+   ================================================================ */
+function validateForm() {
+  const subject  = document.getElementById('fSubject').value.trim();
+  const hasText  = quill && quill.getText().trim().length > 5;
+  const hasRecip = parseInt(document.getElementById('recipCount').textContent, 10) > 0;
+  document.getElementById('btnSend').disabled = !(subject && hasText && hasRecip);
+}
+
+/* ================================================================
+   PREVIEW
+   ================================================================ */
+document.getElementById('btnPreview').addEventListener('click', () => {
+  const subject  = document.getElementById('fSubject').value || '(no subject)';
+  const bodyHtml = quill ? quill.root.innerHTML : '';
+  const html     = buildPreviewHtml(subject, bodyHtml);
+  const iframe   = document.getElementById('previewIframe');
+  iframe.srcdoc  = html;
+  document.getElementById('previewOverlay').classList.add('open');
+});
+document.getElementById('previewClose').addEventListener('click', () => {
+  document.getElementById('previewOverlay').classList.remove('open');
+});
+document.getElementById('previewOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+function buildPreviewHtml(subject, bodyHtml) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+body{margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif}
+.wrapper{max-width:620px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.08)}
+.header{background:linear-gradient(135deg,#1e3a5f 0%,#0d9488 100%);padding:32px 40px}
+.header-logo{font-size:1.35rem;font-weight:700;color:#fff}
+.header-logo span{color:#5eead4}
+.body{padding:36px 40px 28px;color:#1c1c2e;font-size:15px;line-height:1.7}
+.body h1,.body h2,.body h3{color:#0f172a}
+.body a{color:#0d9488}
+.body img{max-width:100%;border-radius:8px}
+.footer{background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 40px;font-size:12px;color:#94a3b8;text-align:center}
+</style></head><body>
+<div class="wrapper">
+  <div class="header"><div class="header-logo">Eduversal <span>Education</span></div></div>
+  <div class="body">${bodyHtml}</div>
+  <div class="footer">
+    <p>You are receiving this email because you are a teacher in the Eduversal network.</p>
+    <p>Eduversal Education · Jakarta, Indonesia</p>
+  </div>
+</div></body></html>`;
+}
+
+/* ================================================================
+   TEST EMAIL
+   ================================================================ */
+document.getElementById('btnTest').addEventListener('click', () => {
+  document.getElementById('testEmail').value = window.currentUser?.email || '';
+  document.getElementById('testModal').classList.add('open');
+});
+document.getElementById('testCancel').addEventListener('click', () => {
+  document.getElementById('testModal').classList.remove('open');
+});
+document.getElementById('testSend').addEventListener('click', async () => {
+  const toEmail  = document.getElementById('testEmail').value.trim();
+  const subject  = document.getElementById('fSubject').value.trim();
+  const bodyHtml = quill?.root.innerHTML || '';
+
+  if (!toEmail)  return showBanner('error', 'Enter a recipient email address.');
+  if (!subject)  return showBanner('error', 'Enter a subject line first.');
+  if (!bodyHtml) return showBanner('error', 'Write some content first.');
+
+  document.getElementById('testModal').classList.remove('open');
+  showBanner('sending', 'Sending test email…');
+  try {
+    await apiPost('/send-test', { subject, bodyHtml, toEmail });
+    showBanner('success', `Test email sent to ${toEmail}`);
+  } catch (err) {
+    showBanner('error', `Test failed: ${err.message}`);
+  }
+});
+
+/* ================================================================
+   SEND CAMPAIGN
+   ================================================================ */
+document.getElementById('btnSend').addEventListener('click', async () => {
+  const subject      = document.getElementById('fSubject').value.trim();
+  const campaignName = document.getElementById('fCampaignName').value.trim() || subject;
+  const bodyHtml     = quill?.root.innerHTML || '';
+  const schoolIds    = isAllSchools ? [] : [...selectedSchoolIds];
+  const recipCount   = parseInt(document.getElementById('recipCount').textContent, 10);
+
+  if (!subject)     return showBanner('error', 'Subject line is required.');
+  if (!bodyHtml || quill?.getText().trim().length < 5)
+                    return showBanner('error', 'Email body cannot be empty.');
+  if (recipCount === 0) return showBanner('error', 'No recipients selected.');
+
+  // Double-click confirmation
+  const btn = document.getElementById('btnSend');
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1';
+    btn.textContent = `Click again to send to ${recipCount} teachers`;
+    setTimeout(() => {
+      delete btn.dataset.confirming;
+      btn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Campaign`;
+    }, 4000);
+    return;
+  }
+
+  delete btn.dataset.confirming;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Sending…';
+  showBanner('sending', `Sending to ${recipCount} recipients — this may take a moment…`);
+
+  try {
+    const result = await apiPost('/send-campaign', {
+      subject,
+      bodyHtml,
+      schoolIds,
+      campaignName,
+      sentBy: window.currentUser?.email || '',
+    });
+    showBanner('success', `Campaign queued! ${result.recipientCount} recipients · Campaign ID: ${result.campaignId.slice(0,8)}…`);
+    // Reset form
+    document.getElementById('fSubject').value = '';
+    document.getElementById('fCampaignName').value = '';
+    quill?.setContents([]);
+    loadHistory();
+  } catch (err) {
+    showBanner('error', `Send failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Campaign`;
+    validateForm();
+  }
+});
+
+/* ================================================================
+   HISTORY
+   ================================================================ */
+async function loadHistory() {
+  try {
+    const data = await apiGet('/campaigns');
+    renderHistory(data.campaigns || []);
+  } catch (err) {
+    document.getElementById('historyTbody').innerHTML =
+      '<tr><td colspan="4" style="text-align:center;color:var(--ink-3);padding:20px">Could not load history.</td></tr>';
+  }
+}
+
+function renderHistory(campaigns) {
+  const tbody = document.getElementById('historyTbody');
+  if (!campaigns.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--ink-3);padding:24px">No campaigns sent yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = campaigns.map(c => {
+    const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+    const statusCls = { sent:'sp-sent', sending:'sp-sending', partial:'sp-partial', failed:'sp-failed' }[c.status] || 'sp-sending';
+    const statusLbl = { sent:'Sent', sending:'Sending…', partial:'Partial', failed:'Failed' }[c.status] || c.status;
+    return `<tr>
+      <td>
+        <div class="history-campaign-name">${escHtml(c.campaignName || c.subject)}</div>
+        <div class="history-subject">${escHtml(c.subject)}</div>
+      </td>
+      <td style="white-space:nowrap;font-size:.8rem;color:var(--ink-3)">${date}</td>
+      <td style="font-weight:600">${c.sentCount ?? c.recipientCount ?? '—'}</td>
+      <td><span class="status-pill ${statusCls}">${statusLbl}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ================================================================
+   STATUS BANNER
+   ================================================================ */
+function showBanner(type, msg) {
+  const b = document.getElementById('statusBanner');
+  b.className = `status-banner ${type}`;
+  b.textContent = msg;
+  if (type === 'success') setTimeout(() => { b.style.display = 'none'; }, 6000);
+}
+
+/* ================================================================
+   API HELPERS
+   ================================================================ */
+function getApiSecret() {
+  return window.ENV?.MAIL_SERVICE_SECRET || '';
+}
+
+async function apiGet(path) {
+  if (!MAIL_SERVICE_URL) throw new Error('MAIL_SERVICE_URL not configured');
+  const res = await fetch(MAIL_SERVICE_URL + path, {
+    headers: { 'Authorization': `Bearer ${getApiSecret()}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+async function apiPost(path, body) {
+  if (!MAIL_SERVICE_URL) throw new Error('MAIL_SERVICE_URL not configured');
+  const res = await fetch(MAIL_SERVICE_URL + path, {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${getApiSecret()}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+/* ================================================================
+   HELPERS
+   ================================================================ */
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s||'').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+// Init after DOM ready
+document.addEventListener('authReady', () => loadAllRecipientsAndCounts());
+</script>
+
+</body>
+</html>
