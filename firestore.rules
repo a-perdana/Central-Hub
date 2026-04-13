@@ -611,6 +611,45 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // -- school_visits (Visit & Audit Management) ------------
+    // Read: any Central Hub user
+    // Write (create/update/delete): central_admin only
+    match /school_visits/{visitId} {
+      allow read:                   if isCentralUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -- kpi_school_submissions (School KPI submissions reviewed by HQ) --
+    // Read: central_admin reads all; academic_admin reads all;
+    //       academic_user reads only their own school's submission
+    // Write (create/update): academic_admin or academic_user for their own school
+    // Status updates (approve/reject/under_review): central_admin only
+    match /kpi_school_submissions/{submId} {
+      allow read: if isAdmin() || isAHAdmin()
+                  || (isAcademicUser()
+                      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == resource.data.schoolId);
+      allow create: if isAHAdmin()
+                    || (isAcademicUser()
+                        && request.resource.data.schoolId ==
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId);
+      allow update: if isAdmin()
+                    || isAHAdmin()
+                    || (isAcademicUser()
+                        && resource.data.schoolId ==
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId);
+      allow delete: if isAdmin();
+    }
+
+    // -- announcement_reads (read-receipt tracking) ----------
+    // Doc ID: {annId}__{uid}
+    // Any authorized user can write their own read receipt; admin reads all
+    match /announcement_reads/{readId} {
+      allow read:   if isAdmin();
+      allow create, update: if isAuthorized()
+                            && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     // -- topics (message board) ------------------------------
     match /topics/{topicId} {
       allow read:   if isAuthorized();
