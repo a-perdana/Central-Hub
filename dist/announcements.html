@@ -147,6 +147,25 @@
     /* LOCKED BADGE */
     .badge-locked { background: #fee2e2; color: #991b1b; }
 
+    /* READ RECEIPT BADGE */
+    .read-receipt-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.72rem; font-weight: 500; color: var(--ink-3);
+      background: var(--paper); border: 1px solid var(--border);
+      border-radius: 10px; padding: 2px 8px;
+    }
+    .read-receipt-badge svg { flex-shrink: 0; }
+
+    /* AUDIENCE TARGET */
+    .audience-section { margin-top: 4px; }
+    .audience-toggle { font-size: 0.8rem; color: var(--accent); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; text-decoration: underline; }
+    .audience-options { margin-top: 8px; display: none; }
+    .audience-options.open { display: block; }
+    .school-check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; max-height: 140px; overflow-y: auto; padding: 2px; }
+    .school-check-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--ink-2); cursor: pointer; }
+    .school-check-item input { accent-color: var(--accent); width: 14px; height: 14px; }
+    .audience-target-badge { font-size: 0.72rem; font-weight: 500; padding: 2px 8px; border-radius: 10px; background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+
     /* SEARCH INPUT */
     .search-input-wrap { position: relative; }
     .search-input { width: 100%; padding: 8px 10px 8px 32px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); outline: none; }
@@ -916,6 +935,7 @@
         <div class="nd-list" id="notifList">
           <p class="nd-empty"><span class="nd-empty-icon">🔔</span><br>Loading…</p>
         </div>
+        <div class="mtd-footer"><a href="notifications">View all notifications →</a></div>
       </div>
     </div>
 
@@ -953,6 +973,7 @@
       <a href="https://academichub.eduversal.org"  class="mobile-nav-link" target="_blank" rel="noopener">Academic Hub ↗</a>
       <a href="https://teachershub.eduversal.org"  class="mobile-nav-link" target="_blank" rel="noopener">Teachers Hub ↗</a>
       <a href="academic-calendar"  class="mobile-nav-link" data-mob-page="academics">Academic Calendar</a>
+      <a href="event-calendar"     class="mobile-nav-link" data-mob-page="academics">Event Calendar</a>
       <a href="announcements"      class="mobile-nav-link" data-mob-page="announcements">Announcements</a>
       <a href="messageboard"       class="mobile-nav-link" data-mob-page="messageboard">Message Board</a>
       <a href="documents"          class="mobile-nav-link" data-mob-page="documents">Documents</a>
@@ -970,6 +991,7 @@
   (function () {
     const aliases = {
       "academic-calendar": "academics",
+      "event-calendar": "academics",
       "secondary-checkpoint-pacing": "academics",
       "igcse-pacing": "academics",
       "igcse-syllabus": "academics",
@@ -981,6 +1003,9 @@
       "ease-system": "assessments",
       "school-appraisals": "appraisals",
       "teacher-appraisals": "appraisals",
+      "school-visits": "appraisals",
+      "notifications": "notifications",
+      "mail-composer": "mail-composer",
       "console":   "console",
       "kpi-admin": "kpi-admin"
     };
@@ -1397,6 +1422,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           </label>
         </div>
       </div>
+      <div class="form-group audience-section">
+        <label class="form-label">Target audience (optional)</label>
+        <p style="font-size:0.76rem;color:var(--ink-3);margin-bottom:6px">Leave blank to broadcast to all schools. Or restrict to specific schools only.</p>
+        <button type="button" class="audience-toggle" id="audienceToggle">+ Select specific schools</button>
+        <div class="audience-options" id="audienceOptions">
+          <div class="school-check-grid" id="audienceSchoolGrid">
+            <span style="font-size:0.8rem;color:var(--ink-3)">Loading schools…</span>
+          </div>
+        </div>
+      </div>
       <label class="form-check">
         <input type="checkbox" id="fieldLocked">
         Lock this post (only you can edit)
@@ -1460,6 +1495,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     await loadAnnouncements();
     bindControls();
     loadTopicDropdownForAnn();
+    loadAudienceSchools();
   });
 
   async function loadTopicDropdownForAnn() {
@@ -1488,6 +1524,42 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     } catch(e) {
       console.warn('Could not load topics for announcement form:', e);
     }
+  }
+
+  // ── Audience school list (loaded once, reused in modal) ────────────
+  let audienceSchoolsList = [];
+  async function loadAudienceSchools() {
+    try {
+      const snap = await getDocs(query(collection(db, 'schools'), orderBy('name')));
+      audienceSchoolsList = snap.docs.map(d => ({ id: d.id, name: d.data().name || d.id }));
+    } catch { /* non-critical */ }
+
+    // Wire up audience toggle
+    document.getElementById('audienceToggle').addEventListener('click', () => {
+      const opts = document.getElementById('audienceOptions');
+      const isOpen = opts.classList.toggle('open');
+      document.getElementById('audienceToggle').textContent = isOpen ? '− Hide school list' : '+ Select specific schools';
+      if (isOpen && !document.getElementById('audienceSchoolGrid').querySelector('label')) {
+        renderAudienceGrid([]);
+      }
+    });
+  }
+
+  function renderAudienceGrid(selected) {
+    const grid = document.getElementById('audienceSchoolGrid');
+    if (!audienceSchoolsList.length) {
+      grid.innerHTML = '<span style="font-size:0.8rem;color:var(--ink-3)">No schools loaded.</span>';
+      return;
+    }
+    grid.innerHTML = audienceSchoolsList.map(s => `
+      <label class="school-check-item">
+        <input type="checkbox" name="audienceSchool" value="${s.id}" ${selected.includes(s.id) ? 'checked' : ''}>
+        ${s.name.length > 28 ? s.name.slice(0, 26) + '…' : s.name}
+      </label>`).join('');
+  }
+
+  function getSelectedAudienceSchools() {
+    return Array.from(document.querySelectorAll('input[name="audienceSchool"]:checked')).map(el => el.value);
   }
 
   async function loadAnnouncements() {
@@ -1621,6 +1693,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const initials = author.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
       const pinClass = a.pinned ? ' pinned' : '';
       const pinBadge = a.pinned ? '<span class="badge badge-amber">Pinned</span>' : '';
+      const targetBadge = Array.isArray(a.targetSchools) && a.targetSchools.length
+        ? `<span class="audience-target-badge" title="Targeted: ${a.targetSchools.length} school(s)">&#127919; ${a.targetSchools.length} school${a.targetSchools.length !== 1 ? 's' : ''}</span>` : '';
       const catLabels = { assignments: 'Assignments', academics: 'Academics', appraisals: 'Appraisals', 'meeting-minutes': 'Meeting Minutes' };
       const catBadge = a.category && catLabels[a.category]
         ? `<span class="badge badge-${a.category}">${catLabels[a.category]}</span>` : '';
@@ -1665,6 +1739,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               ${pinBadge}
               ${catBadge}
               ${lockedBadge}
+              ${targetBadge}
             </div>
             ${adminActions}
           </div>
@@ -1676,7 +1751,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               <div class="ann-avatar" aria-hidden="true">${initials}</div>
               <span class="ann-meta">${esc(author)} &middot; ${date}</span>
             </div>
-            <button class="btn-readmore" onclick="toggleRead('${a.id}')" data-expanded="false">Read more</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              ${isAdmin ? `<span class="read-receipt-badge" id="readcount-${a.id}" title="Users who expanded this announcement">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span id="readcountval-${a.id}">—</span>
+              </span>` : ''}
+              <button class="btn-readmore" onclick="toggleRead('${a.id}')" data-expanded="false">Read more</button>
+            </div>
           </div>
         </article>`;
     }).join('');
@@ -1687,15 +1768,52 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       if (bodyEl) bodyEl.innerHTML = renderBody(a.body || '');
     });
 
+    // Load read receipt counts for all visible announcements (admin only)
+    if (isAdmin) loadAllReadCounts(list.map(a => a.id));
   }
 
-  function toggleRead(id) {
+  async function toggleRead(id) {
     const body = document.getElementById('body-' + id);
     const btn = body.closest('.ann-card').querySelector('.btn-readmore');
     const expanded = btn.dataset.expanded === 'true';
     body.classList.toggle('truncated', expanded);
     btn.textContent = expanded ? 'Read more' : 'Show less';
     btn.dataset.expanded = String(!expanded);
+    // Write read receipt on first expand
+    if (!expanded && currentUser) {
+      try {
+        const receiptId = `${id}__${currentUser.uid}`;
+        const { setDoc, doc: fsDocRef, serverTimestamp: sts } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        await setDoc(fsDocRef(db, 'announcement_reads', receiptId), {
+          announcementId: id,
+          userId: currentUser.uid,
+          userEmail: currentUser.email,
+          userName: currentUser.displayName || currentUser.email,
+          readAt: sts(),
+        }, { merge: true });
+        // Refresh the read count badge for this announcement
+        if (isAdmin) loadReadCount(id);
+      } catch (e) {
+        // Non-blocking — read receipt failure is not a user-facing error
+        console.warn('Read receipt write failed:', e);
+      }
+    }
+  }
+
+  async function loadReadCount(annId) {
+    try {
+      const { getCountFromServer: getCount, collection: col, query: q, where: wh } =
+        await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+      const snap = await getCount(q(col(db, 'announcement_reads'), wh('announcementId', '==', annId)));
+      const el = document.getElementById('readcountval-' + annId);
+      if (el) el.textContent = snap.data().count;
+    } catch { /* silent */ }
+  }
+
+  async function loadAllReadCounts(ids) {
+    // Load read counts in parallel for all visible announcements (admin only)
+    if (!isAdmin || !ids.length) return;
+    ids.forEach(id => loadReadCount(id));
   }
 
   async function togglePin(id, currentlyPinned) {
@@ -1773,6 +1891,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     modalRemoveExistingImage = false;
     renderModalImagePreview();
     document.getElementById('fieldLinkedTopic').value = '';
+    // Reset audience
+    document.getElementById('audienceOptions').classList.remove('open');
+    document.getElementById('audienceToggle').textContent = '+ Select specific schools';
+    renderAudienceGrid([]);
     document.getElementById('saveBtn').textContent = 'Publish';
     hideErr();
     document.getElementById('modalOverlay').classList.add('open');
@@ -1801,6 +1923,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     modalRemoveExistingImage = false;
     renderModalImagePreview();
     document.getElementById('fieldLinkedTopic').value = a.linkedTopicId || '';
+    // Populate audience
+    const existing = Array.isArray(a.targetSchools) ? a.targetSchools : [];
+    if (existing.length) {
+      document.getElementById('audienceOptions').classList.add('open');
+      document.getElementById('audienceToggle').textContent = '− Hide school list';
+      renderAudienceGrid(existing);
+    } else {
+      document.getElementById('audienceOptions').classList.remove('open');
+      document.getElementById('audienceToggle').textContent = '+ Select specific schools';
+      renderAudienceGrid([]);
+    }
     document.getElementById('saveBtn').textContent = 'Update';
     hideErr();
     document.getElementById('modalOverlay').classList.add('open');
@@ -1841,6 +1974,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       showErr('At least one platform must be selected.');
       return;
     }
+    const targetSchools = getSelectedAudienceSchools(); // [] means broadcast to all
 
     const btn = document.getElementById('saveBtn');
     btn.disabled = true;
@@ -1863,10 +1997,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
 
       if (editingId) {
-        await updateDoc(fsDoc(db, 'announcements', editingId), { title, body, category, pinned, locked, platforms, imageUrl, imagePath });
+        await updateDoc(fsDoc(db, 'announcements', editingId), { title, body, category, pinned, locked, platforms, targetSchools, imageUrl, imagePath });
       } else {
         const annRef = await addDoc(collection(db, 'announcements'), {
-          title, body, category, pinned, locked, platforms, imageUrl, imagePath,
+          title, body, category, pinned, locked, platforms, targetSchools, imageUrl, imagePath,
           author: currentUser.displayName || currentUser.email,
           authorId: currentUser.uid,
           createdAt: serverTimestamp(),

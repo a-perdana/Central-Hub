@@ -697,6 +697,7 @@
         <div class="nd-list" id="notifList">
           <p class="nd-empty"><span class="nd-empty-icon">🔔</span><br>Loading…</p>
         </div>
+        <div class="mtd-footer"><a href="notifications">View all notifications →</a></div>
       </div>
     </div>
 
@@ -734,6 +735,7 @@
       <a href="https://academichub.eduversal.org"  class="mobile-nav-link" target="_blank" rel="noopener">Academic Hub ↗</a>
       <a href="https://teachershub.eduversal.org"  class="mobile-nav-link" target="_blank" rel="noopener">Teachers Hub ↗</a>
       <a href="academic-calendar"  class="mobile-nav-link" data-mob-page="academics">Academic Calendar</a>
+      <a href="event-calendar"     class="mobile-nav-link" data-mob-page="academics">Event Calendar</a>
       <a href="announcements"      class="mobile-nav-link" data-mob-page="announcements">Announcements</a>
       <a href="messageboard"       class="mobile-nav-link" data-mob-page="messageboard">Message Board</a>
       <a href="documents"          class="mobile-nav-link" data-mob-page="documents">Documents</a>
@@ -751,6 +753,7 @@
   (function () {
     const aliases = {
       "academic-calendar": "academics",
+      "event-calendar": "academics",
       "secondary-checkpoint-pacing": "academics",
       "igcse-pacing": "academics",
       "igcse-syllabus": "academics",
@@ -762,6 +765,9 @@
       "ease-system": "assessments",
       "school-appraisals": "appraisals",
       "teacher-appraisals": "appraisals",
+      "school-visits": "appraisals",
+      "notifications": "notifications",
+      "mail-composer": "mail-composer",
       "console":   "console",
       "kpi-admin": "kpi-admin"
     };
@@ -1059,6 +1065,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .sidebar::-webkit-scrollbar { width: 4px; }
     .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 4px; }
 
+    /* Back link at top of sidebar */
+    .sidebar-back {
+      display: flex; align-items: center; gap: 7px;
+      padding: 0 1.25rem 1rem; margin-bottom: 0.5rem;
+      font-size: .78rem; font-weight: 500; color: rgba(255,255,255,.6);
+      text-decoration: none; transition: color .15s;
+    }
+    .sidebar-back:hover { color: rgba(255,255,255,.9); }
+
     /* Sidebar logo area */
     .sidebar-brand {
       display: flex; align-items: center; gap: 10px;
@@ -1313,6 +1328,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .stat-card-val   { font-size: 1.4rem; font-weight: 800; color: #0d4f4a; }
     .stat-card-label { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #64748b; margin-top: 2px; }
 
+    /* ── STATUS BADGES (used in results tables) ── */
+    .badge { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+    .badge-active   { background: #dcfce7; color: #15803d; }
+    .badge-info     { background: #dbeafe; color: #1d4ed8; }
+    .badge-warning  { background: #fef3c7; color: #92400e; }
+    .badge-inactive { background: var(--paper-2,#f1f5f9); color: #64748b; }
+    .badge-danger   { background: #fee2e2; color: #991b1b; }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 768px) {
       .sidebar { display: none; }
@@ -1328,6 +1351,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
   <!-- ── SIDEBAR ── -->
   <aside class="sidebar">
+    <a href="index" class="sidebar-back" aria-label="Back to Dashboard">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Dashboard
+    </a>
     <div class="sidebar-brand">
       <div class="sidebar-brand-icon">📊</div>
       <div>
@@ -1340,6 +1367,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <button class="sidebar-btn active" data-panel="panel-kpi"><span class="sidebar-icon">📋</span> KPI Configuration</button>
       <button class="sidebar-btn" data-panel="panel-schools"><span class="sidebar-icon">🏫</span> Partner Schools</button>
       <button class="sidebar-btn" data-panel="panel-semesters"><span class="sidebar-icon">🗓️</span> Semesters</button>
+      <button class="sidebar-btn" data-panel="panel-school-results"><span class="sidebar-icon">📊</span> School Results</button>
     </div>
     <div class="sidebar-divider"></div>
     <div class="sidebar-section">
@@ -1438,6 +1466,51 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         </div>
         <div id="semestersLoading" class="empty-state" style="display:none;"><div class="empty-state-title">Loading semesters…</div></div>
         <div class="sem-grid" id="semGrid"></div>
+      </div>
+
+      <!-- ════ PANEL: SCHOOL KPI RESULTS ════ -->
+      <div class="panel" id="panel-school-results">
+        <div class="toolbar">
+          <span class="toolbar-title">School KPI Submission Results</span>
+          <div class="toolbar-right">
+            <select class="form-select" id="schoolResultsSemSelect" style="min-width:200px;font-size:0.85rem;">
+              <option value="">— Select Semester —</option>
+            </select>
+            <button class="btn-ghost" id="refreshSchoolResultsBtn">↻ Refresh</button>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div id="schoolResultsStats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem;"></div>
+
+        <!-- Summary table -->
+        <div id="schoolResultsTableWrap" class="table-wrap" style="display:none;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>School</th>
+                <th>Semester</th>
+                <th>Score</th>
+                <th>Submitted By</th>
+                <th>Submitted At</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="schoolResultsTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="schoolResultsEmpty" class="empty-state" style="display:none;">
+          <div style="font-size:2rem">📋</div>
+          <div class="empty-state-title">No submissions yet</div>
+          <div class="empty-state-body">Select a semester to see school KPI submissions.</div>
+        </div>
+
+        <div id="schoolResultsLoading" class="empty-state">
+          <div style="font-size:2rem">⏳</div>
+          <div class="empty-state-title">Select a semester above</div>
+        </div>
       </div>
 
       <!-- ════ PANEL: TEACHER KPI CONFIG ════ -->
@@ -1949,6 +2022,7 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   await Promise.all([loadKPIs(), loadSchools(), loadSemesters(), loadTeacherKPIs(), loadTeacherPeriods()]);
   renderKPIs();
   populateResultsPeriodSelect();
+  populateSchoolResultsSemSelect();
   renderSchools();
   renderSemesters();
   renderTeacherKPIs();
@@ -1994,6 +2068,22 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   });
   document.getElementById('resultsPeriodSelect').addEventListener('change', e => {
     if (e.target.value) loadResults(e.target.value);
+  });
+
+  // School KPI Results panel
+  document.getElementById('refreshSchoolResultsBtn').addEventListener('click', () => {
+    const sid = document.getElementById('schoolResultsSemSelect').value;
+    if (sid) loadSchoolResults(sid);
+  });
+  document.getElementById('schoolResultsSemSelect').addEventListener('change', e => {
+    if (e.target.value) loadSchoolResults(e.target.value);
+  });
+  document.getElementById('schoolResultsTableBody').addEventListener('click', async e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.approveId)  updateSchoolSubmissionStatus(btn.dataset.approveId,  'approved');
+    if (btn.dataset.rejectId)   updateSchoolSubmissionStatus(btn.dataset.rejectId,   'rejected');
+    if (btn.dataset.reviewId)   updateSchoolSubmissionStatus(btn.dataset.reviewId,   'under_review');
   });
 
   // Delegated table buttons
@@ -2697,6 +2787,126 @@ async function loadResults(periodId) {
     loading.style.display = 'none';
     console.error(err);
     alert('Error loading results: ' + err.message);
+  }
+}
+
+// ─── SCHOOL KPI SUBMISSION RESULTS ────────────────────────────
+function populateSchoolResultsSemSelect() {
+  const sel = document.getElementById('schoolResultsSemSelect');
+  while (sel.options.length > 1) sel.remove(1);
+  for (const s of semesters) {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name || s.id;
+    sel.appendChild(opt);
+    // Auto-select the active semester
+    if (s.isActive) sel.value = s.id;
+  }
+}
+
+async function loadSchoolResults(semesterId) {
+  const db = window.db;
+  const loading   = document.getElementById('schoolResultsLoading');
+  const empty     = document.getElementById('schoolResultsEmpty');
+  const tableWrap = document.getElementById('schoolResultsTableWrap');
+  const statsEl   = document.getElementById('schoolResultsStats');
+  const tbody     = document.getElementById('schoolResultsTableBody');
+
+  loading.style.display   = 'block';
+  empty.style.display     = 'none';
+  tableWrap.style.display = 'none';
+  statsEl.innerHTML = '';
+  tbody.innerHTML   = '';
+
+  try {
+    const submSnap = await getDocs(query(
+      collection(db, 'kpi_school_submissions'),
+      where('semesterId', '==', semesterId)
+    ));
+    const subs = submSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    loading.style.display = 'none';
+    if (!subs.length) { empty.style.display = 'block'; return; }
+
+    const total        = subs.length;
+    const submitted    = subs.filter(s => s.status === 'submitted').length;
+    const underReview  = subs.filter(s => s.status === 'under_review').length;
+    const approved     = subs.filter(s => s.status === 'approved').length;
+    const rejected     = subs.filter(s => s.status === 'rejected').length;
+    const avgScore     = subs.filter(s => s.score != null).length
+      ? (subs.reduce((acc, s) => acc + (Number(s.score) || 0), 0) / subs.filter(s => s.score != null).length).toFixed(1)
+      : '—';
+
+    statsEl.innerHTML = `
+      <div class="stat-mini-card"><div class="stat-mini-val" style="color:var(--accent)">${total}</div><div class="stat-mini-lbl">Total Schools</div></div>
+      <div class="stat-mini-card"><div class="stat-mini-val" style="color:#1d4ed8">${submitted}</div><div class="stat-mini-lbl">Awaiting Review</div></div>
+      <div class="stat-mini-card"><div class="stat-mini-val" style="color:#d97706">${underReview}</div><div class="stat-mini-lbl">Under Review</div></div>
+      <div class="stat-mini-card"><div class="stat-mini-val" style="color:#15803d">${approved}</div><div class="stat-mini-lbl">Approved</div></div>
+      <div class="stat-mini-card"><div class="stat-mini-val" style="color:#dc2626">${rejected}</div><div class="stat-mini-lbl">Rejected</div></div>
+      <div class="stat-mini-card"><div class="stat-mini-val" style="color:#0891b2">${avgScore !== '—' ? avgScore + '%' : '—'}</div><div class="stat-mini-lbl">Avg Score</div></div>
+    `;
+
+    const STATUS_MAP = {
+      draft:        { label: 'Draft',        cls: 'badge-inactive' },
+      submitted:    { label: 'Submitted',    cls: 'badge-warning' },
+      under_review: { label: 'Under Review', cls: 'badge-info' },
+      approved:     { label: 'Approved',     cls: 'badge-active' },
+      rejected:     { label: 'Rejected',     cls: 'badge-danger' },
+    };
+
+    tbody.innerHTML = subs.map(sub => {
+      const st = STATUS_MAP[sub.status] || { label: sub.status || '—', cls: 'badge-inactive' };
+      const school = schools.find(s => s.id === sub.schoolId);
+      const schoolName = school?.name || sub.schoolId || '—';
+      const sem = semesters.find(s => s.id === sub.semesterId);
+      const semName = sem?.name || sub.semesterId || '—';
+      const submittedAt = sub.submittedAt?.toDate ? sub.submittedAt.toDate().toLocaleDateString('en-GB') : (sub.submittedAt || '—');
+      const score = sub.score != null ? `<strong>${Number(sub.score).toFixed(1)}%</strong>` : '—';
+
+      // kpi-admin.html is central_admin only — always show action buttons
+      const approveBtn = sub.status !== 'approved'
+        ? `<button class="btn-ghost" style="font-size:.75rem;padding:3px 8px;color:#15803d;border-color:#16a34a" data-approve-id="${sub.id}">Approve</button>`
+        : '';
+      const rejectBtn  = sub.status !== 'rejected'
+        ? `<button class="btn-ghost" style="font-size:.75rem;padding:3px 8px;color:#dc2626;border-color:#ef4444" data-reject-id="${sub.id}">Reject</button>`
+        : '';
+      const reviewBtn  = sub.status === 'submitted'
+        ? `<button class="btn-ghost" style="font-size:.75rem;padding:3px 8px" data-review-id="${sub.id}">Mark Under Review</button>`
+        : '';
+
+      return `<tr>
+        <td style="font-weight:600">${schoolName.replace(/</g,'&lt;')}</td>
+        <td style="font-size:.82rem;color:#6b7280">${semName.replace(/</g,'&lt;')}</td>
+        <td>${score}</td>
+        <td style="font-size:.82rem">${(sub.submittedBy || '—').replace(/</g,'&lt;')}</td>
+        <td style="font-size:.82rem;color:#6b7280">${submittedAt}</td>
+        <td><span class="badge ${st.cls}">${st.label}</span></td>
+        <td><div style="display:flex;gap:4px;flex-wrap:wrap">${reviewBtn}${approveBtn}${rejectBtn}</div></td>
+      </tr>`;
+    }).join('');
+
+    tableWrap.style.display = 'block';
+  } catch (err) {
+    loading.style.display = 'none';
+    console.error(err);
+    alert('Error loading school results: ' + err.message);
+  }
+}
+
+async function updateSchoolSubmissionStatus(id, newStatus) {
+  const db = window.db;
+  try {
+    await updateDoc(doc(db, 'kpi_school_submissions', id), {
+      status: newStatus,
+      reviewedBy:  window.currentUser?.email || '',
+      reviewedAt:  serverTimestamp(),
+    });
+    // Reload current semester
+    const semId = document.getElementById('schoolResultsSemSelect').value;
+    if (semId) loadSchoolResults(semId);
+  } catch (err) {
+    console.error(err);
+    alert('Could not update status: ' + err.message);
   }
 }
 </script>
