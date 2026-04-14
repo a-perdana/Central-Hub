@@ -81,25 +81,72 @@
     }
     .card-title svg { color: var(--accent); flex-shrink: 0; }
 
-    /* FILTER ROW */
-    .filter-row {
-      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px;
+    /* PLATFORM CHIPS */
+    .platform-chips {
+      display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px;
     }
-    @media (max-width: 640px) { .filter-row { grid-template-columns: 1fr; } }
-    .filter-group label {
-      display: block; font-size: .72rem; font-weight: 700; color: var(--ink-3);
-      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+    .platform-chip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 13px; border-radius: 20px;
+      border: 1.5px solid var(--border); background: var(--white);
+      font-size: .82rem; font-weight: 500; color: var(--ink-2);
+      cursor: pointer; transition: all .15s ease; user-select: none;
     }
-    .filter-group select {
-      width: 100%; height: 36px; padding: 0 8px;
+    .platform-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .platform-chip.active {
+      border-color: var(--accent); background: var(--accent-2); color: var(--accent);
+      font-weight: 600;
+    }
+    .platform-chip .chip-count {
+      font-size: .72rem; background: rgba(0,0,0,.07); border-radius: 10px;
+      padding: 1px 6px; font-weight: 600;
+    }
+    .platform-chip.active .chip-count { background: var(--accent); color: #fff; }
+
+    /* ACCORDION ROLE/SUBROLE */
+    .plat-accordion {
+      border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden; margin-bottom: 10px; display: none;
+    }
+    .plat-accordion.open { display: block; }
+    .plat-acc-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      background: var(--paper);
+    }
+    .plat-acc-row:last-child { border-bottom: none; }
+    .plat-acc-label {
+      font-size: .72rem; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: .06em; width: 60px; flex-shrink: 0;
+    }
+    .plat-acc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .acc-chip {
+      padding: 3px 10px; border-radius: 12px; font-size: .78rem; font-weight: 500;
+      border: 1px solid var(--border); background: var(--white); color: var(--ink-2);
+      cursor: pointer; transition: all .12s;
+    }
+    .acc-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .acc-chip.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+    /* QUICK SEARCH */
+    .recip-quick-search {
+      position: relative; margin-bottom: 10px;
+    }
+    .recip-quick-search svg {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--ink-3); pointer-events: none;
+    }
+    .recip-quick-search input {
+      width: 100%; height: 36px; padding: 0 10px 0 32px;
       border: 1px solid var(--border); border-radius: 8px;
-      font-size: .84rem; color: var(--ink); background: var(--white);
-      cursor: pointer; outline: none;
+      font-size: .875rem; color: var(--ink); background: var(--paper); outline: none;
     }
-    .filter-group select:focus { border-color: var(--accent); }
+    .recip-quick-search input:focus { border-color: var(--accent); background: #fff; }
+
+    /* MATCH SUMMARY */
     .filter-summary {
-      font-size: .8rem; color: var(--ink-3); margin-top: 10px;
-      padding: 8px 12px; background: var(--paper); border-radius: 7px;
+      font-size: .8rem; color: var(--ink-3);
+      padding: 7px 12px; background: var(--paper); border-radius: 7px;
     }
     .filter-summary strong { color: var(--accent); }
 
@@ -394,30 +441,44 @@
         Recipients
       </p>
 
-      <div class="filter-row">
-        <div class="filter-group">
-          <label for="fPlatform">Platform</label>
-          <select id="fPlatform">
-            <option value="">All Platforms</option>
-            <option value="teachershub">Teachers Hub</option>
-            <option value="academichub">Academic Hub</option>
-            <option value="centralhub">Central Hub</option>
-            <option value="researchhub">Research Hub</option>
-          </select>
+      <!-- Quick search -->
+      <div class="recip-quick-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="recipQuickSearch" placeholder="Search by name or email…" autocomplete="off">
+      </div>
+
+      <!-- Platform chips -->
+      <div class="platform-chips" id="platformChips">
+        <div class="platform-chip active" data-platform="" onclick="togglePlatformChip(this)">
+          <span>All</span><span class="chip-count" id="cnt-all">—</span>
         </div>
-        <div class="filter-group">
-          <label for="fRole">Role</label>
-          <select id="fRole">
-            <option value="all">All Roles</option>
-            <option value="user">Users only</option>
-            <option value="admin">Admins only</option>
-          </select>
+        <div class="platform-chip" data-platform="teachershub" onclick="togglePlatformChip(this)">
+          <span>Teachers Hub</span><span class="chip-count" id="cnt-teachershub">—</span>
         </div>
-        <div class="filter-group">
-          <label for="fSubRole">Sub-role</label>
-          <select id="fSubRole" disabled>
-            <option value="">Any</option>
-          </select>
+        <div class="platform-chip" data-platform="academichub" onclick="togglePlatformChip(this)">
+          <span>Academic Hub</span><span class="chip-count" id="cnt-academichub">—</span>
+        </div>
+        <div class="platform-chip" data-platform="centralhub" onclick="togglePlatformChip(this)">
+          <span>Central Hub</span><span class="chip-count" id="cnt-centralhub">—</span>
+        </div>
+        <div class="platform-chip" data-platform="researchhub" onclick="togglePlatformChip(this)">
+          <span>Research Hub</span><span class="chip-count" id="cnt-researchhub">—</span>
+        </div>
+      </div>
+
+      <!-- Role / Sub-role accordion (shown when a specific platform is selected) -->
+      <div class="plat-accordion" id="platAccordion">
+        <div class="plat-acc-row">
+          <span class="plat-acc-label">Role</span>
+          <div class="plat-acc-chips">
+            <span class="acc-chip active" data-role="all" onclick="toggleAccChip(this,'role')">All</span>
+            <span class="acc-chip" data-role="user" onclick="toggleAccChip(this,'role')">Users</span>
+            <span class="acc-chip" data-role="admin" onclick="toggleAccChip(this,'role')">Admins</span>
+          </div>
+        </div>
+        <div class="plat-acc-row" id="subRoleRow" style="display:none">
+          <span class="plat-acc-label">Sub-role</span>
+          <div class="plat-acc-chips" id="subRoleChips"></div>
         </div>
       </div>
 
@@ -676,41 +737,109 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   }
   document.getElementById('mainContent').style.display = 'block';
   initQuill();
-  setupFilterListeners();
+  setupQuickSearch();
   await loadHistory();
+  await loadAllCounts();
   await loadFilteredRecipients();
 });
 
 /* ================================================================
-   FILTER SETUP
+   PLATFORM CHIP STATE
    ================================================================ */
-function setupFilterListeners() {
-  document.getElementById('fPlatform').addEventListener('change', () => {
-    updateSubRoleOptions();
-    loadFilteredRecipients();
+let activePlatform = '';   // '' = all
+let activeRole     = 'all';
+let activeSubRole  = '';
+
+window.togglePlatformChip = function(el) {
+  activePlatform = el.dataset.platform;
+  activeRole     = 'all';
+  activeSubRole  = '';
+  // Visual
+  document.querySelectorAll('.platform-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  // Show/hide accordion
+  const acc = document.getElementById('platAccordion');
+  if (activePlatform) {
+    acc.classList.add('open');
+    renderSubRoleChips();
+    // Reset role chips
+    document.querySelectorAll('.acc-chip[data-role]').forEach(c => {
+      c.classList.toggle('active', c.dataset.role === 'all');
+    });
+  } else {
+    acc.classList.remove('open');
+  }
+  loadFilteredRecipients();
+};
+
+window.toggleAccChip = function(el, type) {
+  const group = type === 'role' ? '[data-role]' : '[data-subrole]';
+  el.closest('.plat-acc-chips').querySelectorAll(group).forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  if (type === 'role') {
+    activeRole    = el.dataset.role;
+    activeSubRole = '';
+    // Reset subrole chips
+    document.querySelectorAll('[data-subrole]').forEach(c => c.classList.remove('active'));
+  } else {
+    // Toggle subrole (click same = deselect)
+    if (activeSubRole === el.dataset.subrole) {
+      activeSubRole = '';
+      el.classList.remove('active');
+    } else {
+      activeSubRole = el.dataset.subrole;
+    }
+  }
+  loadFilteredRecipients();
+};
+
+function renderSubRoleChips() {
+  const options = SUBROLES[activePlatform] || [];
+  const row     = document.getElementById('subRoleRow');
+  const chips   = document.getElementById('subRoleChips');
+  if (!options.length) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  chips.innerHTML = options.map(o =>
+    `<span class="acc-chip${activeSubRole === o.value ? ' active' : ''}" data-subrole="${escAttr(o.value)}" onclick="toggleAccChip(this,'subrole')">${escHtml(o.label)}</span>`
+  ).join('');
+}
+
+/* ================================================================
+   QUICK SEARCH
+   ================================================================ */
+function setupQuickSearch() {
+  let timer;
+  document.getElementById('recipQuickSearch').addEventListener('input', function() {
+    clearTimeout(timer);
+    timer = setTimeout(() => loadFilteredRecipients(), 300);
   });
-  document.getElementById('fRole').addEventListener('change', loadFilteredRecipients);
-  document.getElementById('fSubRole').addEventListener('change', loadFilteredRecipients);
 }
 
-function updateSubRoleOptions() {
-  const platform = document.getElementById('fPlatform').value;
-  const sel = document.getElementById('fSubRole');
-  const options = SUBROLES[platform] || [];
-  sel.innerHTML = '<option value="">Any</option>' +
-    options.map(o => `<option value="${escAttr(o.value)}">${escHtml(o.label)}</option>`).join('');
-  sel.disabled = options.length === 0;
-}
-
+/* ================================================================
+   FILTER PARAMS
+   ================================================================ */
 function getFilterParams() {
-  const platform = document.getElementById('fPlatform').value;
-  const role     = document.getElementById('fRole').value;
-  const subRole  = document.getElementById('fSubRole').value;
-  const params   = new URLSearchParams();
-  if (platform) params.set('platform', platform);
-  if (role && role !== 'all') params.set('role', role);
-  if (subRole) params.set('subRole', subRole);
+  const params = new URLSearchParams();
+  if (activePlatform) params.set('platform', activePlatform);
+  if (activeRole && activeRole !== 'all') params.set('role', activeRole);
+  if (activeSubRole) params.set('subRole', activeSubRole);
   return params;
+}
+
+/* ================================================================
+   LOAD ALL COUNTS (for chip badges)
+   ================================================================ */
+async function loadAllCounts() {
+  const platforms = ['', 'teachershub', 'academichub', 'centralhub', 'researchhub'];
+  const results   = await Promise.all(platforms.map(p => {
+    const q = p ? `?platform=${p}` : '';
+    return apiGet('/recipients' + q).catch(() => ({ recipients: [] }));
+  }));
+  const ids = ['all', 'teachershub', 'academichub', 'centralhub', 'researchhub'];
+  results.forEach((r, i) => {
+    const el = document.getElementById(`cnt-${ids[i]}`);
+    if (el) el.textContent = r.recipients?.length ?? 0;
+  });
 }
 
 /* ================================================================
@@ -722,37 +851,36 @@ async function loadFilteredRecipients() {
   try {
     const params = getFilterParams();
     const data   = await apiGet('/recipients?' + params.toString());
-    updateRecipientDisplay(data.recipients || []);
-    updateFilterSummary();
+    let recips   = data.recipients || [];
+
+    // Quick search client-side filter
+    const q = document.getElementById('recipQuickSearch').value.trim().toLowerCase();
+    if (q) recips = recips.filter(r =>
+      r.name?.toLowerCase().includes(q) || r.email.toLowerCase().includes(q)
+    );
+
+    updateRecipientDisplay(recips);
+    updateFilterSummary(recips.length);
   } catch (err) {
     console.error('loadFilteredRecipients error:', err);
     document.getElementById('filterSummary').textContent = 'Could not load recipients.';
   }
 }
 
-function updateFilterSummary() {
-  const platform = document.getElementById('fPlatform').value;
-  const role     = document.getElementById('fRole').value;
-  const subRole  = document.getElementById('fSubRole').value;
-  const count    = allRecipientsList.length;
-
+function updateFilterSummary(count) {
+  const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
   const parts = [];
-  if (platform) {
-    const labels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
-    parts.push(labels[platform] || platform);
-  } else {
-    parts.push('All Platforms');
-  }
-  if (role === 'admin') parts.push('Admins');
-  else if (role === 'user') parts.push('Users');
-  if (subRole) {
-    const p = document.getElementById('fPlatform').value;
-    const found = (SUBROLES[p] || []).find(o => o.value === subRole);
+  parts.push(activePlatform ? platLabels[activePlatform] : 'All Platforms');
+  if (activeRole === 'admin') parts.push('Admins');
+  else if (activeRole === 'user') parts.push('Users');
+  if (activeSubRole) {
+    const found = (SUBROLES[activePlatform] || []).find(o => o.value === activeSubRole);
     if (found) parts.push(found.label);
   }
-
+  const q = document.getElementById('recipQuickSearch').value.trim();
+  if (q) parts.push(`"${q}"`);
   document.getElementById('filterSummary').innerHTML =
-    `<strong>${count}</strong> recipient${count !== 1 ? 's' : ''} match: ${parts.join(' · ')}`;
+    `<strong>${count}</strong> recipient${count !== 1 ? 's' : ''} · ${parts.join(' › ')}`;
 }
 
 /* ================================================================
