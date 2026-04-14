@@ -149,11 +149,11 @@
       display: none; align-items: center; justify-content: center; font-size: 11px; line-height: 1;
     }
     .recip-quick-search.has-value .clear-btn { display: flex; }
-    /* Search dropdown */
+    /* Search dropdown — fixed so it's never clipped by parent overflow/position */
     .search-dropdown {
-      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000;
+      position: fixed; z-index: 9000;
       background: #fff; border: 1px solid var(--border); border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      box-shadow: 0 8px 24px rgba(0,0,0,.15);
       max-height: 240px; overflow-y: auto; display: none;
     }
     .search-dropdown.open { display: block; }
@@ -794,25 +794,29 @@ function finalList() {
 /* ================================================================
    PLATFORM CHIPS
    ================================================================ */
+// activePlatform === null  → no chip selected (search-only mode)
+// activePlatform === ''    → All platforms
+// activePlatform === 'xyz' → specific platform
 window.togglePlatformChip = function(el) {
-  const clicked = el.dataset.platform;
-  if (clicked !== '' && activePlatform === clicked) {
-    // Deselect → back to All
-    activePlatform = '';
-    document.querySelectorAll('.platform-chip').forEach(c =>
-      c.classList.toggle('active', c.dataset.platform === ''));
+  const clicked = el.dataset.platform; // '' for All, 'teachershub' etc for specific
+
+  if (activePlatform === clicked) {
+    // Clicking the already-active chip → deselect everything (search-only mode)
+    activePlatform = null;
+    document.querySelectorAll('.platform-chip').forEach(c => c.classList.remove('active'));
     document.getElementById('platAccordion').classList.remove('open');
   } else {
     activePlatform = clicked;
     document.querySelectorAll('.platform-chip').forEach(c =>
       c.classList.toggle('active', c.dataset.platform === clicked));
     if (activePlatform) {
-      activeRole = 'all'; activeSubRole = '';
+      // Specific platform: show accordion
       document.getElementById('platAccordion').classList.add('open');
       renderSubRoleChips();
       document.querySelectorAll('.acc-chip[data-role]').forEach(c =>
         c.classList.toggle('active', c.dataset.role === 'all'));
     } else {
+      // All chip selected
       document.getElementById('platAccordion').classList.remove('open');
     }
   }
@@ -853,6 +857,12 @@ function renderSubRoleChips() {
    FETCH CHIP RECIPIENTS (platform/role/subrole → chipRecipients)
    ================================================================ */
 async function fetchChipRecipients() {
+  if (activePlatform === null) {
+    // No chip selected — clear chip recipients, keep manual ones
+    chipRecipients = new Map();
+    syncRecipientDisplay();
+    return;
+  }
   const params = new URLSearchParams();
   if (activePlatform) params.set('platform', activePlatform);
   if (activeRole && activeRole !== 'all') params.set('role', activeRole);
@@ -909,13 +919,24 @@ function setupQuickSearch() {
   });
 
   document.addEventListener('click', e => {
-    if (!wrap.contains(e.target)) closeDropdown();
+    if (!wrap.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
   });
+
+  window.addEventListener('scroll', () => { if (dropdown.classList.contains('open')) positionDropdown(); }, true);
+  window.addEventListener('resize', () => { if (dropdown.classList.contains('open')) positionDropdown(); });
+
+  function positionDropdown() {
+    const rect = input.getBoundingClientRect();
+    dropdown.style.top   = (rect.bottom + 4) + 'px';
+    dropdown.style.left  = rect.left + 'px';
+    dropdown.style.width = rect.width + 'px';
+  }
 
   function renderDropdown(matches, q) {
     focusedIndex = -1;
     if (!matches.length) {
       dropdown.innerHTML = `<div class="sd-empty">No results for "${escHtml(q)}"</div>`;
+      positionDropdown();
       dropdown.classList.add('open'); return;
     }
     dropdown.innerHTML = matches.map(r => {
@@ -932,6 +953,7 @@ function setupQuickSearch() {
         ${already ? '<span class="sd-tag" style="color:var(--accent);border-color:var(--accent)">Added</span>' : ''}
       </div>`;
     }).join('');
+    positionDropdown();
     dropdown.classList.add('open');
   }
 
@@ -973,7 +995,7 @@ function updateFilterSummary() {
   const chipCount   = [...chipRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
   const manualCount = [...manualRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
 
-  let desc = activePlatform ? platLabels[activePlatform] : 'All Platforms';
+  let desc = activePlatform === null ? 'No chip filter (search only)' : (activePlatform ? platLabels[activePlatform] : 'All Platforms');
   if (activeRole === 'admin') desc += ' · Admins';
   else if (activeRole === 'user') desc += ' · Users';
   if (activeSubRole) {
