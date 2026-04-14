@@ -81,33 +81,27 @@
     }
     .card-title svg { color: var(--accent); flex-shrink: 0; }
 
-    /* RECIPIENT SECTION */
-    .school-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-      gap: 8px; margin-top: 10px;
+    /* FILTER ROW */
+    .filter-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px;
     }
-    .school-chip {
-      display: flex; align-items: center; gap: 9px;
-      padding: 9px 12px;
+    @media (max-width: 640px) { .filter-row { grid-template-columns: 1fr; } }
+    .filter-group label {
+      display: block; font-size: .72rem; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+    }
+    .filter-group select {
+      width: 100%; height: 36px; padding: 0 8px;
       border: 1px solid var(--border); border-radius: 8px;
-      cursor: pointer; transition: all .15s ease;
-      background: var(--white);
+      font-size: .84rem; color: var(--ink); background: var(--white);
+      cursor: pointer; outline: none;
     }
-    .school-chip:hover { border-color: var(--accent); background: var(--accent-2); }
-    .school-chip.selected { border-color: var(--accent); background: var(--accent-2); }
-    .school-chip input[type="checkbox"] { accent-color: var(--accent); flex-shrink: 0; }
-    .school-chip-name { font-size: .84rem; font-weight: 500; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .school-chip-count { font-size: .72rem; color: var(--ink-3); flex-shrink: 0; }
-
-    .all-schools-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; border-radius: 8px;
-      background: var(--paper); border: 1px solid var(--border);
-      margin-bottom: 12px; cursor: pointer;
+    .filter-group select:focus { border-color: var(--accent); }
+    .filter-summary {
+      font-size: .8rem; color: var(--ink-3); margin-top: 10px;
+      padding: 8px 12px; background: var(--paper); border-radius: 7px;
     }
-    .all-schools-row input[type="checkbox"] { accent-color: var(--accent); }
-    .all-schools-label { font-size: .875rem; font-weight: 600; color: var(--ink); }
-    .all-schools-sub   { font-size: .78rem; color: var(--ink-3); margin-left: auto; }
+    .filter-summary strong { color: var(--accent); }
 
     /* QUILL EDITOR */
     .quill-wrap { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
@@ -400,21 +394,36 @@
         Recipients
       </p>
 
-      <div class="all-schools-row" id="allSchoolsRow" onclick="toggleAllSchools()">
-        <input type="checkbox" id="chkAllSchools" checked onclick="event.stopPropagation()">
-        <label class="all-schools-label" for="chkAllSchools">All Schools</label>
-        <span class="all-schools-sub" id="totalRecipLabel">Loading…</span>
+      <div class="filter-row">
+        <div class="filter-group">
+          <label for="fPlatform">Platform</label>
+          <select id="fPlatform">
+            <option value="">All Platforms</option>
+            <option value="teachershub">Teachers Hub</option>
+            <option value="academichub">Academic Hub</option>
+            <option value="centralhub">Central Hub</option>
+            <option value="researchhub">Research Hub</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="fRole">Role</label>
+          <select id="fRole">
+            <option value="all">All Roles</option>
+            <option value="user">Users only</option>
+            <option value="admin">Admins only</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="fSubRole">Sub-role</label>
+          <select id="fSubRole" disabled>
+            <option value="">Any</option>
+          </select>
+        </div>
       </div>
 
-      <div class="school-grid" id="schoolGrid">
-        <!-- populated by JS -->
-        <div class="skel" style="height:44px;border-radius:8px"></div>
-        <div class="skel" style="height:44px;border-radius:8px"></div>
-        <div class="skel" style="height:44px;border-radius:8px"></div>
-        <div class="skel" style="height:44px;border-radius:8px"></div>
-      </div>
+      <div class="filter-summary" id="filterSummary">Loading…</div>
 
-      <button class="btn-view-recip" id="btnViewRecip" style="display:none">
+      <button class="btn-view-recip" id="btnViewRecip" style="display:none;margin-top:12px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         View &amp; Edit Recipients
       </button>
@@ -609,10 +618,25 @@ const MAIL_SERVICE_URL = (window.ENV?.MAIL_SERVICE_URL || '').replace(/\/$/, '')
    STATE
    ================================================================ */
 let quill;
-let schoolList    = [];   // [{ id, name }]
-let recipientData = null; // full /recipients response
-let selectedSchoolIds = new Set(); // empty = all schools
-let isAllSchools  = true;
+
+// Sub-role options per platform
+const SUBROLES = {
+  teachershub: [
+    { value: 'subject_teacher',  label: 'Subject Teacher' },
+    { value: 'subject_leader',   label: 'Subject Leader' },
+  ],
+  academichub: [
+    { value: 'foundation_representative', label: 'Foundation Representative' },
+    { value: 'school_principal',          label: 'School Principal' },
+    { value: 'academic_coordinator',      label: 'Academic Coordinator' },
+    { value: 'cambridge_coordinator',     label: 'Cambridge Coordinator' },
+  ],
+  centralhub: [
+    { value: 'director',     label: 'Director' },
+    { value: 'coordinator',  label: 'Coordinator' },
+  ],
+  researchhub: [],
+};
 
 /* ================================================================
    QUILL INIT
@@ -652,143 +676,83 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   }
   document.getElementById('mainContent').style.display = 'block';
   initQuill();
-  await Promise.all([loadSchools(), loadHistory()]);
-  await loadAllRecipientsAndCounts();
+  setupFilterListeners();
+  await loadHistory();
+  await loadFilteredRecipients();
 });
 
 /* ================================================================
-   SCHOOLS
+   FILTER SETUP
    ================================================================ */
-async function loadSchools() {
-  try {
-    const res  = await apiGet('/schools');
-    schoolList = res.schools || [];
-    renderSchoolGrid();
-  } catch (err) {
-    console.error('loadSchools error:', err);
-    document.getElementById('schoolGrid').innerHTML =
-      '<p style="font-size:.84rem;color:var(--ink-3);padding:8px 0">Could not load schools.</p>';
-  }
+function setupFilterListeners() {
+  document.getElementById('fPlatform').addEventListener('change', () => {
+    updateSubRoleOptions();
+    loadFilteredRecipients();
+  });
+  document.getElementById('fRole').addEventListener('change', loadFilteredRecipients);
+  document.getElementById('fSubRole').addEventListener('change', loadFilteredRecipients);
 }
 
-function renderSchoolGrid() {
-  const grid = document.getElementById('schoolGrid');
-  if (!schoolList.length) {
-    grid.innerHTML = '<p style="font-size:.84rem;color:var(--ink-3);padding:8px 0">No schools found.</p>';
-    return;
-  }
-  grid.innerHTML = schoolList.map(s => `
-    <div class="school-chip" id="chip-${escAttr(s.id)}" onclick="toggleSchool('${escAttr(s.id)}')">
-      <input type="checkbox" id="chk-${escAttr(s.id)}" onchange="toggleSchool('${escAttr(s.id)}')" onclick="event.stopPropagation()">
-      <span class="school-chip-name" title="${escHtml(s.name)}">${escHtml(s.name)}</span>
-      <span class="school-chip-count" id="cnt-${escAttr(s.id)}">—</span>
-    </div>
-  `).join('');
+function updateSubRoleOptions() {
+  const platform = document.getElementById('fPlatform').value;
+  const sel = document.getElementById('fSubRole');
+  const options = SUBROLES[platform] || [];
+  sel.innerHTML = '<option value="">Any</option>' +
+    options.map(o => `<option value="${escAttr(o.value)}">${escHtml(o.label)}</option>`).join('');
+  sel.disabled = options.length === 0;
+}
+
+function getFilterParams() {
+  const platform = document.getElementById('fPlatform').value;
+  const role     = document.getElementById('fRole').value;
+  const subRole  = document.getElementById('fSubRole').value;
+  const params   = new URLSearchParams();
+  if (platform) params.set('platform', platform);
+  if (role && role !== 'all') params.set('role', role);
+  if (subRole) params.set('subRole', subRole);
+  return params;
 }
 
 /* ================================================================
    RECIPIENTS
    ================================================================ */
-async function loadRecipients(schoolId) {
+async function loadFilteredRecipients() {
   document.getElementById('recipCount').textContent = '…';
+  document.getElementById('filterSummary').textContent = 'Loading…';
   try {
-    const url = schoolId ? `/recipients?schoolId=${encodeURIComponent(schoolId)}` : '/recipients';
-    recipientData = await apiGet(url);
-    updateRecipientDisplay(recipientData.recipients || []);
+    const params = getFilterParams();
+    const data   = await apiGet('/recipients?' + params.toString());
+    updateRecipientDisplay(data.recipients || []);
+    updateFilterSummary();
   } catch (err) {
-    console.error('loadRecipients error:', err);
-    document.getElementById('recipCount').textContent = '—';
+    console.error('loadFilteredRecipients error:', err);
+    document.getElementById('filterSummary').textContent = 'Could not load recipients.';
   }
 }
 
-async function loadAllRecipientsAndCounts() {
-  // Load per-school counts for the grid
-  try {
-    const full = await apiGet('/recipients');
-    const allRecips = full.recipients || [];
-    document.getElementById('totalRecipLabel').textContent = `${allRecips.length} teachers`;
+function updateFilterSummary() {
+  const platform = document.getElementById('fPlatform').value;
+  const role     = document.getElementById('fRole').value;
+  const subRole  = document.getElementById('fSubRole').value;
+  const count    = allRecipientsList.length;
 
-    // Count per school
-    const countMap = {};
-    allRecips.forEach(r => {
-      if (r.schoolId) countMap[r.schoolId] = (countMap[r.schoolId] || 0) + 1;
-    });
-    schoolList.forEach(s => {
-      const el = document.getElementById(`cnt-${escAttr(s.id)}`);
-      if (el) el.textContent = `${countMap[s.id] || 0}`;
-    });
-
-    recipientData = full;
-    updateRecipientDisplay(allRecips);
-  } catch (err) {
-    console.error('loadAllRecipientsAndCounts error:', err);
-  }
-}
-
-
-/* ================================================================
-   SCHOOL TOGGLE
-   ================================================================ */
-window.toggleAllSchools = function() {
-  // If already all-schools, clicking again does nothing (stays selected)
-  // If specific schools were selected, revert to all
-  isAllSchools = true;
-  selectedSchoolIds.clear();
-  document.getElementById('chkAllSchools').checked = true;
-  schoolList.forEach(s => {
-    const chk  = document.getElementById(`chk-${escAttr(s.id)}`);
-    const chip = document.getElementById(`chip-${escAttr(s.id)}`);
-    if (chk)  chk.checked = false;
-    if (chip) chip.classList.remove('selected');
-  });
-  loadAllRecipientsAndCounts();
-};
-
-window.toggleSchool = function(id) {
-  const chk  = document.getElementById(`chk-${escAttr(id)}`);
-  const chip = document.getElementById(`chip-${escAttr(id)}`);
-  if (!chk) return;
-
-  // Toggle selection
-  if (selectedSchoolIds.has(id)) {
-    selectedSchoolIds.delete(id);
-    chk.checked = false;
-    chip?.classList.remove('selected');
+  const parts = [];
+  if (platform) {
+    const labels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
+    parts.push(labels[platform] || platform);
   } else {
-    selectedSchoolIds.add(id);
-    chk.checked = true;
-    chip?.classList.add('selected');
+    parts.push('All Platforms');
+  }
+  if (role === 'admin') parts.push('Admins');
+  else if (role === 'user') parts.push('Users');
+  if (subRole) {
+    const p = document.getElementById('fPlatform').value;
+    const found = (SUBROLES[p] || []).find(o => o.value === subRole);
+    if (found) parts.push(found.label);
   }
 
-  // Uncheck "All Schools" once a specific school is chosen
-  isAllSchools = selectedSchoolIds.size === 0;
-  document.getElementById('chkAllSchools').checked = isAllSchools;
-
-  refreshSelectedRecipients();
-};
-
-async function refreshSelectedRecipients() {
-  if (selectedSchoolIds.size === 0) {
-    // No specific school selected — fall back to all
-    isAllSchools = true;
-    document.getElementById('chkAllSchools').checked = true;
-    loadAllRecipientsAndCounts();
-    return;
-  }
-  document.getElementById('recipCount').textContent = '…';
-  try {
-    // Fetch recipients for each selected school and merge
-    const results = await Promise.all(
-      [...selectedSchoolIds].map(id => apiGet(`/recipients?schoolId=${encodeURIComponent(id)}`))
-    );
-    const map = new Map();
-    results.forEach(r => {
-      (r.recipients || []).forEach(rec => map.set(rec.email.toLowerCase(), rec));
-    });
-    updateRecipientDisplay([...map.values()]);
-  } catch (err) {
-    console.error('refreshSelectedRecipients error:', err);
-  }
+  document.getElementById('filterSummary').innerHTML =
+    `<strong>${count}</strong> recipient${count !== 1 ? 's' : ''} match: ${parts.join(' · ')}`;
 }
 
 /* ================================================================
@@ -888,9 +852,9 @@ document.getElementById('btnSend').addEventListener('click', async () => {
   const subject      = document.getElementById('fSubject').value.trim();
   const campaignName = document.getElementById('fCampaignName').value.trim() || subject;
   const bodyHtml     = quill?.root.innerHTML || '';
-  const schoolIds    = isAllSchools ? [] : [...selectedSchoolIds];
   const activeRecips = allRecipientsList.filter(r => !excludedEmails.has(r.email.toLowerCase()));
   const recipCount   = activeRecips.length;
+  const filterParams = Object.fromEntries(getFilterParams().entries());
 
   if (!subject)     return showBanner('error', 'Subject line is required.');
   if (!bodyHtml || quill?.getText().trim().length < 5)
@@ -918,10 +882,13 @@ document.getElementById('btnSend').addEventListener('click', async () => {
     const result = await apiPost('/send-campaign', {
       subject,
       bodyHtml,
-      schoolIds,
       campaignName,
-      sentBy: window.currentUser?.email || '',
+      sentBy:         window.currentUser?.email || '',
       excludedEmails: [...excludedEmails],
+      platform:       filterParams.platform || null,
+      role:           filterParams.role     || 'all',
+      subRole:        filterParams.subRole  || null,
+      schoolIds:      [],
     });
     showBanner('success', `Campaign queued! ${result.recipientCount} recipients · Campaign ID: ${result.campaignId.slice(0,8)}…`);
     // Reset form
