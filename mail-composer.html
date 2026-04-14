@@ -746,51 +746,61 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
 /* ================================================================
    PLATFORM CHIP STATE
    ================================================================ */
-let activePlatform = '';   // '' = all
+let activePlatform = '';
 let activeRole     = 'all';
 let activeSubRole  = '';
+// Full unfiltered list for the current platform/role/subrole selection
+let baseRecipientsList = [];
 
 window.togglePlatformChip = function(el) {
-  activePlatform = el.dataset.platform;
-  activeRole     = 'all';
-  activeSubRole  = '';
-  // Visual
-  document.querySelectorAll('.platform-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  // Show/hide accordion
-  const acc = document.getElementById('platAccordion');
-  if (activePlatform) {
-    acc.classList.add('open');
-    renderSubRoleChips();
-    // Reset role chips
-    document.querySelectorAll('.acc-chip[data-role]').forEach(c => {
-      c.classList.toggle('active', c.dataset.role === 'all');
-    });
+  const clicked = el.dataset.platform;
+  // Toggle: clicking the already-active chip deselects it (back to All)
+  if (clicked !== '' && activePlatform === clicked) {
+    activePlatform = '';
+    document.querySelectorAll('.platform-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.platform === '')
+    );
+    document.getElementById('platAccordion').classList.remove('open');
   } else {
-    acc.classList.remove('open');
+    activePlatform = clicked;
+    document.querySelectorAll('.platform-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.platform === clicked)
+    );
+    const acc = document.getElementById('platAccordion');
+    if (activePlatform) {
+      activeRole = 'all'; activeSubRole = '';
+      acc.classList.add('open');
+      renderSubRoleChips();
+      document.querySelectorAll('.acc-chip[data-role]').forEach(c =>
+        c.classList.toggle('active', c.dataset.role === 'all')
+      );
+    } else {
+      acc.classList.remove('open');
+    }
   }
-  loadFilteredRecipients();
+  activeRole = 'all'; activeSubRole = '';
+  fetchBaseRecipients();
 };
 
 window.toggleAccChip = function(el, type) {
-  const group = type === 'role' ? '[data-role]' : '[data-subrole]';
-  el.closest('.plat-acc-chips').querySelectorAll(group).forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
   if (type === 'role') {
+    document.querySelectorAll('.acc-chip[data-role]').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
     activeRole    = el.dataset.role;
     activeSubRole = '';
-    // Reset subrole chips
     document.querySelectorAll('[data-subrole]').forEach(c => c.classList.remove('active'));
   } else {
-    // Toggle subrole (click same = deselect)
+    // Toggle: same subrole click = deselect
     if (activeSubRole === el.dataset.subrole) {
       activeSubRole = '';
       el.classList.remove('active');
     } else {
+      document.querySelectorAll('[data-subrole]').forEach(c => c.classList.remove('active'));
       activeSubRole = el.dataset.subrole;
+      el.classList.add('active');
     }
   }
-  loadFilteredRecipients();
+  fetchBaseRecipients();
 };
 
 function renderSubRoleChips() {
@@ -800,7 +810,7 @@ function renderSubRoleChips() {
   if (!options.length) { row.style.display = 'none'; return; }
   row.style.display = '';
   chips.innerHTML = options.map(o =>
-    `<span class="acc-chip${activeSubRole === o.value ? ' active' : ''}" data-subrole="${escAttr(o.value)}" onclick="toggleAccChip(this,'subrole')">${escHtml(o.label)}</span>`
+    `<span class="acc-chip" data-subrole="${escAttr(o.value)}" onclick="toggleAccChip(this,'subrole')">${escHtml(o.label)}</span>`
   ).join('');
 }
 
@@ -811,8 +821,33 @@ function setupQuickSearch() {
   let timer;
   document.getElementById('recipQuickSearch').addEventListener('input', function() {
     clearTimeout(timer);
-    timer = setTimeout(() => loadFilteredRecipients(), 300);
+    timer = setTimeout(() => applySearchFilter(), 200);
   });
+}
+
+function applySearchFilter() {
+  const q = document.getElementById('recipQuickSearch').value.trim().toLowerCase();
+  const filtered = q
+    ? baseRecipientsList.filter(r =>
+        r.name?.toLowerCase().includes(q) || r.email.toLowerCase().includes(q)
+      )
+    : baseRecipientsList;
+  updateRecipientDisplay(filtered);
+  updateFilterSummary(filtered.length);
+}
+
+function updateAutoComplete(list) {
+  let dl = document.getElementById('recipSuggestions');
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = 'recipSuggestions';
+    document.getElementById('recipQuickSearch').setAttribute('list', 'recipSuggestions');
+    document.getElementById('recipQuickSearch').after(dl);
+  }
+  dl.innerHTML = list.slice(0, 80).map(r => {
+    const label = r.name ? `${r.name} (${r.email})` : r.email;
+    return `<option value="${escHtml(r.name || r.email)}" label="${escHtml(r.email)}">`;
+  }).join('');
 }
 
 /* ================================================================
@@ -843,29 +878,27 @@ async function loadAllCounts() {
 }
 
 /* ================================================================
-   RECIPIENTS
+   RECIPIENTS — two-step:
+   1. fetchBaseRecipients: API call with platform/role/subrole filters → baseRecipientsList
+   2. applySearchFilter: client-side name/email filter on baseRecipientsList
    ================================================================ */
-async function loadFilteredRecipients() {
+async function fetchBaseRecipients() {
   document.getElementById('recipCount').textContent = '…';
   document.getElementById('filterSummary').textContent = 'Loading…';
   try {
     const params = getFilterParams();
     const data   = await apiGet('/recipients?' + params.toString());
-    let recips   = data.recipients || [];
-
-    // Quick search client-side filter
-    const q = document.getElementById('recipQuickSearch').value.trim().toLowerCase();
-    if (q) recips = recips.filter(r =>
-      r.name?.toLowerCase().includes(q) || r.email.toLowerCase().includes(q)
-    );
-
-    updateRecipientDisplay(recips);
-    updateFilterSummary(recips.length);
+    baseRecipientsList = data.recipients || [];
+    updateAutoComplete(baseRecipientsList);
+    applySearchFilter(); // applies search on top, updates display + counter
   } catch (err) {
-    console.error('loadFilteredRecipients error:', err);
+    console.error('fetchBaseRecipients error:', err);
     document.getElementById('filterSummary').textContent = 'Could not load recipients.';
   }
 }
+
+// Keep alias for authReady call
+const loadFilteredRecipients = fetchBaseRecipients;
 
 function updateFilterSummary(count) {
   const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
@@ -895,10 +928,15 @@ document.getElementById('fSubject').addEventListener('input', function() {
    FORM VALIDATION
    ================================================================ */
 function validateForm() {
-  const subject    = document.getElementById('fSubject').value.trim();
-  const hasText    = quill && quill.getText().trim().length > 5;
+  const subject     = document.getElementById('fSubject').value.trim();
+  const hasText     = quill && quill.getText().trim().length > 5;
+  // activeCount = currently displayed list minus manually excluded
   const activeCount = allRecipientsList.filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
   document.getElementById('recipCount').textContent = activeCount;
+  document.getElementById('brRegistered').textContent =
+    allRecipientsList.filter(r => r.source === 'registered' && !excludedEmails.has(r.email.toLowerCase())).length;
+  document.getElementById('brManual').textContent =
+    allRecipientsList.filter(r => r.source === 'manual' && !excludedEmails.has(r.email.toLowerCase())).length;
   document.getElementById('btnSend').disabled = !(subject && hasText && activeCount > 0);
 }
 
@@ -980,7 +1018,8 @@ document.getElementById('btnSend').addEventListener('click', async () => {
   const subject      = document.getElementById('fSubject').value.trim();
   const campaignName = document.getElementById('fCampaignName').value.trim() || subject;
   const bodyHtml     = quill?.root.innerHTML || '';
-  const activeRecips = allRecipientsList.filter(r => !excludedEmails.has(r.email.toLowerCase()));
+  // Use baseRecipientsList (platform/role filtered, before search) so send isn't limited by search text
+  const activeRecips = baseRecipientsList.filter(r => !excludedEmails.has(r.email.toLowerCase()));
   const recipCount   = activeRecips.length;
   const filterParams = Object.fromEntries(getFilterParams().entries());
 
