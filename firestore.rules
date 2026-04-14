@@ -665,6 +665,44 @@ service cloud.firestore {
       allow write: if false; // Admin SDK only
     }
 
+    // -- competency_evidence (Teacher & Admin evidence submissions) --
+    // Create:  the owner (any authorized teacher or academic user)
+    // Read:    owner reads their own; central_admin reads all
+    // Update:  central_admin only (to set status, reviewerNote, reviewedBy)
+    // Delete:  central_admin only
+    match /competency_evidence/{evId} {
+      allow create: if isAuthorized()
+                    && request.resource.data.uid == request.auth.uid;
+      allow read:   if isAdmin()
+                    || (isAuthorized() && resource.data.uid == request.auth.uid);
+      allow list:   if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // -- user_competencies (Per-user earned competency tracking) --
+    // Doc ID = uid
+    // User can read/write their own doc (for material done tracking).
+    // Admin can read/write any doc (for approving earned levels).
+    match /user_competencies/{uid} {
+      allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // -- competency_certificates (Issued certificates) -------
+    // Create:  central_admin only (issued via competency-admin.html)
+    // Read:    owner reads their own; central_admin reads all
+    // Update:  central_admin only (revoke flag)
+    // Delete:  central_admin only
+    match /competency_certificates/{certId} {
+      allow create: if isAdmin();
+      allow read:   if isAdmin()
+                    || (isAuthorized() && resource.data.uid == request.auth.uid);
+      allow list:   if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     // -- topics (message board) ------------------------------
     match /topics/{topicId} {
       allow read:   if isAuthorized();
