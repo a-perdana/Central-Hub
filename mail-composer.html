@@ -401,7 +401,7 @@
       </p>
 
       <div class="all-schools-row" id="allSchoolsRow" onclick="toggleAllSchools()">
-        <input type="checkbox" id="chkAllSchools" checked onchange="toggleAllSchools()" onclick="event.stopPropagation()">
+        <input type="checkbox" id="chkAllSchools" checked onclick="event.stopPropagation()">
         <label class="all-schools-label" for="chkAllSchools">All Schools</label>
         <span class="all-schools-sub" id="totalRecipLabel">Loading…</span>
       </div>
@@ -730,10 +730,11 @@ async function loadAllRecipientsAndCounts() {
    SCHOOL TOGGLE
    ================================================================ */
 window.toggleAllSchools = function() {
+  // If already all-schools, clicking again does nothing (stays selected)
+  // If specific schools were selected, revert to all
   isAllSchools = true;
   selectedSchoolIds.clear();
   document.getElementById('chkAllSchools').checked = true;
-  // Uncheck all school chips
   schoolList.forEach(s => {
     const chk  = document.getElementById(`chk-${escAttr(s.id)}`);
     const chip = document.getElementById(`chip-${escAttr(s.id)}`);
@@ -767,7 +768,10 @@ window.toggleSchool = function(id) {
 };
 
 async function refreshSelectedRecipients() {
-  if (isAllSchools || selectedSchoolIds.size === 0) {
+  if (selectedSchoolIds.size === 0) {
+    // No specific school selected — fall back to all
+    isAllSchools = true;
+    document.getElementById('chkAllSchools').checked = true;
     loadAllRecipientsAndCounts();
     return;
   }
@@ -1140,16 +1144,15 @@ function updateRecipModalMeta() {
 
 function updateRecipientDisplay(recipients) {
   allRecipientsList = recipients;
-  excludedEmails    = new Set(); // reset exclusions on new load
+  excludedEmails    = new Set(); // reset exclusions when school filter changes
   const registered = recipients.filter(r => r.source === 'registered').length;
   const manual     = recipients.filter(r => r.source === 'manual').length;
   document.getElementById('recipCount').textContent    = recipients.length;
   document.getElementById('brRegistered').textContent  = registered;
   document.getElementById('brManual').textContent      = manual;
-  // Show view button once we have data
-  const show = recipients.length > 0;
-  document.getElementById('btnViewRecip').style.display   = show ? 'flex' : 'none';
-  document.getElementById('btnViewRecipSm').style.display = show ? 'flex' : 'none';
+  // Always show view buttons after first load (even if 0 from a specific school)
+  document.getElementById('btnViewRecip').style.display   = 'flex';
+  document.getElementById('btnViewRecipSm').style.display = 'flex';
   validateForm();
 }
 </script>
