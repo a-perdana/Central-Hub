@@ -92,6 +92,7 @@ const htmlFiles = [
   "notifications.html",
   "mail-composer.html",
   "library.html",
+  "network-health.html",
 ];
 
 htmlFiles.forEach((file) => {
