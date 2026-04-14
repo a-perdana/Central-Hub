@@ -83,6 +83,7 @@ const htmlFiles = [
   "certificate-verify.html",
   "checklist-admin.html",
   "weekly-checklist.html",
+  "feedback-management.html",
   "cambridge-calendar.html",
   "event-calendar.html",
   "curriculum-map.html",
