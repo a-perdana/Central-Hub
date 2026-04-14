@@ -171,6 +171,8 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 | `igcse_syllabus/{docId}`            | Syllabus reference items. **Doc ID format: `{subjectCode}_{syllabusCode}` e.g. `0580_C1.1`**. Fields: `code` (display code e.g. `C1.1`), `title`, `tier` (`Core`/`Extended`), `topicArea`, `description`, `content`, `notes`. Autocomplete in igcse-math-pacing must search `entry.code` field, NOT the doc ID. | central_admin |
 | `userProgress/{uid}`                | Per-teacher pacing progress written by Teachers Hub. Not read by Central Hub yet. | owner (teacher) |
 | `school_events/{eventId}`           | Partner Schools Event Calendar events. Fields: `schoolId`, `schoolName`, `title`, `category`, `date_start` (YYYY-MM-DD), `date_end`, `description`, `createdBy`, `createdAt`. | any central hub user |
+| `user_competencies/{uid}`           | Competency progress for Teachers Hub (`earned`, `matDone`) and Academic Hub (`earned_academic`, `matDone_academic`). Written by each platform, read by `competency-admin.html` for context. | owner (per platform) |
+| `competency_evidence/{docId}`       | Evidence submissions from Teachers Hub and Academic Hub for competency certification. Fields: `uid`, `platform` (`'teachers'`\|`'academic'`), `compId`, `compName`, `domain`, `level`, `description`, `fileUrl`, `fileName`, `status` (`'pending'`\|`'approved'`\|`'rejected'`), `reviewerNote`, `createdAt`, `updatedAt`. Reviewed via `competency-admin.html`. | owner (create), central_admin (update status/reviewerNote) |
 
 **Timestamp field:** always `createdAt` (serverTimestamp). Do not use `timestamp` — that was the legacy name.
 
@@ -250,6 +252,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `event-calendar.html`              | `/event-calendar`               | Partner Schools Event Calendar — school activities by month. All Central Hub users can add/edit/delete events. Firestore: `school_events` collection. |
 | `checklist-admin.html`             | `/checklist-admin`              | Weekly checklist template admin — sets tasks and essentials for all 8 platforms (teachers, subject_leader, academic_coordinator, school_principal, foundation_representative, cambridge_coordinator, director, coordinator). central_admin only. |
 | `weekly-checklist.html`            | `/weekly-checklist`             | Weekly checklist for Central Hub users — director and coordinator ch_sub_roles. Users see only their own tab(s); central_admin sees both and can add/edit/delete tasks inline. Firestore: `weekly_templates` (read), `weekly_progress` (read/write own), `weekly_essentials` (read). |
+| `competency-admin.html`            | `/competency-admin`             | Competency evidence review dashboard — central_admin reviews pending `competency_evidence` submissions from both Teachers Hub and Academic Hub. Approve/reject with reviewer notes. Reads `competency_evidence` collection filtered by `status === 'pending'`. |
 
 ---
 
