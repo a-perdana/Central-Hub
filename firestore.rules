@@ -76,6 +76,13 @@ service cloud.firestore {
       );
     }
 
+    function isTHAdmin() {
+      return isAuthorized() && (
+        userProfile().role_centralhub  == 'central_admin' ||
+        userProfile().role_teachershub == 'teachers_admin'
+      );
+    }
+
     function canAccessPlatform(platform) {
       return (
         (platform == 'centralhub'  && isCentralUser()) ||
@@ -249,10 +256,26 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // -- school_appraisals -----------------------------------
+    // -- school_appraisals (legacy handbook editor) ----------
     match /school_appraisals/{docId} {
       allow read:   if isAuthorized();
       allow write:  if isAdmin();
+    }
+
+    // -- school_appraisals_v2 (interactive 5-domain appraisal tool) --
+    // Read:   any Central Hub or Academic Hub user
+    // Create: central_admin only (creates the appraisal record for a school)
+    // Update: central_admin can update any field (review, recommendations);
+    //         academic_user/admin with schoolId match can update ratings/evidence/strengths/improvements
+    // Delete: central_admin only
+    match /school_appraisals_v2/{docId} {
+      allow read:   if isCentralUser() || isAcademicUser();
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+                    || (isAcademicUser()
+                        && resource.data.schoolId ==
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId);
+      allow delete: if isAdmin();
     }
 
     // -- teacher_appraisals ----------------------------------
@@ -687,6 +710,20 @@ service cloud.firestore {
     match /user_competencies/{uid} {
       allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // -- content_overrides_academic (Admin-edited reading text for Academic Hub) --
+    // Doc ID = "{compId}_{lvl}" e.g. "evsi-1_awareness"
+    match /content_overrides_academic/{docId} {
+      allow read:  if isAuthorized();
+      allow write: if isAHAdmin();
+    }
+
+    // -- content_overrides_teachers (Admin-edited reading text for Teachers Hub) --
+    // Doc ID = "{compId}_{lvl}" e.g. "smc-1_awareness"
+    match /content_overrides_teachers/{docId} {
+      allow read:  if isAuthorized();
+      allow write: if isTHAdmin();
     }
 
     // -- competency_certificates (Issued certificates) -------
