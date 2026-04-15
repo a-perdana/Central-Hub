@@ -243,6 +243,23 @@
     .evidence-hint-title { font-size: 0.75rem; color: var(--ink-3); font-weight: 500; margin-bottom: 5px; }
     .evidence-hints ul { padding-left: 16px; }
     .evidence-hints li { font-size: 0.75rem; color: var(--ink-3); line-height: 1.55; }
+    .expectations-block { margin-top: 10px; margin-bottom: 10px; }
+    .expectations-title { font-size: 0.75rem; color: var(--ink-3); font-weight: 500; margin-bottom: 5px; }
+    .expectations-block ul { padding-left: 16px; }
+    .expectations-block li { font-size: 0.75rem; color: var(--ink-2); line-height: 1.55; margin-bottom: 2px; }
+    .rsg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; margin-bottom: 14px; }
+    .rsg-item { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--paper); }
+    .rsg-item.rsg-1 { border-color: #fca5a5; background: #fff5f5; }
+    .rsg-item.rsg-2 { border-color: #fcd34d; background: #fffbeb; }
+    .rsg-item.rsg-3 { border-color: #6ee7b7; background: #f0fdf4; }
+    .rsg-item.rsg-4 { border-color: #93c5fd; background: #eff6ff; }
+    .rsg-num { font-size: 1rem; font-weight: 700; color: var(--ink); }
+    .rsg-label { font-size: 0.7rem; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
+    .rsg-desc { font-size: 0.68rem; color: var(--ink-3); line-height: 1.4; }
+    .rsg-guide { font-size: 0.68rem; color: var(--ink-2); line-height: 1.4; margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); font-style: italic; }
+    .ref-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .ref-pill-ch { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--paper); color: var(--ink-3); border: 1px solid var(--border); text-decoration: none; transition: background .15s, color .15s; }
+    .ref-pill-ch:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
     /* Domain overall score */
     .domain-score-summary {
@@ -808,7 +825,19 @@
         <div class="field-group">
           <label>Eduversal Coordinator Recommendations</label>
           <textarea data-overview-field="recommendations" style="min-height:80px;" placeholder="Recommendations for the school following review…">${a.recommendations || ''}</textarea>
-        </div>`;
+        </div>
+        ${FRAMEWORK.meta.references ? `
+        <div class="ref-row">
+          ${FRAMEWORK.meta.references.map(r => {
+            const name = r.name || r;
+            const url = r.url || null;
+            const label = name.match(/\(([^)]+)\)/)?.[1] || name.split(' ').slice(0,2).join(' ');
+            return url
+              ? `<a class="ref-pill-ch" href="${url}" target="_blank" rel="noopener" title="${name}">${label}</a>`
+              : `<span class="ref-pill-ch" title="${name}">${label}</span>`;
+          }).join('')}
+        </div>` : ''}
+        `;
     }
 
     function buildDomainPanel(domain, a, canEdit) {
@@ -827,6 +856,17 @@
         }).join('');
 
         const hintsHtml = aspect.evidence_examples.map(e => `<li>${e}</li>`).join('');
+        const expectHtml = aspect.expectations.map(e => `<li>${e}</li>`).join('');
+        const scaleCards = [1,2,3,4].map(v => {
+          const s = FRAMEWORK.meta.rating_scale[v];
+          const guide = aspect.rating_scale_guide?.[v];
+          return `<div class="rsg-item rsg-${v}">
+            <div class="rsg-num">${v}</div>
+            <div class="rsg-label">${s.label}</div>
+            <div class="rsg-desc">${s.description}</div>
+            ${guide ? `<div class="rsg-guide">${guide}</div>` : ''}
+          </div>`;
+        }).join('');
 
         return `
           <div class="aspect-card">
@@ -837,6 +877,12 @@
               </div>
             </div>
             <div class="aspect-body">
+              ${expectHtml ? `
+              <div class="expectations-block">
+                <div class="expectations-title">What is expected (${aspect.expectations.length} criteria):</div>
+                <ul>${expectHtml}</ul>
+              </div>` : ''}
+              <div class="rsg-grid">${scaleCards}</div>
               <div class="rating-label">Self-Assessment Rating</div>
               <div class="rating-options">${ratingBtns}</div>
               <div class="evidence-label">Evidence & Notes</div>
