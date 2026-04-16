@@ -281,10 +281,53 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // -- teacher_appraisals ----------------------------------
+    // -- teacher_appraisals (Formal Appraisal v2.0) ----------
+    // Create:  academic_admin or academic_user with school_principal/academic_coordinator/cambridge_coordinator sub-role
+    // Read:    the teacher who owns it (teacherUid == uid), any AH admin, any TH admin, central_admin
+    // Update:  appraiser (AH admin/sub-role) can update any field while status != finalised;
+    //          teacher can update teacherResponse + status (shared → acknowledged) only
+    // Delete:  central_admin only
     match /teacher_appraisals/{docId} {
-      allow read:   if isAuthorized();
-      allow write:  if isAdmin();
+      allow read: if isAdmin()
+                  || isAHAdmin()
+                  || isTeachersAdmin()
+                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid)
+                  || (isAcademicUser() && resource.data.appraiserUid == request.auth.uid);
+      allow create: if isAHAdmin()
+                    || (isAcademicUser()
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+      allow update: if isAdmin()
+                    || isAHAdmin()
+                    || (isAcademicUser()
+                        && resource.data.appraiserUid == request.auth.uid
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
+                    || (isTeachersUser()
+                        && resource.data.teacherUid == request.auth.uid
+                        && resource.data.status == 'shared'
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherResponse', 'status', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    // -- teacher_walkthroughs (Classroom Walkthrough v2.0) ---
+    // Create:  academic_admin, or academic_user with school_principal/academic_coordinator/cambridge_coordinator sub-role
+    // Read:    the teacher (teacherUid), appraiser (observerUid), AH admin, TH admin, central_admin
+    // Update:  observer who created it, or AH admin (within same academic year — no cross-year edits)
+    // Delete:  central_admin or AH admin only
+    match /teacher_walkthroughs/{docId} {
+      allow read: if isAdmin()
+                  || isAHAdmin()
+                  || isTeachersAdmin()
+                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid)
+                  || (isAcademicUser() && resource.data.observerUid == request.auth.uid);
+      allow create: if isAHAdmin()
+                    || (isAcademicUser()
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+      allow update: if isAdmin()
+                    || isAHAdmin()
+                    || (isAcademicUser()
+                        && resource.data.observerUid == request.auth.uid
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+      allow delete: if isAdmin() || isAHAdmin();
     }
 
     // -- ease_system -----------------------------------------
