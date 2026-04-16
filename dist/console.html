@@ -843,6 +843,7 @@
     <a href="https://academichub.eduversal.org" class="nav-link" id="navAcademicHub" target="_blank" rel="noopener">Academic Hub</a>
     <a href="https://teachershub.eduversal.org" class="nav-link" id="navTeachersHub" target="_blank" rel="noopener">Teachers Hub</a>
     <a href="kpi-admin" class="nav-link" id="navKpiAdmin">Performance</a>
+    <a href="competency-admin" class="nav-link" id="navCompetencyAdmin">Competency</a>
   </div>
 
   <button class="nav-hamburger" id="navHamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNavOverlay">
@@ -944,6 +945,7 @@
       <a href="staff"              class="mobile-nav-link" data-mob-page="staff">Staff</a>
       <a href="console"            class="mobile-nav-link" data-mob-page="console">User Console</a>
       <a href="kpi-admin"          class="mobile-nav-link" data-mob-page="kpi-admin">Performance</a>
+      <a href="competency-admin"   class="mobile-nav-link" data-mob-page="competency-admin">Competency Admin</a>
     </nav>
   </div>
 </div>
@@ -1372,8 +1374,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <hr class="drawer-divider" style="margin:8px 0 12px">
           <div style="font-size:0.72rem;font-weight:600;letter-spacing:.04em;color:var(--ink-3);text-transform:uppercase;margin-bottom:8px">Teaching Profile <span style="font-weight:400;text-transform:none;color:var(--ink-3);opacity:.6">(set by teacher)</span></div>
           <div class="form-group" style="margin-bottom:8px">
-            <label class="form-label">Subjects</label>
+            <label class="form-label">Cambridge Subjects</label>
             <div id="fieldSubjectsSummary" class="field-meta"></div>
+          </div>
+          <div class="form-group" id="nonCambridgeSummaryGroup" style="margin-bottom:8px;display:none">
+            <label class="form-label">Non-Cambridge Subjects</label>
+            <div id="fieldNonCambridgeSummary" class="field-meta"></div>
           </div>
           <div class="form-group" style="margin-bottom:8px">
             <label class="form-label">Curriculum Levels</label>
@@ -1910,33 +1916,50 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     populateSchoolIdSelect(u.schoolId || '');
 
     // Teaching profile summary (read-only — set by teacher in Teachers Hub)
-    const SUBJ_LABELS = { math:'Mathematics', biology:'Biology', chemistry:'Chemistry', physics:'Physics', english:'English', science:'Science' };
+    const CAMBRIDGE_SUBJ_LABELS = { math:'Mathematics', biology:'Biology', chemistry:'Chemistry', physics:'Physics', english:'English', science:'Science' };
+    const NON_CAMBRIDGE_SUBJ_LABELS = { religion:'Religion' };
+    const ALL_SUBJ_LABELS = { ...CAMBRIDGE_SUBJ_LABELS, ...NON_CAMBRIDGE_SUBJ_LABELS };
     const LEVEL_LABELS = { igcse:'IGCSE (Year 9–10)', checkpoint:'Checkpoint (Year 7–8)', asalevel:'AS & A Level (Year 11–12)' };
+    function _subjLabel(sv) {
+      if (ALL_SUBJ_LABELS[sv]) return ALL_SUBJ_LABELS[sv];
+      // Custom "other" subjects — capitalise each word
+      return sv.split(/[\s_-]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
     const subjects = Array.isArray(u.subjects) ? u.subjects : [];
+    const cambridgeSubjects    = subjects.filter(s =>  CAMBRIDGE_SUBJ_LABELS[s]);
+    const nonCambridgeSubjects = subjects.filter(s => !CAMBRIDGE_SUBJ_LABELS[s]);
     const levels   = Array.isArray(u.classes)  ? u.classes  : [];
     const summaryEl = document.getElementById('teachingProfileSummary');
     if (subjects.length || levels.length || u.school) {
       summaryEl.style.display = '';
       const subjEl = document.getElementById('fieldSubjectsSummary');
-      subjEl.innerHTML = subjects.length
-        ? subjects.map(s => `<span class="tp-chip">${SUBJ_LABELS[s] || s}</span>`).join('')
+      subjEl.innerHTML = cambridgeSubjects.length
+        ? cambridgeSubjects.map(s => `<span class="tp-chip">${_subjLabel(s)}</span>`).join('')
         : '<span style="color:var(--ink-3);font-size:0.82rem">— not set —</span>';
+      const nonCamGroup = document.getElementById('nonCambridgeSummaryGroup');
+      const nonCamEl    = document.getElementById('fieldNonCambridgeSummary');
+      if (nonCambridgeSubjects.length) {
+        nonCamGroup.style.display = '';
+        nonCamEl.innerHTML = nonCambridgeSubjects.map(s => `<span class="tp-chip">${_subjLabel(s)}</span>`).join('');
+      } else {
+        nonCamGroup.style.display = 'none';
+      }
       const lvlEl = document.getElementById('fieldLevelsSummary');
       lvlEl.innerHTML = levels.length
         ? levels.map(l => `<span class="tp-chip">${LEVEL_LABELS[l] || l}</span>`).join('')
         : '<span style="color:var(--ink-3);font-size:0.82rem">— not set —</span>';
       const clsEl = document.getElementById('fieldClassesSummary');
       clsEl.innerHTML = '';
-      if (levels.length && subjects.length) {
+      if (levels.length && cambridgeSubjects.length) {
         levels.forEach(lv => {
-          subjects.forEach(sv => {
+          cambridgeSubjects.forEach(sv => {
             const key = `${lv}_${sv}_classes`;
             const cls = Array.isArray(u[key]) ? u[key] : [];
             if (cls.length) {
               const row = document.createElement('div');
               row.className = 'tp-classes-row form-group';
               row.style.marginBottom = '4px';
-              row.innerHTML = `<label class="form-label" style="margin-bottom:4px">${LEVEL_LABELS[lv]||lv} — ${SUBJ_LABELS[sv]||sv}</label><div class="field-meta">${cls.map(c=>`<span class="tp-chip">${esc(c)}</span>`).join('')}</div>`;
+              row.innerHTML = `<label class="form-label" style="margin-bottom:4px">${LEVEL_LABELS[lv]||lv} — ${_subjLabel(sv)}</label><div class="field-meta">${cls.map(c=>`<span class="tp-chip">${esc(c)}</span>`).join('')}</div>`;
               clsEl.appendChild(row);
             }
           });
