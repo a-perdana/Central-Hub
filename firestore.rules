@@ -304,7 +304,32 @@ service cloud.firestore {
                     || (isTeachersUser()
                         && resource.data.teacherUid == request.auth.uid
                         && resource.data.status == 'shared'
-                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherResponse', 'status', 'updatedAt']));
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherResponse', 'status', 'updatedAt']))
+                    || (isTeachersUser()
+                        && resource.data.teacherUid == request.auth.uid
+                        && resource.data.status == 'finalised'
+                        && !resource.data.disputed
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['disputed', 'disputeReason', 'disputedAt', 'disputeStatus']));
+      allow delete: if isAdmin();
+    }
+
+    // -- teacher_self_appraisals (Teacher Self-Appraisal) -----
+    // Create/update: the teacher themselves (uid match), draft or submitted
+    // Read:          the teacher, any AH admin/appraiser sub-role, TH admin, central_admin
+    // Delete:        central_admin only
+    match /teacher_self_appraisals/{docId} {
+      allow read: if isAdmin()
+                  || isAHAdmin()
+                  || isTeachersAdmin()
+                  || (isAcademicUser() && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
+                  || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && (isTeachersUser() || isTeachersAdmin());
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && resource.data.status != 'submitted'
+                    && (isTeachersUser() || isTeachersAdmin());
       allow delete: if isAdmin();
     }
 
