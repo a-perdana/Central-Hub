@@ -794,6 +794,29 @@ service cloud.firestore {
       allow write: if isAHAdmin();
     }
 
+    // -- calibration_sessions (Appraiser IRR calibration — Academic Hub) --
+    // Doc ID: {uid}_{year}  e.g. "abc123_2025"
+    // Read:   owner reads their own; academic_admin reads all (leaderboard)
+    // Write:  owner only (setDoc with merge)
+    match /calibration_sessions/{docId} {
+      allow read:  if isAHAdmin()
+                   || (isSignedIn() && isAcademicUser() && resource.data.uid == request.auth.uid);
+      allow list:  if isAHAdmin();
+      allow write: if isSignedIn() && isAcademicUser()
+                   && request.resource.data.uid == request.auth.uid;
+    }
+
+    // -- calibration_group_sessions (Real-time group calibration sessions) --
+    // Doc ID: 6-char session code (random)
+    // Read:   any Academic Hub user (to join by code)
+    // Create: any Academic Hub user (facilitator)
+    // Update: any Academic Hub user (join as participant, submit scores)
+    match /calibration_group_sessions/{sessionCode} {
+      allow read:   if isSignedIn() && isAcademicUser();
+      allow create: if isSignedIn() && isAcademicUser();
+      allow update: if isSignedIn() && isAcademicUser();
+    }
+
     // -- topics (message board) ------------------------------
     match /topics/{topicId} {
       allow read:   if isAuthorized();
