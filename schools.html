@@ -655,7 +655,7 @@
               <span style="font-size:0.9rem;font-weight:600;color:var(--ink)">${esc(c.name)}</span>
               <span style="font-size:0.75rem;color:var(--ink-3);margin-left:8px">Grade ${esc(String(c.grade))} · ${esc(c.section)}</span>
             </div>
-            ${isAdmin ? `<button onclick="deleteSchoolClass('${s.id}','${c.id}')" style="font-size:0.78rem;color:#dc2626;background:none;border:1px solid #fecaca;border-radius:5px;padding:3px 8px;cursor:pointer">Delete</button>` : ''}
+            ${isAdmin ? `<button onclick="deleteSchoolClass(this,'${s.id}','${c.id}')" data-confirming="false" style="font-size:0.78rem;color:#dc2626;background:none;border:1px solid #fecaca;border-radius:5px;padding:3px 8px;cursor:pointer">Delete</button>` : ''}
           </div>`).join('');
       };
       el.innerHTML = `
@@ -695,11 +695,28 @@
           finally { btn.disabled = false; btn.textContent = 'Add Class'; }
         });
 
-        window.deleteSchoolClass = async (schoolId, classId) => {
-          const { deleteDoc: del, doc: fDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-          await del(fDoc(db, 'schools', schoolId, 'classes', classId));
-          await loadClasses();
-          renderClassList();
+        window.deleteSchoolClass = async (btn, schoolId, classId) => {
+          if (btn.dataset.confirming === 'true') {
+            const { deleteDoc: del, doc: fDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            await del(fDoc(db, 'schools', schoolId, 'classes', classId));
+            await loadClasses();
+            renderClassList();
+          } else {
+            btn.dataset.confirming = 'true';
+            btn.textContent = 'Confirm?';
+            btn.style.background = '#dc2626';
+            btn.style.color = '#fff';
+            btn.style.borderColor = '#dc2626';
+            setTimeout(() => {
+              if (btn.dataset.confirming === 'true') {
+                btn.dataset.confirming = 'false';
+                btn.textContent = 'Delete';
+                btn.style.background = 'none';
+                btn.style.color = '#dc2626';
+                btn.style.borderColor = '#fecaca';
+              }
+            }, 3000);
+          }
         };
       }
     } catch (err) {
