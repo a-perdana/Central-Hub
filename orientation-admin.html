@@ -148,10 +148,40 @@
     }
     .modal-err.on { display: block; }
 
+    /* ── REG DETAIL MODAL ── */
+    .reg-info-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;
+    }
+    .reg-info-card {
+      background: var(--paper, #faf9f7); border: 1px solid var(--border, #e0ddd6);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .reg-info-card.full { grid-column: 1 / -1; }
+    .reg-info-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+      color: var(--ink-3, #8888a8); margin-bottom: 4px;
+    }
+    .reg-info-value {
+      font-size: 14px; color: var(--ink, #1c1c2e); font-weight: 500; word-break: break-word;
+    }
+    .reg-info-value a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .reg-info-value a:hover { text-decoration: underline; }
+
+    .reg-section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+      color: var(--ink-3, #8888a8); margin: 20px 0 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .reg-section-label::after {
+      content: ''; flex: 1; height: 1px; background: var(--border, #e0ddd6);
+    }
+
     /* ── QUIZ ANSWER LIST ── */
-    .qa-item { margin-bottom: 14px; }
-    .qa-q { font-size: 13px; font-weight: 600; color: var(--ink-2, #44445a); margin-bottom: 4px; }
-    .qa-a { font-size: 14px; color: var(--ink, #1c1c2e); padding-left: 10px; border-left: 3px solid var(--accent-2); }
+    .qa-item {
+      margin-bottom: 12px; background: var(--paper, #faf9f7);
+      border: 1px solid var(--border, #e0ddd6); border-radius: 10px; padding: 12px 14px;
+    }
+    .qa-q { font-size: 12px; font-weight: 700; color: var(--ink-3, #8888a8); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+    .qa-a { font-size: 14px; color: var(--ink, #1c1c2e); font-weight: 500; border-left: 3px solid var(--accent); padding-left: 10px; }
 
     /* ── SPINNER / EMPTY ── */
     .spinner-wrap { text-align: center; padding: 48px; color: var(--ink-3, #8888a8); }
@@ -316,9 +346,13 @@
 
 <!-- ── REGISTRATION DETAIL MODAL ── -->
 <div class="modal-overlay" id="reg-modal">
-  <div class="modal-box" style="max-width:620px">
-    <div class="modal-head">
-      <h3 id="reg-modal-name">Registration</h3>
+  <div class="modal-box" style="max-width:640px">
+    <div class="modal-head" style="gap:12px">
+      <div id="reg-modal-avatar" style="width:40px;height:40px;border-radius:50%;background:var(--accent-2);color:var(--accent);font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <h3 id="reg-modal-name" style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Registration</h3>
+        <div id="reg-modal-sub" style="font-size:12px;color:var(--ink-3,#8888a8);margin-top:1px"></div>
+      </div>
       <button class="modal-close" onclick="closeModal('reg-modal')">×</button>
     </div>
     <div class="modal-body" id="reg-modal-body"></div>
@@ -474,26 +508,59 @@
 
     const quizHtml = (r.quizAnswers || []).map((qa, i) => `
       <div class="qa-item">
-        <div class="qa-q">Q${i+1}: ${esc(qa.question)}</div>
+        <div class="qa-q">Q${i+1} — ${esc(qa.question)}</div>
         <div class="qa-a">${esc(qa.answerText || '—')}</div>
-      </div>`).join('') || '<p style="color:var(--ink-3)">No quiz answers recorded.</p>';
+      </div>`).join('') || '<div class="qa-item"><div class="qa-a" style="border:none;padding:0;color:var(--ink-3)">No quiz answers recorded.</div></div>';
 
     const cvLink = r.cvLink
-      ? `<a href="${esc(r.cvLink)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Open CV →</a>`
-      : '—';
+      ? `<a href="${esc(r.cvLink)}" target="_blank" rel="noopener noreferrer">Open CV →</a>`
+      : '<span style="color:var(--ink-3)">—</span>';
 
-    document.getElementById('reg-modal-name').textContent = r.fullName;
+    const statusColors = { reviewed: '#059669', rejected: '#dc2626', pending: '#b07800' };
+    const statusBg     = { reviewed: '#d1fae5', rejected: '#fee2e2', pending: '#fef8e7' };
+    const st = r.status || 'pending';
+    const statusBadge = `<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;background:${statusBg[st]};color:${statusColors[st]}">${st.charAt(0).toUpperCase()+st.slice(1)}</span>`;
+
+    const initials = (r.fullName || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+    document.getElementById('reg-modal-avatar').textContent = initials;
+    document.getElementById('reg-modal-name').textContent  = r.fullName;
+    document.getElementById('reg-modal-sub').textContent   = `${r.school || ''}${r.subjects ? ' · ' + r.subjects : ''}`;
     document.getElementById('reg-modal-body').innerHTML = `
-      <table style="width:100%;font-size:14px;margin-bottom:20px">
-        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600;width:130px">Email</td><td>${esc(r.email)}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">School</td><td>${esc(r.school)}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Subject(s)</td><td>${esc(r.subjects)}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Level(s)</td><td>${esc(r.level)}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">CV</td><td>${cvLink}</td></tr>
-        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Submitted</td><td>${date}</td></tr>
-        ${r.note ? `<tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Note</td><td>${esc(r.note)}</td></tr>` : ''}
-      </table>
-      <p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);margin-bottom:12px">Competency Answers</p>
+      <div class="reg-info-grid">
+        <div class="reg-info-card full">
+          <div class="reg-info-label">Email</div>
+          <div class="reg-info-value">${esc(r.email)}</div>
+        </div>
+        <div class="reg-info-card">
+          <div class="reg-info-label">School</div>
+          <div class="reg-info-value">${esc(r.school)}</div>
+        </div>
+        <div class="reg-info-card">
+          <div class="reg-info-label">Subject(s)</div>
+          <div class="reg-info-value">${esc(r.subjects)}</div>
+        </div>
+        <div class="reg-info-card full">
+          <div class="reg-info-label">Level(s)</div>
+          <div class="reg-info-value">${esc(r.level)}</div>
+        </div>
+        <div class="reg-info-card">
+          <div class="reg-info-label">Submitted</div>
+          <div class="reg-info-value">${date}</div>
+        </div>
+        <div class="reg-info-card">
+          <div class="reg-info-label">Status</div>
+          <div class="reg-info-value">${statusBadge}</div>
+        </div>
+        <div class="reg-info-card">
+          <div class="reg-info-label">CV</div>
+          <div class="reg-info-value">${cvLink}</div>
+        </div>
+        ${r.note ? `<div class="reg-info-card">
+          <div class="reg-info-label">Note</div>
+          <div class="reg-info-value">${esc(r.note)}</div>
+        </div>` : ''}
+      </div>
+      <div class="reg-section-label">Competency Answers</div>
       ${quizHtml}
     `;
     showModal('reg-modal');
