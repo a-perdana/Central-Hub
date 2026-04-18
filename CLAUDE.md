@@ -2,7 +2,15 @@
 
 ## What This App Is
 
-CentralHub is the super-admin control panel for the Eduversal platform. `central_user` and `central_admin` roles can access it; only `central_admin` sees management actions. It manages schools, staff, announcements, documents, and the message board across the whole platform. It is a **vanilla HTML/CSS/JS application** (no React, no bundler framework). Pages are plain `.html` files with inline scripts that load Firebase via CDN.
+Central Hub is the **Eduversal HQ operations portal** — the nerve centre for the entire partner school network. Its users are Eduversal headquarters staff:
+
+- **Directors** — Primary Schools Director and Secondary Schools Director
+- **Subject Specialists** — Math, English, Bahasa, Physics, Chemistry, Biology, Religion
+- **Coordinators** — cross-functional HQ coordinators
+
+Key responsibilities managed here: partner school profiles and performance, staff database, platform-wide announcements, document repository, activity/project tracking, EASE assessment coordination, appraisal visit management, academic calendar, weekly checklists for HQ roles, competency evidence review (for all platforms), and full user/role management via the Console.
+
+Access is restricted to `@eduversal.org` email addresses. `central_user` can read and participate; `central_admin` has full management access. It is a **vanilla HTML/CSS/JS application** (no React, no bundler framework). Pages are plain `.html` files with inline scripts that load Firebase via CDN.
 
 **Deployment:** Vercel (build output in `dist/`).
 
