@@ -307,9 +307,63 @@
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast.error { background: #dc2626; }
 
+    /* ── VIEW SWITCHER ── */
+    .view-switcher {
+      display: flex; gap: 4px; margin-bottom: 24px;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 4px; width: fit-content;
+      box-shadow: var(--shadow-sm);
+    }
+    .view-btn {
+      padding: 8px 20px; border-radius: 7px; border: none;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600;
+      color: var(--ink-3); background: transparent; cursor: pointer; transition: all 0.18s;
+    }
+    .view-btn.active { background: var(--accent); color: #fff; }
+    .view-btn:hover:not(.active) { background: var(--paper-2); color: var(--ink); }
+
+    /* ── NETWORK OVERVIEW ── */
+    .overview-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px; margin-bottom: 28px;
+    }
+    .platform-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm);
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .platform-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .platform-card-name { font-size: 0.875rem; font-weight: 700; color: var(--ink); }
+    .platform-card-pct {
+      font-size: 1.4rem; font-weight: 900; line-height: 1;
+    }
+    .pct-green  { color: var(--green); }
+    .pct-yellow { color: #d97706; }
+    .pct-red    { color: #dc2626; }
+
+    .mini-bar { height: 8px; background: var(--paper-2); border-radius: 4px; overflow: hidden; }
+    .mini-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+
+    .card-stats { display: flex; gap: 16px; }
+    .card-stat { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+    .card-stat span { color: var(--ink); font-weight: 700; }
+
+    /* lagging users table */
+    .lagging-panel { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+    .lagging-panel .panel-head h3 { font-size: 0.875rem; }
+    .lagging-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 8px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .lagging-badge.not-started { background: var(--paper-2); color: var(--ink-3); }
+    .lagging-badge.partial     { background: #fef9c3; color: #a16207; }
+
+    .overview-empty { text-align: center; padding: 48px; color: var(--ink-3); font-size: 0.875rem; }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
       .two-col { grid-template-columns: 1fr; }
+      .overview-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 768px) {
       .page-wrap { padding: 20px 16px 56px; }
@@ -318,6 +372,7 @@
       .hero-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
       .hero-tabs::-webkit-scrollbar { display: none; }
       .hero-tabs .plat-tab { padding: 11px 16px; font-size: 0.78rem; }
+      .overview-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 520px) {
     }
@@ -372,6 +427,72 @@
 
   <!-- Main -->
   <div id="mainContent" style="display:none">
+
+    <!-- View Switcher -->
+    <div class="view-switcher">
+      <button class="view-btn active" id="viewTemplateBtn" onclick="switchView('template')">Template Admin</button>
+      <button class="view-btn" id="viewOverviewBtn" onclick="switchView('overview')">Network Overview</button>
+    </div>
+
+    <!-- ── NETWORK OVERVIEW VIEW ── -->
+    <div id="overviewView" style="display:none">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap">
+        <div>
+          <h2 style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:4px">Completion Overview — Week <span id="ovWeekLabel">—</span></h2>
+          <p style="font-size:0.78rem;color:var(--ink-3)">Live progress for all 8 platforms this week.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <select class="week-jump-select" id="ovWeekSelect" title="Week" style="font-size:0.78rem"></select>
+          <button class="btn btn-secondary btn-sm" id="ovRefreshBtn">Refresh</button>
+        </div>
+      </div>
+
+      <div id="ovLoading" class="loading-state" style="padding:40px">
+        <div class="spinner"></div> Loading network data…
+      </div>
+
+      <div id="ovContent" style="display:none">
+        <!-- Platform completion cards -->
+        <div class="overview-grid" id="ovGrid"></div>
+
+        <!-- Lagging users table -->
+        <div class="lagging-panel">
+          <div class="panel-head">
+            <h3>Users Needing Attention <span id="laggingCountBadge" style="font-size:11px;font-weight:700;color:var(--ink-3);margin-left:6px"></span></h3>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="search" id="laggingSearch" placeholder="Search…"
+                style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:var(--ink);background:var(--paper);outline:none;width:160px"
+                oninput="renderLagging()">
+              <select id="laggingPlatFilter" style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:var(--ink);background:var(--paper);outline:none" onchange="renderLagging()">
+                <option value="">All platforms</option>
+              </select>
+            </div>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <div id="laggingEmpty" class="overview-empty" style="display:none">All users are on track this week.</div>
+            <div class="progress-table-wrap" id="laggingTableWrap" style="display:none">
+              <table class="prog-tbl" id="laggingTable">
+                <thead>
+                  <tr>
+                    <th style="width:28%">Name</th>
+                    <th style="width:18%">Platform</th>
+                    <th style="width:10%">Done</th>
+                    <th>Progress</th>
+                    <th style="width:14%">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="laggingBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /overviewView -->
+
+    <!-- ── TEMPLATE ADMIN VIEW ── -->
+    <div id="templateView">
 
     <!-- Week Navigator -->
     <div class="week-nav">
@@ -438,7 +559,8 @@
     <div class="panel">
       <div class="panel-head">
         <h3>Staff Progress</h3>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="openSeedModal()" title="Load starter tasks for this platform &amp; week">Seed Tasks</button>
           <input type="search" id="progressSearch" placeholder="Search name…"
             style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--ink);background:var(--paper);outline:none;width:180px;"
             oninput="filterProgress()">
@@ -475,9 +597,31 @@
 
     </div><!-- /staff progress panel -->
 
+    </div><!-- /templateView -->
+
   </div><!-- /mainContent -->
 
 </div><!-- /page-wrap -->
+
+<!-- ── SEED MODAL ── -->
+<div class="modal-bg" id="seedModal">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-head">
+      <h3>Seed Starter Tasks</h3>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.82rem;color:var(--ink-2);margin-bottom:16px;line-height:1.5">
+        Load a curated set of <strong>starter tasks</strong> for <strong id="seedPlatLabel">this platform</strong>
+        into week <strong id="seedWeekLabel">—</strong>. Existing tasks will be <em>replaced</em>.
+      </p>
+      <p id="seedPreviewCount" style="font-size:0.78rem;color:var(--ink-3)">Loading preview…</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSeedModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSeed()">Load Tasks</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── TASK MODAL ── -->
 <div class="modal-bg" id="taskModal">
@@ -1072,6 +1216,375 @@ document.getElementById('taskModal').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeTaskModal();
+});
+
+// ── View Switcher ─────────────────────────────────────────────────
+let currentView = 'template';
+
+function switchView(view) {
+  currentView = view;
+  document.getElementById('templateView').style.display  = view === 'template'  ? '' : 'none';
+  document.getElementById('overviewView').style.display  = view === 'overview'  ? '' : 'none';
+  document.getElementById('viewTemplateBtn').classList.toggle('active', view === 'template');
+  document.getElementById('viewOverviewBtn').classList.toggle('active', view === 'overview');
+  if (view === 'overview') loadOverview();
+}
+window.switchView = switchView;
+
+// ── Network Overview ──────────────────────────────────────────────
+const ALL_PLATFORMS = [
+  { key: 'teachers',                  label: 'Subject Teacher',            color: '#38bdf8' },
+  { key: 'subject_leader',            label: 'Subject Leader',             color: '#a78bfa' },
+  { key: 'academic_coordinator',      label: 'Academic Coordinator',       color: '#34d399' },
+  { key: 'school_principal',          label: 'School Principal',           color: '#fbbf24' },
+  { key: 'foundation_representative', label: 'Foundation Representative',  color: '#fb7185' },
+  { key: 'cambridge_coordinator',     label: 'Cambridge Coordinator',      color: '#2dd4bf' },
+  { key: 'director',                  label: 'Director',                   color: '#818cf8' },
+  { key: 'coordinator',               label: 'Coordinator (CH)',           color: '#fb923c' },
+];
+
+let ovWeek = 1;
+let laggingAll = [];
+
+async function loadOverview() {
+  // Sync week select with overview
+  const ovSel = document.getElementById('ovWeekSelect');
+  if (!ovSel.options.length) {
+    for (let w = 1; w <= TOTAL_WEEKS; w++) {
+      const opt = document.createElement('option');
+      opt.value = w; opt.textContent = `Wk ${w}  (${getWeekDates(w)})`;
+      ovSel.appendChild(opt);
+    }
+    ovSel.value = getWeekNumber(new Date());
+    ovSel.addEventListener('change', () => { ovWeek = Number(ovSel.value); loadOverview(); });
+    document.getElementById('ovRefreshBtn').addEventListener('click', loadOverview);
+  }
+
+  ovWeek = Number(ovSel.value);
+  document.getElementById('ovWeekLabel').textContent = ovWeek;
+  document.getElementById('ovLoading').style.display  = '';
+  document.getElementById('ovContent').style.display  = 'none';
+
+  const db = window.db;
+
+  // 1. Load all users
+  let allUsers = [];
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    snap.forEach(d => allUsers.push({ uid: d.id, ...d.data() }));
+  } catch (e) { console.error(e); }
+
+  // 2. For each platform, get tasks + progress in parallel
+  const weekPad = String(ovWeek).padStart(2, '0');
+  const templateIds = ALL_PLATFORMS.map(p => `${ACADEMIC_YEAR}_w${weekPad}_${p.key}`);
+
+  const templateSnaps = await Promise.all(
+    templateIds.map(id => getDoc(doc(db, 'weekly_templates', id)))
+  );
+
+  // Map platform key → tasks array
+  const platformTasks = {};
+  ALL_PLATFORMS.forEach((p, i) => {
+    const snap = templateSnaps[i];
+    platformTasks[p.key] = (snap.exists() && Array.isArray(snap.data().tasks)) ? snap.data().tasks : [];
+  });
+
+  // 3. For each platform get its users, then their progress docs
+  const platformStats = [];
+  laggingAll = [];
+
+  for (const plat of ALL_PLATFORMS) {
+    const tasks = platformTasks[plat.key];
+    const users = getUsersForPlatform(allUsers, plat.key);
+
+    if (users.length === 0) {
+      platformStats.push({ ...plat, tasks: tasks.length, users: 0, fullDone: 0, avgPct: 0 });
+      continue;
+    }
+
+    const progressSnaps = await Promise.all(
+      users.map(u => getDoc(doc(db, 'weekly_progress', `${u.uid}_${ACADEMIC_YEAR}_w${weekPad}_${plat.key}`)))
+    );
+
+    let doneCount = 0;
+    let totalPct  = 0;
+
+    users.forEach((u, i) => {
+      const snap = progressSnaps[i];
+      let done = 0;
+      if (snap.exists() && tasks.length > 0) {
+        const items = snap.data().items || {};
+        done = tasks.filter(t => items[t.id]?.checked).length;
+      }
+      const pct = tasks.length > 0 ? Math.round(done / tasks.length * 100) : 0;
+      if (pct === 100) doneCount++;
+      totalPct += pct;
+
+      if (pct < 100 && tasks.length > 0) {
+        laggingAll.push({
+          name:      u.displayName || u.email,
+          email:     u.email,
+          platform:  plat.label,
+          platKey:   plat.key,
+          done,
+          total:     tasks.length,
+          pct,
+        });
+      }
+    });
+
+    const avgPct = users.length > 0 ? Math.round(totalPct / users.length) : 0;
+    platformStats.push({ ...plat, tasks: tasks.length, users: users.length, fullDone: doneCount, avgPct });
+  }
+
+  // 4. Sort lagging: least done first
+  laggingAll.sort((a, b) => a.pct - b.pct);
+
+  renderOverviewGrid(platformStats);
+  populateLaggingFilter();
+  renderLagging();
+
+  document.getElementById('ovLoading').style.display  = 'none';
+  document.getElementById('ovContent').style.display  = '';
+}
+
+function getUsersForPlatform(allUsers, platKey) {
+  return allUsers.filter(u => {
+    const thSubs = Array.isArray(u.th_sub_roles) ? u.th_sub_roles : [];
+    const ahSubs = Array.isArray(u.ah_sub_roles) ? u.ah_sub_roles : [];
+    const chSubs = Array.isArray(u.ch_sub_roles)  ? u.ch_sub_roles  : [];
+    switch (platKey) {
+      case 'teachers':                  return u.role_teachershub === 'teachers_user' && !thSubs.includes('subject_leader');
+      case 'subject_leader':            return thSubs.includes('subject_leader');
+      case 'academic_coordinator':      return ahSubs.includes('academic_coordinator');
+      case 'school_principal':          return ahSubs.includes('school_principal');
+      case 'foundation_representative': return ahSubs.includes('foundation_representative');
+      case 'cambridge_coordinator':     return ahSubs.includes('cambridge_coordinator');
+      case 'director':                  return chSubs.includes('director');
+      case 'coordinator':               return chSubs.includes('coordinator');
+      default: return false;
+    }
+  });
+}
+
+function renderOverviewGrid(stats) {
+  const grid = document.getElementById('ovGrid');
+  if (!stats.length) { grid.innerHTML = '<p class="overview-empty">No data.</p>'; return; }
+
+  grid.innerHTML = stats.map(p => {
+    const pct    = p.avgPct;
+    const pctCls = pct >= 80 ? 'pct-green' : pct >= 40 ? 'pct-yellow' : 'pct-red';
+    const noTasks = p.tasks === 0;
+    return `
+      <div class="platform-card">
+        <div class="platform-card-head">
+          <span class="platform-card-name" style="color:${escHtml(p.color)}">${escHtml(p.label)}</span>
+          <span class="platform-card-pct ${noTasks ? '' : pctCls}">${noTasks ? '—' : pct + '%'}</span>
+        </div>
+        <div class="mini-bar">
+          <div class="mini-bar-fill" style="width:${noTasks ? 0 : pct}%;background:${escHtml(p.color)}"></div>
+        </div>
+        <div class="card-stats">
+          <div class="card-stat">Users <span>${p.users}</span></div>
+          <div class="card-stat">Tasks <span>${p.tasks}</span></div>
+          <div class="card-stat">Done <span>${p.fullDone}</span></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function populateLaggingFilter() {
+  const sel = document.getElementById('laggingPlatFilter');
+  const existing = Array.from(sel.options).map(o => o.value);
+  ALL_PLATFORMS.forEach(p => {
+    if (!existing.includes(p.key)) {
+      const opt = document.createElement('option');
+      opt.value = p.key; opt.textContent = p.label;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function renderLagging() {
+  const q    = (document.getElementById('laggingSearch')?.value || '').toLowerCase();
+  const plat = document.getElementById('laggingPlatFilter')?.value || '';
+
+  let data = laggingAll;
+  if (q)    data = data.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q));
+  if (plat) data = data.filter(u => u.platKey === plat);
+
+  document.getElementById('laggingCountBadge').textContent = `(${data.length})`;
+
+  if (data.length === 0) {
+    document.getElementById('laggingEmpty').style.display      = '';
+    document.getElementById('laggingTableWrap').style.display  = 'none';
+    return;
+  }
+  document.getElementById('laggingEmpty').style.display      = 'none';
+  document.getElementById('laggingTableWrap').style.display  = '';
+
+  document.getElementById('laggingBody').innerHTML = data.map(u => {
+    const statusBadge = u.pct === 0
+      ? `<span class="lagging-badge not-started">Not started</span>`
+      : `<span class="lagging-badge partial">${u.pct}%</span>`;
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:600;color:var(--ink)">${escHtml(u.name || u.email)}</div>
+          ${u.name && u.email !== u.name ? `<div style="font-size:11px;color:var(--ink-3)">${escHtml(u.email)}</div>` : ''}
+        </td>
+        <td style="font-size:0.78rem;color:var(--ink-2)">${escHtml(u.platform)}</td>
+        <td style="font-weight:700">${u.done}<span style="color:var(--ink-3);font-weight:400">/${u.total}</span></td>
+        <td>
+          <div class="prog-bar-wrap">
+            <div class="prog-bar"><div class="prog-bar-fill" style="width:${u.pct}%"></div></div>
+            <span class="prog-pct">${u.pct}%</span>
+          </div>
+        </td>
+        <td>${statusBadge}</td>
+      </tr>`;
+  }).join('');
+}
+
+window.renderLagging = renderLagging;
+
+// ── Seed Task Data ────────────────────────────────────────────────
+const SEED_TASKS = {
+  teachers: [
+    { title: 'Submit weekly lesson plans to Subject Leader', category: 'Planning' },
+    { title: 'Mark and return last week\'s assessments with feedback', category: 'Assessment' },
+    { title: 'Update student progress tracker on pacing guide', category: 'Planning' },
+    { title: 'Review Cambridge syllabus objectives for upcoming topics', category: 'Planning' },
+    { title: 'Record actual teaching hours on pacing page', category: 'Administration' },
+    { title: 'Attend subject department meeting', category: 'Communication' },
+    { title: 'Identify students who need additional support this week', category: 'Assessment' },
+    { title: 'Prepare differentiated materials for weaker learners', category: 'Planning' },
+    { title: 'Complete one CPD activity (article / video / reflection)', category: 'Professional Development' },
+    { title: 'Update class register and attendance records', category: 'Administration' },
+    { title: 'Communicate with parents of students with concerns', category: 'Communication' },
+    { title: 'Review and respond to student self-assessments', category: 'Assessment' },
+  ],
+  subject_leader: [
+    { title: 'Hold weekly subject team meeting and record minutes', category: 'Subject Leader Meeting' },
+    { title: 'Review pacing progress for all classes in subject', category: 'Data Review' },
+    { title: 'Check lesson plan submissions from subject teachers', category: 'Planning' },
+    { title: 'Conduct at least one informal classroom observation', category: 'Assessment' },
+    { title: 'Update subject coverage report for Academic Coordinator', category: 'Reporting' },
+    { title: 'Identify topics where classes are behind and plan catch-up', category: 'Data Review' },
+    { title: 'Share teaching resources or strategies with team', category: 'Professional Development' },
+    { title: 'Review assessment data and identify trends', category: 'Data Review' },
+    { title: 'Coordinate exam preparation schedule with Cambridge Coordinator', category: 'Subject Leader Meeting' },
+    { title: 'Submit weekly subject update to Academic Coordinator', category: 'Reporting' },
+    { title: 'Check marking consistency across teachers in subject', category: 'Assessment' },
+  ],
+  academic_coordinator: [
+    { title: 'Collect and review weekly pacing reports from Subject Leaders', category: 'Data Review' },
+    { title: 'Conduct structured walkthrough in at least 2 classrooms', category: 'Lesson Observation' },
+    { title: 'Hold Academic Team briefing / weekly standup', category: 'Staff Meeting' },
+    { title: 'Review student performance data across all subjects', category: 'Data Review' },
+    { title: 'Submit weekly academic progress report to School Principal', category: 'Reporting' },
+    { title: 'Follow up on action items from previous week\'s observation', category: 'Lesson Observation' },
+    { title: 'Check completion of weekly checklists by all subject leaders', category: 'Data Review' },
+    { title: 'Coordinate with Cambridge Coordinator on exam prep status', category: 'Staff Meeting' },
+    { title: 'Review and approve curriculum adjustments if needed', category: 'Planning' },
+    { title: 'Respond to parent queries escalated by teachers', category: 'Parent Communication' },
+    { title: 'Complete one reflective entry in Academic Journal', category: 'Professional Development' },
+    { title: 'Update school academic dashboard for this week', category: 'Reporting' },
+  ],
+  school_principal: [
+    { title: 'Review weekly academic summary from Academic Coordinator', category: 'Data Review' },
+    { title: 'Conduct one formal or informal leadership walkthrough', category: 'Lesson Observation' },
+    { title: 'Hold school leadership team meeting', category: 'Staff Meeting' },
+    { title: 'Review and approve staff welfare or support requests', category: 'Administration' },
+    { title: 'Respond to parent communications within 24 hours', category: 'Parent Communication' },
+    { title: 'Review weekly safeguarding and attendance data', category: 'Data Review' },
+    { title: 'Check budget vs. actual spend for current period', category: 'Reporting' },
+    { title: 'Approve any policy or curriculum change proposals', category: 'Planning' },
+    { title: 'Submit weekly update to Foundation Representative', category: 'Reporting' },
+    { title: 'Visit at least one co-curricular activity or event', category: 'Professional Development' },
+    { title: 'Conduct brief 1-on-1 with one coordinator or department head', category: 'Staff Meeting' },
+    { title: 'Review school discipline log and follow up on cases', category: 'Data Review' },
+  ],
+  foundation_representative: [
+    { title: 'Review weekly school performance summary from Principal', category: 'Data Review' },
+    { title: 'Monitor key KPIs: enrolment, attendance, assessment results', category: 'Data Review' },
+    { title: 'Hold Foundation leadership call or briefing', category: 'Staff Meeting' },
+    { title: 'Review compliance with Cambridge programme requirements', category: 'Reporting' },
+    { title: 'Approve budget requests or resource allocations submitted this week', category: 'Administration' },
+    { title: 'Submit weekly network performance report to Eduversal', category: 'Reporting' },
+    { title: 'Follow up on accreditation or regulatory requirements', category: 'Reporting' },
+    { title: 'Review parent satisfaction feedback received this week', category: 'Parent Communication' },
+    { title: 'Check staff turnover or HR issues flagged by Principal', category: 'Administration' },
+    { title: 'Review school visit schedule for next fortnight', category: 'Planning' },
+    { title: 'Attend one school event or community engagement activity', category: 'Professional Development' },
+  ],
+  cambridge_coordinator: [
+    { title: 'Update Cambridge exam countdown and share with teachers', category: 'Exam Preparation' },
+    { title: 'Review syllabus coverage progress with Subject Leaders', category: 'Syllabus Review' },
+    { title: 'Check submission status for Cambridge coursework components', category: 'Exam Preparation' },
+    { title: 'Distribute Cambridge examiner reports or past paper resources', category: 'Syllabus Review' },
+    { title: 'Hold Cambridge team briefing with all subject coordinators', category: 'Staff Meeting' },
+    { title: 'Verify student entry information in Cambridge systems', category: 'Administration' },
+    { title: 'Submit weekly Cambridge readiness update to Academic Coordinator', category: 'Reporting' },
+    { title: 'Review predicted grades vs. current performance data', category: 'Data Review' },
+    { title: 'Coordinate mock exam scheduling for upcoming assessment window', category: 'Exam Preparation' },
+    { title: 'Communicate Cambridge policy updates to relevant staff', category: 'Parent Communication' },
+    { title: 'Check stationery and exam room resource readiness', category: 'Exam Preparation' },
+  ],
+  director: [
+    { title: 'Review weekly network performance dashboard across all schools', category: 'Data Review' },
+    { title: 'Hold Director leadership team call', category: 'Staff Meeting' },
+    { title: 'Conduct or plan school visit for this week', category: 'School Visit' },
+    { title: 'Review school principals\' weekly reports and provide feedback', category: 'Reporting' },
+    { title: 'Approve strategic decisions escalated by school leaders', category: 'Strategic Planning' },
+    { title: 'Monitor checklist completion rates across all platforms', category: 'Data Review' },
+    { title: 'Review HR issues or staffing changes flagged this week', category: 'Administration' },
+    { title: 'Check budget vs. targets at network level', category: 'Strategic Planning' },
+    { title: 'Submit weekly Director briefing to Foundation Representative', category: 'Reporting' },
+    { title: 'Follow up on action items from last school visit', category: 'School Visit' },
+    { title: 'Review accreditation or quality assurance updates', category: 'Reporting' },
+    { title: 'Attend one professional development session or webinar', category: 'Professional Development' },
+  ],
+  coordinator: [
+    { title: 'Collect weekly updates from assigned schools', category: 'Reporting' },
+    { title: 'Conduct virtual or in-person check-in with school leadership', category: 'School Visit' },
+    { title: 'Review pacing completion rates for assigned schools', category: 'Data Review' },
+    { title: 'Submit weekly coordinator briefing to Director', category: 'Reporting' },
+    { title: 'Follow up on pending support requests from schools', category: 'Communication' },
+    { title: 'Update school visit notes and action items in the system', category: 'School Visit' },
+    { title: 'Review checklist completion for assigned school users', category: 'Data Review' },
+    { title: 'Hold team alignment meeting with coordinator colleagues', category: 'Staff Meeting' },
+    { title: 'Review and escalate any compliance issues to Director', category: 'Reporting' },
+    { title: 'Support onboarding of any new school staff on platform', category: 'Communication' },
+    { title: 'Complete one CPD reflection or professional reading', category: 'Professional Development' },
+  ],
+};
+
+function openSeedModal() {
+  const seedTasks = SEED_TASKS[currentPlatform] || [];
+  document.getElementById('seedPlatLabel').textContent = getPlatformLabel(currentPlatform);
+  document.getElementById('seedWeekLabel').textContent = `Week ${currentWeek}`;
+  document.getElementById('seedPreviewCount').textContent =
+    `${seedTasks.length} tasks will be loaded${tasks.length > 0 ? ` (replaces ${tasks.length} existing task${tasks.length !== 1 ? 's' : ''})` : ''}.`;
+  document.getElementById('seedModal').classList.add('open');
+}
+
+function closeSeedModal() {
+  document.getElementById('seedModal').classList.remove('open');
+}
+
+async function confirmSeed() {
+  const seedTasks = SEED_TASKS[currentPlatform] || [];
+  if (!seedTasks.length) { closeSeedModal(); return; }
+  tasks = seedTasks.map(t => ({ id: genId(), title: t.title, category: t.category }));
+  closeSeedModal();
+  await saveTaskTemplate();
+  showToast(`${tasks.length} starter tasks loaded for ${getPlatformLabel(currentPlatform)}.`);
+}
+
+Object.assign(window, { openSeedModal, closeSeedModal, confirmSeed });
+document.getElementById('seedModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSeedModal();
 });
 </script>
 
