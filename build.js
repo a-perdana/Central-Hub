@@ -144,6 +144,12 @@ if (fs.existsSync("shared-styles.css")) {
   console.log("Copied: shared-styles.css");
 }
 
+// -- Copy tokens.css
+if (fs.existsSync("tokens.css")) {
+  fs.copyFileSync("tokens.css", path.join("dist", "tokens.css"));
+  console.log("Copied: tokens.css");
+}
+
 // -- Copy partials/igcse-pacing-core.js
 const partialsDistDir = path.join("dist", "partials");
 if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
