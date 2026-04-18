@@ -320,6 +320,7 @@
       <button class="profile-tab active" data-tab="overview" role="tab">Overview</button>
       <button class="profile-tab" data-tab="performance" role="tab">Performance</button>
       <button class="profile-tab" data-tab="visits" role="tab">Visits</button>
+      <button class="profile-tab" data-tab="classes" role="tab">Classes</button>
       <button class="profile-tab" data-tab="notes" role="tab">Notes</button>
     </div>
     <div class="modal-body" id="detailBody" style="padding-top:16px"></div>
@@ -508,6 +509,9 @@
     } else if (activeProfileTab === 'visits') {
       body.innerHTML = '<div id="visitsTabContent"><div class="empty-state" style="padding:24px 0">Loading visit history…</div></div>';
       loadSchoolVisitsTab(s);
+    } else if (activeProfileTab === 'classes') {
+      body.innerHTML = '<div id="classesTabContent"><div class="empty-state" style="padding:24px 0">Loading classes…</div></div>';
+      loadSchoolClassesTab(s);
     } else if (activeProfileTab === 'notes') {
       body.innerHTML = `
         <p style="font-size:0.8rem;color:var(--ink-3);margin-bottom:10px">Internal notes about this school — visible to Central Hub admins only.</p>
@@ -623,6 +627,83 @@
         <p style="font-size:0.74rem;color:var(--ink-3);margin-top:10px">Showing last 20 visits. <a href="school-visits" style="color:var(--accent)">Manage all visits →</a></p>`;
     } catch (err) {
       if (el) el.innerHTML = '<p style="font-size:0.82rem;color:var(--ink-3)">Could not load visit history.</p>';
+    }
+  }
+
+  async function loadSchoolClassesTab(s) {
+    const el = document.getElementById('classesTabContent');
+    try {
+      const { getDocs: gd, collection: col, query: q, orderBy: ob, addDoc: ad, deleteDoc: dd, doc: fd } =
+        await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+      const classesRef = col(db, 'schools', s.id, 'classes');
+      let classes = [];
+      const loadClasses = async () => {
+        const snap = await gd(q(classesRef, ob('grade'), ob('section')));
+        classes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      };
+      await loadClasses();
+      const renderClassList = () => {
+        const list = el.querySelector('#classListWrap');
+        if (!list) return;
+        if (!classes.length) {
+          list.innerHTML = '<p style="font-size:0.82rem;color:var(--ink-3)">No classes defined yet.</p>';
+          return;
+        }
+        list.innerHTML = classes.map(c => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:var(--paper)">
+            <div>
+              <span style="font-size:0.9rem;font-weight:600;color:var(--ink)">${esc(c.name)}</span>
+              <span style="font-size:0.75rem;color:var(--ink-3);margin-left:8px">Grade ${esc(String(c.grade))} · ${esc(c.section)}</span>
+            </div>
+            ${isAdmin ? `<button onclick="deleteSchoolClass('${s.id}','${c.id}')" style="font-size:0.78rem;color:#dc2626;background:none;border:1px solid #fecaca;border-radius:5px;padding:3px 8px;cursor:pointer">Delete</button>` : ''}
+          </div>`).join('');
+      };
+      el.innerHTML = `
+        <p style="font-size:0.8rem;color:var(--ink-3);margin-bottom:12px">Classes shared across all teachers at this school. Teachers pick from this list in their pacing pages.</p>
+        <div id="classListWrap"></div>
+        ${isAdmin ? `
+        <div id="classAddRow" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <input id="classGradeInput" type="number" min="1" max="13" placeholder="Grade (e.g. 10)"
+            style="width:120px;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:0.88rem;color:var(--ink);outline:none;font-family:inherit">
+          <input id="classSectionInput" type="text" placeholder="Section (e.g. Stanford)"
+            style="flex:1;min-width:140px;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:0.88rem;color:var(--ink);outline:none;font-family:inherit">
+          <button id="classAddBtn" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:0.88rem;font-weight:600;cursor:pointer;font-family:inherit">Add Class</button>
+        </div>
+        <p id="classAddErr" style="font-size:0.78rem;color:#dc2626;min-height:18px;margin-top:4px"></p>` : ''}`;
+      renderClassList();
+
+      if (isAdmin) {
+        el.querySelector('#classAddBtn').addEventListener('click', async () => {
+          const gradeRaw = el.querySelector('#classGradeInput').value.trim();
+          const section  = el.querySelector('#classSectionInput').value.trim();
+          const errEl    = el.querySelector('#classAddErr');
+          const grade    = parseInt(gradeRaw, 10);
+          errEl.textContent = '';
+          if (!gradeRaw || isNaN(grade) || grade < 1 || grade > 13) { errEl.textContent = 'Enter a valid grade (1–13).'; return; }
+          if (!section) { errEl.textContent = 'Section name is required.'; return; }
+          const name = `${grade} ${section}`;
+          if (classes.some(c => c.name.toLowerCase() === name.toLowerCase())) { errEl.textContent = 'This class already exists.'; return; }
+          const btn = el.querySelector('#classAddBtn');
+          btn.disabled = true; btn.textContent = 'Adding…';
+          try {
+            await ad(classesRef, { name, grade, section, createdBy: window.currentUser.uid, createdAt: (await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js')).serverTimestamp() });
+            await loadClasses();
+            renderClassList();
+            el.querySelector('#classGradeInput').value = '';
+            el.querySelector('#classSectionInput').value = '';
+          } catch (e) { errEl.textContent = 'Error: ' + e.message; }
+          finally { btn.disabled = false; btn.textContent = 'Add Class'; }
+        });
+
+        window.deleteSchoolClass = async (schoolId, classId) => {
+          const { deleteDoc: del, doc: fDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+          await del(fDoc(db, 'schools', schoolId, 'classes', classId));
+          await loadClasses();
+          renderClassList();
+        };
+      }
+    } catch (err) {
+      if (el) el.innerHTML = '<p style="font-size:0.82rem;color:var(--ink-3)">Could not load classes.</p>';
     }
   }
 
