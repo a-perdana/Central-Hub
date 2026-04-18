@@ -136,6 +136,15 @@
       letter-spacing: 0.1em; color: var(--ink-3); margin: 0;
     }
     .essentials-list { display: flex; flex-direction: column; gap: 6px; padding: 0 18px 14px; }
+    .ess-pager { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .ess-pager-btn {
+      width: 26px; height: 26px; border-radius: 6px; border: 1.5px solid var(--border);
+      background: var(--white); cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; color: var(--ink-3); font-size: 0.75rem;
+    }
+    .ess-pager-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .ess-pager-btn:disabled { opacity: 0.35; cursor: default; }
+    .ess-pager-info { font-size: 0.72rem; color: var(--ink-3); font-weight: 500; }
     .ess-item {
       display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px;
       border: 1.5px solid var(--border); background: var(--paper);
@@ -358,6 +367,11 @@
   <div class="essentials-section" id="essentialsSection" style="display:none">
     <div class="essentials-header">
       <h4>Weekly Essentials</h4>
+      <div class="ess-pager" id="essPager" style="display:none">
+        <button class="ess-pager-btn" id="essPrev" onclick="essPage--;renderEssentials()">&#8592;</button>
+        <span class="ess-pager-info" id="essPageInfo"></span>
+        <button class="ess-pager-btn" id="essNext" onclick="essPage++;renderEssentials()">&#8594;</button>
+      </div>
     </div>
     <div class="essentials-list" id="essentialsList"></div>
   </div>
@@ -469,6 +483,8 @@ let openNoteId      = null;
 let editTaskId      = null;
 let activeFilter    = 'All';
 let essentials      = [];
+let essPage         = 0;
+const ESS_PAGE_SIZE = 5;
 let unsubTasks      = null;
 let unsubProgress   = null;
 let unsubEssentials = null;
@@ -823,9 +839,11 @@ function updateProgressRing() {
 // ── Weekly Essentials ─────────────────────────────────────────────
 function loadEssentials() {
   if (unsubEssentials) { unsubEssentials(); unsubEssentials = null; }
+  essPage = 0;
   const db = window.db;
   unsubEssentials = onSnapshot(doc(db, 'weekly_essentials', currentPlatform), snap => {
     essentials = (snap.exists() && Array.isArray(snap.data().items)) ? snap.data().items : [];
+    essPage = 0;
     renderEssentials();
   }, err => console.error('Essentials error:', err));
 }
@@ -836,7 +854,24 @@ function renderEssentials() {
   if (!section || !list) return;
   if (essentials.length === 0) { section.style.display = 'none'; return; }
   section.style.display = '';
-  list.innerHTML = essentials.map(e => {
+  const totalPages = Math.ceil(essentials.length / ESS_PAGE_SIZE);
+  essPage = Math.min(essPage, totalPages - 1);
+  const pageItems = essentials.slice(essPage * ESS_PAGE_SIZE, (essPage + 1) * ESS_PAGE_SIZE);
+
+  // update pager in header
+  const pager = document.getElementById('essPager');
+  if (pager) {
+    if (totalPages > 1) {
+      pager.style.display = 'flex';
+      pager.querySelector('#essPrev').disabled = essPage === 0;
+      pager.querySelector('#essNext').disabled = essPage >= totalPages - 1;
+      pager.querySelector('#essPageInfo').textContent = `${essPage + 1} / ${totalPages}`;
+    } else {
+      pager.style.display = 'none';
+    }
+  }
+
+  list.innerHTML = pageItems.map(e => {
     const checked = !!myEssProgress[e.id]?.checked;
     return `
       <div class="ess-item${checked ? ' checked' : ''}" data-ess-id="${escAttr(e.id)}">
