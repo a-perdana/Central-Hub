@@ -13,11 +13,10 @@ CentralHub is the super-admin control panel for the Eduversal platform. `central
 ```
 Eduversal Web/                    ← monorepo root (not a deployed app)
 ├── Academic Hub/                 ← analytics dashboards (Vercel)
-├── CentralHub/                   ← THIS app (Vercel)
+├── Central Hub/                  ← THIS app (Vercel)
 │   ├── firestore.rules           ← ⚠️ ONLY Firestore rules file — deploy from here
 │   └── firebase.json             ← firebase deploy config
 ├── Teachers Hub/                 ← teacher tools (Vercel)
-├── migrate-auth-and-firestore.js ← one-time migration script
 └── keys/                         ← service account JSON keys (gitignored)
 ```
 
