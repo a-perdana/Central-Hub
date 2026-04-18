@@ -222,6 +222,62 @@
     .skel-line { height: 14px; background: #f1f5f9; border-radius: 4px; animation: shimmer 1.4s infinite; }
     @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.4} }
 
+    /* Inline error */
+    .inline-err {
+      background: #fee2e2; border: 1px solid #fecaca; border-radius: 8px;
+      color: #dc2626; font-size: .8rem; font-weight: 600;
+      padding: 8px 14px; margin-top: 8px; display: none;
+    }
+    .inline-err.visible { display: block; }
+
+    /* Trend tab */
+    .trend-wrap { padding-top: 4px; }
+    .trend-filters {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 16px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .trend-select {
+      border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 7px 10px;
+      font-family: inherit; font-size: .82rem; color: #1e293b; background: #fff;
+      cursor: pointer; flex: 1; min-width: 160px;
+    }
+    .trend-select:focus { outline: none; border-color: #7c3aed; }
+
+    .trend-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.04); padding: 20px 24px; margin-bottom: 20px;
+    }
+    .trend-card-title { font-size: .88rem; font-weight: 700; color: #1e293b; margin-bottom: 16px; }
+
+    .trend-bars { display: flex; align-items: flex-end; gap: 12px; height: 140px; padding-bottom: 4px; }
+    .trend-bar-group { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+    .trend-bar-col { width: 100%; border-radius: 5px 5px 0 0; transition: height .4s; cursor: default; position: relative; min-height: 4px; }
+    .trend-bar-col:hover::after {
+      content: attr(data-tip);
+      position: absolute; bottom: 105%; left: 50%; transform: translateX(-50%);
+      background: #1e293b; color: #fff; border-radius: 5px;
+      padding: 3px 8px; font-size: .7rem; white-space: nowrap; z-index: 10;
+    }
+    .trend-bar-year { font-size: .68rem; color: #94a3b8; font-weight: 600; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
+    .trend-bar-score { font-size: .7rem; font-weight: 800; color: #1e293b; }
+
+    .trend-teacher-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 14px 18px; margin-bottom: 12px;
+    }
+    .trend-teacher-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .trend-teacher-name { font-size: .88rem; font-weight: 700; color: #1e293b; }
+    .trend-teacher-meta { font-size: .71rem; color: #94a3b8; margin-top: 2px; }
+    .trend-teacher-arrow { font-size: .78rem; font-weight: 700; }
+    .trend-arrow-up   { color: #16a34a; }
+    .trend-arrow-down { color: #dc2626; }
+    .trend-arrow-flat { color: #94a3b8; }
+
+    .trend-sparkline { display: flex; align-items: flex-end; gap: 6px; height: 40px; }
+    .trend-spark-bar { flex: 1; border-radius: 3px 3px 0 0; min-height: 3px; }
+    .trend-spark-label { font-size: .62rem; color: #94a3b8; text-align: center; margin-top: 3px; }
+
     @media (max-width: 900px) {
       .stats-strip { grid-template-columns: repeat(3, 1fr); }
       .page-wrap { padding: 0 16px 48px; }
@@ -276,6 +332,7 @@
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="appraisals">Formal Appraisals</button>
       <button class="tab-btn" data-tab="walkthroughs">Walkthroughs</button>
+      <button class="tab-btn" data-tab="trends">Trend Analysis</button>
     </div>
 
     <!-- ── APPRAISALS TAB ── -->
@@ -338,6 +395,25 @@
           </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ── TREND ANALYSIS TAB ── -->
+    <div id="tabTrends" class="trend-wrap" style="display:none;">
+      <div class="trend-filters">
+        <select class="trend-select" id="trendSchool">
+          <option value="">All schools</option>
+        </select>
+        <select class="trend-select" id="trendTeacher">
+          <option value="">All teachers (school average)</option>
+        </select>
+      </div>
+      <div class="trend-card">
+        <div class="trend-card-title">Average Score by Academic Year</div>
+        <div class="trend-bars" id="trendBars">
+          <div style="color:#94a3b8;font-size:.82rem;align-self:center;">Loading…</div>
+        </div>
+      </div>
+      <div id="trendTeacherCards"></div>
     </div>
 
     <!-- ── WALKTHROUGHS TAB ── -->
@@ -640,7 +716,7 @@ window.openAppraisalModal = function(id) {
       </div>
     ` : ''}
 
-    ${finaliseBtn ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;">${finaliseBtn}</div>` : ''}
+    ${finaliseBtn ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;">${finaliseBtn}<div class="inline-err" id="finaliseErr"></div></div>` : ''}
   `;
 
   document.getElementById('appraisalModal').style.display = 'flex';
@@ -652,6 +728,7 @@ window.closeAppraisalModal = function() {
 
 window.finaliseAppraisal = async function(id) {
   if (!isAdmin) return;
+  const errEl = document.getElementById('finaliseErr');
   try {
     const db = window.db;
     await updateDoc(doc(db, 'teacher_appraisals', id), {
@@ -665,7 +742,7 @@ window.finaliseAppraisal = async function(id) {
     closeAppraisalModal();
   } catch(e) {
     console.error(e);
-    alert('Failed to finalise. Check permissions.');
+    if (errEl) { errEl.textContent = 'Failed to finalise. Check permissions.'; errEl.classList.add('visible'); }
   }
 };
 
@@ -746,10 +823,116 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const tab = btn.dataset.tab;
-    document.getElementById('tabAppraisals').style.display  = tab === 'appraisals'  ? 'block' : 'none';
-    document.getElementById('tabWalkthroughs').style.display = tab === 'walkthroughs' ? 'block' : 'none';
+    document.getElementById('tabAppraisals').style.display   = tab === 'appraisals'   ? 'block' : 'none';
+    document.getElementById('tabWalkthroughs').style.display = tab === 'walkthroughs'  ? 'block' : 'none';
+    document.getElementById('tabTrends').style.display       = tab === 'trends'        ? 'block' : 'none';
+    if (tab === 'trends') renderTrends();
   });
 });
+
+// ── TREND ANALYSIS ────────────────────────────────────────
+function renderTrends() {
+  const schoolF  = document.getElementById('trendSchool').value;
+  const teacherF = document.getElementById('trendTeacher').value;
+
+  let data = [...allAppraisals];
+  if (schoolF)  data = data.filter(a => a.schoolId === schoolF);
+  if (teacherF) data = data.filter(a => a.teacherName === teacherF);
+
+  // Year averages
+  const byYear = {};
+  data.forEach(a => {
+    if (!a.academicYear || !a.compositePercent) return;
+    if (!byYear[a.academicYear]) byYear[a.academicYear] = [];
+    byYear[a.academicYear].push(a.compositePercent);
+  });
+  const years = Object.keys(byYear).sort();
+  const yearAvgs = years.map(y => {
+    const arr = byYear[y];
+    return { year: y, avg: arr.reduce((a,b)=>a+b,0)/arr.length, count: arr.length };
+  });
+
+  const barsEl = document.getElementById('trendBars');
+  if (!yearAvgs.length) {
+    barsEl.innerHTML = '<div style="color:#94a3b8;font-size:.82rem;align-self:center;">No data for selected filters.</div>';
+    document.getElementById('trendTeacherCards').innerHTML = '';
+    return;
+  }
+
+  const maxAvg = Math.max(...yearAvgs.map(y => y.avg), 1);
+  const barH = 120;
+  barsEl.innerHTML = yearAvgs.map(y => {
+    const h = Math.max(8, Math.round((y.avg/maxAvg)*barH));
+    const color = y.avg >= 75 ? '#16a34a' : y.avg >= 50 ? '#ca8a04' : '#dc2626';
+    return `<div class="trend-bar-group">
+      <div class="trend-bar-score">${y.avg.toFixed(1)}%</div>
+      <div class="trend-bar-col" style="height:${h}px;background:${color};" data-tip="${y.count} record${y.count!==1?'s':''}"></div>
+      <div class="trend-bar-year">${y.year}</div>
+    </div>`;
+  }).join('');
+
+  // Per-teacher sparklines (when showing all teachers)
+  if (!teacherF) {
+    const teachers = [...new Set(data.map(a => a.teacherName).filter(Boolean))].sort();
+    const cards = teachers.map(name => {
+      const tData = data.filter(a => a.teacherName === name && a.compositePercent && a.academicYear);
+      if (tData.length < 1) return '';
+      tData.sort((a,b) => a.academicYear?.localeCompare(b.academicYear));
+      const school  = tData[tData.length-1]?.schoolId || '';
+      const subject = tData[tData.length-1]?.subject || '';
+      const scores  = tData.map(a => a.compositePercent);
+      const first   = scores[0], last = scores[scores.length-1];
+      const delta   = last - first;
+      const arrowCls = delta > 2 ? 'trend-arrow-up' : delta < -2 ? 'trend-arrow-down' : 'trend-arrow-flat';
+      const arrowTxt = delta > 2 ? `▲ +${delta.toFixed(1)}%` : delta < -2 ? `▼ ${delta.toFixed(1)}%` : `→ Stable`;
+      const maxS = Math.max(...scores, 1);
+      const sparks = scores.map((s, i) => {
+        const h = Math.max(4, Math.round((s/maxS)*36));
+        const c = s >= 75 ? '#16a34a' : s >= 50 ? '#ca8a04' : '#dc2626';
+        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;">
+          <div class="trend-spark-bar" style="height:${h}px;background:${c};width:100%;"></div>
+          <div class="trend-spark-label">${tData[i].academicYear?.split('/')[0]||''}</div>
+        </div>`;
+      }).join('');
+
+      return `<div class="trend-teacher-card">
+        <div class="trend-teacher-head">
+          <div>
+            <div class="trend-teacher-name">${name}</div>
+            <div class="trend-teacher-meta">${school}${subject ? ' · '+subject : ''}</div>
+          </div>
+          <div class="trend-teacher-arrow ${arrowCls}">${arrowTxt}</div>
+        </div>
+        <div class="trend-sparkline">${sparks}</div>
+      </div>`;
+    }).filter(Boolean).join('');
+    document.getElementById('trendTeacherCards').innerHTML = cards
+      || '<div style="color:#94a3b8;font-size:.82rem;padding:12px 0;">No teacher trend data.</div>';
+  } else {
+    document.getElementById('trendTeacherCards').innerHTML = '';
+  }
+}
+
+function populateTrendFilters() {
+  const schools  = [...new Set(allAppraisals.map(a => a.schoolId).filter(Boolean))].sort();
+  const teachers = [...new Set(allAppraisals.map(a => a.teacherName).filter(Boolean))].sort();
+
+  const schoolSel  = document.getElementById('trendSchool');
+  const teacherSel = document.getElementById('trendTeacher');
+
+  schools.forEach(s  => { const o = new Option(s, s); schoolSel.appendChild(o); });
+  teachers.forEach(t => { const o = new Option(t, t); teacherSel.appendChild(o); });
+
+  schoolSel.addEventListener('change', () => {
+    const sf = schoolSel.value;
+    while (teacherSel.options.length > 1) teacherSel.remove(1);
+    const filtered = allAppraisals.filter(a => !sf || a.schoolId === sf);
+    [...new Set(filtered.map(a => a.teacherName).filter(Boolean))].sort()
+      .forEach(t => { const o = new Option(t, t); teacherSel.appendChild(o); });
+    renderTrends();
+  });
+  teacherSel.addEventListener('change', renderTrends);
+}
 
 // ── FILTER LISTENERS ─────────────────────────────────────
 ['searchAppraisals','filterYear','filterLevel','filterStatus','filterPred'].forEach(id => {
@@ -774,6 +957,7 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
   allWalkthroughs = wtSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   populateYears(allAppraisals, allWalkthroughs);
+  populateTrendFilters();
   updateStats();
   renderAppraisals();
   renderWalkthroughs();
