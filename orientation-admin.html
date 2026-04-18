@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orientation Admin — Eduversal Central Hub</title>
+  <link rel="stylesheet" href="shared-styles.css" />
+  <script src="firebase-config.js"></script>
+  <style>
+    :root { --accent: #6c5ce7; --accent-dk: #5848c2; --accent-2: #ede9fe; }
+
+    .page-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px 32px 0; flex-wrap: wrap; gap: 12px;
+    }
+    .page-head h1 { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+    .page-head p  { font-size: 14px; color: var(--ink-2, #44445a); margin-top: 2px; }
+
+    .tab-bar {
+      display: flex; gap: 2px;
+      border-bottom: 1px solid var(--border, #e0ddd6);
+      padding: 0 32px;
+      margin: 20px 0 0;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 11px 18px;
+      background: none; border: none;
+      border-bottom: 3px solid transparent;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      color: var(--ink-3, #8888a8); cursor: pointer;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn.on { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-btn:hover:not(.on) { color: var(--ink-2, #44445a); }
+
+    .section { display: none; padding: 24px 32px 60px; }
+    .section.on { display: block; }
+
+    /* ── TABLE ── */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th {
+      text-align: left; padding: 10px 14px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--ink-3, #8888a8);
+      border-bottom: 1px solid var(--border, #e0ddd6);
+    }
+    .data-table td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--border, #e0ddd6);
+      vertical-align: top;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #fafaf9; }
+
+    .table-wrap {
+      background: white;
+      border: 1px solid var(--border, #e0ddd6);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(28,28,46,.07);
+    }
+
+    /* ── PILLS ── */
+    .pill {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+    .pill-handbook { background: #e8f0fb; color: #1a5fa8; }
+    .pill-video    { background: #fee2e2; color: #dc2626; }
+    .pill-book     { background: #d1fae5; color: #059669; }
+    .pill-link     { background: var(--accent-2); color: var(--accent); }
+    .pill-pending  { background: #fef8e7; color: #b07800; }
+    .pill-reviewed { background: #d1fae5; color: #059669; }
+    .pill-rejected { background: #fee2e2; color: #dc2626; }
+
+    /* ── TOOLBAR ── */
+    .section-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .section-toolbar h2 { font-size: 16px; font-weight: 700; }
+
+    /* ── ACTION BUTTONS ── */
+    .btn-row { display: flex; gap: 6px; }
+    .btn-sm {
+      padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; font-family: inherit;
+      transition: opacity .15s;
+    }
+    .btn-sm:hover { opacity: .85; }
+    .btn-edit   { background: var(--accent-2); color: var(--accent); }
+    .btn-delete { background: #fee2e2; color: #dc2626; }
+    .btn-review { background: #d1fae5; color: #059669; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      display: none; align-items: center; justify-content: center;
+      z-index: 1000; padding: 16px;
+    }
+    .modal-overlay.on { display: flex; }
+    .modal-box {
+      background: white; border-radius: 16px;
+      width: 100%; max-width: 540px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(28,28,46,.2);
+    }
+    .modal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border, #e0ddd6);
+    }
+    .modal-head h3 { font-size: 17px; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; font-size: 22px;
+      color: var(--ink-3, #8888a8); cursor: pointer; line-height: 1;
+    }
+    .modal-body { padding: 20px 24px; }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border, #e0ddd6);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+    .modal-field { margin-bottom: 14px; }
+    .modal-label {
+      display: block; font-size: 13px; font-weight: 600;
+      color: var(--ink-2, #44445a); margin-bottom: 5px;
+    }
+    .modal-input, .modal-select, .modal-textarea {
+      width: 100%; padding: 9px 13px;
+      border: 1.5px solid var(--border, #e0ddd6);
+      border-radius: 9px; font-family: inherit; font-size: 14px;
+      color: var(--ink, #1c1c2e); background: white; outline: none;
+      transition: border-color .15s;
+    }
+    .modal-input:focus, .modal-select:focus, .modal-textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108,92,231,.1);
+    }
+    .modal-textarea { resize: vertical; min-height: 80px; }
+    .modal-err {
+      background: #fee2e2; border: 1px solid #fca5a5;
+      border-radius: 8px; padding: 9px 12px;
+      font-size: 13px; color: #dc2626; margin-bottom: 12px; display: none;
+    }
+    .modal-err.on { display: block; }
+
+    /* ── QUIZ ANSWER LIST ── */
+    .qa-item { margin-bottom: 14px; }
+    .qa-q { font-size: 13px; font-weight: 600; color: var(--ink-2, #44445a); margin-bottom: 4px; }
+    .qa-a { font-size: 14px; color: var(--ink, #1c1c2e); padding-left: 10px; border-left: 3px solid var(--accent-2); }
+
+    /* ── SPINNER / EMPTY ── */
+    .spinner-wrap { text-align: center; padding: 48px; color: var(--ink-3, #8888a8); }
+    .empty-state  { text-align: center; padding: 48px 24px; color: var(--ink-3, #8888a8); font-size: 14px; }
+
+    /* ── STATS ROW ── */
+    .stats-row {
+      display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .stat-card {
+      background: white; border: 1px solid var(--border, #e0ddd6);
+      border-radius: 12px; padding: 16px 20px; min-width: 130px;
+      box-shadow: 0 1px 4px rgba(28,28,46,.07);
+    }
+    .stat-num { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+    .stat-lbl { font-size: 12px; color: var(--ink-3, #8888a8); font-weight: 600; margin-top: 2px; }
+
+    /* ── TRUNCATE ── */
+    .truncate { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── REGISTRATION STATUS ── */
+    .status-select {
+      padding: 4px 8px; border-radius: 8px; font-size: 12px;
+      border: 1.5px solid var(--border, #e0ddd6); font-family: inherit;
+      cursor: pointer; background: white;
+    }
+  </style>
+</head>
+<body>
+
+<!-- SHARED_NAVBAR -->
+
+<div class="page-head">
+  <div>
+    <h1>Orientation Admin</h1>
+    <p>Manage resources, competency questions, and incoming registrations for partner school teachers.</p>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn on" data-tab="registrations" onclick="switchTab('registrations')">Registrations</button>
+  <button class="tab-btn"    data-tab="resources"      onclick="switchTab('resources')">Resources</button>
+  <button class="tab-btn"    data-tab="questions"      onclick="switchTab('questions')">Competency Questions</button>
+</div>
+
+<!-- ── REGISTRATIONS TAB ── -->
+<div id="tab-registrations" class="section on">
+  <div class="stats-row" id="reg-stats">
+    <div class="stat-card"><div class="stat-num" id="stat-total">—</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-pending">—</div><div class="stat-lbl">Pending</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-reviewed">—</div><div class="stat-lbl">Reviewed</div></div>
+  </div>
+
+  <div class="table-wrap" id="reg-wrap">
+    <div class="spinner-wrap">Loading…</div>
+  </div>
+</div>
+
+<!-- ── RESOURCES TAB ── -->
+<div id="tab-resources" class="section">
+  <div class="section-toolbar">
+    <h2>Resources</h2>
+    <button class="btn-primary btn-add" onclick="openResourceModal()">+ Add Resource</button>
+  </div>
+  <div class="table-wrap" id="res-wrap">
+    <div class="spinner-wrap">Loading…</div>
+  </div>
+</div>
+
+<!-- ── QUESTIONS TAB ── -->
+<div id="tab-questions" class="section">
+  <div class="section-toolbar">
+    <h2>Competency Questions</h2>
+    <button class="btn-primary btn-add" onclick="openQuestionModal()">+ Add Question</button>
+  </div>
+  <div class="table-wrap" id="q-wrap">
+    <div class="spinner-wrap">Loading…</div>
+  </div>
+</div>
+
+<!-- ── RESOURCE MODAL ── -->
+<div class="modal-overlay" id="res-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="res-modal-title">Add Resource</h3>
+      <button class="modal-close" onclick="closeModal('res-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-err" id="res-err"></div>
+      <div class="modal-field">
+        <label class="modal-label">Title *</label>
+        <input class="modal-input" id="res-title" type="text" placeholder="e.g. Teacher Handbook 2025" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Type *</label>
+        <select class="modal-select" id="res-type">
+          <option value="">Select type…</option>
+          <option value="handbook">Handbook</option>
+          <option value="video">Video</option>
+          <option value="book">Book</option>
+          <option value="link">Link</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">URL *</label>
+        <input class="modal-input" id="res-url" type="url" placeholder="https://…" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Description</label>
+        <textarea class="modal-textarea" id="res-desc" placeholder="Short description (optional)"></textarea>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Order (display sequence)</label>
+        <input class="modal-input" id="res-order" type="number" placeholder="e.g. 1" min="0" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('res-modal')">Cancel</button>
+      <button class="btn-save btn-primary" onclick="saveResource()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── QUESTION MODAL ── -->
+<div class="modal-overlay" id="q-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="q-modal-title">Add Question</h3>
+      <button class="modal-close" onclick="closeModal('q-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-err" id="q-err"></div>
+      <div class="modal-field">
+        <label class="modal-label">Question *</label>
+        <textarea class="modal-textarea" id="q-text" placeholder="e.g. How familiar are you with the Cambridge curriculum?"></textarea>
+      </div>
+      <div id="options-wrap">
+        <label class="modal-label">Answer Options *</label>
+        <div id="options-list"></div>
+        <button class="btn-sm btn-edit" style="margin-top:8px" onclick="addOptionField()">+ Add Option</button>
+      </div>
+      <div class="modal-field" style="margin-top:14px">
+        <label class="modal-label">Order (display sequence)</label>
+        <input class="modal-input" id="q-order" type="number" placeholder="e.g. 1" min="0" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('q-modal')">Cancel</button>
+      <button class="btn-save btn-primary" onclick="saveQuestion()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── REGISTRATION DETAIL MODAL ── -->
+<div class="modal-overlay" id="reg-modal">
+  <div class="modal-box" style="max-width:620px">
+    <div class="modal-head">
+      <h3 id="reg-modal-name">Registration</h3>
+      <button class="modal-close" onclick="closeModal('reg-modal')">×</button>
+    </div>
+    <div class="modal-body" id="reg-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('reg-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+  import {
+    getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc,
+    doc, orderBy, query, serverTimestamp
+  } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+  let db, isAdmin = false;
+
+  document.addEventListener('authReady', ({ detail: { profile } }) => {
+    isAdmin = profile?.role_centralhub === 'central_admin';
+    if (!isAdmin) {
+      document.body.innerHTML = '<div style="text-align:center;padding:80px;color:#888">Access restricted to central admins.</div>';
+      return;
+    }
+    db = window.db;
+    loadRegistrations();
+    loadResources();
+    loadQuestions();
+  });
+
+  // ── TAB SWITCH ──────────────────────────────────────────────────────────────
+
+  window.switchTab = function(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b =>
+      b.classList.toggle('on', b.dataset.tab === tab)
+    );
+    document.querySelectorAll('.section').forEach(s =>
+      s.classList.toggle('on', s.id === `tab-${tab}`)
+    );
+  };
+
+  // ── MODAL HELPERS ───────────────────────────────────────────────────────────
+
+  window.closeModal = function(id) {
+    document.getElementById(id).classList.remove('on');
+  };
+
+  function showModal(id) {
+    document.getElementById(id).classList.add('on');
+  }
+
+  function modalErr(errElId, msg) {
+    const el = document.getElementById(errElId);
+    el.textContent = msg;
+    el.classList.add('on');
+  }
+
+  function clearErr(errElId) {
+    const el = document.getElementById(errElId);
+    el.textContent = '';
+    el.classList.remove('on');
+  }
+
+  // ── REGISTRATIONS ───────────────────────────────────────────────────────────
+
+  let allRegs = [];
+
+  async function loadRegistrations() {
+    const snap = await getDocs(query(
+      collection(db, 'orientation_registrations'),
+      orderBy('createdAt', 'desc')
+    ));
+    allRegs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderRegistrations();
+  }
+
+  function renderRegistrations() {
+    const total    = allRegs.length;
+    const pending  = allRegs.filter(r => !r.status || r.status === 'pending').length;
+    const reviewed = allRegs.filter(r => r.status === 'reviewed').length;
+
+    document.getElementById('stat-total').textContent   = total;
+    document.getElementById('stat-pending').textContent  = pending;
+    document.getElementById('stat-reviewed').textContent = reviewed;
+
+    if (total === 0) {
+      document.getElementById('reg-wrap').innerHTML =
+        '<div class="empty-state">No registrations yet.</div>';
+      return;
+    }
+
+    const rows = allRegs.map(r => {
+      const date = r.createdAt?.toDate
+        ? r.createdAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—';
+      const statusPill = r.status === 'reviewed'
+        ? '<span class="pill pill-reviewed">Reviewed</span>'
+        : r.status === 'rejected'
+        ? '<span class="pill pill-rejected">Rejected</span>'
+        : '<span class="pill pill-pending">Pending</span>';
+
+      return `
+        <tr>
+          <td><strong>${esc(r.fullName)}</strong><br><span style="color:var(--ink-3);font-size:12px">${esc(r.email)}</span></td>
+          <td>${esc(r.school)}</td>
+          <td>${esc(r.subjects)}</td>
+          <td>${esc(r.level)}</td>
+          <td>${date}</td>
+          <td>
+            <select class="status-select" onchange="updateRegStatus('${r.id}', this.value)">
+              <option value="pending"  ${(!r.status || r.status==='pending')  ? 'selected' : ''}>Pending</option>
+              <option value="reviewed" ${r.status==='reviewed' ? 'selected' : ''}>Reviewed</option>
+              <option value="rejected" ${r.status==='rejected' ? 'selected' : ''}>Rejected</option>
+            </select>
+          </td>
+          <td>
+            <button class="btn-sm btn-edit" onclick="viewRegistration('${r.id}')">View</button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('reg-wrap').innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>School</th><th>Subject(s)</th><th>Level</th><th>Date</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  window.updateRegStatus = async function(id, status) {
+    await updateDoc(doc(db, 'orientation_registrations', id), { status });
+    const r = allRegs.find(r => r.id === id);
+    if (r) r.status = status;
+    const total    = allRegs.length;
+    const pending  = allRegs.filter(r => !r.status || r.status === 'pending').length;
+    const reviewed = allRegs.filter(r => r.status === 'reviewed').length;
+    document.getElementById('stat-total').textContent   = total;
+    document.getElementById('stat-pending').textContent  = pending;
+    document.getElementById('stat-reviewed').textContent = reviewed;
+  };
+
+  window.viewRegistration = function(id) {
+    const r = allRegs.find(r => r.id === id);
+    if (!r) return;
+
+    const date = r.createdAt?.toDate
+      ? r.createdAt.toDate().toLocaleString('en-GB')
+      : '—';
+
+    const quizHtml = (r.quizAnswers || []).map((qa, i) => `
+      <div class="qa-item">
+        <div class="qa-q">Q${i+1}: ${esc(qa.question)}</div>
+        <div class="qa-a">${esc(qa.answerText || '—')}</div>
+      </div>`).join('') || '<p style="color:var(--ink-3)">No quiz answers recorded.</p>';
+
+    const cvLink = r.cvLink
+      ? `<a href="${esc(r.cvLink)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Open CV →</a>`
+      : '—';
+
+    document.getElementById('reg-modal-name').textContent = r.fullName;
+    document.getElementById('reg-modal-body').innerHTML = `
+      <table style="width:100%;font-size:14px;margin-bottom:20px">
+        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600;width:130px">Email</td><td>${esc(r.email)}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">School</td><td>${esc(r.school)}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Subject(s)</td><td>${esc(r.subjects)}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Level(s)</td><td>${esc(r.level)}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">CV</td><td>${cvLink}</td></tr>
+        <tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Submitted</td><td>${date}</td></tr>
+        ${r.note ? `<tr><td style="padding:6px 0;color:var(--ink-3);font-weight:600">Note</td><td>${esc(r.note)}</td></tr>` : ''}
+      </table>
+      <p style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);margin-bottom:12px">Competency Answers</p>
+      ${quizHtml}
+    `;
+    showModal('reg-modal');
+  };
+
+  // ── RESOURCES ───────────────────────────────────────────────────────────────
+
+  let allResources = [];
+  let editingResId = null;
+
+  async function loadResources() {
+    const snap = await getDocs(query(
+      collection(db, 'orientation_resources'),
+      orderBy('order', 'asc')
+    ));
+    allResources = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderResources();
+  }
+
+  function renderResources() {
+    if (allResources.length === 0) {
+      document.getElementById('res-wrap').innerHTML =
+        '<div class="empty-state">No resources yet. Click "+ Add Resource" to add one.</div>';
+      return;
+    }
+    const rows = allResources.map(r => `
+      <tr>
+        <td><span class="pill pill-${r.type || 'link'}">${r.type || 'link'}</span></td>
+        <td><strong>${esc(r.title)}</strong>${r.description ? `<br><span style="color:var(--ink-3);font-size:12px">${esc(r.description)}</span>` : ''}</td>
+        <td><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" class="truncate" style="color:var(--accent);font-size:13px;display:block">${esc(r.url)}</a></td>
+        <td style="text-align:center">${r.order ?? '—'}</td>
+        <td>
+          <div class="btn-row">
+            <button class="btn-sm btn-edit"   onclick="editResource('${r.id}')">Edit</button>
+            <button class="btn-sm btn-delete" onclick="deleteResource('${r.id}')">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('res-wrap').innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Type</th><th>Title</th><th>URL</th><th style="text-align:center">Order</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  window.openResourceModal = function() {
+    editingResId = null;
+    clearErr('res-err');
+    document.getElementById('res-modal-title').textContent = 'Add Resource';
+    document.getElementById('res-title').value = '';
+    document.getElementById('res-type').value  = '';
+    document.getElementById('res-url').value   = '';
+    document.getElementById('res-desc').value  = '';
+    document.getElementById('res-order').value = '';
+    showModal('res-modal');
+  };
+
+  window.editResource = function(id) {
+    const r = allResources.find(r => r.id === id);
+    if (!r) return;
+    editingResId = id;
+    clearErr('res-err');
+    document.getElementById('res-modal-title').textContent = 'Edit Resource';
+    document.getElementById('res-title').value = r.title || '';
+    document.getElementById('res-type').value  = r.type  || '';
+    document.getElementById('res-url').value   = r.url   || '';
+    document.getElementById('res-desc').value  = r.description || '';
+    document.getElementById('res-order').value = r.order ?? '';
+    showModal('res-modal');
+  };
+
+  window.saveResource = async function() {
+    const title = document.getElementById('res-title').value.trim();
+    const type  = document.getElementById('res-type').value;
+    const url   = document.getElementById('res-url').value.trim();
+    const desc  = document.getElementById('res-desc').value.trim();
+    const order = parseInt(document.getElementById('res-order').value) || 0;
+
+    if (!title) return modalErr('res-err', 'Please enter a title.');
+    if (!type)  return modalErr('res-err', 'Please select a type.');
+    if (!url || !url.startsWith('http')) return modalErr('res-err', 'Please enter a valid URL.');
+
+    const data = { title, type, url, order, description: desc || null };
+
+    if (editingResId) {
+      await updateDoc(doc(db, 'orientation_resources', editingResId), data);
+      const idx = allResources.findIndex(r => r.id === editingResId);
+      if (idx >= 0) allResources[idx] = { ...allResources[idx], ...data };
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'orientation_resources'), data);
+      allResources.push({ id: ref.id, ...data });
+    }
+
+    allResources.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+    renderResources();
+    closeModal('res-modal');
+  };
+
+  window.deleteResource = async function(id) {
+    const r = allResources.find(r => r.id === id);
+    if (!r) return;
+    if (!confirm(`Delete "${r.title}"?`)) return;
+    await deleteDoc(doc(db, 'orientation_resources', id));
+    allResources = allResources.filter(r => r.id !== id);
+    renderResources();
+  };
+
+  // ── QUESTIONS ───────────────────────────────────────────────────────────────
+
+  let allQuestions = [];
+  let editingQId   = null;
+
+  async function loadQuestions() {
+    const snap = await getDocs(query(
+      collection(db, 'orientation_questions'),
+      orderBy('order', 'asc')
+    ));
+    allQuestions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderQuestions();
+  }
+
+  function renderQuestions() {
+    if (allQuestions.length === 0) {
+      document.getElementById('q-wrap').innerHTML =
+        '<div class="empty-state">No questions yet. Click "+ Add Question" to add one.</div>';
+      return;
+    }
+    const rows = allQuestions.map((q, i) => `
+      <tr>
+        <td style="text-align:center;color:var(--ink-3);font-weight:700">${i+1}</td>
+        <td>
+          <strong>${esc(q.question)}</strong>
+          <ul style="margin-top:6px;padding-left:18px;color:var(--ink-3);font-size:13px">
+            ${(q.options||[]).map(o => `<li>${esc(o)}</li>`).join('')}
+          </ul>
+        </td>
+        <td style="text-align:center">${q.order ?? '—'}</td>
+        <td>
+          <div class="btn-row">
+            <button class="btn-sm btn-edit"   onclick="editQuestion('${q.id}')">Edit</button>
+            <button class="btn-sm btn-delete" onclick="deleteQuestion('${q.id}')">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    document.getElementById('q-wrap').innerHTML = `
+      <table class="data-table">
+        <thead><tr><th style="text-align:center">#</th><th>Question & Options</th><th style="text-align:center">Order</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  window.openQuestionModal = function() {
+    editingQId = null;
+    clearErr('q-err');
+    document.getElementById('q-modal-title').textContent = 'Add Question';
+    document.getElementById('q-text').value  = '';
+    document.getElementById('q-order').value = '';
+    document.getElementById('options-list').innerHTML = '';
+    addOptionField(); addOptionField(); // start with 2 empty options
+    showModal('q-modal');
+  };
+
+  window.editQuestion = function(id) {
+    const q = allQuestions.find(q => q.id === id);
+    if (!q) return;
+    editingQId = id;
+    clearErr('q-err');
+    document.getElementById('q-modal-title').textContent = 'Edit Question';
+    document.getElementById('q-text').value  = q.question || '';
+    document.getElementById('q-order').value = q.order ?? '';
+    const list = document.getElementById('options-list');
+    list.innerHTML = '';
+    (q.options || []).forEach(o => addOptionField(o));
+    if ((q.options || []).length === 0) { addOptionField(); addOptionField(); }
+    showModal('q-modal');
+  };
+
+  window.addOptionField = function(value = '') {
+    const list = document.getElementById('options-list');
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+    wrap.innerHTML = `
+      <input class="modal-input" type="text" placeholder="Option text…" value="${esc(value)}" style="flex:1" />
+      <button class="btn-sm btn-delete" style="flex-shrink:0" onclick="this.parentElement.remove()">✕</button>`;
+    list.appendChild(wrap);
+  };
+
+  window.saveQuestion = async function() {
+    const text  = document.getElementById('q-text').value.trim();
+    const order = parseInt(document.getElementById('q-order').value) || 0;
+    const opts  = Array.from(document.querySelectorAll('#options-list input'))
+      .map(i => i.value.trim()).filter(Boolean);
+
+    if (!text) return modalErr('q-err', 'Please enter the question text.');
+    if (opts.length < 2) return modalErr('q-err', 'Please add at least 2 answer options.');
+
+    const data = { question: text, options: opts, order };
+
+    if (editingQId) {
+      await updateDoc(doc(db, 'orientation_questions', editingQId), data);
+      const idx = allQuestions.findIndex(q => q.id === editingQId);
+      if (idx >= 0) allQuestions[idx] = { ...allQuestions[idx], ...data };
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'orientation_questions'), data);
+      allQuestions.push({ id: ref.id, ...data });
+    }
+
+    allQuestions.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+    renderQuestions();
+    closeModal('q-modal');
+  };
+
+  window.deleteQuestion = async function(id) {
+    const q = allQuestions.find(q => q.id === id);
+    if (!q) return;
+    if (!confirm(`Delete this question?`)) return;
+    await deleteDoc(doc(db, 'orientation_questions', id));
+    allQuestions = allQuestions.filter(q => q.id !== id);
+    renderQuestions();
+  };
+
+  // ── UTIL ────────────────────────────────────────────────────────────────────
+
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>

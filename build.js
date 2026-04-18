@@ -95,6 +95,7 @@ const htmlFiles = [
   "library.html",
   "network-health.html",
   "competency-admin.html",
+  "orientation-admin.html",
 ];
 
 htmlFiles.forEach((file) => {
