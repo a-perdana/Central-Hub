@@ -257,11 +257,20 @@
       </div>
       <div class="modal-field">
         <label class="modal-label">URL *</label>
-        <input class="modal-input" id="res-url" type="url" placeholder="https://…" />
+        <input class="modal-input" id="res-url" type="url" placeholder="https://…" oninput="onUrlInput()" />
       </div>
       <div class="modal-field">
         <label class="modal-label">Description</label>
         <textarea class="modal-textarea" id="res-desc" placeholder="Short description (optional)"></textarea>
+      </div>
+      <div class="modal-field" id="thumb-field">
+        <label class="modal-label">Thumbnail URL <span style="color:var(--ink-3);font-weight:400">(optional — auto-filled for YouTube videos)</span></label>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <input class="modal-input" id="res-thumb" type="url" placeholder="https://…" style="flex:1" oninput="updateThumbPreview()" />
+          <div id="thumb-preview" style="width:80px;height:54px;border-radius:7px;overflow:hidden;flex-shrink:0;background:var(--paper-2);display:none">
+            <img id="thumb-preview-img" src="" alt="" style="width:100%;height:100%;object-fit:cover" onerror="document.getElementById('thumb-preview').style.display='none'" />
+          </div>
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">Order (display sequence)</label>
@@ -509,9 +518,14 @@
         '<div class="empty-state">No resources yet. Click "+ Add Resource" to add one.</div>';
       return;
     }
-    const rows = allResources.map(r => `
+    const rows = allResources.map(r => {
+      const thumbHtml = r.thumbnail
+        ? `<img src="${esc(r.thumbnail)}" alt="" style="width:64px;height:44px;object-fit:cover;border-radius:6px;display:block" onerror="this.style.display='none'" />`
+        : `<span style="color:var(--ink-3);font-size:12px">—</span>`;
+      return `
       <tr>
         <td><span class="pill pill-${r.type || 'link'}">${r.type || 'link'}</span></td>
+        <td>${thumbHtml}</td>
         <td><strong>${esc(r.title)}</strong>${r.description ? `<br><span style="color:var(--ink-3);font-size:12px">${esc(r.description)}</span>` : ''}</td>
         <td><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" class="truncate" style="color:var(--accent);font-size:13px;display:block">${esc(r.url)}</a></td>
         <td style="text-align:center">${r.order ?? '—'}</td>
@@ -521,13 +535,65 @@
             <button class="btn-sm btn-delete" onclick="deleteResource('${r.id}')">Delete</button>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>`; }).join('');
 
     document.getElementById('res-wrap').innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Type</th><th>Title</th><th>URL</th><th style="text-align:center">Order</th><th></th></tr></thead>
+        <thead><tr><th>Type</th><th>Thumb</th><th>Title</th><th>URL</th><th style="text-align:center">Order</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
+  }
+
+  // Extract YouTube video ID from various URL formats
+  function ytVideoId(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtube.com')) return u.searchParams.get('v');
+      if (u.hostname === 'youtu.be') return u.pathname.slice(1);
+    } catch {}
+    return null;
+  }
+
+  function autoThumb(url, type) {
+    if (type === 'video') {
+      const id = ytVideoId(url);
+      if (id) return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+    }
+    return '';
+  }
+
+  window.onUrlInput = function() {
+    const url  = document.getElementById('res-url').value.trim();
+    const type = document.getElementById('res-type').value;
+    const thumbInput = document.getElementById('res-thumb');
+    // Only auto-fill if thumb field is currently empty or was previously auto-filled
+    if (type === 'video') {
+      const generated = autoThumb(url, type);
+      if (generated) {
+        thumbInput.value = generated;
+        updateThumbPreview();
+      }
+    }
+  };
+
+  window.updateThumbPreview = function() {
+    const url     = document.getElementById('res-thumb').value.trim();
+    const preview = document.getElementById('thumb-preview');
+    const img     = document.getElementById('thumb-preview-img');
+    if (url.startsWith('http')) {
+      img.src = url;
+      preview.style.display = 'block';
+    } else {
+      preview.style.display = 'none';
+    }
+  };
+
+  function setThumbPreview(url) {
+    const preview = document.getElementById('thumb-preview');
+    const img     = document.getElementById('thumb-preview-img');
+    document.getElementById('res-thumb').value = url || '';
+    if (url) { img.src = url; preview.style.display = 'block'; }
+    else preview.style.display = 'none';
   }
 
   window.openResourceModal = function() {
@@ -539,6 +605,7 @@
     document.getElementById('res-url').value   = '';
     document.getElementById('res-desc').value  = '';
     document.getElementById('res-order').value = '';
+    setThumbPreview('');
     showModal('res-modal');
   };
 
@@ -553,6 +620,7 @@
     document.getElementById('res-url').value   = r.url   || '';
     document.getElementById('res-desc').value  = r.description || '';
     document.getElementById('res-order').value = r.order ?? '';
+    setThumbPreview(r.thumbnail || '');
     showModal('res-modal');
   };
 
@@ -562,12 +630,16 @@
     const url   = document.getElementById('res-url').value.trim();
     const desc  = document.getElementById('res-desc').value.trim();
     const order = parseInt(document.getElementById('res-order').value) || 0;
+    const thumbInput = document.getElementById('res-thumb').value.trim();
 
     if (!title) return modalErr('res-err', 'Please enter a title.');
     if (!type)  return modalErr('res-err', 'Please select a type.');
     if (!url || !url.startsWith('http')) return modalErr('res-err', 'Please enter a valid URL.');
 
-    const data = { title, type, url, order, description: desc || null };
+    // Auto-generate thumbnail for YouTube if not manually set
+    const thumbnail = thumbInput || autoThumb(url, type) || null;
+
+    const data = { title, type, url, order, description: desc || null, thumbnail };
 
     if (editingResId) {
       await updateDoc(doc(db, 'orientation_resources', editingResId), data);
