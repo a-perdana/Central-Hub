@@ -160,7 +160,17 @@
       font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: 0.1em; color: var(--ink-3); margin: 0; flex: 1;
     }
-    .journal-save-status { font-size: 0.7rem; color: var(--ink-3); transition: opacity 0.3s; }
+    .journal-toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      background: #1a1a2e; color: #fff; font-size: 0.8rem; font-weight: 500;
+      padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      display: flex; align-items: center; gap: 8px;
+      transform: translateY(12px); opacity: 0;
+      transition: opacity 0.22s, transform 0.22s;
+      pointer-events: none;
+    }
+    .journal-toast.show { opacity: 1; transform: translateY(0); }
+    .journal-toast svg { flex-shrink: 0; }
     .journal-toolbar {
       display: flex; align-items: center; gap: 2px;
       padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--paper);
@@ -351,6 +361,11 @@
   </style>
 </head>
 <body>
+<div class="journal-toast" id="journalToast">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7l3.5 3.5L12 3" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  Journal saved
+</div>
+
 
 <!-- SHARED_NAVBAR -->
 
@@ -453,7 +468,6 @@
   <div class="journal-section">
     <div class="journal-header">
       <h4>Weekly Journal</h4>
-      <span class="journal-save-status" id="journalStatus"></span>
     </div>
     <div class="journal-toolbar">
       <button class="jtb-btn" id="jBold" title="Bold"><b>B</b></button>
@@ -1065,8 +1079,15 @@ document.addEventListener('keydown', e => {
 // ── Journal ───────────────────────────────────────────────────────
 (function initJournal() {
   const editor = document.getElementById('journalEditor');
-  const status = document.getElementById('journalStatus');
+  const toast  = document.getElementById('journalToast');
   let saveTimer = null;
+  let toastTimer = null;
+
+  function showToast() {
+    clearTimeout(toastTimer);
+    toast.classList.add('show');
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+  }
 
   const toolbar = {
     jBold:      () => document.execCommand('bold'),
@@ -1088,18 +1109,15 @@ document.addEventListener('keydown', e => {
     if (!currentUid) return;
     const db = window.db;
     const progressId = `${currentUid}_${ACADEMIC_YEAR}_w${String(currentWeek).padStart(2,'0')}_${currentPlatform}`;
-    status.textContent = 'Saving…';
     await setDoc(doc(db, 'weekly_progress', progressId), {
       uid: currentUid, weekNumber: currentWeek,
       academicYear: ACADEMIC_YEAR, platform: currentPlatform,
       journalHtml: editor.innerHTML, updatedAt: serverTimestamp(),
     }, { merge: true });
-    status.textContent = 'Saved';
-    setTimeout(() => { status.textContent = ''; }, 2000);
+    showToast();
   }
 
   editor.addEventListener('input', () => {
-    status.textContent = '';
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveJournal, 1500);
   });
