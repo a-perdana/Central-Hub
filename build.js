@@ -72,7 +72,7 @@ const htmlFiles = [
   "igcse-biology-pacing.html",
   "igcse-chemistry-pacing.html",
   "igcse-physics-pacing.html",
-  "as-alevel-pacing.html",
+  "as-alevel-syllabus.html",
   "assessment-management.html",
   "assessments.html",
   "console.html",
