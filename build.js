@@ -64,7 +64,7 @@ const htmlFiles = [
   "ease-system.html",
   "academics.html",
   "primary-checkpoint-pacing.html",
-  "secondary-checkpoint-pacing.html",
+  "secondary-checkpoint-syllabus.html",
   "igcse-pacing.html",
   "igcse-syllabus.html",
   "igcse-math-admin.html",
