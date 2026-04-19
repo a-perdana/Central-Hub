@@ -429,14 +429,34 @@
     .syllabus-no-results { padding: 10px 12px; font-size: 0.8rem; color: var(--ink-3); }
     .syllabus-hint { font-size: 0.72rem; color: var(--ink-3); margin-top: 5px; }
 
-    /* ===== SYLLABUS CHIPS ON TOPIC ROWS ===== */
-    .topic-syllabus-block { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
-    .srl-code {
-      display: inline-block; padding: 2px 8px; border-radius: 100px;
-      background: var(--accent-2); color: var(--accent-dk); border: 1px solid var(--accent);
-      font-size: 0.7rem; font-weight: 700; cursor: pointer; transition: background 0.1s;
+    /* ===== SYLLABUS REFS ON TOPIC ROWS ===== */
+    .topic-syllabus-block { margin-bottom: 8px; }
+    .topic-refs-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+    .syllabus-ref-line {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      align-items: baseline; gap: 6px;
+      font-size: 0.8rem; line-height: 1.5;
     }
-    .srl-code:hover { background: var(--accent); color: #fff; }
+    .srl-code {
+      font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 100px;
+      background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;
+      cursor: pointer; transition: background 0.12s; white-space: nowrap; flex-shrink: 0;
+    }
+    .srl-code:hover { background: #bae6fd; }
+    .srl-topic {
+      font-size: 0.72rem; font-weight: 500; color: var(--ink-3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .srl-title {
+      color: var(--ink-2); font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .srl-desc {
+      grid-column: 3 / -1;
+      color: var(--ink-3); font-size: 0.73rem; line-height: 1.55;
+      white-space: normal; padding-top: 1px;
+    }
 
     /* ===== SYLLABUS DETAIL MODAL ===== */
     .syl-detail-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
@@ -2100,20 +2120,45 @@ function renderTopic(t, ti, ci, q = '') {
          onclick="openAssessmentModal({type:'topic',ci:${ci},ti:${ti}})">+ Activity</button>`;
 
   const cfg = SUBJECTS[currentSubject];
-  const syllabusBlock = (t.syllabusRefs && t.syllabusRefs.length)
-    ? `<div class="topic-syllabus-block">${t.syllabusRefs.map(code => {
-        const res = lookupSyllabus(cfg.code, code);
-        const e = res?.entry;
-        return `<span class="srl-code" title="${escHtml(e?.title || '')}" onclick="openSyllabusDetail('${escHtml(cfg.code)}','${escHtml(code)}')">${escHtml(code)}</span>`;
-      }).join('')}</div>`
-    : '';
+  const subjCode = cfg ? cfg.code : '';
+  let syllabusBlock = '';
+  if (t.syllabusRefs && t.syllabusRefs.length) {
+    const chipLines = t.syllabusRefs.map(code => {
+      const res       = lookupSyllabus(subjCode, code);
+      const indexKey  = res?.key || `${subjCode}_${code}`;
+      const entry     = res?.entry;
+      const displayCode = q ? highlight(code, q) : escHtml(code);
+      const titleText   = entry ? (q ? highlight(entry.title || '', q) : escHtml(entry.title || '')) : '';
+      const topicText   = entry ? escHtml(entry.topicArea || '') : '';
+      const content     = Array.isArray(entry?.content) ? entry.content : (entry?.content || '').split('\n').filter(Boolean);
+      const descText    = entry?.description
+        ? escHtml(entry.description)
+        : content.length
+          ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : ''))
+          : '';
+      return `<div class="syllabus-ref-line">
+        <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
+        <span class="srl-topic">${topicText}</span>
+        <span class="srl-title">${titleText}</span>
+        ${descText ? `<span class="srl-desc">${descText}</span>` : ''}
+      </div>`;
+    }).join('');
+
+    let notesHtml = '';
+    if (objRaw) {
+      const rendered = /<[a-z]/i.test(objRaw)
+        ? (q ? highlightInHtml(objRaw, q) : objRaw)
+        : highlight(objRaw, q);
+      notesHtml = `<div class="topic-notes">${rendered}</div>`;
+    }
+    syllabusBlock = `<div class="topic-syllabus-block"><div class="topic-refs-list">${chipLines}</div>${notesHtml}</div>`;
+  }
 
   return `<div class="topic-row">
     <div class="topic-num">${ti + 1}</div>
     <div class="topic-main">
       <div class="topic-title">${highlight(t.title || t.topic || '', q)}</div>
-      ${objHtml}
-      ${syllabusBlock}
+      ${syllabusBlock || objHtml}
       <div class="topic-meta-row">
         ${metaChips}
         <div class="activity-row">${activityHtml}</div>
@@ -2548,6 +2593,12 @@ document.getElementById('syllabusEditorCloseBtn')?.addEventListener('click', clo
 document.getElementById('syllabusEditorCloseFooter')?.addEventListener('click', closeSyllabusEditor);
 document.getElementById('editSyllabusBtn')?.addEventListener('click', () => openSyllabusEditor());
 document.getElementById('syllabusEditorSaveBtn')?.addEventListener('click', saveSyllabusEntry);
+
+// Delegated click: srl-code chips on topic rows → open syllabus detail
+document.addEventListener('click', e => {
+  const chip = e.target.closest('[data-syl-key]');
+  if (chip) openSyllabusDetail(chip.dataset.sylKey);
+});
 
 // Close modals on backdrop click
 document.getElementById('chapterModal').addEventListener('click', e => {
