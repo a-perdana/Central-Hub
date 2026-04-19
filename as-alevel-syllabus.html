@@ -1095,6 +1095,8 @@ function initSyllabusPicker() {
     if (!document.getElementById('syllabusPicker')?.contains(e.target)) {
       dropdown.classList.remove('open');
     }
+    const chip = e.target.closest('[data-syl-key]');
+    if (chip) openSyllabusDetail(chip.dataset.sylKey);
   }, { passive: true });
 }
 
@@ -1129,9 +1131,20 @@ document.getElementById('syllabusDetailEditBtn')?.addEventListener('click', () =
   openSyllabusEditor(key);
 });
 
-function openSyllabusDetail(subjCode, code) {
-  const result = lookupSyllabus(subjCode, code);
-  const indexKey = result ? `${subjCode}_${code}` : null;
+function openSyllabusDetail(subjCodeOrKey, code) {
+  let subjCode, result;
+  if (code === undefined) {
+    // called with full key e.g. "9709_1.1"
+    const key = subjCodeOrKey;
+    const entry = syllabusIndex[key];
+    result = entry ? { key, entry } : null;
+    subjCode = key.split('_')[0];
+    code = key.split('_').slice(1).join('_');
+  } else {
+    subjCode = subjCodeOrKey;
+    result = lookupSyllabus(subjCode, code);
+  }
+  const indexKey = result ? result.key : null;
   const e = result?.entry;
   const modal    = document.getElementById('syllabusDetailModal');
   const body     = document.getElementById('sylDetailBody');
@@ -1791,8 +1804,44 @@ function renderChapter(ch, ci, q = '', matchedTopics = null) {
 
 function renderTopic(t, ti, ci, q = '') {
   const objRaw = t.objectives || t.objective || '';
+  const cfg      = SUBJECTS[currentSubject];
+  const subjCode = cfg ? cfg.code : '';
+  const hasRefs  = t.syllabusRefs && t.syllabusRefs.length > 0;
   let objHtml = '';
-  if (objRaw) {
+
+  if (hasRefs) {
+    const chipLines = t.syllabusRefs.map(code => {
+      const { key: indexKey, entry } = lookupSyllabus(subjCode, code);
+      const displayCode = q ? highlight(code, q) : escHtml(code);
+      const titleText   = entry ? (q ? highlight(entry.title, q) : escHtml(entry.title)) : '';
+      const topicText   = entry ? escHtml(entry.topicArea || '') : '';
+      const content     = entry?.content || [];
+      const descText    = entry?.description
+        ? escHtml(entry.description)
+        : content.length
+          ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : ''))
+          : '';
+      return `<div class="syllabus-ref-line">
+        <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
+        <span class="srl-topic">${topicText}</span>
+        <span class="srl-title">${titleText}</span>
+        ${descText ? `<span class="srl-desc">${descText}</span>` : ''}
+      </div>`;
+    }).join('');
+
+    let notesHtml = '';
+    if (objRaw) {
+      const rendered = /<[a-z]/i.test(objRaw)
+        ? (q ? highlightInHtml(objRaw, q) : objRaw)
+        : highlight(objRaw, q);
+      notesHtml = `<div class="topic-notes">${rendered}</div>`;
+    }
+
+    objHtml = `<div class="topic-syllabus-block">
+      <div class="topic-refs-list">${chipLines}</div>
+      ${notesHtml}
+    </div>`;
+  } else if (objRaw) {
     if (/<[a-z]/i.test(objRaw)) {
       objHtml = `<div class="topic-objectives obj-rich">${q ? highlightInHtml(objRaw, q) : objRaw}</div>`;
     } else {
@@ -1820,21 +1869,11 @@ function renderTopic(t, ti, ci, q = '') {
     : `<button class="btn btn-secondary btn-sm" style="font-size:0.7rem;padding:2px 8px"
          onclick="openAssessmentModal({type:'topic',ci:${ci},ti:${ti}})">+ Activity</button>`;
 
-  const cfg = SUBJECTS[currentSubject];
-  const syllabusBlock = (t.syllabusRefs && t.syllabusRefs.length)
-    ? `<div class="topic-syllabus-block">${t.syllabusRefs.map(code => {
-        const res = lookupSyllabus(cfg.code, code);
-        const e = res?.entry;
-        return `<span class="srl-code" title="${escHtml(e?.title || '')}" onclick="openSyllabusDetail('${escHtml(cfg.code)}','${escHtml(code)}')">${escHtml(code)}</span>`;
-      }).join('')}</div>`
-    : '';
-
   return `<div class="topic-row">
     <div class="topic-num">${ti + 1}</div>
     <div class="topic-main">
       <div class="topic-title">${highlight(t.title || t.topic || '', q)}</div>
       ${objHtml}
-      ${syllabusBlock}
       <div class="topic-meta-row">
         ${metaChips}
         <div class="activity-row">${activityHtml}</div>
