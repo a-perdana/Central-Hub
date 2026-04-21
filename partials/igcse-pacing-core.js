@@ -133,7 +133,7 @@ window.commitTopicName = async function(inp, ci, ti) {
   renderChapters();
 };
 
-// Codes cell: inline input with autocomplete from igcse_syllabus
+// Codes cell: inline input with autocomplete from cambridge_syllabus
 window.activateCodesInput = function(wrapEl, ci, ti) {
   if (wrapEl.querySelector('.inline-codes-input')) return;
   const topic = chapters[ci]?.topics?.[ti];
@@ -1405,11 +1405,11 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     }
   }).catch(e => console.warn('calendar_settings load failed:', e));
 
-  getDocs(collection(db, 'igcse_syllabus')).then(snap => {
+  getDocs(collection(db, 'cambridge_syllabus')).then(snap => {
     snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
     syllabusReady = true;
     console.log(`Syllabus index loaded: ${Object.keys(syllabusIndex).length} codes`);
-  }).catch(e => console.warn('igcse_syllabus load failed:', e));
+  }).catch(e => console.warn('cambridge_syllabus load failed:', e));
 
   onSnapshot(doc(db, COLLECTION, DOC_ID), snap => {
     if (snap.exists()) {
