@@ -48,6 +48,196 @@ window.ENV = {
 fs.writeFileSync(path.join("dist", "firebase-config.js"), firebaseConfigContent);
 console.log("Generated: dist/firebase-config.js");
 
+// ============================================================
+// IGCSE pacing pages — generated from igcse-pacing-template.html
+// ============================================================
+const AO_MATH = `<option value="AO1">AO1 — Knowledge &amp; techniques</option>
+          <option value="AO2">AO2 — Analyse &amp; interpret</option>
+          <option value="AO1+AO2">AO1 + AO2 — Both</option>`;
+const AO_SCIENCE = `<option value="AO1">AO1 — Knowledge &amp; understanding</option>
+          <option value="AO2">AO2 — Handle information &amp; solve problems</option>
+          <option value="AO3">AO3 — Experimental skills &amp; investigations</option>
+          <option value="AO1+AO2">AO1 + AO2 — Both</option>`;
+
+const IGCSE_SUBJECTS = {
+  'igcse-math-pacing.html': {
+    pageTitle:    'IGCSE Mathematics Pacing — CentralHub',
+    accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;\n      --red-50: #fff5f5;\n      --red-100: #fee2e2;\n      --red-600: #dc2626;\n      --red-700: #b91c1c;\n      --red-800: #991b1b;\n      --red-900: #7f1d1d;',
+    heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
+    heroGlow:     'rgba(185,28,28,.4)',
+    heroIcon:     '∫',
+    heroEyebrow:  'IGCSE Mathematics 0580',
+    heroTitle:    'IGCSE Mathematics Pacing',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'math_pacing', docId: 'year9-10', subjectKey: 'math', syllabusCode: '0580', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
+    yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
+  },
+  'igcse-biology-pacing.html': {
+    pageTitle:    'IGCSE Biology Pacing — CentralHub',
+    accentVars:   '--accent: #1e7a4a;\n      --accent-dk: #166534;\n      --accent-2: #e9f7ef;',
+    heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
+    heroGlow:     'rgba(21,128,61,.4)',
+    heroIcon:     '🧬',
+    heroEyebrow:  'IGCSE Biology 0610',
+    heroTitle:    'IGCSE Biology Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'biology_pacing', docId: 'year9-10', subjectKey: 'biology', syllabusCode: '0610', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
+    yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
+  },
+  'igcse-chemistry-pacing.html': {
+    pageTitle:    'IGCSE Chemistry Pacing — CentralHub',
+    accentVars:   '--accent: #7c3aed;\n      --accent-dk: #6d28d9;\n      --accent-2: #f5f3ff;',
+    heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 40%, #5b21b6 70%, #6d28d9 100%)',
+    heroGlow:     'rgba(109,40,217,.4)',
+    heroIcon:     '⚗',
+    heroEyebrow:  'IGCSE Chemistry 0620',
+    heroTitle:    'IGCSE Chemistry Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'chemistry_pacing', docId: 'year9-10', subjectKey: 'chemistry', syllabusCode: '0620', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
+    yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
+  },
+  'igcse-physics-pacing.html': {
+    pageTitle:    'IGCSE Physics Pacing — CentralHub',
+    accentVars:   '--accent: #0369a1;\n      --accent-dk: #075985;\n      --accent-2: #f0f9ff;',
+    heroGradient: 'linear-gradient(135deg, #0c4a6e 0%, #075985 40%, #0369a1 70%, #0284c7 100%)',
+    heroGlow:     'rgba(2,132,199,.4)',
+    heroIcon:     '⚛',
+    heroEyebrow:  'IGCSE Physics 0625',
+    heroTitle:    'IGCSE Physics Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'physics_pacing', docId: 'year9-10', subjectKey: 'physics', syllabusCode: '0625', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
+    yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
+  },
+};
+
+// ============================================================
+// Checkpoint pacing pages — generated from igcse-pacing-template.html
+// ============================================================
+const CHECKPOINT_SUBJECTS = {
+  'checkpoint-math-pacing.html': {
+    pageTitle:    'Checkpoint Mathematics Pacing — CentralHub',
+    accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
+    heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
+    heroGlow:     'rgba(185,28,28,.4)',
+    heroIcon:     '∫',
+    heroEyebrow:  'Cambridge Checkpoint Mathematics 1112',
+    heroTitle:    'Checkpoint Mathematics Pacing',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'checkpoint_math_pacing', docId: 'year7-8', subjectKey: 'checkpoint_math', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
+  },
+  'checkpoint-english-pacing.html': {
+    pageTitle:    'Checkpoint English Pacing — CentralHub',
+    accentVars:   '--accent: #2980b9;\n      --accent-dk: #1f6fa3;\n      --accent-2: #e8f4fd;',
+    heroGradient: 'linear-gradient(135deg, #0c2340 0%, #1a4a7a 40%, #1f6fa3 70%, #2980b9 100%)',
+    heroGlow:     'rgba(41,128,185,.4)',
+    heroIcon:     '📖',
+    heroEyebrow:  'Cambridge Checkpoint English 1111',
+    heroTitle:    'Checkpoint English Pacing',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'checkpoint_english', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
+  },
+  'checkpoint-science-pacing.html': {
+    pageTitle:    'Checkpoint Science Pacing — CentralHub',
+    accentVars:   '--accent: #27ae60;\n      --accent-dk: #1e8449;\n      --accent-2: #e9f7ef;',
+    heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
+    heroGlow:     'rgba(21,128,61,.4)',
+    heroIcon:     '🔬',
+    heroEyebrow:  'Cambridge Checkpoint Science 1113',
+    heroTitle:    'Checkpoint Science Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'checkpoint_science', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
+  },
+};
+
+// ============================================================
+// AS/A-Level pacing pages — generated from igcse-pacing-template.html
+// ============================================================
+const ASALEVEL_SUBJECTS = {
+  'asalevel-math-pacing.html': {
+    pageTitle:    'AS & A Level Mathematics Pacing — CentralHub',
+    accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
+    heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
+    heroGlow:     'rgba(185,28,28,.4)',
+    heroIcon:     '∫',
+    heroEyebrow:  'Cambridge AS & A Level Mathematics 9709',
+    heroTitle:    'AS & A Level Mathematics Pacing',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'asalevel_math_pacing', docId: 'year11-12', subjectKey: 'asalevel_math', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
+    yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
+  },
+  'asalevel-biology-pacing.html': {
+    pageTitle:    'AS & A Level Biology Pacing — CentralHub',
+    accentVars:   '--accent: #1e7a4a;\n      --accent-dk: #166534;\n      --accent-2: #e9f7ef;',
+    heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
+    heroGlow:     'rgba(21,128,61,.4)',
+    heroIcon:     '🧬',
+    heroEyebrow:  'Cambridge AS & A Level Biology 9700',
+    heroTitle:    'AS & A Level Biology Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'asalevel_biology_pacing', docId: 'year11-12', subjectKey: 'asalevel_biology', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
+    yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
+  },
+  'asalevel-chemistry-pacing.html': {
+    pageTitle:    'AS & A Level Chemistry Pacing — CentralHub',
+    accentVars:   '--accent: #e67e22;\n      --accent-dk: #ca6f1e;\n      --accent-2: #fef5e7;',
+    heroGradient: 'linear-gradient(135deg, #431407 0%, #7c2d12 40%, #9a3412 70%, #c2410c 100%)',
+    heroGlow:     'rgba(194,65,12,.4)',
+    heroIcon:     '⚗',
+    heroEyebrow:  'Cambridge AS & A Level Chemistry 9701',
+    heroTitle:    'AS & A Level Chemistry Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'asalevel_chemistry_pacing', docId: 'year11-12', subjectKey: 'asalevel_chemistry', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
+    yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
+  },
+  'asalevel-physics-pacing.html': {
+    pageTitle:    'AS & A Level Physics Pacing — CentralHub',
+    accentVars:   '--accent: #0369a1;\n      --accent-dk: #075985;\n      --accent-2: #f0f9ff;',
+    heroGradient: 'linear-gradient(135deg, #0c4a6e 0%, #075985 40%, #0369a1 70%, #0284c7 100%)',
+    heroGlow:     'rgba(2,132,199,.4)',
+    heroIcon:     '⚛',
+    heroEyebrow:  'Cambridge AS & A Level Physics 9702',
+    heroTitle:    'AS & A Level Physics Pacing',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'asalevel_physics_pacing', docId: 'year11-12', subjectKey: 'asalevel_physics', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
+    yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
+  },
+};
+
+function generateFromPacingTemplate(template, cfg) {
+  return template
+    .replace('{{PAGE_TITLE}}',    cfg.pageTitle)
+    .replace('{{ACCENT_VARS}}',   cfg.accentVars)
+    .replace('{{HERO_GRADIENT}}', cfg.heroGradient)
+    .replace('{{HERO_GLOW}}',     cfg.heroGlow)
+    .replace('{{HERO_ICON}}',     cfg.heroIcon)
+    .replace('{{HERO_EYEBROW}}',  cfg.heroEyebrow)
+    .replace('{{HERO_TITLE}}',    cfg.heroTitle)
+    .replace('{{AO_OPTIONS}}',    cfg.aoOptions)
+    .replace('{{PACING_CONFIG}}', cfg.pacingConfig)
+    .replace(/\{\{YEAR_A_KEY\}\}/g, cfg.yearAKey)
+    .replace(/\{\{YEAR_B_KEY\}\}/g, cfg.yearBKey)
+    .replace(/\{\{YEAR_A\}\}/g,    cfg.yearA)
+    .replace(/\{\{YEAR_B\}\}/g,    cfg.yearB);
+}
+
+const igcseTemplate      = fs.readFileSync('igcse-pacing-template.html', 'utf8');
+const checkpointTemplate = fs.readFileSync('checkpoint-pacing-template.html', 'utf8');
+const asalevelTemplate   = fs.readFileSync('asalevel-pacing-template.html', 'utf8');
+
+const generatedPacing = {};
+Object.entries(IGCSE_SUBJECTS).forEach(([f, cfg]) => {
+  generatedPacing[f] = generateFromPacingTemplate(igcseTemplate, cfg);
+});
+Object.entries(CHECKPOINT_SUBJECTS).forEach(([f, cfg]) => {
+  generatedPacing[f] = generateFromPacingTemplate(checkpointTemplate, cfg);
+});
+Object.entries(ASALEVEL_SUBJECTS).forEach(([f, cfg]) => {
+  generatedPacing[f] = generateFromPacingTemplate(asalevelTemplate, cfg);
+});
+
 // -- Copy HTML files
 const htmlFiles = [
   "index.html",
@@ -72,6 +262,13 @@ const htmlFiles = [
   "igcse-biology-pacing.html",
   "igcse-chemistry-pacing.html",
   "igcse-physics-pacing.html",
+  "checkpoint-math-pacing.html",
+  "checkpoint-english-pacing.html",
+  "checkpoint-science-pacing.html",
+  "asalevel-math-pacing.html",
+  "asalevel-biology-pacing.html",
+  "asalevel-chemistry-pacing.html",
+  "asalevel-physics-pacing.html",
   "as-alevel-syllabus.html",
   "assessment-management.html",
   "assessments.html",
@@ -99,8 +296,11 @@ const htmlFiles = [
 ];
 
 htmlFiles.forEach((file) => {
-  if (!fs.existsSync(file)) return;
-  let source = fs.readFileSync(file, "utf8");
+  let source = generatedPacing[file] || null;
+  if (!source) {
+    if (!fs.existsSync(file)) return;
+    source = fs.readFileSync(file, "utf8");
+  }
 
   // Inject shared-styles.css before the first <style> or </head> tag
   if (!source.includes('shared-styles.css')) {

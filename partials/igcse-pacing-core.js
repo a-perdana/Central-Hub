@@ -15,7 +15,11 @@ import {
 const COLLECTION    = window.PACING_CONFIG.collection;
 const DOC_ID        = window.PACING_CONFIG.docId;
 const SUBJECT_KEY   = window.PACING_CONFIG.subjectKey;
-const SYLLABUS_CODE = window.PACING_CONFIG.syllabusCode || ''; // e.g. '0610', '0620', '0625'
+const SYLLABUS_CODE = window.PACING_CONFIG.syllabusCode || '';
+const YEAR_A        = window.PACING_CONFIG.yearA || 'Year 9';
+const YEAR_B        = window.PACING_CONFIG.yearB || 'Year 10';
+const YEAR_A_KEY    = window.PACING_CONFIG.yearAKey || 'year9';
+const YEAR_B_KEY    = window.PACING_CONFIG.yearBKey || 'year10';
 
 let db, isAdmin = false;
 let chapters = [];
@@ -437,7 +441,7 @@ function renderChapters() {
   el.innerHTML = pageChapters.map((ch, localCi) => {
     const ci = localCi + pageOffset;
     const topics = ch.topics || [];
-    const yearCls = ch.year === 'Year 9' ? 'yr9' : 'yr10';
+    const yearCls = ch.year === YEAR_A ? 'yr9' : 'yr10';
     const topicsHtml = topics.length === 0
       ? '<div style="padding:10px 14px;font-size:.75rem;color:var(--ink-3)">No topics yet.</div>'
       : `<table class="topic-tbl">
@@ -561,7 +565,7 @@ window.openAddChapterModal = function() {
   _editChIdx = null;
   document.getElementById('chModalTitle').textContent = 'Add Chapter';
   document.getElementById('chNameInput').value = '';
-  document.getElementById('chYearInput').value = 'Year 9';
+  document.getElementById('chYearInput').value = YEAR_A;
   document.getElementById('chapterModal').style.display = 'flex';
   setTimeout(() => document.getElementById('chNameInput').focus(), 50);
 };
@@ -571,7 +575,7 @@ window.editChapter = function(ci) {
   const ch = chapters[ci];
   document.getElementById('chModalTitle').textContent = 'Edit Chapter';
   document.getElementById('chNameInput').value = ch.chapter || '';
-  document.getElementById('chYearInput').value = ch.year || 'Year 9';
+  document.getElementById('chYearInput').value = ch.year || YEAR_A;
   document.getElementById('chapterModal').style.display = 'flex';
   setTimeout(() => document.getElementById('chNameInput').focus(), 50);
 };
@@ -794,8 +798,8 @@ function renderProgressView() {
   function classMatchesYear(cls) {
     if (!selectedClass || selectedClass === 'default') return true;
     const n = cls.replace(/\s/g, '').toLowerCase();
-    if (selectedClass === 'year9')  return /\b9/.test(n) && !/10/.test(n);
-    if (selectedClass === 'year10') return /10/.test(n);
+    if (selectedClass === YEAR_A_KEY) return new RegExp('\\b' + YEAR_A.replace('Year ','') + '\\b').test(n.replace(/\s/g,''));
+    if (selectedClass === YEAR_B_KEY) return new RegExp('\\b' + YEAR_B.replace('Year ','') + '\\b').test(n.replace(/\s/g,''));
     return true;
   }
 
