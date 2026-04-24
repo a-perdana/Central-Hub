@@ -726,7 +726,7 @@
               <button class="btn btn-secondary btn-sm" onclick="addClassGroup()">+ Add</button>
             </div>
             <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="saveClassGroups()">Save Class Groups</button>
+              <button class="btn btn-primary btn-sm" id="saveClassGroupsBtn" onclick="saveClassGroups()">Save Class Groups</button>
             </div>
           </div>
         </div>
@@ -749,17 +749,14 @@
               <input class="form-input" id="objPrefixInput" type="text" placeholder="e.g. C, E">
               <p class="form-hint">Used to detect codes like <strong>C1.1</strong> in objectives. Leave blank to auto-detect.</p>
             </div>
-            <div class="form-group" style="margin-bottom:10px">
-              <label class="form-label" for="termStartInput">Term start date (for pace alerts)</label>
-              <input class="form-input" id="termStartInput" type="date">
-              <p class="form-hint">Applies to all subjects. Teachers Hub uses this to calculate overdue/behind alerts.</p>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label" for="totalWeeksInput">Total teaching weeks per year</label>
-              <input class="form-input" id="totalWeeksInput" type="number" min="1" max="52" placeholder="e.g. 36">
+            <div id="calSettingsInfo" style="padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1D4ED8;font-size:12px;line-height:1.6;margin-bottom:10px">
+              Term start date and total teaching weeks are managed in
+              <a href="academic-calendar" style="font-weight:700;color:#1D4ED8;text-decoration:underline">Academic Calendar → Year Settings</a>.
+              Teachers Hub reads those values automatically.
+              <div id="calSettingsDisplay" style="margin-top:6px;color:#1e40af;font-weight:500"></div>
             </div>
             <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="saveObjSettings()">Save Settings</button>
+              <button class="btn btn-primary btn-sm" id="saveObjBtn" onclick="saveObjSettings()">Save Settings</button>
             </div>
           </div>
         </div>
@@ -882,11 +879,11 @@
       <div class="form-group">
         <label class="form-label" for="chTitleInput">Chapter Title</label>
         <input class="form-input" id="chTitleInput" type="text" placeholder="e.g. Number and Algebra"
-          onkeydown="if(event.key==='Enter')saveChapterModal()">
+          onkeydown="if(event.key==='Enter')saveChapterModal()" oninput="_modalDirty=true">
       </div>
       <div class="form-group">
         <label class="form-label" for="chYearSelect">Year Group</label>
-        <select class="form-select" id="chYearSelect">
+        <select class="form-select" id="chYearSelect" onchange="_modalDirty=true">
           <option value="Year 11">Year 11</option>
           <option value="Year 12">Year 12</option>
         </select>
@@ -908,16 +905,16 @@
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label" for="topTitleInput">Topic Title</label>
-        <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number">
+        <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number" oninput="_modalDirty=true">
       </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label" for="topDurationInput">Lesson Hours</label>
-          <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 2">
+          <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 2" oninput="_modalDirty=true">
         </div>
         <div class="form-group">
           <label class="form-label" for="topStartWeekInput">Week</label>
-          <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5">
+          <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5" oninput="_modalDirty=true">
         </div>
       </div>
       <div class="form-group">
@@ -943,7 +940,7 @@
             <div class="rte-sep"></div>
             <button class="rte-btn" type="button" title="Clear formatting" onclick="_rteClear()">Clear</button>
           </div>
-          <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="Additional notes, objectives, or context…"></div>
+          <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="Additional notes, objectives, or context…" oninput="_modalDirty=true"></div>
         </div>
       </div>
       <!-- Resources -->
@@ -1059,11 +1056,12 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" integrity="sha512-3ItEsaNAHpxFjLp0VwdF7bI5mJnXcF9N26BVp1pIRkOF0jXAOk7OJpvXZ2JRE0ZTf1ILDsH3wqNKyJ/iZQqw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, getDoc, getDocs, collection, onSnapshot, setDoc, updateDoc, serverTimestamp }
+import { doc, getDoc, getDocs, collection, query, limit, onSnapshot, setDoc, updateDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -1133,7 +1131,7 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
 // ── Syllabus loader ──────────────────────────────────────────────
 async function loadSyllabus() {
   try {
-    const snap = await getDocs(collection(window.db, 'cambridge_syllabus'));
+    const snap = await getDocs(query(collection(window.db, 'cambridge_syllabus'), limit(500)));
     snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
     syllabusLoaded = true;
     const hint = document.getElementById('syllabusPickerHint');
@@ -1542,10 +1540,10 @@ function loadSubject(subj) {
 
 // ── Settings ─────────────────────────────────────────────────────
 let settingsData = {
-  math:      { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
-  biology:   { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
-  chemistry: { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
-  physics:   { classes: [], objPrefixes: '', termStart: '', totalWeeks: '' },
+  math:      { classes: [], objPrefixes: '' },
+  biology:   { classes: [], objPrefixes: '' },
+  chemistry: { classes: [], objPrefixes: '' },
+  physics:   { classes: [], objPrefixes: '' },
 };
 let settingsClassSubj = 'math';
 let settingsObjSubj   = 'math';
@@ -1580,14 +1578,25 @@ function loadAllSettings() {
         settingsData[subj] = {
           classes:    Array.isArray(d.classes)     ? d.classes : [],
           objPrefixes: Array.isArray(d.objPrefixes) ? d.objPrefixes.join(', ') : (settingsData[subj].objPrefixes || ''),
-          termStart:  d.termStart  || '',
-          totalWeeks: d.totalWeeks || '',
         };
       }
       renderClassGroups();
       renderObjSettings();
     }).catch(err => console.error('Settings load error:', err));
   });
+  // Load calendar_settings/current to display term info read-only
+  _getDoc(_doc(db, 'calendar_settings', 'current')).then(snap => {
+    const display = document.getElementById('calSettingsDisplay');
+    if (!display) return;
+    if (snap.exists()) {
+      const d = snap.data();
+      const start = d.academicYearStart ? new Date(d.academicYearStart).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+      const weeks = d.totalTeachingWeeks ?? '—';
+      display.textContent = `Academic year start: ${start} · Teaching weeks: ${weeks}`;
+    } else {
+      display.textContent = 'No calendar settings configured yet.';
+    }
+  }).catch(() => {});
 }
 
 window.switchClassSubj = function switchClassSubj(subj, btn) {
@@ -1634,40 +1643,38 @@ window.removeClassGroup = function removeClassGroup(i) {
 window.saveClassGroups = async function saveClassGroups() {
   const subj = settingsClassSubj;
   const data = settingsData[subj];
+  const btn = document.getElementById('saveClassGroupsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
     await _setDoc(_doc(window.db, SUBJECTS[subj].collection, DOC_ID),
       { classes: data.classes, updatedAt: _ts() }, { merge: true });
     showToast(`Class groups saved for ${SUBJECTS[subj].label}.`);
   } catch (err) { console.error(err); showToast('Save failed.', true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Save Class Groups'; } }
 }
 
 function renderObjSettings() {
   const data = settingsData[settingsObjSubj];
   const p = document.getElementById('objPrefixInput');
-  const t = document.getElementById('termStartInput');
-  const w = document.getElementById('totalWeeksInput');
   if (p) p.value = data.objPrefixes || '';
-  if (t) t.value = data.termStart   || '';
-  if (w) w.value = data.totalWeeks  || '';
 }
 
 window.saveObjSettings = async function saveObjSettings() {
   const subj = settingsObjSubj;
-  const prefRaw    = (document.getElementById('objPrefixInput').value || '').trim();
-  const termStart  = (document.getElementById('termStartInput').value  || '').trim();
-  const totalWeeks = parseInt(document.getElementById('totalWeeksInput').value) || null;
-  const prefixes   = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const prefRaw  = (document.getElementById('objPrefixInput').value || '').trim();
+  const prefixes = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
   settingsData[subj].objPrefixes = prefRaw;
-  settingsData[subj].termStart   = termStart;
-  settingsData[subj].totalWeeks  = totalWeeks;
+  const btn = document.getElementById('saveObjBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
     await _setDoc(_doc(window.db, SUBJECTS[subj].collection, DOC_ID),
-      { objPrefixes: prefixes, termStart: termStart || null, totalWeeks: totalWeeks || null, updatedAt: _ts() },
+      { objPrefixes: prefixes, updatedAt: _ts() },
       { merge: true });
     showToast(`Settings saved for ${SUBJECTS[subj].label}.`);
   } catch (err) { console.error(err); showToast('Save failed.', true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Save Settings'; } }
 }
 
 // ── GLH Banner ────────────────────────────────────────────────────
@@ -2222,6 +2229,7 @@ function genId() {
 function openAddChapterModal() {
   modalMode = 'add-chapter';
   editChIdx = null;
+  _modalDirty = false;
   document.getElementById('chModalTitle').textContent = 'Add Chapter';
   document.getElementById('chTitleInput').value       = '';
   document.getElementById('chYearSelect').value       = 'Year 11';
@@ -2232,6 +2240,7 @@ function openAddChapterModal() {
 function editChapter(ci) {
   modalMode = 'edit-chapter';
   editChIdx = ci;
+  _modalDirty = false;
   const ch = chapters[ci];
   document.getElementById('chModalTitle').textContent = 'Edit Chapter';
   document.getElementById('chTitleInput').value       = ch.chapter || ch.title || '';
@@ -2251,24 +2260,29 @@ async function saveChapterModal() {
     chapters[editChIdx] = { ...chapters[editChIdx], chapter: title, year };
   }
 
+  _modalDirty = false;
   closeChapterModal();
   await saveChapters();
   showToast(modalMode === 'add-chapter' ? 'Chapter added.' : 'Chapter updated.');
 }
 
 function closeChapterModal() {
+  if (_modalDirty) {
+    showToast('Changes discarded.');
+    _modalDirty = false;
+  }
   document.getElementById('chapterModal').classList.remove('open');
 }
 
 async function deleteChapter(e, ci) {
   e.stopPropagation();
-  const ch = chapters[ci];
-  const n  = (ch.topics || []).length;
-  const chName = ch.chapter || ch.title;
-  const msg = n > 0
-    ? `Delete "${chName}"? This will also delete all ${n} topic${n !== 1 ? 's' : ''}.`
-    : `Delete chapter "${chName}"?`;
-  if (!confirm(msg)) return;
+  const btn = e.currentTarget;
+  if (btn.dataset.confirming !== 'true') {
+    btn.dataset.confirming = 'true';
+    btn.textContent = 'Confirm?';
+    setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Delete'; }, 3000);
+    return;
+  }
   chapters.splice(ci, 1);
   await saveChapters();
   showToast('Chapter deleted.');
@@ -2289,6 +2303,7 @@ function openAddTopicModal(ci) {
   modalMode  = 'add-topic';
   editChIdx  = ci;
   editTopIdx = null;
+  _modalDirty = false;
   modalResources = [];
   modalSyllabusRefs = [];
   document.getElementById('topModalTitle').textContent     = 'Add Topic';
@@ -2307,6 +2322,7 @@ function editTopic(ci, ti) {
   modalMode  = 'edit-topic';
   editChIdx  = ci;
   editTopIdx = ti;
+  _modalDirty = false;
   const t = chapters[ci].topics[ti];
   modalResources = (t.resources || []).map(r => ({ ...r }));
   modalSyllabusRefs = (t.syllabusRefs || []).slice();
@@ -2315,7 +2331,7 @@ function editTopic(ci, ti) {
   document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
   document.getElementById('topStartWeekInput').value       = t.week  || '';
   const rawObj = t.objectives || t.objective || '';
-  document.getElementById('topObjectivesEditor').innerHTML = rawObj;
+  document.getElementById('topObjectivesEditor').innerHTML = DOMPurify.sanitize(rawObj);
   renderModalResources();
   renderSyllabusChips();
   initSyllabusPicker();
@@ -2386,19 +2402,29 @@ async function saveTopicModal() {
     };
   }
 
+  _modalDirty = false;
   closeTopicModal();
   await saveChapters();
   showToast(modalMode === 'add-topic' ? 'Topic added.' : 'Topic updated.');
 }
 
 function closeTopicModal() {
+  if (_modalDirty) {
+    showToast('Changes discarded.');
+    _modalDirty = false;
+  }
   document.getElementById('topicModal').classList.remove('open');
 }
 
 async function deleteTopic(e, ci, ti) {
   e.stopPropagation();
-  const t = chapters[ci].topics[ti];
-  if (!confirm(`Delete topic "${t.title || t.topic}"?`)) return;
+  const btn = e.currentTarget;
+  if (btn.dataset.confirming !== 'true') {
+    btn.dataset.confirming = 'true';
+    btn.textContent = 'Confirm?';
+    setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Delete'; }, 3000);
+    return;
+  }
   chapters[ci].topics.splice(ti, 1);
   await saveChapters();
   showToast('Topic deleted.');

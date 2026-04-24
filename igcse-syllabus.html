@@ -842,7 +842,7 @@
               <button class="btn btn-secondary btn-sm" onclick="addClassGroup()">+ Add</button>
             </div>
             <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="saveClassGroups()">Save Class Groups</button>
+              <button class="btn btn-primary btn-sm" id="saveClassGroupsBtn" onclick="saveClassGroups()">Save Class Groups</button>
             </div>
           </div>
         </div>
@@ -865,13 +865,14 @@
               <input class="form-input" id="objPrefixInput" type="text" placeholder="e.g. C, E">
               <p class="form-hint">Used to detect codes like <strong>C1.1</strong> in objectives. Leave blank to auto-detect.</p>
             </div>
-            <div class="form-hint" style="padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1D4ED8;font-size:12px;line-height:1.5">
+            <div id="calSettingsInfo" style="padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1D4ED8;font-size:12px;line-height:1.6">
               Term start date and total teaching weeks are managed in
               <a href="academic-calendar" style="font-weight:700;color:#1D4ED8;text-decoration:underline">Academic Calendar → Year Settings</a>.
               Teachers Hub reads those values automatically.
+              <div id="calSettingsDisplay" style="margin-top:6px;color:#1e40af;font-weight:500"></div>
             </div>
             <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="saveObjSettings()">Save Settings</button>
+              <button class="btn btn-primary btn-sm" id="saveObjBtn" onclick="saveObjSettings()">Save Settings</button>
             </div>
           </div>
         </div>
@@ -1183,11 +1184,12 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" integrity="sha512-3ItEsaNAHpxFjLp0VwdF7bI5mJnXcF9N26BVp1pIRkOF0jXAOk7OJpvXZ2JRE0ZTf1ILDsH3wqNKyJ/iZQqw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, getDoc, getDocs, collection, onSnapshot, setDoc, updateDoc, serverTimestamp }
+import { doc, getDoc, getDocs, collection, query, limit, onSnapshot, setDoc, updateDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -1248,7 +1250,7 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
 // ── Syllabus loader ──────────────────────────────────────────────
 async function loadSyllabus() {
   try {
-    const snap = await getDocs(collection(window.db, 'cambridge_syllabus'));
+    const snap = await getDocs(query(collection(window.db, 'cambridge_syllabus'), limit(500)));
     snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
     syllabusLoaded = true;
     const hint = document.getElementById('syllabusPickerHint');
@@ -1786,6 +1788,19 @@ function loadAllSettings() {
       renderObjSettings();
     }).catch(err => console.error('Settings load error:', err));
   });
+  // Load calendar_settings/current to display term info read-only
+  _getDoc(_doc(db, 'calendar_settings', 'current')).then(snap => {
+    const display = document.getElementById('calSettingsDisplay');
+    if (!display) return;
+    if (snap.exists()) {
+      const d = snap.data();
+      const start = d.academicYearStart ? new Date(d.academicYearStart).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+      const weeks = d.totalTeachingWeeks ?? '—';
+      display.textContent = `Academic year start: ${start} · Teaching weeks: ${weeks}`;
+    } else {
+      display.textContent = 'No calendar settings configured yet.';
+    }
+  }).catch(() => {});
 }
 
 window.switchClassSubj = function switchClassSubj(subj, btn) {
@@ -1832,12 +1847,15 @@ window.removeClassGroup = function removeClassGroup(i) {
 window.saveClassGroups = async function saveClassGroups() {
   const subj = settingsClassSubj;
   const data = settingsData[subj];
+  const btn = document.getElementById('saveClassGroupsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
     await _setDoc(_doc(window.db, _IGCSE_SUBJECTS[subj].collection, _IGCSE_DOC_ID),
       { classes: data.classes, updatedAt: _ts() }, { merge: true });
     showToast(`Class groups saved for ${_IGCSE_SUBJECTS[subj].label}.`);
   } catch (err) { console.error(err); showToast('Save failed.', true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Save Class Groups'; } }
 }
 
 function renderObjSettings() {
@@ -1851,6 +1869,8 @@ window.saveObjSettings = async function saveObjSettings() {
   const prefRaw  = (document.getElementById('objPrefixInput').value || '').trim();
   const prefixes = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
   settingsData[subj].objPrefixes = prefRaw;
+  const btn = document.getElementById('saveObjBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: _doc, setDoc: _setDoc, serverTimestamp: _ts } = window.__firestoreHelpers;
     await _setDoc(_doc(window.db, _IGCSE_SUBJECTS[subj].collection, _IGCSE_DOC_ID),
@@ -1858,6 +1878,7 @@ window.saveObjSettings = async function saveObjSettings() {
       { merge: true });
     showToast(`Settings saved for ${_IGCSE_SUBJECTS[subj].label}.`);
   } catch (err) { console.error(err); showToast('Save failed.', true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'Save Settings'; } }
 }
 
 // ── Inline chip edit ─────────────────────────────────────────────
@@ -2629,7 +2650,7 @@ function editTopic(ci, ti) {
   document.getElementById('topDurationInput').value        = t.duration || t.hour  || '';
   document.getElementById('topStartWeekInput').value       = t.week     || '';
   document.getElementById('topAoSelect').value             = t.ao       || '';
-  document.getElementById('topObjectivesEditor').innerHTML = t.objectives || t.objective || '';
+  document.getElementById('topObjectivesEditor').innerHTML = DOMPurify.sanitize(t.objectives || t.objective || '');
   document.getElementById('syllabusSearchInput').value     = '';
   document.getElementById('syllabusDropdown').classList.remove('open');
   renderSyllabusChips();
