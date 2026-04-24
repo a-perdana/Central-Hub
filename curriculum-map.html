@@ -672,7 +672,7 @@
     let currentView    = 'week';
     let syllabusCache  = {};   // code → doc data
     let pacingData     = {};   // subjectKey → { chapters }
-    let progressCache  = {};   // subjectKey_topicKey → status
+    let cachedGaps     = null; // memoized countGaps result, cleared on load
 
     // ── Boot ──────────────────────────────────────────────────────
     document.addEventListener('authReady', async ({ detail: { profile } }) => {
@@ -683,13 +683,16 @@
 
     function bindControls() {
       document.getElementById('selLevel').addEventListener('change', e => {
-        currentLevel = e.target.value;
-        pacingData   = {};
+        currentLevel  = e.target.value;
+        pacingData    = {};
         syllabusCache = {};
-        loadAndRender();
+        cachedGaps    = null;
+        setControlsDisabled(true);
+        loadAndRender().finally(() => setControlsDisabled(false));
       });
       document.getElementById('selSubject').addEventListener('change', e => {
         currentSubject = e.target.value;
+        cachedGaps     = null;
         render();
       });
       document.querySelectorAll('.view-btn').forEach(btn => {
@@ -706,50 +709,79 @@
       });
     }
 
+    function setControlsDisabled(disabled) {
+      document.getElementById('selLevel').disabled   = disabled;
+      document.getElementById('selSubject').disabled = disabled;
+      document.querySelectorAll('.view-btn').forEach(b => b.disabled = disabled);
+    }
+
+    function showError(msg) {
+      document.getElementById('mapContent').innerHTML =
+        `<div class="map-loading" style="color:#dc2626;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          ${esc(msg)}
+        </div>`;
+    }
+
     // ── Load all pacing + syllabus data ───────────────────────────
     async function loadAndRender() {
       document.getElementById('mapContent').innerHTML =
         '<div class="map-loading"><div class="spinner"></div>Loading curriculum data…</div>';
 
       const configs = getActiveConfigs();
+      let pacingFailed = false;
 
-      // Load pacing documents in parallel
+      // Load pacing documents in parallel (skip already cached)
       await Promise.all(configs.map(async cfg => {
         if (pacingData[cfg.key]) return;
         try {
           const snap = await getDoc(doc(db, cfg.col, cfg.docId));
           pacingData[cfg.key] = snap.exists() ? snap.data() : { chapters: [] };
-        } catch { pacingData[cfg.key] = { chapters: [] }; }
+        } catch (err) {
+          console.error('Pacing load failed:', cfg.key, err);
+          pacingData[cfg.key] = { chapters: [] };
+          pacingFailed = true;
+        }
       }));
 
-      // Load syllabus codes referenced in pacing
+      if (pacingFailed) {
+        showError('Some curriculum data could not be loaded. Check your connection and refresh.');
+        return;
+      }
+
+      // Collect all syllabus codes referenced in pacing (parse once here)
       const allCodes = new Set();
       configs.forEach(cfg => {
         (pacingData[cfg.key]?.chapters || []).forEach(ch => {
           (ch.topics || []).forEach(t => {
-            (t.objective || '').split(/\s+/).filter(Boolean).forEach(c => allCodes.add(c));
+            getCodes(t.objective).forEach(c => allCodes.add(c));
           });
         });
       });
 
-      // Load syllabus docs not yet cached
-      const uncached = [...allCodes].filter(c => !(c in syllabusCache));
+      // Cap at 150 unique codes to prevent unbounded reads; extras load on modal open
+      const uncached = [...allCodes].filter(c => !(c in syllabusCache)).slice(0, 150);
       if (uncached.length) {
         // Batch into chunks of 30 (Firestore 'in' limit)
+        const batches = [];
         for (let i = 0; i < uncached.length; i += 30) {
-          const chunk = uncached.slice(i, i + 30);
-          try {
-            const snaps = await getDocs(query(
-              collection(db, 'cambridge_syllabus'),
-              where('code', 'in', chunk),
-            ));
-            snaps.forEach(s => { syllabusCache[s.data().code] = s.data(); });
-          } catch {}
+          batches.push(uncached.slice(i, i + 30));
         }
-        // Mark any not found
+        const results = await Promise.allSettled(batches.map(chunk =>
+          getDocs(query(collection(db, 'cambridge_syllabus'), where('code', 'in', chunk)))
+        ));
+        results.forEach((r, idx) => {
+          if (r.status === 'fulfilled') {
+            r.value.forEach(s => { syllabusCache[s.data().code] = s.data(); });
+          } else {
+            console.error('Syllabus batch failed:', batches[idx], r.reason);
+          }
+        });
+        // Mark any not found as null
         uncached.forEach(c => { if (!(c in syllabusCache)) syllabusCache[c] = null; });
       }
 
+      cachedGaps = null;
       render();
     }
 
@@ -767,59 +799,76 @@
       return currentSubject === 'all' ? all : all.filter(c => c.key === currentSubject);
     }
 
+    // ── Helpers ───────────────────────────────────────────────────
+    function getCodes(objective) {
+      return (objective || '').split(/\s+/).filter(Boolean);
+    }
+
+    function getStatusDisplay(status) {
+      if (status === 'done')       return { cls: 'sp-done',       label: 'Done' };
+      if (status === 'inprogress') return { cls: 'sp-inprogress', label: 'In Progress' };
+      return { cls: 'sp-pending', label: 'Pending' };
+    }
+
+    function getTopicData(t, ch, cfg) {
+      return {
+        name: t.topic, week: t.week, hours: t.hours,
+        chapter: ch.name, status: t.status || 'pending',
+        objective: t.objective || '',
+        subjectKey: cfg.key,
+        color: /^#[0-9a-fA-F]{3,8}$/.test(cfg.color) ? cfg.color : '#7c3aed',
+      };
+    }
+
     // ── Summary cards ─────────────────────────────────────────────
     function renderSummary(configs) {
       let totalTopics = 0, totalHours = 0;
-      const mappedCodes = new Set(), allSyllabusCodes = new Set();
+      const mappedCodes = new Set();
 
       configs.forEach(cfg => {
         (pacingData[cfg.key]?.chapters || []).forEach(ch => {
           (ch.topics || []).forEach(t => {
             totalTopics++;
             totalHours += Number(t.hours) || 0;
-            (t.objective || '').split(/\s+/).filter(Boolean).forEach(c => mappedCodes.add(c));
+            getCodes(t.objective).forEach(c => mappedCodes.add(c));
           });
         });
       });
 
-      // All syllabus codes for these subjects
-      Object.entries(syllabusCache).forEach(([code]) => allSyllabusCodes.add(code));
-      const pct = allSyllabusCodes.size
-        ? Math.round((mappedCodes.size / (mappedCodes.size + countGaps(configs).length)) * 100)
-        : 100;
-      const gaps = countGaps(configs).length;
+      const gaps = getGaps(configs);
+      const total = mappedCodes.size + gaps.length;
+      const pct   = total ? Math.round((mappedCodes.size / total) * 100) : 100;
 
       document.getElementById('sumTopics').textContent   = totalTopics;
       document.getElementById('sumCoverage').textContent = pct + '%';
       document.getElementById('sumHours').textContent    = totalHours + 'h';
-      document.getElementById('sumGaps').textContent     = gaps;
+      document.getElementById('sumGaps').textContent     = gaps.length;
     }
 
-    function countGaps(configs) {
-      // Gaps = syllabus codes in igcse_syllabus (for these prefixes) not in any topic objective
+    function getGaps(configs) {
+      if (cachedGaps) return cachedGaps;
       const mapped = new Set();
       configs.forEach(cfg => {
         (pacingData[cfg.key]?.chapters || []).forEach(ch =>
-          (ch.topics || []).forEach(t =>
-            (t.objective || '').split(/\s+/).filter(Boolean).forEach(c => mapped.add(c))
-          )
+          (ch.topics || []).forEach(t => getCodes(t.objective).forEach(c => mapped.add(c)))
         );
       });
-      return Object.entries(syllabusCache)
+      cachedGaps = Object.entries(syllabusCache)
         .filter(([code, data]) => data && !mapped.has(code))
         .map(([code, data]) => ({ code, title: data.title || '' }));
+      return cachedGaps;
     }
 
     // ── Gap panel ─────────────────────────────────────────────────
     function renderGaps(configs) {
-      const gaps  = countGaps(configs);
+      const gaps  = getGaps(configs);
       const panel = document.getElementById('gapPanel');
       const list  = document.getElementById('gapList');
       document.getElementById('gapBadge').textContent = gaps.length;
 
       if (gaps.length === 0) {
-        panel.style.display = '';
-        list.innerHTML = '<div class="no-gaps"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>All syllabus objectives are covered.</div>';
+        panel.style.display = 'none';
+        list.innerHTML = '';
       } else {
         panel.style.display = '';
         list.innerHTML = gaps.map(g => `
@@ -830,8 +879,15 @@
       }
     }
 
+    // ── Topic registry for event delegation ──────────────────────
+    const topicRegistry = new Map(); // chipId → topic data object
+    let   topicIdSeq    = 0;
+
     // ── Week View ─────────────────────────────────────────────────
     function renderWeekView(configs) {
+      topicRegistry.clear();
+      topicIdSeq = 0;
+
       // Build map: week → { subjectKey → [topics] }
       const weekMap = {};
       let maxWeek = 0;
@@ -855,9 +911,8 @@
         return;
       }
 
-      // Build table header
       const subjectCols = configs.map(cfg =>
-        `<th style="border-top: 3px solid ${cfg.color}">${esc(cfg.label)}</th>`
+        `<th style="border-top: 3px solid ${esc(cfg.color)}">${esc(cfg.label)}</th>`
       ).join('');
 
       let rows = '';
@@ -867,15 +922,12 @@
           const topics = weekData[cfg.key] || [];
           if (!topics.length) return `<td><span class="empty-week">—</span></td>`;
           const chips = topics.map(t => {
-            const status  = t.status || 'pending';
-            const codes   = (t.objective || '').split(/\s+/).filter(Boolean);
+            const status = t.status || 'pending';
+            const codes  = getCodes(t.objective);
+            const id     = `t${++topicIdSeq}`;
+            topicRegistry.set(id, getTopicData(t, { name: t.chapterName }, cfg));
             return `
-              <span class="topic-chip status-${esc(status)}" data-topic='${JSON.stringify({
-                name: t.topic, week: t.week, hours: t.hours,
-                chapter: t.chapterName, status,
-                objective: t.objective || '',
-                subjectKey: cfg.key, color: cfg.color,
-              }).replace(/'/g, '&#39;')}'>
+              <span class="topic-chip status-${esc(status)}" data-tid="${id}">
                 <span class="tc-status-dot"></span>
                 <span>
                   <div class="tc-name">${esc(t.topic)}</div>
@@ -889,63 +941,84 @@
           return `<td>${chips}</td>`;
         }).join('');
 
-        rows += `<tr>
-          <td class="td-week">Wk ${w}</td>
-          ${cells}
-        </tr>`;
+        rows += `<tr><td class="td-week">Wk ${w}</td>${cells}</tr>`;
       }
 
-      document.getElementById('mapContent').innerHTML = `
+      const content = document.getElementById('mapContent');
+      content.innerHTML = `
         <div class="grid-wrap">
           <table class="week-grid">
-            <thead>
-              <tr>
-                <th class="th-week">Week</th>
-                ${subjectCols}
-              </tr>
-            </thead>
+            <thead><tr><th class="th-week">Week</th>${subjectCols}</tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>`;
 
-      // Bind click to topic chips
-      document.querySelectorAll('.topic-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-          try { openDetail(JSON.parse(chip.dataset.topic.replace(/&#39;/g, "'"))); }
-          catch {}
-        });
+      // Single delegated listener for all topic chips
+      content.addEventListener('click', e => {
+        const chip = e.target.closest('.topic-chip[data-tid]');
+        if (!chip) return;
+        const data = topicRegistry.get(chip.dataset.tid);
+        if (data) openDetail(data);
       });
     }
 
     // ── Chapter View ──────────────────────────────────────────────
     function renderChapterView(configs) {
+      topicRegistry.clear();
+      topicIdSeq = 0;
+
       if (!configs.length) {
         document.getElementById('mapContent').innerHTML =
           '<div class="map-loading">No pacing data available for this selection.</div>';
         return;
       }
 
+      const thStyle = 'padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)';
+
       let html = '';
       configs.forEach(cfg => {
         const chapters = pacingData[cfg.key]?.chapters || [];
         if (!chapters.length) return;
+        const safeColor = esc(cfg.color);
 
-        html += `<h3 style="font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${cfg.color};margin:24px 0 10px;display:flex;align-items:center;gap:8px;">
-          <span style="width:10px;height:10px;border-radius:2px;background:${cfg.color};display:inline-block"></span>
+        html += `<h3 style="font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${safeColor};margin:24px 0 10px;display:flex;align-items:center;gap:8px;">
+          <span style="width:10px;height:10px;border-radius:2px;background:${safeColor};display:inline-block"></span>
           ${esc(cfg.label)}
-        </h3>
-        <div class="chapter-list">`;
+        </h3><div class="chapter-list">`;
 
         chapters.forEach((ch, ci) => {
-          const topics  = ch.topics || [];
-          const done    = topics.filter(t => t.status === 'done').length;
-          const pct     = topics.length ? Math.round((done / topics.length) * 100) : 0;
-          const totalH  = topics.reduce((s, t) => s + (Number(t.hours) || 0), 0);
+          const topics = ch.topics || [];
+          const done   = topics.filter(t => t.status === 'done').length;
+          const pct    = topics.length ? Math.round((done / topics.length) * 100) : 0;
+          const totalH = topics.reduce((s, t) => s + (Number(t.hours) || 0), 0);
+          const chId   = `ch_${cfg.key}_${ci}`;
+
+          const topicRows = topics.map((t, ti) => {
+            const codes  = getCodes(t.objective);
+            const status = t.status || 'pending';
+            const sp     = getStatusDisplay(status);
+            const tid    = `t${++topicIdSeq}`;
+            topicRegistry.set(tid, getTopicData(t, ch, cfg));
+
+            const codeBadges = codes.map(c => {
+              const uncovered = syllabusCache[c] === null;
+              return `<span class="obj-badge${uncovered ? ' uncovered' : ''}" data-tid="${tid}">${esc(c)}</span>`;
+            }).join('');
+
+            return `<tr>
+              <td style="padding:10px 20px;border-bottom:1px solid var(--paper-2);font-size:0.72rem;color:var(--ink-3)">${ci + 1}.${ti + 1}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.83rem;color:var(--ink);font-weight:500;line-height:1.4">${esc(t.topic)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${t.week ? `Wk ${t.week}` : '—'}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${t.hours ? `${t.hours}h` : '—'}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2)">${codeBadges || '<span style="color:var(--ink-3);font-size:0.75rem">—</span>'}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);text-align:right"><span class="status-pill ${sp.cls}">${sp.label}</span></td>
+            </tr>`;
+          }).join('');
 
           html += `
-          <div class="chapter-card" id="ch_${cfg.key}_${ci}">
-            <div class="chapter-head" onclick="toggleChapter('ch_${cfg.key}_${ci}')">
-              <span class="ch-number" style="background:${cfg.color}1a;color:${cfg.color}">${ci + 1}</span>
+          <div class="chapter-card" id="${chId}">
+            <div class="chapter-head" data-chid="${chId}">
+              <span class="ch-number" style="background:${safeColor}1a;color:${safeColor}">${ci + 1}</span>
               <span class="ch-name">${esc(ch.name)}</span>
               <span class="ch-meta">
                 <span>${topics.length} topics</span>
@@ -959,40 +1032,15 @@
             </div>
             <div class="chapter-topics">
               <table style="width:100%;border-collapse:collapse">
-                <thead>
-                  <tr style="background:var(--paper)">
-                    <th style="padding:8px 20px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">#</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Topic</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Week</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Hours</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Syllabus Codes</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:right;border-bottom:1px solid var(--border)">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${topics.map((t, ti) => {
-                    const codes  = (t.objective || '').split(/\s+/).filter(Boolean);
-                    const status = t.status || 'pending';
-                    const spClass = status === 'done' ? 'sp-done' : status === 'inprogress' ? 'sp-inprogress' : 'sp-pending';
-                    const spLabel = status === 'done' ? 'Done' : status === 'inprogress' ? 'In Progress' : 'Pending';
-                    const codeBadges = codes.map(c => {
-                      const inSyllabus = syllabusCache[c] !== undefined;
-                      return `<span class="obj-badge${!inSyllabus && syllabusCache[c] === null ? ' uncovered' : ''}"
-                        data-topic='${JSON.stringify({ name: t.topic, week: t.week, hours: t.hours, chapter: ch.name, status, objective: t.objective || '', subjectKey: cfg.key, color: cfg.color }).replace(/'/g, '&#39;')}'
-                        onclick="event.stopPropagation();openDetailFromEl(this)"
-                      >${esc(c)}</span>`;
-                    }).join('');
-
-                    return `<tr>
-                      <td style="padding:10px 20px;border-bottom:1px solid var(--paper-2);font-size:0.72rem;color:var(--ink-3)">${ci + 1}.${ti + 1}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.83rem;color:var(--ink);font-weight:500;line-height:1.4">${esc(t.topic)}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${t.week ? `Wk ${t.week}` : '—'}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${t.hours ? `${t.hours}h` : '—'}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2)">${codeBadges || '<span style="color:var(--ink-3);font-size:0.75rem">—</span>'}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);text-align:right"><span class="status-pill ${spClass}">${spLabel}</span></td>
-                    </tr>`;
-                  }).join('')}
-                </tbody>
+                <thead><tr style="background:var(--paper)">
+                  <th style="${thStyle};padding-left:20px">#</th>
+                  <th style="${thStyle}">Topic</th>
+                  <th style="${thStyle}">Week</th>
+                  <th style="${thStyle}">Hours</th>
+                  <th style="${thStyle}">Syllabus Codes</th>
+                  <th style="${thStyle};text-align:right">Status</th>
+                </tr></thead>
+                <tbody>${topicRows}</tbody>
               </table>
             </div>
           </div>`;
@@ -1001,31 +1049,44 @@
         html += '</div>';
       });
 
-      document.getElementById('mapContent').innerHTML = html || '<div class="map-loading">No pacing data available.</div>';
+      const content = document.getElementById('mapContent');
+      content.innerHTML = html || '<div class="map-loading">No pacing data available.</div>';
+
+      // Single delegated listener for chapter toggles and code badge clicks
+      content.addEventListener('click', e => {
+        const head = e.target.closest('.chapter-head[data-chid]');
+        if (head) {
+          document.getElementById(head.dataset.chid)?.classList.toggle('open');
+          return;
+        }
+        const badge = e.target.closest('.obj-badge[data-tid]');
+        if (badge) {
+          e.stopPropagation();
+          const data = topicRegistry.get(badge.dataset.tid);
+          if (data) openDetail(data);
+        }
+      });
     }
 
-    // ── Toggle chapter (chapter view) ─────────────────────────────
-    window.toggleChapter = function(id) {
-      document.getElementById(id)?.classList.toggle('open');
-    };
-
     // ── Detail modal ──────────────────────────────────────────────
-    window.openDetailFromEl = function(el) {
-      try { openDetail(JSON.parse(el.dataset.topic.replace(/&#39;/g, "'"))); } catch {}
-    };
-
     function openDetail(data) {
       const { name, week, hours, chapter, status, objective, color } = data;
-      const codes  = (objective || '').split(/\s+/).filter(Boolean);
-      const spClass = status === 'done' ? 'sp-done' : status === 'inprogress' ? 'sp-inprogress' : 'sp-pending';
-      const spLabel = status === 'done' ? 'Done' : status === 'inprogress' ? 'In Progress' : 'Pending';
+      const codes = getCodes(objective);
+      const sp    = getStatusDisplay(status);
+
+      const TIER_STYLES = {
+        Core:     { bg: '#e0f2fe', color: '#0891b2' },
+        Extended: { bg: '#ede9fe', color: '#7c3aed' },
+      };
 
       const codeCards = codes.length ? codes.map(c => {
         const s = syllabusCache[c];
         if (!s) return `<div class="dm-code-card"><div class="dm-code-id">${esc(c)}</div><div class="dm-code-desc" style="color:var(--ink-3);font-style:italic">Not found in syllabus database.</div></div>`;
+        const tier = s.tier === 'Core' || s.tier === 'Extended' ? s.tier : null;
+        const ts   = tier ? TIER_STYLES[tier] : null;
         return `
           <div class="dm-code-card">
-            <div class="dm-code-id">${esc(s.code)}${s.tier ? ` <span style="font-family:'DM Sans';font-size:0.7rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${s.tier==='Core'?'#e0f2fe':'#ede9fe'};color:${s.tier==='Core'?'#0891b2':'#7c3aed'}">${s.tier}</span>` : ''}</div>
+            <div class="dm-code-id">${esc(s.code)}${tier ? ` <span style="font-family:'DM Sans';font-size:0.7rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${ts.bg};color:${ts.color}">${esc(tier)}</span>` : ''}</div>
             <div class="dm-code-title">${esc(s.title || '')}</div>
             ${s.description ? `<div class="dm-code-desc">${esc(s.description)}</div>` : ''}
           </div>`;
@@ -1034,7 +1095,7 @@
       document.getElementById('detailTitle').textContent = name;
       document.getElementById('detailBody').innerHTML = `
         <div class="dm-header">
-          <div class="dm-icon" style="background:${color}1a;color:${color}">
+          <div class="dm-icon" style="background:${esc(color)}1a;color:${esc(color)}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
           </div>
           <div>
@@ -1047,7 +1108,7 @@
           <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.83rem;color:var(--ink-2)">
             ${week  ? `<span>📅 Week ${week}</span>`  : ''}
             ${hours ? `<span>⏱ ${hours} hours</span>` : ''}
-            <span class="status-pill ${spClass}" style="margin-left:auto">${spLabel}</span>
+            <span class="status-pill ${sp.cls}" style="margin-left:auto">${sp.label}</span>
           </div>
         </div>
         <div class="dm-section">
