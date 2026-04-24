@@ -916,8 +916,10 @@
       });
 
       if (maxWeek === 0) {
+        const subjectLabel = configs.length === 1 ? configs[0].label : 'the selected subjects';
+        const levelLabel   = document.getElementById('selLevel').selectedOptions[0]?.text || currentLevel;
         document.getElementById('mapContent').innerHTML =
-          '<div class="map-loading">No pacing data available for this selection.</div>';
+          `<div class="map-loading">No pacing data for <strong>${esc(subjectLabel)}</strong> in <strong>${esc(levelLabel)}</strong>. Add chapters via the pacing admin page.</div>`;
         return;
       }
 
@@ -979,7 +981,7 @@
 
       if (!configs.length) {
         document.getElementById('mapContent').innerHTML =
-          '<div class="map-loading">No pacing data available for this selection.</div>';
+          '<div class="map-loading">No subjects found for this selection.</div>';
         return;
       }
 
@@ -1060,7 +1062,12 @@
       });
 
       const content = document.getElementById('mapContent');
-      content.innerHTML = html || '<div class="map-loading">No pacing data available.</div>';
+      if (!html) {
+        const subjectLabel = configs.length === 1 ? configs[0].label : 'the selected subjects';
+        const levelLabel   = document.getElementById('selLevel').selectedOptions[0]?.text || currentLevel;
+        html = `<div class="map-loading">No pacing data for <strong>${esc(subjectLabel)}</strong> in <strong>${esc(levelLabel)}</strong>. Add chapters via the pacing admin page.</div>`;
+      }
+      content.innerHTML = html;
 
       // Single delegated listener for chapter toggles and code badge clicks
       content.addEventListener('click', e => {
@@ -1091,7 +1098,13 @@
 
       const codeCards = codes.length ? codes.map(c => {
         const s = syllabusCache[c];
-        if (!s) return `<div class="dm-code-card"><div class="dm-code-id">${esc(c)}</div><div class="dm-code-desc" style="color:var(--ink-3);font-style:italic">Not found in syllabus database.</div></div>`;
+        if (s === undefined) {
+          // Not yet fetched (beyond the 150-code cap or race condition)
+          return `<div class="dm-code-card"><div class="dm-code-id">${esc(c)}</div><div class="dm-code-desc" style="color:var(--ink-3);font-style:italic">Loading syllabus details…</div></div>`;
+        }
+        if (s === null) {
+          return `<div class="dm-code-card"><div class="dm-code-id">${esc(c)}</div><div class="dm-code-desc" style="color:var(--ink-3);font-style:italic">Not found in syllabus database.</div></div>`;
+        }
         const tier = s.tier === 'Core' || s.tier === 'Extended' ? s.tier : null;
         const ts   = tier ? TIER_STYLES[tier] : null;
         return `
