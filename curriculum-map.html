@@ -522,6 +522,50 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── CHAPTER PAGER ── */
+    .ch-pager {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--paper);
+      flex-wrap: wrap;
+    }
+    .ch-pager-info {
+      font-size: 0.75rem;
+      color: var(--ink-3);
+      margin-right: auto;
+    }
+    .ch-page-btn {
+      min-width: 30px;
+      height: 30px;
+      padding: 0 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--white);
+      color: var(--ink-2);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ch-page-btn:hover:not(.active):not(:disabled) {
+      background: var(--paper-2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .ch-page-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .ch-page-btn:disabled { opacity: 0.35; cursor: default; }
+
     @media (max-width: 900px) {
       .page-wrap { padding: 24px 20px 60px; }
       .hero { padding: 36px 20px; }
@@ -669,6 +713,8 @@
     let syllabusCache  = {};   // code → doc data
     let pacingData     = {};   // subjectKey → { chapters }
     let cachedGaps     = null; // memoized countGaps result, cleared on load
+    let chapterPages   = {};   // subjectKey → current page index (0-based)
+    const CH_PAGE_SIZE = 5;
 
     // ── Boot ──────────────────────────────────────────────────────
     document.addEventListener('authReady', async ({ detail: { profile } }) => {
@@ -696,6 +742,7 @@
         pacingData    = {};
         syllabusCache = {};
         cachedGaps    = null;
+        chapterPages  = {};
         updateSubjectDropdown();
         setControlsDisabled(true);
         loadAndRender().finally(() => setControlsDisabled(false));
@@ -703,6 +750,7 @@
       document.getElementById('selSubject').addEventListener('change', e => {
         currentSubject = e.target.value;
         cachedGaps     = null;
+        chapterPages   = {};
         render();
       });
       document.querySelectorAll('.view-btn').forEach(btn => {
@@ -989,16 +1037,23 @@
 
       let html = '';
       configs.forEach(cfg => {
-        const chapters = pacingData[cfg.key]?.chapters || [];
-        if (!chapters.length) return;
+        const allChapters = pacingData[cfg.key]?.chapters || [];
+        if (!allChapters.length) return;
         const safeColor = esc(cfg.color);
+
+        const page      = chapterPages[cfg.key] || 0;
+        const totalPages = Math.ceil(allChapters.length / CH_PAGE_SIZE);
+        const pageChapters = allChapters.slice(page * CH_PAGE_SIZE, (page + 1) * CH_PAGE_SIZE);
+        const startIdx  = page * CH_PAGE_SIZE; // global index offset for numbering
 
         html += `<h3 style="font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${safeColor};margin:24px 0 10px;display:flex;align-items:center;gap:8px;">
           <span style="width:10px;height:10px;border-radius:2px;background:${safeColor};display:inline-block"></span>
           ${esc(cfg.label)}
+          <span style="font-size:0.72rem;font-weight:400;color:var(--ink-3);text-transform:none;letter-spacing:0">${allChapters.length} chapters</span>
         </h3><div class="chapter-list">`;
 
-        chapters.forEach((ch, ci) => {
+        pageChapters.forEach((ch, pageIdx) => {
+          const ci     = startIdx + pageIdx; // global chapter index
           const topics = ch.topics || [];
           const done   = topics.filter(t => t.status === 'done').length;
           const pct    = topics.length ? Math.round((done / topics.length) * 100) : 0;
@@ -1031,7 +1086,7 @@
           <div class="chapter-card" id="${chId}">
             <div class="chapter-head" data-chid="${chId}">
               <span class="ch-number" style="background:${safeColor}1a;color:${safeColor}">${ci + 1}</span>
-              <span class="ch-name">${esc(ch.name)}</span>
+              <span class="ch-name">${esc(ch.chapter || ch.name || '')}</span>
               <span class="ch-meta">
                 <span>${topics.length} topics</span>
                 <span>${totalH}h</span>
@@ -1058,6 +1113,18 @@
           </div>`;
         });
 
+        // Pager
+        if (totalPages > 1) {
+          const from = page * CH_PAGE_SIZE + 1;
+          const to   = Math.min((page + 1) * CH_PAGE_SIZE, allChapters.length);
+          let pagerBtns = `<button class="ch-page-btn" data-pgkey="${cfg.key}" data-pgto="${page - 1}" ${page === 0 ? 'disabled' : ''}>‹</button>`;
+          for (let p = 0; p < totalPages; p++) {
+            pagerBtns += `<button class="ch-page-btn${p === page ? ' active' : ''}" data-pgkey="${cfg.key}" data-pgto="${p}">${p + 1}</button>`;
+          }
+          pagerBtns += `<button class="ch-page-btn" data-pgkey="${cfg.key}" data-pgto="${page + 1}" ${page === totalPages - 1 ? 'disabled' : ''}>›</button>`;
+          html += `<div class="ch-pager"><span class="ch-pager-info">Chapters ${from}–${to} of ${allChapters.length}</span>${pagerBtns}</div>`;
+        }
+
         html += '</div>';
       });
 
@@ -1069,13 +1136,22 @@
       }
       content.innerHTML = html;
 
-      // Single delegated listener for chapter toggles and code badge clicks
+      // Single delegated listener for chapter toggles, badge clicks, and pager
       content.addEventListener('click', e => {
+        // Pager button
+        const pgBtn = e.target.closest('.ch-page-btn[data-pgkey]');
+        if (pgBtn && !pgBtn.disabled) {
+          chapterPages[pgBtn.dataset.pgkey] = Number(pgBtn.dataset.pgto);
+          renderChapterView(configs);
+          return;
+        }
+        // Chapter toggle
         const head = e.target.closest('.chapter-head[data-chid]');
         if (head) {
           document.getElementById(head.dataset.chid)?.classList.toggle('open');
           return;
         }
+        // Syllabus code badge
         const badge = e.target.closest('.obj-badge[data-tid]');
         if (badge) {
           e.stopPropagation();
