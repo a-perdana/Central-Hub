@@ -770,11 +770,9 @@
     overflow: visible;
     background: transparent;
   }
-  /* In edit mode: block all clicks on the <a> itself, but allow label text editing */
-  .nav-edit-mode .ch-dd-item { pointer-events: none; }
-  .nav-edit-mode .ch-dd-item[draggable="true"] { pointer-events: auto; }
-  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-item-label { pointer-events: auto; }
-  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-drag-handle { pointer-events: auto; }
+  /* In edit mode: items are draggable and labels are editable — no navigation */
+  .nav-edit-mode .ch-dd-item[draggable="true"] { cursor: grab; }
+  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-item-label { pointer-events: auto; cursor: text; }
 </style>
 
 <nav class="top-nav" aria-label="Main navigation">
@@ -1531,8 +1529,7 @@ function exitEditMode(save) {
     item.removeEventListener('dragleave', onDragLeave);
     item.removeEventListener('drop', onDrop);
     item.removeEventListener('dragend', onDragEnd);
-    item.removeEventListener('click',     blockNav, true);
-    item.removeEventListener('mousedown', blockNav, true);
+    item.removeEventListener('click', blockNav, true);
     item._navEditInit = false;
     item.classList.remove('dragging', 'drag-over');
     // Restore stashed href
@@ -1584,17 +1581,14 @@ function initItem(item) {
   item.addEventListener('dragleave', onDragLeave);
   item.addEventListener('drop', onDrop);
   item.addEventListener('dragend', onDragEnd);
-  // Block click and mousedown on the item itself (capture phase)
-  item.addEventListener('click',     blockNav, true);
-  item.addEventListener('mousedown', blockNav, true);
+  // Block click in capture phase (prevents any residual navigation)
+  item.addEventListener('click', blockNav, true);
   item._navEditInit = true;
 
   const lbl = item.querySelector('.nav-item-label');
   if (lbl) {
     lbl.contentEditable = 'true';
     lbl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbl.blur(); } });
-    // Allow mousedown on label for text editing, but stop it reaching the <a>
-    lbl.addEventListener('mousedown', e => { e.stopPropagation(); }, true);
   }
 }
 
