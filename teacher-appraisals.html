@@ -701,7 +701,7 @@ window.openAppraisalModal = function(id) {
 
     ${a.appraiserNarrative ? `
       <div class="detail-section-title">Appraiser Narrative</div>
-      <div class="detail-narrative">${a.appraiserNarrative}</div>
+      <div class="detail-narrative">${typeof a.appraiserNarrative === 'object' ? (a.appraiserNarrative.text || JSON.stringify(a.appraiserNarrative)) : a.appraiserNarrative}</div>
     ` : ''}
 
     ${a.teacherResponse ? `
@@ -953,7 +953,19 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
     getDocs(query(collection(db, 'teacher_walkthroughs'), orderBy('createdAt', 'desc')))
   ]);
 
-  allAppraisals   = appraisalSnap.docs.map(d  => ({ id: d.id,  ...d.data()  }));
+  allAppraisals   = appraisalSnap.docs.map(d => {
+    const data = d.data();
+    // Compute compositePercent if missing: F1=20%, F2=60%, F3=20%, each out of 4
+    if (data.compositePercent == null && (data.f1Score != null || data.f2Score != null || data.f3Score != null)) {
+      const f1 = data.f1Score ?? 0, f2 = data.f2Score ?? 0, f3 = data.f3Score ?? 0;
+      data.compositePercent = ((f1*0.2 + f2*0.6 + f3*0.2) / 4) * 100;
+      if (!data.predicate) {
+        const p = data.compositePercent;
+        data.predicate = p >= 86 ? 'A' : p >= 66 ? 'B' : p >= 51 ? 'C' : p >= 36 ? 'D' : 'F';
+      }
+    }
+    return { id: d.id, ...data };
+  });
   allWalkthroughs = wtSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   populateYears(allAppraisals, allWalkthroughs);
