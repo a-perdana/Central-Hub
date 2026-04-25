@@ -512,19 +512,6 @@
       padding-bottom: 14px; border-bottom: 1px solid var(--border);
     }
 
-    /* ===== TEACHER PROGRESS ===== */
-    .teacher-progress-panel {
-      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 20px 22px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
-    }
-    .tp-panel-head { font-size: 0.85rem; font-weight: 700; color: var(--ink); margin-bottom: 14px; }
-    .tp-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    .tp-table th { text-align: left; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); padding: 0 0 8px; border-bottom: 1px solid var(--border); }
-    .tp-table td { padding: 10px 0; border-bottom: 1px solid var(--paper-2); }
-    .tp-table tr:last-child td { border-bottom: none; }
-    .tp-pct { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-    .tp-bar-wrap { height: 7px; border-radius: 100px; background: var(--paper-2); overflow: hidden; }
-    .tp-bar-fill { height: 100%; border-radius: 100px; background: var(--accent); transition: width 0.4s; }
 
     /* ===== TOAST ===== */
     .toast {
@@ -814,7 +801,8 @@
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          Teacher Progress
+          View Progress Report
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true" style="margin-left:2px;opacity:0.6"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
         <button class="btn btn-primary" onclick="openAddChapterModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -834,13 +822,6 @@
       <div class="glh-chart-body" id="glhChartBody" style="display:none"></div>
     </div>
 
-    <!-- Teacher Progress Panel -->
-    <div id="teacherProgressPanel" style="display:none">
-      <div class="teacher-progress-panel">
-        <div class="tp-panel-head">Teacher Progress — <span id="tpSubjLabel">Mathematics</span></div>
-        <div id="teacherProgressContent"></div>
-      </div>
-    </div>
 
     <!-- Search -->
     <div class="pacing-search-wrap">
@@ -1633,55 +1614,6 @@ function toggleTeacherProgress() {
   if (url) window.location.href = url;
 }
 
-async function loadTeacherProgress() {
-  const contentEl = document.getElementById('teacherProgressContent');
-  const labelEl   = document.getElementById('tpSubjLabel');
-  contentEl.innerHTML = '<p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">Loading…</p>';
-  if (labelEl) labelEl.textContent = SUBJECTS[currentSubject].label;
-
-  const cfg = SUBJECTS[currentSubject];
-  const totalTopics = chapters.reduce((s, ch) => s + (ch.topics?.length || 0), 0);
-
-  try {
-    const snap = await getDocs(collection(window.db, 'userProgress'));
-    const rows = [];
-    snap.forEach(d => {
-      const data = d.data();
-      const statuses = data.statuses || data[`statuses_${cfg.collection}`] || {};
-      const done = Object.values(statuses).filter(v => v === 'done').length;
-      if (done > 0 || Object.keys(statuses).length > 0) {
-        rows.push({ uid: d.id, name: data.displayName || d.id, done, total: totalTopics });
-      }
-    });
-
-    if (!rows.length) {
-      contentEl.innerHTML = '<p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">No teacher progress recorded yet.</p>';
-      return;
-    }
-
-    rows.sort((a, b) => b.done - a.done);
-    contentEl.innerHTML = `
-      <table class="tp-table">
-        <thead><tr><th>Teacher</th><th>Done</th><th>Progress</th></tr></thead>
-        <tbody>${rows.map(r => {
-          const pct = totalTopics ? Math.round(r.done / totalTopics * 100) : 0;
-          return `<tr>
-            <td>${escHtml(r.name)}</td>
-            <td><span class="tp-pct">${r.done} / ${totalTopics}</span></td>
-            <td style="min-width:140px">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="tp-bar-wrap" style="flex:1"><div class="tp-bar-fill" style="width:${pct}%"></div></div>
-                <span style="font-size:0.75rem;color:var(--ink-3);width:32px;text-align:right">${pct}%</span>
-              </div>
-            </td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
-  } catch (err) {
-    contentEl.innerHTML = '<p style="color:#dc2626;font-size:0.875rem;text-align:center;padding:24px">Failed to load progress data.</p>';
-    console.error('Teacher progress error:', err);
-  }
-}
 
 // ── Load subject ─────────────────────────────────────────────────
 function loadSubject(subj) {

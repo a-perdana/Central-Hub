@@ -405,15 +405,6 @@
     .syllabus-option .opt-topic { font-size: 0.7rem; color: var(--ink-3); }
     .syllabus-no-results { padding: 10px 12px; font-size: 0.8rem; color: var(--ink-3); text-align: center; }
 
-    /* ===== TEACHER PROGRESS ===== */
-    .tp-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    .tp-table th { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 8px 12px; border-bottom: 2px solid var(--border); text-align: left; }
-    .tp-table td { padding: 9px 12px; border-bottom: 1px solid var(--paper-2); font-size: 0.875rem; vertical-align: middle; }
-    .tp-table tr:last-child td { border-bottom: none; }
-    .tp-table tr:hover td { background: var(--paper); }
-    .tp-bar-wrap { height: 7px; background: var(--paper-2); border-radius: 10px; overflow: hidden; min-width: 80px; }
-    .tp-bar-fill { height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.4s; }
-    .tp-pct { font-size: 0.78rem; font-weight: 700; color: var(--accent-dk); }
 
     /* ===== RESOURCES ===== */
     .res-section-head {
@@ -780,7 +771,8 @@
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-secondary" id="teacherProgressBtn" onclick="toggleTeacherProgress()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="23 21 23 19 20 16 17 19"/></svg>
-          Teacher Progress
+          View Progress Report
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true" style="margin-left:2px;opacity:0.6"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
         <button class="btn btn-print" onclick="openPrintView()" title="Open print-friendly view">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -806,19 +798,6 @@
       </div>
     </div>
 
-    <!-- Teacher Progress Panel -->
-    <div id="teacherProgressPanel" style="display:none;margin-bottom:24px">
-      <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow-sm)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <div>
-            <h3 style="font-size:0.95rem;font-weight:600;color:var(--ink);margin-bottom:3px">Teacher Progress</h3>
-            <p style="font-size:0.8rem;color:var(--ink-3)">Topics marked done by each teacher for this subject</p>
-          </div>
-          <button class="btn btn-secondary btn-sm" onclick="toggleTeacherProgress()">Close</button>
-        </div>
-        <div id="teacherProgressContent"><p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">Loading…</p></div>
-      </div>
-    </div>
 
     <!-- GLH Banner -->
     <div id="glhBanner" class="glh-banner" style="display:none"></div>
@@ -1457,53 +1436,6 @@ function toggleTeacherProgress() {
   if (url) window.location.href = url;
 }
 
-async function loadTeacherProgress() {
-  const contentEl = document.getElementById('teacherProgressContent');
-  contentEl.innerHTML = '<p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">Loading…</p>';
-
-  const cfg = SUBJECTS[currentSubject];
-  const totalTopics = chapters.reduce((s, ch) => s + (ch.topics?.length || 0), 0);
-
-  try {
-    const snap = await getDocs(collection(window.db, 'userProgress'));
-    const rows = [];
-    snap.forEach(d => {
-      const data = d.data();
-      const statuses = data.statuses || data[`statuses_${cfg.collection}`] || {};
-      const done = Object.values(statuses).filter(v => v === 'done').length;
-      if (done > 0 || Object.keys(statuses).length > 0) {
-        rows.push({ uid: d.id, name: data.displayName || d.id, done, total: totalTopics });
-      }
-    });
-
-    if (!rows.length) {
-      contentEl.innerHTML = '<p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">No teacher progress recorded yet.</p>';
-      return;
-    }
-
-    rows.sort((a, b) => b.done - a.done);
-    contentEl.innerHTML = `
-      <table class="tp-table">
-        <thead><tr><th>Teacher</th><th>Done</th><th>Progress</th></tr></thead>
-        <tbody>${rows.map(r => {
-          const pct = totalTopics ? Math.round(r.done / totalTopics * 100) : 0;
-          return `<tr>
-            <td>${escHtml(r.name)}</td>
-            <td><span class="tp-pct">${r.done} / ${totalTopics}</span></td>
-            <td style="min-width:140px">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="tp-bar-wrap" style="flex:1"><div class="tp-bar-fill" style="width:${pct}%"></div></div>
-                <span style="font-size:0.75rem;color:var(--ink-3);width:32px;text-align:right">${pct}%</span>
-              </div>
-            </td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
-  } catch (err) {
-    contentEl.innerHTML = '<p style="color:#dc2626;font-size:0.875rem;text-align:center;padding:24px">Failed to load progress data.</p>';
-    console.error('Teacher progress error:', err);
-  }
-}
 
 // ── Load subject ─────────────────────────────────────────────────
 function loadSubject(subj) {
