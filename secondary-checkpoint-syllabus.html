@@ -1071,7 +1071,7 @@
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, getDoc, getDocs, collection, query, limit, onSnapshot, setDoc, updateDoc, serverTimestamp }
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, setDoc, updateDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -1300,8 +1300,16 @@ window.saveObjSettings = async function saveObjSettings() {
 // ── Syllabus loader ──────────────────────────────────────────────
 async function loadSyllabus() {
   try {
-    const snap = await getDocs(query(collection(window.db, 'cambridge_syllabus'), limit(500)));
-    snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
+    const subjectCodes = Object.values(SUBJECTS).map(s => s.code);
+    const snaps = await Promise.all(
+      subjectCodes.map(code =>
+        getDocs(query(
+          collection(window.db, 'cambridge_syllabus'),
+          where('subjectCode', '==', code)
+        ))
+      )
+    );
+    snaps.forEach(snap => snap.forEach(d => { syllabusIndex[d.id] = d.data(); }));
     syllabusLoaded = true;
     const hint = document.getElementById('syllabusPickerHint');
     if (hint) hint.textContent = '';
