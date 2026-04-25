@@ -68,6 +68,7 @@ const IGCSE_SUBJECTS = {
     heroIcon:     '∫',
     heroEyebrow:  'IGCSE Mathematics 0580',
     heroTitle:    'IGCSE Mathematics Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'math_pacing', docId: 'year9-10', subjectKey: 'math', syllabusCode: '0580', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
@@ -80,6 +81,7 @@ const IGCSE_SUBJECTS = {
     heroIcon:     '🧬',
     heroEyebrow:  'IGCSE Biology 0610',
     heroTitle:    'IGCSE Biology Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'biology_pacing', docId: 'year9-10', subjectKey: 'biology', syllabusCode: '0610', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
@@ -92,6 +94,7 @@ const IGCSE_SUBJECTS = {
     heroIcon:     '⚗',
     heroEyebrow:  'IGCSE Chemistry 0620',
     heroTitle:    'IGCSE Chemistry Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'chemistry_pacing', docId: 'year9-10', subjectKey: 'chemistry', syllabusCode: '0620', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
@@ -104,6 +107,7 @@ const IGCSE_SUBJECTS = {
     heroIcon:     '⚛',
     heroEyebrow:  'IGCSE Physics 0625',
     heroTitle:    'IGCSE Physics Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'physics_pacing', docId: 'year9-10', subjectKey: 'physics', syllabusCode: '0625', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
@@ -122,6 +126,7 @@ const CHECKPOINT_SUBJECTS = {
     heroIcon:     '∫',
     heroEyebrow:  'Cambridge Checkpoint Mathematics 1112',
     heroTitle:    'Checkpoint Mathematics Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'checkpoint_math_pacing', docId: 'year7-8', subjectKey: 'checkpoint_math', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
@@ -134,6 +139,7 @@ const CHECKPOINT_SUBJECTS = {
     heroIcon:     '📖',
     heroEyebrow:  'Cambridge Checkpoint English 1111',
     heroTitle:    'Checkpoint English Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'checkpoint_english', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
@@ -146,6 +152,7 @@ const CHECKPOINT_SUBJECTS = {
     heroIcon:     '🔬',
     heroEyebrow:  'Cambridge Checkpoint Science 1113',
     heroTitle:    'Checkpoint Science Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'checkpoint_science', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
@@ -164,6 +171,7 @@ const ASALEVEL_SUBJECTS = {
     heroIcon:     '∫',
     heroEyebrow:  'Cambridge AS & A Level Mathematics 9709',
     heroTitle:    'AS & A Level Mathematics Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'asalevel_math_pacing', docId: 'year11-12', subjectKey: 'asalevel_math', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
@@ -176,6 +184,7 @@ const ASALEVEL_SUBJECTS = {
     heroIcon:     '🧬',
     heroEyebrow:  'Cambridge AS & A Level Biology 9700',
     heroTitle:    'AS & A Level Biology Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_biology_pacing', docId: 'year11-12', subjectKey: 'asalevel_biology', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
@@ -188,6 +197,7 @@ const ASALEVEL_SUBJECTS = {
     heroIcon:     '⚗',
     heroEyebrow:  'Cambridge AS & A Level Chemistry 9701',
     heroTitle:    'AS & A Level Chemistry Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_chemistry_pacing', docId: 'year11-12', subjectKey: 'asalevel_chemistry', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
@@ -200,6 +210,7 @@ const ASALEVEL_SUBJECTS = {
     heroIcon:     '⚛',
     heroEyebrow:  'Cambridge AS & A Level Physics 9702',
     heroTitle:    'AS & A Level Physics Pacing',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_physics_pacing', docId: 'year11-12', subjectKey: 'asalevel_physics', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
@@ -215,6 +226,7 @@ function generateFromPacingTemplate(template, cfg) {
     .replace('{{HERO_ICON}}',     cfg.heroIcon)
     .replace('{{HERO_EYEBROW}}',  cfg.heroEyebrow)
     .replace('{{HERO_TITLE}}',    cfg.heroTitle)
+    .replace('{{HERO_DESC}}',     cfg.heroDesc)
     .replace('{{AO_OPTIONS}}',    cfg.aoOptions)
     .replace('{{PACING_CONFIG}}', cfg.pacingConfig)
     .replace(/\{\{YEAR_A_KEY\}\}/g, cfg.yearAKey)
