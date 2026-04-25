@@ -737,7 +737,7 @@ window.moveTopic = function(ci, ti, dir) {
 // Only includes teachers whose `subjects` array contains SUBJECT_KEY.
 // Legacy teachers with no subjects field are always included.
 async function fetchTeachers() {
-  const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', '==', 'teachers_user')));
+  const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', 'in', ['teachers_user', 'teachers_admin'])));
   allTeachers = [];
   snap.forEach(d => {
     const data = d.data();
