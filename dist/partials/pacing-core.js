@@ -1,5 +1,5 @@
 /**
- * igcse-pacing-core.js — shared JS for all IGCSE subject pacing pages.
+ * pacing-core.js — shared JS for all pacing pages (IGCSE, Checkpoint, AS-Level).
  *
  * Each subject page sets window.PACING_CONFIG before importing this module:
  *   window.PACING_CONFIG = {

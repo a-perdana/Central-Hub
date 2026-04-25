@@ -362,13 +362,13 @@ if (fs.existsSync("tokens.css")) {
   console.log("Copied: tokens.css");
 }
 
-// -- Copy partials/igcse-pacing-core.js
+// -- Copy partials/pacing-core.js
 const partialsDistDir = path.join("dist", "partials");
 if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
-const pacingCoreJs = path.join("partials", "igcse-pacing-core.js");
+const pacingCoreJs = path.join("partials", "pacing-core.js");
 if (fs.existsSync(pacingCoreJs)) {
-  fs.copyFileSync(pacingCoreJs, path.join(partialsDistDir, "igcse-pacing-core.js"));
-  console.log("Copied: partials/igcse-pacing-core.js");
+  fs.copyFileSync(pacingCoreJs, path.join(partialsDistDir, "pacing-core.js"));
+  console.log("Copied: partials/pacing-core.js");
 }
 
 // -- Summary
