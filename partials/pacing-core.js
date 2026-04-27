@@ -143,7 +143,11 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   const topic = chapters[ci]?.topics?.[ti];
   if (!topic) return;
 
-  const confirmedCodes = new Set(_parseObjCodes(topic.objective || ''));
+  const confirmedCodes = new Set(
+    Array.isArray(topic.syllabusRefs) && topic.syllabusRefs.length
+      ? topic.syllabusRefs
+      : _parseObjCodes(topic.objective || '')
+  );
   let acIndex = -1;
 
   wrapEl.innerHTML = `
@@ -269,8 +273,9 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
 
   async function commit() {
     drop.style.display = 'none';
-    const objective = [...confirmedCodes].join(' ');
-    topic.objective = objective;
+    const codeList = [...confirmedCodes];
+    topic.syllabusRefs = codeList;
+    topic.objective = codeList.join(' ');
     try {
       await saveChapters();
       showToast('Codes saved ✓');
@@ -281,7 +286,9 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   }
 
   function restorePills(objective) {
-    const codes = _parseObjCodes(objective);
+    const codes = Array.isArray(topic.syllabusRefs) && topic.syllabusRefs.length
+      ? topic.syllabusRefs
+      : _parseObjCodes(objective);
     wrapEl.innerHTML = codes.map(c => {
       const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
       const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
@@ -460,7 +467,7 @@ function renderChapters() {
           </tr></thead>
           <tbody>
             ${topics.map((t, ti) => {
-              const codes = _parseObjCodes(t.objective);
+              const codes = Array.isArray(t.syllabusRefs) && t.syllabusRefs.length ? t.syllabusRefs : _parseObjCodes(t.objective);
               const dur   = t.duration ?? t.hour ?? '';
               const wk    = t.week ?? '';
               return `
