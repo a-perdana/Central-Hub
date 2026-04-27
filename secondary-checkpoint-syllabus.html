@@ -1111,6 +1111,9 @@ const SUBJECTS = {
 const DOC_ID = 'year7-8';
 
 const GLH_TARGET = 130;
+// 1 lesson hour = 40 min; 1 Cambridge GLH = 60 min → conversion factor 2/3
+const LESSON_TO_GLH = 2 / 3;
+const toGlh = lessonHours => Math.round(lessonHours * LESSON_TO_GLH * 10) / 10;
 
 // ── State ─────────────────────────────────────────────────────────
 let currentSubject = 'math';
@@ -1837,13 +1840,14 @@ function renderGlhBanner() {
 
   const visible = getVisibleChapters();
 
-  let totalPlanned = 0;
+  let totalLessonHours = 0;
   visible.forEach(ch => {
-    (ch.topics || []).forEach(t => { totalPlanned += (t.duration || t.hour || 1); });
+    (ch.topics || []).forEach(t => { totalLessonHours += (t.duration || t.hour || 1); });
   });
+  const totalPlanned = toGlh(totalLessonHours);
 
   const plannedPct = Math.min(100, (totalPlanned / GLH_TARGET) * 100);
-  const diff       = totalPlanned - GLH_TARGET;
+  const diff       = Math.round((totalPlanned - GLH_TARGET) * 10) / 10;
   const diffLabel  = diff >= 0 ? `+${diff}h over target` : `${Math.abs(diff)}h under target`;
   const diffClass  = diff > 10 ? 'over' : diff > 0 ? 'warn' : 'ok';
   const totalTopics = visible.reduce((s, ch) => s + (ch.topics || []).length, 0);
@@ -1889,7 +1893,7 @@ function renderGlhChart() {
   const visible = getVisibleChapters();
   const chapterTotals = visible.map(ch => ({
     name: ch.chapter || ch.title || 'Chapter',
-    hours: (ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0),
+    hours: toGlh((ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)),
   }));
   const maxHours = Math.max(...chapterTotals.map(c => c.hours), 1);
 
@@ -1923,16 +1927,16 @@ window.openPrintView = function() {
     ? chapters
     : chapters.filter(ch => ch.year === activeYearFilter);
   const yearLabel  = activeYearFilter === 'all' ? 'Year 7–8' : activeYearFilter;
-  const totalHours = printChapters.reduce((s, ch) =>
-    s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0);
+  const totalHours = toGlh(printChapters.reduce((s, ch) =>
+    s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0));
 
   let tableRows = '';
   printChapters.forEach((ch, ci) => {
     const topics  = ch.topics || [];
-    const chHours = topics.reduce((s, t) => s + (t.duration || t.hour || 0), 0);
+    const chHours = toGlh(topics.reduce((s, t) => s + (t.duration || t.hour || 0), 0));
     tableRows += `<tr class="ch-row">
       <td colspan="5"><strong>Chapter ${ci+1}: ${escHtml(ch.chapter || ch.title || '')}</strong>
-        <span class="ch-meta-print"> — ${escHtml(ch.year || '')} · ${topics.length} topics · ${chHours}h</span>
+        <span class="ch-meta-print"> — ${escHtml(ch.year || '')} · ${topics.length} topics · ${chHours} GLH</span>
       </td></tr>`;
     topics.forEach((t, ti) => {
       const refs  = (t.syllabusRefs || []).join(', ') || '—';
@@ -1963,7 +1967,7 @@ window.openPrintView = function() {
   @media print{body{margin:0}}
 </style></head><body>
 <h1>${escHtml(subjLabel)}</h1>
-<p class="meta">${escHtml(yearLabel)} · Total planned: ${totalHours}h · GLH target: ${GLH_TARGET}h · ${printChapters.length} chapters · Printed ${new Date().toLocaleDateString('en-GB')}</p>
+<p class="meta">${escHtml(yearLabel)} · Total planned: ${totalHours} GLH · Cambridge target: ${GLH_TARGET} GLH · ${printChapters.length} chapters · Printed ${new Date().toLocaleDateString('en-GB')}</p>
 <table>
   <thead><tr><th style="width:28px">#</th><th style="width:34%">Topic</th><th style="width:18%">Codes</th><th style="width:7%">Hours</th><th>Week / Notes</th></tr></thead>
   <tbody>${tableRows}</tbody>
