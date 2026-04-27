@@ -706,7 +706,18 @@
         evts.filter(e => e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')).forEach(e => markSkipWeek(e.date_start, e.date_end));
         evts.filter(e => /leadership camp/i.test(e.title)).forEach(e => markSkipWeek(e.date_start, e.date_end));
 
-        // Every week within a semester is a teaching week, except EASE and Leadership Camp.
+        // Build a set of all Public Holiday dates (Mon–Fri only)
+        const publicHolidayDates = new Set();
+        evts.filter(e => e.category === 'Public Holiday').forEach(e => {
+          const s = new Date(e.date_start + 'T00:00:00'), end = new Date(e.date_end + 'T00:00:00');
+          for (let d = new Date(s); d <= end; d.setDate(d.getDate() + 1)) {
+            const wd = d.getDay();
+            if (wd >= 1 && wd <= 5) publicHolidayDates.add(localDateStr(d));
+          }
+        });
+
+        // Every week within a semester is a teaching week, except EASE and Leadership Camp weeks,
+        // and weeks where ALL 5 days are public holidays.
         const semBounds = termsCfg.map(t => ({
           label: t.label || '',
           start: new Date(t.start + 'T00:00:00'),
@@ -728,7 +739,10 @@
               break;
             }
           }
-          if (semLabel && !skipWeekStarts.has(localDateStr(mon))) {
+          const allHoliday = semLabel && [0,1,2,3,4].every(i => {
+            const d = new Date(mon); d.setDate(mon.getDate() + i); return publicHolidayDates.has(localDateStr(d));
+          });
+          if (semLabel && !skipWeekStarts.has(localDateStr(mon)) && !allHoliday) {
             globalWeekNo++;
             semCounters[semIdx]++;
             computedWeeks.push({ weekNo: globalWeekNo, semLabel, semWeekNo: semCounters[semIdx], mon: localDateStr(mon), fri: localDateStr(fri) });
