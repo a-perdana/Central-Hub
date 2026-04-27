@@ -1413,11 +1413,11 @@ window.syncCalendarData = async function syncCalendarData() {
       if (cd.academicYearStart) yearStartIso = cd.academicYearStart;
       if (Array.isArray(cd.terms)) terms = cd.terms;
     }
-    // Snap to the Sunday of the academic year start week (school week = Sun–Thu)
+    // Snap to the Monday of the academic year start week (school week = Mon–Fri)
     const yearStartRaw = new Date(yearStartIso + 'T00:00:00');
     const dow = yearStartRaw.getDay(); // 0=Sun,1=Mon,...,6=Sat
     const yearStart = new Date(yearStartRaw);
-    yearStart.setDate(yearStartRaw.getDate() - dow); // back to Sunday
+    yearStart.setDate(yearStartRaw.getDate() - (dow === 0 ? 6 : dow - 1)); // back to Monday
 
     // 3. Extract public holidays from Sheets
     function normalizeDate(str) {
@@ -1462,14 +1462,14 @@ window.syncCalendarData = async function syncCalendarData() {
       schoolHolidayRanges.push({ date_start: ramadhanStart.date_start, date_end: ramadhanEnd.date_start });
     }
 
-    // ── Build skip-date Set (Sun–Thu school days only) ───────────────
+    // ── Build skip-date Set (Mon–Fri school days only) ───────────────
     const skipDates = new Set();
     const addRangeToSkip = (dateStart, dateEnd) => {
       const s = new Date(dateStart + 'T00:00:00');
       const e = new Date(dateEnd   + 'T00:00:00');
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
         const wd = d.getDay();
-        if (wd === 0 || (wd >= 1 && wd <= 4)) skipDates.add(d.toISOString().slice(0, 10)); // Sun=0, Mon–Thu=1–4
+        if (wd >= 1 && wd <= 5) skipDates.add(d.toISOString().slice(0, 10)); // Mon–Fri
       }
     };
 
@@ -1493,22 +1493,22 @@ window.syncCalendarData = async function syncCalendarData() {
     const weeks = [];
     let globalWeekNo = 0;
     for (let w = 0; w < 70; w++) {
-      const sun = new Date(yearStart);
-      sun.setDate(yearStart.getDate() + w * 7);
-      const thu = new Date(sun);
-      thu.setDate(sun.getDate() + 4);
+      const mon = new Date(yearStart);
+      mon.setDate(yearStart.getDate() + w * 7);
+      const fri = new Date(mon);
+      fri.setDate(mon.getDate() + 4);
 
       let shouldSkip = false;
       for (let i = 0; i < 5; i++) {
-        const d = new Date(sun);
-        d.setDate(sun.getDate() + i);
+        const d = new Date(mon);
+        d.setDate(mon.getDate() + i);
         if (skipDates.has(d.toISOString().slice(0, 10))) { shouldSkip = true; break; }
       }
 
       if (!shouldSkip) {
         globalWeekNo++;
-        // Use Tuesday (sun+2) as mid-week point for semester membership
-        const mid = new Date(sun); mid.setDate(sun.getDate() + 2);
+        // Use Wednesday (mon+2) as mid-week point for semester membership
+        const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
         let semLabel = '';
         let semWeekNo = globalWeekNo;
         for (let si = 0; si < semBounds.length; si++) {
@@ -1523,8 +1523,8 @@ window.syncCalendarData = async function syncCalendarData() {
           weekNo: globalWeekNo,
           semLabel,
           semWeekNo,
-          mon: sun.toISOString().slice(0, 10),
-          fri: thu.toISOString().slice(0, 10),
+          mon: mon.toISOString().slice(0, 10),
+          fri: fri.toISOString().slice(0, 10),
         });
       }
     }
