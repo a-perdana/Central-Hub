@@ -555,9 +555,12 @@ window.toggleCh = toggleCh;
 
 function _parseObjCodes(objStr) {
   if (!objStr) return [];
-  // Match syllabus codes: C1.1 (math) or 1.1 / 1.1.1 (other subjects)
-  const matches = String(objStr).match(/[A-Z]?\d+\.\d+(?:\.\d+)*/g) || [];
-  return [...new Set(matches)];
+  const s = String(objStr);
+  // IGCSE/A-Level codes: C1.1, E2.3, 1.1, 1.1.1
+  const igcse = s.match(/[A-Z]?\d+\.\d+(?:\.\d+)*/g) || [];
+  // Checkpoint codes: 7Ni.01, 7Nf.07, 8Sp.03
+  const checkpoint = s.match(/\d[A-Za-z]+\.\d+/g) || [];
+  return [...new Set([...igcse, ...checkpoint])];
 }
 
 // ── Chapter CRUD ─────────────────────────────────────────────
