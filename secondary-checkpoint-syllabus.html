@@ -1392,19 +1392,31 @@ async function loadCalendarData() {
     }
   } catch (e) { console.warn('Could not load math settings:', e); }
 
-  // Listen to calendar_settings/current
-  onSnapshot(doc(db, 'calendar_settings', 'current'), snap => {
-    if (snap.exists()) {
-      const d = snap.data();
-      calYearStart = d.academicYearStart ? new Date(d.academicYearStart + 'T00:00:00') : null;
-    } else {
-      calYearStart = null;
-    }
-    if (_calDataReady) { buildTeachingWeeks(); render(); }
-  }, e => console.warn('calendar_settings snapshot error:', e));
+  // Both listeners must fire at least once before we resolve.
+  // We track readiness separately and only call resolve() when both have fired.
+  let _calSettingsReady = false;
+  let _holsReady        = false;
 
-  // Listen to public holidays in calendar_events
   return new Promise(resolve => {
+    function maybeResolve() {
+      if (_calSettingsReady && _holsReady) {
+        buildTeachingWeeks();
+        _calDataReady = true;
+        resolve();
+      }
+    }
+
+    onSnapshot(doc(db, 'calendar_settings', 'current'), snap => {
+      if (snap.exists()) {
+        const d = snap.data();
+        calYearStart = d.academicYearStart ? new Date(d.academicYearStart + 'T00:00:00') : null;
+      } else {
+        calYearStart = null;
+      }
+      if (!_calSettingsReady) { _calSettingsReady = true; maybeResolve(); }
+      else { buildTeachingWeeks(); render(); }
+    }, e => { console.warn('calendar_settings snapshot error:', e); _calSettingsReady = true; maybeResolve(); });
+
     onSnapshot(
       query(collection(db, 'calendar_events'), where('category', '==', 'Public Holiday')),
       snap => {
@@ -1413,11 +1425,10 @@ async function loadCalendarData() {
           const ev = d.data();
           if (ev.date_start) publicHolidays.push({ date_start: ev.date_start, date_end: ev.date_end || ev.date_start });
         });
-        buildTeachingWeeks();
-        if (!_calDataReady) { _calDataReady = true; resolve(); }
-        else { render(); }
+        if (!_holsReady) { _holsReady = true; maybeResolve(); }
+        else { buildTeachingWeeks(); render(); }
       },
-      e => { console.warn('calendar_events snapshot error:', e); resolve(); }
+      e => { console.warn('calendar_events snapshot error:', e); _holsReady = true; maybeResolve(); }
     );
   });
 }
