@@ -1804,13 +1804,19 @@ const PAGE_SIZE = 5;
 let currentPage = 0;
 
 // ── GLH Banner ────────────────────────────────────────────────────
+function getVisibleChapters() {
+  return activeYearFilter === 'all' ? chapters : chapters.filter(ch => ch.year === activeYearFilter);
+}
+
 function renderGlhBanner() {
   const banner = document.getElementById('glhBanner');
   if (!banner) return;
   if (!chapters.length) { banner.style.display = 'none'; return; }
 
+  const visible = getVisibleChapters();
+
   let totalPlanned = 0;
-  chapters.forEach(ch => {
+  visible.forEach(ch => {
     (ch.topics || []).forEach(t => { totalPlanned += (t.duration || t.hour || 1); });
   });
 
@@ -1818,7 +1824,7 @@ function renderGlhBanner() {
   const diff       = totalPlanned - GLH_TARGET;
   const diffLabel  = diff >= 0 ? `+${diff}h over target` : `${Math.abs(diff)}h under target`;
   const diffClass  = diff > 10 ? 'over' : diff > 0 ? 'warn' : 'ok';
-  const totalTopics = chapters.reduce((s, ch) => s + (ch.topics || []).length, 0);
+  const totalTopics = visible.reduce((s, ch) => s + (ch.topics || []).length, 0);
 
   banner.innerHTML = `
     <div class="glh-banner-head">
@@ -1858,7 +1864,8 @@ function renderGlhChart() {
   if (!body || !wrap) return;
   if (!chapters.length) { wrap.style.display = 'none'; return; }
 
-  const chapterTotals = chapters.map(ch => ({
+  const visible = getVisibleChapters();
+  const chapterTotals = visible.map(ch => ({
     name: ch.chapter || ch.title || 'Chapter',
     hours: (ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0),
   }));
