@@ -810,19 +810,15 @@
 
       </div>
 
-      <!-- Sync Card -->
-      <div class="settings-card" style="margin-top:20px">
+      <!-- Sync info (now managed in Academic Calendar → Year Settings) -->
+      <div class="settings-card" style="margin-top:20px;background:#F8FAFC">
         <div class="settings-card-head">
           <div>
-            <h3 class="settings-card-title">Teaching Week Sync</h3>
-            <p class="settings-card-desc">Reads public holidays from the Academic Calendar (Google Sheets) and the academic year start date, then saves a pre-computed teaching week schedule to Firestore. Run this once after updating holidays in the Academic Calendar.</p>
+            <h3 class="settings-card-title" style="color:#64748B">Teaching Week Schedule</h3>
+            <p class="settings-card-desc">Teaching weeks are synced from <strong>Academic Calendar → ⚙ Year Settings → Sync Teaching Weeks</strong>. Run the sync there after updating the academic calendar.</p>
           </div>
         </div>
-        <div id="syncStatusBox" style="display:none;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;margin-bottom:12px"></div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-primary btn-sm" id="syncCalBtn" onclick="syncCalendarData()">⟳ Sync from Academic Calendar</button>
-          <span id="syncLastRun" style="font-size:11px;color:var(--ink-3)"></span>
-        </div>
+        <div id="syncStatusBox" style="font-size:12px;color:#64748B;margin-top:4px"></div>
       </div>
 
     </div>
@@ -1373,11 +1369,9 @@ window.saveObjSettings = async function saveObjSettings() {
   }
 }
 
-// ── Calendar Sync ─────────────────────────────────────────────────
-// Reads Google Sheets (via Academic Calendar API) + calendar_settings/current,
-// computes teaching weeks (skipping public holiday weeks), and saves the result
-// to Firestore as teaching_schedule/checkpoint_math so the syllabus page only
-// needs one cheap read on load — no runtime calculation needed.
+// ── Calendar Sync (MOVED to academic-calendar.html → Year Settings) ──────────
+// Teaching weeks are now synced from Academic Calendar → ⚙ Year Settings.
+// Kept stub below for backwards compat reference only — not called from UI.
 
 const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec';
 
@@ -1602,7 +1596,7 @@ async function loadCalendarData() {
 
   // Load math weeklyHours alongside schedule doc in parallel
   const [schedSnap, mathSnap] = await Promise.all([
-    getDoc(doc(db, 'teaching_schedule', 'checkpoint_math')).catch(() => null),
+    getDoc(doc(db, 'teaching_schedule', 'main')).catch(() => null),
     getDoc(doc(db, SUBJECTS.math.collection, 'year7-8')).catch(() => null),
   ]);
 
@@ -1618,20 +1612,13 @@ async function loadCalendarData() {
       mon: new Date(w.mon + 'T00:00:00'),
       fri: new Date(w.fri + 'T00:00:00'),
     }));
-
-    // Show last sync info in settings panel if open
     const d = schedSnap.data();
-    const lastRun = document.getElementById('syncLastRun');
-    if (lastRun && d.syncedAt) {
-      const ts = d.syncedAt.toDate ? d.syncedAt.toDate() : new Date(d.syncedAt);
-      lastRun.textContent = `Last synced: ${ts.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-    }
-    const display = document.getElementById('calSettingsDisplay');
-    if (display) display.textContent = `${teachingWeeks.length} teaching weeks loaded · ${d.publicHolidayCount ?? 0} holidays skipped`;
+    const display = document.getElementById('syncStatusBox');
+    if (display) display.textContent = `${teachingWeeks.length} teaching weeks loaded — sync from Academic Calendar → ⚙ Year Settings.`;
   } else {
     teachingWeeks = [];
-    const display = document.getElementById('calSettingsDisplay');
-    if (display) display.textContent = 'No schedule synced yet — use the Sync button in Settings.';
+    const display = document.getElementById('syncStatusBox');
+    if (display) display.textContent = 'No schedule synced yet — go to Academic Calendar → ⚙ Year Settings → Sync Teaching Weeks.';
   }
 }
 

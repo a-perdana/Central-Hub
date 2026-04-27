@@ -241,7 +241,7 @@
   };
 
   // ─── ACADEMIC YEAR SETTINGS MODAL ───────────────────────────────────────────
-  function AcademicYearSettingsModal({ yearStart, totalWeeks, terms, onSave, onClose }) {
+  function AcademicYearSettingsModal({ yearStart, totalWeeks, terms, onSave, onClose, teachingWeeks, twSyncing, twSyncMsg, onSyncTeachingWeeks, onUpdateWeek }) {
     const [yStart,  setYStart]  = useState(yearStart);
     const [weeks,   setWeeks]   = useState(String(totalWeeks));
     const [termRows, setTermRows] = useState(
@@ -249,6 +249,8 @@
     );
     const [saving,  setSaving]  = useState(false);
     const [err,     setErr]     = useState("");
+    const [editingWeek, setEditingWeek] = useState(null); // {idx, mon, fri}
+    const [weekSection, setWeekSection] = useState(false);
 
     function setTerm(idx, field, val) {
       setTermRows(rows => rows.map((r, i) => i === idx ? { ...r, [field]: val } : r));
@@ -316,8 +318,88 @@
 
           {err && <div className="form-err visible" style={{ marginBottom: 10 }}>{err}</div>}
 
-          <div className="modal-actions">
-            <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          {/* ── Teaching Schedule ── */}
+          <div style={{ borderTop: "1.5px solid #E2E8F0", marginTop: 20, paddingTop: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em" }}>Teaching Schedule</div>
+                {teachingWeeks.length > 0 && (
+                  <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>{teachingWeeks.length} teaching weeks computed</div>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {teachingWeeks.length > 0 && (
+                  <button onClick={() => setWeekSection(v => !v)} style={{ fontSize: 12, fontWeight: 700, color: "#2563EB", background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+                    {weekSection ? "Hide weeks ▲" : "Show weeks ▼"}
+                  </button>
+                )}
+                <button onClick={onSyncTeachingWeeks} disabled={twSyncing} style={{
+                  padding: "7px 14px", background: twSyncing ? "#F1F5F9" : "#0F172A", color: twSyncing ? "#94A3B8" : "#fff",
+                  border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12,
+                  cursor: twSyncing ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif",
+                }}>
+                  {twSyncing ? "Syncing…" : "⟳ Sync Teaching Weeks"}
+                </button>
+              </div>
+            </div>
+
+            {twSyncMsg && (
+              <div style={{ fontSize: 12, color: twSyncMsg.startsWith("✓") ? "#059669" : "#DC2626", background: twSyncMsg.startsWith("✓") ? "#ECFDF5" : "#FEF2F2", border: `1px solid ${twSyncMsg.startsWith("✓") ? "#A7F3D0" : "#FECACA"}`, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
+                {twSyncMsg}
+              </div>
+            )}
+
+            {weekSection && teachingWeeks.length > 0 && (
+              <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 10 }}>
+                {/* Edit row */}
+                {editingWeek !== null && (
+                  <div style={{ position: "sticky", top: 0, background: "#EFF6FF", borderBottom: "1px solid #BFDBFE", padding: "10px 14px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", zIndex: 1 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#1E40AF", minWidth: 70 }}>Week {teachingWeeks[editingWeek].weekNo}</span>
+                    <input type="date" defaultValue={teachingWeeks[editingWeek].mon} id="tw-edit-mon"
+                      style={{ padding: "5px 8px", border: "1.5px solid #BFDBFE", borderRadius: 6, fontSize: 12, fontFamily: "'DM Sans',sans-serif" }} />
+                    <span style={{ fontSize: 12, color: "#64748B" }}>–</span>
+                    <input type="date" defaultValue={teachingWeeks[editingWeek].fri} id="tw-edit-fri"
+                      style={{ padding: "5px 8px", border: "1.5px solid #BFDBFE", borderRadius: 6, fontSize: 12, fontFamily: "'DM Sans',sans-serif" }} />
+                    <button onClick={() => {
+                      const mon = document.getElementById("tw-edit-mon").value;
+                      const fri = document.getElementById("tw-edit-fri").value;
+                      if (mon && fri) { onUpdateWeek(editingWeek, mon, fri); setEditingWeek(null); }
+                    }} style={{ padding: "5px 12px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Save</button>
+                    <button onClick={() => setEditingWeek(null)} style={{ padding: "5px 12px", background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                )}
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: "#F8FAFC" }}>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "#64748B", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>#</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "#64748B", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Semester</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "#64748B", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Sem Week</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "#64748B", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Mon</th>
+                      <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "#64748B", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Fri</th>
+                      <th style={{ padding: "8px 6px", textAlign: "center", fontWeight: 700, color: "#64748B", fontSize: 11 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teachingWeeks.map((w, idx) => (
+                      <tr key={idx} style={{ borderTop: "1px solid #F1F5F9", background: editingWeek === idx ? "#EFF6FF" : (idx % 2 === 0 ? "white" : "#FAFBFC") }}>
+                        <td style={{ padding: "7px 12px", fontWeight: 700, color: "#0F172A" }}>{w.weekNo}</td>
+                        <td style={{ padding: "7px 12px", color: "#64748B" }}>{w.semLabel || "—"}</td>
+                        <td style={{ padding: "7px 12px", color: "#64748B" }}>{w.semWeekNo}</td>
+                        <td style={{ padding: "7px 12px", color: "#334155", fontFamily: "monospace" }}>{w.mon}</td>
+                        <td style={{ padding: "7px 12px", color: "#334155", fontFamily: "monospace" }}>{w.fri}</td>
+                        <td style={{ padding: "7px 6px", textAlign: "center" }}>
+                          <button onClick={() => setEditingWeek(editingWeek === idx ? null : idx)} style={{ background: "none", border: "none", cursor: "pointer", color: "#2563EB", fontSize: 12, fontWeight: 700, padding: "2px 6px" }}>Edit</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: 20 }}>
+            <button className="btn-secondary" onClick={onClose}>Close</button>
             <button className="btn-primary" onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save Settings"}
             </button>
@@ -417,6 +499,9 @@
     const [totalWeeks,      setTotalWeeks]      = useState(DEFAULT_TOTAL_WEEKS);
     const [terms,           setTerms]           = useState(DEFAULT_TERMS);
     const [settingsModal,   setSettingsModal]   = useState(false); // admin only
+    const [teachingWeeks,   setTeachingWeeks]   = useState([]);
+    const [twSyncing,       setTwSyncing]       = useState(false);
+    const [twSyncMsg,       setTwSyncMsg]       = useState("");
     // sheetsVersionModal: show original Sheets data for an overridden event
     const [sheetsVersionModal, setSheetsVersionModal] = useState(null);
 
@@ -548,6 +633,144 @@
         setDataSource("empty");
       }
     }, [loadFromFirestore]);
+
+    // ─── Teaching schedule: load from Firestore ───────────────────────────────
+    const loadTeachingWeeks = useCallback(async () => {
+      const { getFirestore, doc, getDoc } = window.__calFS;
+      const db = getFirestore(window.firebaseApp);
+      const snap = await getDoc(doc(db, 'teaching_schedule', 'main'));
+      if (snap.exists() && Array.isArray(snap.data().weeks)) {
+        setTeachingWeeks(snap.data().weeks);
+      }
+    }, []);
+
+    useEffect(() => { loadTeachingWeeks(); }, [loadTeachingWeeks]);
+
+    // ─── Teaching schedule: sync from Sheets + calendar_settings ─────────────
+    const syncTeachingWeeks = useCallback(async () => {
+      setTwSyncing(true);
+      setTwSyncMsg("");
+      try {
+        const { getFirestore, doc, getDoc, setDoc, serverTimestamp } = window.__calFS;
+        const db = getFirestore(window.firebaseApp);
+
+        const [sheetsRes, calSnap] = await Promise.all([
+          fetch(SHEETS_API_URL).then(r => r.json()),
+          getDoc(doc(db, 'calendar_settings', 'current')),
+        ]);
+
+        let yearStartIso = '2025-07-21';
+        let termsCfg = [];
+        if (calSnap.exists()) {
+          const cd = calSnap.data();
+          if (cd.academicYearStart) yearStartIso = cd.academicYearStart;
+          if (Array.isArray(cd.terms)) termsCfg = cd.terms;
+        }
+
+        const localDateStr = d => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        };
+
+        const yearStartRaw = new Date(yearStartIso + 'T00:00:00');
+        const dow = yearStartRaw.getDay();
+        const yearStart = new Date(yearStartRaw);
+        yearStart.setDate(yearStartRaw.getDate() + (dow === 0 ? 1 : dow === 1 ? 0 : -(dow - 1)));
+
+        function normDate(str) {
+          if (!str) return null;
+          const s = String(str);
+          if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+          const MM = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+          const m2 = s.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+          if (m2 && MM[m2[1]]) return `${m2[3]}-${MM[m2[1]]}-${String(m2[2]).padStart(2,'0')}`;
+          return null;
+        }
+
+        const evts = Array.isArray(sheetsRes) ? sheetsRes.map(e => ({
+          ...e, date_start: normDate(e.date_start), date_end: normDate(e.date_end) || normDate(e.date_start),
+        })).filter(e => e.date_start) : [];
+
+        const skipDates = new Set();
+        const addRange = (ds, de) => {
+          const s = new Date(ds + 'T00:00:00'), e = new Date(de + 'T00:00:00');
+          for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+            const wd = d.getDay();
+            if (wd >= 1 && wd <= 5) skipDates.add(localDateStr(d));
+          }
+        };
+
+        evts.filter(e => e.category === 'Public Holiday').forEach(h => addRange(h.date_start, h.date_end));
+        evts.filter(e => e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')).forEach(e => addRange(e.date_start, e.date_end));
+
+        const sem1HolStart = evts.find(e => /start of semester 1 holiday/i.test(e.title));
+        const sem2Start    = evts.find(e => /start of semester 2/i.test(e.title) && !/holiday/i.test(e.title));
+        if (sem1HolStart && sem2Start) addRange(sem1HolStart.date_start, sem2Start.date_start);
+
+        const ramStart = evts.find(e => /start of ramadhan holiday/i.test(e.title));
+        const ramEnd   = evts.find(e => /end of ramadhan holiday/i.test(e.title));
+        if (ramStart && ramEnd) addRange(ramStart.date_start, ramEnd.date_start);
+
+        const semBounds = termsCfg.map(t => ({
+          label: t.label || '',
+          start: new Date(t.start + 'T00:00:00'),
+          end:   new Date(t.end   + 'T23:59:59'),
+        }));
+        const semCounters = semBounds.map(() => 0);
+
+        const computedWeeks = [];
+        let globalWeekNo = 0;
+        for (let w = 0; w < 70; w++) {
+          const mon = new Date(yearStart); mon.setDate(yearStart.getDate() + w * 7);
+          const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+          let skip = false;
+          for (let i = 0; i < 5; i++) {
+            const d = new Date(mon); d.setDate(mon.getDate() + i);
+            if (skipDates.has(localDateStr(d))) { skip = true; break; }
+          }
+          if (!skip) {
+            globalWeekNo++;
+            const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
+            let semLabel = '', semWeekNo = globalWeekNo;
+            for (let si = 0; si < semBounds.length; si++) {
+              if (mid >= semBounds[si].start && mid <= semBounds[si].end) {
+                semCounters[si]++;
+                semLabel = semBounds[si].label;
+                semWeekNo = semCounters[si];
+                break;
+              }
+            }
+            computedWeeks.push({ weekNo: globalWeekNo, semLabel, semWeekNo, mon: localDateStr(mon), fri: localDateStr(fri) });
+          }
+        }
+
+        await setDoc(doc(db, 'teaching_schedule', 'main'), {
+          academicYearStart: yearStartIso,
+          skippedWeekCount: 70 - computedWeeks.length,
+          teachingWeekCount: computedWeeks.length,
+          weeks: computedWeeks,
+          syncedAt: serverTimestamp(),
+        });
+
+        setTeachingWeeks(computedWeeks);
+        setTwSyncMsg(`✓ Synced — ${computedWeeks.length} teaching weeks saved (${70 - computedWeeks.length} skipped).`);
+      } catch (e) {
+        setTwSyncMsg(`Sync failed: ${e.message}`);
+      } finally {
+        setTwSyncing(false);
+      }
+    }, [terms, yearStartIso]);
+
+    // ─── Teaching schedule: update a single week's dates ─────────────────────
+    const updateTeachingWeek = useCallback(async (idx, mon, fri) => {
+      const { getFirestore, doc, updateDoc } = window.__calFS;
+      const db = getFirestore(window.firebaseApp);
+      const updated = teachingWeeks.map((w, i) => i === idx ? { ...w, mon, fri } : w);
+      await updateDoc(doc(db, 'teaching_schedule', 'main'), { weeks: updated });
+      setTeachingWeeks(updated);
+    }, [teachingWeeks]);
 
     // ─── Admin: save academic year settings ──────────────────────────────────
     const handleSettingsSave = useCallback(async ({ academicYearStart, totalTeachingWeeks, terms: newTerms }) => {
@@ -1351,6 +1574,11 @@
             terms={terms}
             onSave={handleSettingsSave}
             onClose={() => setSettingsModal(false)}
+            teachingWeeks={teachingWeeks}
+            twSyncing={twSyncing}
+            twSyncMsg={twSyncMsg}
+            onSyncTeachingWeeks={syncTeachingWeeks}
+            onUpdateWeek={updateTeachingWeek}
           />
         )}
       </div>
