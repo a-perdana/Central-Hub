@@ -679,6 +679,7 @@
         const yearStart = new Date(yearStartRaw);
         yearStart.setDate(yearStartRaw.getDate() + (dow === 0 ? 1 : dow === 1 ? 0 : -(dow - 1)));
 
+        // Build skip-week set: EASE exam weeks + Leadership Camp weeks
         function normDate(str) {
           if (!str) return null;
           const s = String(str);
@@ -688,39 +689,24 @@
           if (m2 && MM[m2[1]]) return `${m2[3]}-${MM[m2[1]]}-${String(m2[2]).padStart(2,'0')}`;
           return null;
         }
-
         const evts = Array.isArray(sheetsRes) ? sheetsRes.map(e => ({
           ...e, date_start: normDate(e.date_start), date_end: normDate(e.date_end) || normDate(e.date_start),
         })).filter(e => e.date_start) : [];
 
-        const skipDates = new Set();
-        const addRange = (ds, de) => {
+        const skipWeekStarts = new Set();
+        const markSkipWeek = (ds, de) => {
           const s = new Date(ds + 'T00:00:00'), e = new Date(de + 'T00:00:00');
-          for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+          for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 7)) {
+            // Find Monday of this week
             const wd = d.getDay();
-            if (wd >= 1 && wd <= 5) skipDates.add(localDateStr(d));
+            const mon = new Date(d); mon.setDate(d.getDate() - (wd === 0 ? 6 : wd - 1));
+            skipWeekStarts.add(localDateStr(mon));
           }
         };
+        evts.filter(e => e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')).forEach(e => markSkipWeek(e.date_start, e.date_end));
+        evts.filter(e => /leadership camp/i.test(e.title)).forEach(e => markSkipWeek(e.date_start, e.date_end));
 
-        // Public holidays do NOT skip the whole week (lessons still run on other days).
-        // Skip full weeks: EASE exam weeks, Leadership Camp weeks, school holiday blocks.
-        evts.filter(e => e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')).forEach(e => addRange(e.date_start, e.date_end));
-        evts.filter(e => /leadership camp/i.test(e.title)).forEach(e => addRange(e.date_start, e.date_end));
-        evts.filter(e => /first week of ramadhan/i.test(e.title)).forEach(e => addRange(e.date_start, e.date_end));
-
-        const sem1HolStart = evts.find(e => /start of semester 1 holiday/i.test(e.title));
-        const sem2Start    = evts.find(e => /start of semester 2/i.test(e.title) && !/holiday/i.test(e.title));
-        if (sem1HolStart && sem2Start) {
-          // End the skip range one day before Semester 2 starts so that first week is not skipped
-          const sem2StartDate = new Date(sem2Start.date_start + 'T00:00:00');
-          sem2StartDate.setDate(sem2StartDate.getDate() - 1);
-          addRange(sem1HolStart.date_start, localDateStr(sem2StartDate));
-        }
-
-        const ramStart = evts.find(e => /start of ramadhan holiday/i.test(e.title));
-        const ramEnd   = evts.find(e => /end of ramadhan holiday/i.test(e.title));
-        if (ramStart && ramEnd) addRange(ramStart.date_start, ramEnd.date_start);
-
+        // Every week within a semester is a teaching week, except EASE and Leadership Camp.
         const semBounds = termsCfg.map(t => ({
           label: t.label || '',
           start: new Date(t.start + 'T00:00:00'),
@@ -733,27 +719,19 @@
         for (let w = 0; w < 70; w++) {
           const mon = new Date(yearStart); mon.setDate(yearStart.getDate() + w * 7);
           const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
-          let skip = false;
-          for (let i = 0; i < 5; i++) {
-            const d = new Date(mon); d.setDate(mon.getDate() + i);
-            if (skipDates.has(localDateStr(d))) { skip = true; break; }
+          const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
+          let semLabel = '', semWeekNo = 0;
+          for (let si = 0; si < semBounds.length; si++) {
+            if (mid >= semBounds[si].start && mid <= semBounds[si].end) {
+              semCounters[si]++;
+              semLabel = semBounds[si].label;
+              semWeekNo = semCounters[si];
+              break;
+            }
           }
-          if (!skip) {
+          if (semLabel && !skipWeekStarts.has(localDateStr(mon))) {
             globalWeekNo++;
-            const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
-            let semLabel = '', semWeekNo = globalWeekNo;
-            for (let si = 0; si < semBounds.length; si++) {
-              if (mid >= semBounds[si].start && mid <= semBounds[si].end) {
-                semCounters[si]++;
-                semLabel = semBounds[si].label;
-                semWeekNo = semCounters[si];
-                break;
-              }
-            }
-            // Only save weeks that fall within a semester
-            if (semLabel) {
-              computedWeeks.push({ weekNo: globalWeekNo, semLabel, semWeekNo, mon: localDateStr(mon), fri: localDateStr(fri) });
-            }
+            computedWeeks.push({ weekNo: globalWeekNo, semLabel, semWeekNo, mon: localDateStr(mon), fri: localDateStr(fri) });
           }
         }
 
