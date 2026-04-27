@@ -227,6 +227,20 @@
     .meta-chip:hover { opacity: 0.75; }
     .chip-hours { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
     .chip-week  { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+    .chip-sem1  { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+    .chip-sem2  { background: #fce7f3; color: #be185d; border-color: #fbcfe8; }
+    .sem-toggle-group {
+      display: flex; gap: 3px; border: 1px solid var(--border);
+      border-radius: 7px; padding: 3px; background: var(--paper-2);
+    }
+    .sem-btn {
+      font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600;
+      padding: 4px 12px; border-radius: 5px; border: none; cursor: pointer;
+      transition: all 0.15s; color: var(--ink-3); background: transparent;
+    }
+    .sem-btn:hover { color: var(--ink); background: var(--white); }
+    .sem-btn.active-s1 { background: #ede9fe; color: #6d28d9; }
+    .sem-btn.active-s2 { background: #fce7f3; color: #be185d; }
     .chip-inline-input {
       font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 600;
       padding: 1px 6px; border-radius: 100px; border: 2px solid var(--accent);
@@ -927,6 +941,14 @@
         <div class="form-group">
           <label class="form-label" for="topStartWeekInput">Week</label>
           <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5" oninput="_modalDirty=true">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Semester</label>
+        <div class="sem-toggle-group">
+          <button type="button" class="sem-btn" id="semBtn0" onclick="setModalSemester(0)">— None</button>
+          <button type="button" class="sem-btn" id="semBtn1" onclick="setModalSemester(1)">Semester I</button>
+          <button type="button" class="sem-btn" id="semBtn2" onclick="setModalSemester(2)">Semester II</button>
         </div>
       </div>
       <div class="form-group">
@@ -2107,6 +2129,9 @@ function renderTopic(t, ti, ci, q = '') {
   const metaChips = [
     `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur == 1 ? '' : 's') : '—'}</span>`,
     `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 ${t.week != null ? 'Week ' + t.week : '—'}</span>`,
+    t.semester === 1 ? `<span class="meta-chip chip-sem1" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem I</span>` :
+    t.semester === 2 ? `<span class="meta-chip chip-sem2" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem II</span>` :
+                       `<span class="meta-chip" style="opacity:0.45" title="Click to set semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem —</span>`,
     ...(t.resources || []).map(r =>
       `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`
     ),
@@ -2294,6 +2319,7 @@ function openAddTopicModal(ci) {
   document.getElementById('topDurationInput').value        = '';
   document.getElementById('topStartWeekInput').value       = '';
   document.getElementById('topObjectivesEditor').innerHTML = '';
+  setModalSemester(0);
   renderModalResources();
   renderSyllabusChips();
   initSyllabusPicker();
@@ -2313,6 +2339,7 @@ function editTopic(ci, ti) {
   document.getElementById('topTitleInput').value           = t.title      || t.topic      || '';
   document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
   document.getElementById('topStartWeekInput').value       = t.week  || '';
+  setModalSemester(t.semester || 0);
   const rawObj = t.objectives || t.objective || '';
   document.getElementById('topObjectivesEditor').innerHTML = DOMPurify.sanitize(rawObj);
   renderModalResources();
@@ -2372,7 +2399,7 @@ async function saveTopicModal() {
   if (!title) { document.getElementById('topTitleInput').focus(); return; }
 
   const resources = readModalResourcesFromDOM();
-  const topic = { topic: title, hour: duration, week: startWeek, objective: objectives, resources, syllabusRefs: modalSyllabusRefs.slice() };
+  const topic = { topic: title, hour: duration, week: startWeek, semester: _modalSemester || null, objective: objectives, resources, syllabusRefs: modalSyllabusRefs.slice() };
 
   if (modalMode === 'add-topic') {
     if (!chapters[editChIdx].topics) chapters[editChIdx].topics = [];
@@ -2390,6 +2417,26 @@ async function saveTopicModal() {
   await saveChapters();
   showToast(modalMode === 'add-topic' ? 'Topic added.' : 'Topic updated.');
 }
+
+window.cycleSemesterChip = async function(e, ci, ti) {
+  e.stopPropagation();
+  const t = chapters[ci].topics[ti];
+  const next = !t.semester ? 1 : t.semester === 1 ? 2 : null;
+  t.semester = next;
+  await saveChapters();
+  showToast(next ? `Semester ${next === 1 ? 'I' : 'II'} set.` : 'Semester cleared.');
+  render();
+};
+
+let _modalSemester = 0;
+
+window.setModalSemester = function(val) {
+  _modalSemester = val;
+  _modalDirty = true;
+  document.getElementById('semBtn0').className = 'sem-btn' + (val === 0 ? ' active-s1' : '');
+  document.getElementById('semBtn1').className = 'sem-btn' + (val === 1 ? ' active-s1' : '');
+  document.getElementById('semBtn2').className = 'sem-btn' + (val === 2 ? ' active-s2' : '');
+};
 
 function closeTopicModal() {
   if (_modalDirty) {
