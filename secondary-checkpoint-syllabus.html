@@ -1413,11 +1413,21 @@ window.syncCalendarData = async function syncCalendarData() {
       if (cd.academicYearStart) yearStartIso = cd.academicYearStart;
       if (Array.isArray(cd.terms)) terms = cd.terms;
     }
-    // Snap to the Monday of the academic year start week (school week = Mon–Fri)
+    // Local-date helper — avoids toISOString() UTC shift on UTC+7 machines
+    const localDateStr = d => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    // Snap to the Monday on or after the academic year start date
     const yearStartRaw = new Date(yearStartIso + 'T00:00:00');
     const dow = yearStartRaw.getDay(); // 0=Sun,1=Mon,...,6=Sat
     const yearStart = new Date(yearStartRaw);
-    yearStart.setDate(yearStartRaw.getDate() - (dow === 0 ? 6 : dow - 1)); // back to Monday
+    // If Sun(0): +1 to reach Mon. If Mon(1): 0. If Tue–Sat: subtract to go back to Mon.
+    const daysToMon = dow === 0 ? 1 : (dow === 1 ? 0 : -(dow - 1));
+    yearStart.setDate(yearStartRaw.getDate() + daysToMon);
 
     // 3. Extract public holidays from Sheets
     function normalizeDate(str) {
@@ -1469,7 +1479,7 @@ window.syncCalendarData = async function syncCalendarData() {
       const e = new Date(dateEnd   + 'T00:00:00');
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
         const wd = d.getDay();
-        if (wd >= 1 && wd <= 5) skipDates.add(d.toISOString().slice(0, 10)); // Mon–Fri
+        if (wd >= 1 && wd <= 5) skipDates.add(localDateStr(d)); // Mon–Fri
       }
     };
 
@@ -1502,7 +1512,7 @@ window.syncCalendarData = async function syncCalendarData() {
       for (let i = 0; i < 5; i++) {
         const d = new Date(mon);
         d.setDate(mon.getDate() + i);
-        if (skipDates.has(d.toISOString().slice(0, 10))) { shouldSkip = true; break; }
+        if (skipDates.has(localDateStr(d))) { shouldSkip = true; break; }
       }
 
       if (!shouldSkip) {
@@ -1523,8 +1533,8 @@ window.syncCalendarData = async function syncCalendarData() {
           weekNo: globalWeekNo,
           semLabel,
           semWeekNo,
-          mon: mon.toISOString().slice(0, 10),
-          fri: fri.toISOString().slice(0, 10),
+          mon: localDateStr(mon),
+          fri: localDateStr(fri),
         });
       }
     }
