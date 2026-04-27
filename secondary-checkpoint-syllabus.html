@@ -539,6 +539,21 @@
     .pg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .pg-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 
+    /* ===== YEAR FILTER BUTTONS ===== */
+    .year-filter-group {
+      display: flex; gap: 4px; background: var(--paper-2);
+      border: 1px solid var(--border); border-radius: 8px; padding: 3px;
+    }
+    .btn-year-filter {
+      font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 600;
+      padding: 5px 14px; border-radius: 6px; border: none; cursor: pointer;
+      transition: all 0.15s; color: var(--ink-3); background: transparent;
+    }
+    .btn-year-filter:hover { color: var(--ink); background: var(--white); }
+    .btn-year-filter.active-y7 { background: #dbeafe; color: #1d4ed8; }
+    .btn-year-filter.active-y8 { background: #fce7f3; color: #be185d; }
+    .btn-year-filter.active-all { background: var(--white); color: var(--ink); }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 768px) {
       .hero { padding: 32px 24px; }
@@ -780,6 +795,11 @@
         <p id="subjSub">1112 · Year 7–8</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="year-filter-group" id="yearFilterGroup">
+          <button class="btn-year-filter active-y7" id="yfY7" onclick="setYearFilter('Year 7')">Grade 7</button>
+          <button class="btn-year-filter" id="yfY8" onclick="setYearFilter('Year 8')">Grade 8</button>
+          <button class="btn-year-filter" id="yfAll" onclick="setYearFilter('all')">All</button>
+        </div>
         <button class="btn btn-secondary" onclick="openPrintView()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -1630,11 +1650,15 @@ function loadSubject(subj) {
   document.getElementById('emptyState').style.display   = 'none';
   document.getElementById('chaptersList').style.display = 'none';
 
-  // Clear search when switching subjects
+  // Clear search and reset year filter when switching subjects
   searchQuery = '';
   currentPage = 0;
   const searchInput = document.getElementById('pacingSearch');
   if (searchInput) { searchInput.value = ''; document.getElementById('pacingSearchClear').style.display = 'none'; }
+  activeYearFilter = 'Year 7';
+  document.getElementById('yfY7').className  = 'btn-year-filter active-y7';
+  document.getElementById('yfY8').className  = 'btn-year-filter';
+  document.getElementById('yfAll').className = 'btn-year-filter';
 
   const ref = doc(window.db, cfg.collection, DOC_ID);
   unsub = onSnapshot(ref, snap => {
@@ -1698,6 +1722,18 @@ async function saveChapters() {
   }
 }
 
+// ── Year Filter ───────────────────────────────────────────────────
+let activeYearFilter = 'Year 7';
+
+function setYearFilter(val) {
+  activeYearFilter = val;
+  document.getElementById('yfY7').className  = 'btn-year-filter' + (val === 'Year 7' ? ' active-y7' : '');
+  document.getElementById('yfY8').className  = 'btn-year-filter' + (val === 'Year 8' ? ' active-y8' : '');
+  document.getElementById('yfAll').className = 'btn-year-filter' + (val === 'all'    ? ' active-all' : '');
+  currentPage = 0;
+  render();
+}
+
 // ── Search ────────────────────────────────────────────────────────
 let searchQuery = '';
 
@@ -1731,14 +1767,24 @@ function stripHtml(html) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// Returns filtered chapters for the current search query.
-// Each chapter gets a synthetic _matchedTopics array (only matched topics).
-// Returns null when no search is active (use chapters as-is).
+// Returns filtered chapters applying year filter + search query.
+// Returns null only when both are inactive (use chapters as-is).
 function getFilteredChapters() {
-  if (!searchQuery) return null;
+  const hasYearFilter = activeYearFilter !== 'all';
+  const hasSearch     = !!searchQuery;
+  if (!hasYearFilter && !hasSearch) return null;
+
   const q = searchQuery;
   const result = [];
   chapters.forEach((ch, ci) => {
+    // Year filter: skip chapters whose year doesn't match
+    if (hasYearFilter && ch.year !== activeYearFilter) return;
+
+    if (!hasSearch) {
+      result.push({ ...ch, _ci: ci, _matchedTopics: ch.topics || [] });
+      return;
+    }
+
     const chTitle = (ch.chapter || ch.title || '').toLowerCase();
     const chMatch = chTitle.includes(q);
     const matchedTopics = (ch.topics || []).filter(t => {
@@ -1844,11 +1890,15 @@ window.openPrintView = function() {
   const cfg       = SUBJECTS[currentSubject];
   const subjLabel = cfg ? `Cambridge Secondary Checkpoint — ${cfg.label} (${cfg.code})` : 'Pacing Guide';
 
-  const totalHours = chapters.reduce((s, ch) =>
+  const printChapters = activeYearFilter === 'all'
+    ? chapters
+    : chapters.filter(ch => ch.year === activeYearFilter);
+  const yearLabel  = activeYearFilter === 'all' ? 'Year 7–8' : activeYearFilter;
+  const totalHours = printChapters.reduce((s, ch) =>
     s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0);
 
   let tableRows = '';
-  chapters.forEach((ch, ci) => {
+  printChapters.forEach((ch, ci) => {
     const topics  = ch.topics || [];
     const chHours = topics.reduce((s, t) => s + (t.duration || t.hour || 0), 0);
     tableRows += `<tr class="ch-row">
@@ -1884,7 +1934,7 @@ window.openPrintView = function() {
   @media print{body{margin:0}}
 </style></head><body>
 <h1>${escHtml(subjLabel)}</h1>
-<p class="meta">Total planned: ${totalHours}h · GLH target: ${GLH_TARGET}h · ${chapters.length} chapters · Printed ${new Date().toLocaleDateString('en-GB')}</p>
+<p class="meta">${escHtml(yearLabel)} · Total planned: ${totalHours}h · GLH target: ${GLH_TARGET}h · ${printChapters.length} chapters · Printed ${new Date().toLocaleDateString('en-GB')}</p>
 <table>
   <thead><tr><th style="width:28px">#</th><th style="width:34%">Topic</th><th style="width:18%">Codes</th><th style="width:7%">Hours</th><th>Week / Notes</th></tr></thead>
   <tbody>${tableRows}</tbody>
