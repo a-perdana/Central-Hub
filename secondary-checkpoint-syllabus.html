@@ -229,6 +229,7 @@
     .chip-week  { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
     .chip-sem1  { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
     .chip-sem2  { background: #fce7f3; color: #be185d; border-color: #fbcfe8; }
+    .chip-date  { background: #f0fdf4; color: #166534; border-color: #bbf7d0; cursor: default; }
     .sem-toggle-group {
       display: flex; gap: 3px; border: 1px solid var(--border);
       border-radius: 7px; padding: 3px; background: var(--paper-2);
@@ -787,6 +788,11 @@
               <input class="form-input" id="objPrefixInput" type="text" placeholder="e.g. C, E">
               <p class="form-hint">Used to detect codes like <strong>C1.1</strong> or <strong>E2.3</strong> in objectives. Leave blank to auto-detect.</p>
             </div>
+            <div id="mathWeeklyHoursGroup" style="margin-bottom:14px;display:none">
+              <label class="form-label" for="mathWeeklyHoursInput">Math lesson hours per week</label>
+              <input class="form-input" id="mathWeeklyHoursInput" type="number" min="1" max="20" placeholder="e.g. 6" style="max-width:100px">
+              <p class="form-hint">Used to calculate estimated teaching dates for each Math topic.</p>
+            </div>
             <div id="calSettingsInfo" style="padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1D4ED8;font-size:12px;line-height:1.6;margin-bottom:10px">
               Term start date and total teaching weeks are managed in
               <a href="academic-calendar" style="font-weight:700;color:#1D4ED8;text-decoration:underline">Academic Calendar → Year Settings</a>.
@@ -1137,13 +1143,19 @@ let syllabusLoaded = false;
 
 // Settings state — keyed by subject
 let settingsData = {
-  math:    { classes: [], objPrefixes: 'C, E' },
-  english: { classes: [], objPrefixes: 'E'    },
-  science: { classes: [], objPrefixes: 'C, B' },
+  math:    { classes: [], objPrefixes: 'C, E', weeklyHours: 6 },
+  english: { classes: [], objPrefixes: 'E',    weeklyHours: 0 },
+  science: { classes: [], objPrefixes: 'C, B', weeklyHours: 0 },
 };
 let settingsClassSubj = 'math';
 let settingsObjSubj   = 'math';
 let settingsUnsub = null;
+
+// ── Calendar / schedule state ─────────────────────────────────────
+let calYearStart    = null;   // Date object — Monday of week 1
+let publicHolidays  = [];     // [{ date_start, date_end }] — ISO strings
+// teachingWeeks: array of { weekNo, mon: Date, fri: Date } — public holiday weeks excluded
+let teachingWeeks   = [];
 
 // ── Auth ─────────────────────────────────────────────────────────
 document.addEventListener('authReady', async ({ detail: { profile } }) => {
@@ -1154,7 +1166,7 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
 
   document.getElementById('mainContent').style.display = '';
 
-  await loadSyllabus();
+  await Promise.all([loadSyllabus(), loadCalendarData()]);
 
   // Subject tab clicks
   document.querySelectorAll('.subj-tab').forEach(tab => {
@@ -1207,12 +1219,14 @@ function loadAllSettings() {
       if (snap.exists()) {
         const d = snap.data();
         settingsData[subj] = {
-          classes:    Array.isArray(d.classes) ? d.classes : [],
+          classes:     Array.isArray(d.classes) ? d.classes : [],
           objPrefixes: Array.isArray(d.objPrefixes) ? d.objPrefixes.join(', ') : (settingsData[subj].objPrefixes || ''),
+          weeklyHours: typeof d.weeklyHours === 'number' ? d.weeklyHours : (settingsData[subj].weeklyHours || 0),
         };
       }
       renderClassGroups();
       renderObjSettings();
+      renderWeeklyHoursSettings();
     }).catch(err => console.error('Settings load error:', err));
   });
   // Load calendar_settings/current to display term info read-only
@@ -1221,9 +1235,9 @@ function loadAllSettings() {
     if (!display) return;
     if (snap.exists()) {
       const d = snap.data();
-      const start = d.academicYearStart ? new Date(d.academicYearStart).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-      const weeks = d.totalTeachingWeeks ?? '—';
-      display.textContent = `Academic year start: ${start} · Teaching weeks: ${weeks}`;
+      const start = d.academicYearStart ? new Date(d.academicYearStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+      const hols  = publicHolidays.length;
+      display.textContent = `Academic year start: ${start} · Public holidays loaded: ${hols}`;
     } else {
       display.textContent = 'No calendar settings configured yet.';
     }
@@ -1300,6 +1314,14 @@ function renderObjSettings() {
   const data = settingsData[settingsObjSubj];
   const prefInp = document.getElementById('objPrefixInput');
   if (prefInp) prefInp.value = data.objPrefixes || '';
+  const hoursGroup = document.getElementById('mathWeeklyHoursGroup');
+  if (hoursGroup) hoursGroup.style.display = settingsObjSubj === 'math' ? '' : 'none';
+  renderWeeklyHoursSettings();
+}
+
+function renderWeeklyHoursSettings() {
+  const inp = document.getElementById('mathWeeklyHoursInput');
+  if (inp) inp.value = settingsData.math.weeklyHours || '';
 }
 
 window.saveObjSettings = async function saveObjSettings() {
@@ -1307,15 +1329,24 @@ window.saveObjSettings = async function saveObjSettings() {
   const prefRaw = (document.getElementById('objPrefixInput').value || '').trim();
   const prefixes = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
   settingsData[subj].objPrefixes = prefRaw;
+  const payload = { objPrefixes: prefixes };
+  if (subj === 'math') {
+    const h = parseInt(document.getElementById('mathWeeklyHoursInput')?.value || '0');
+    if (!isNaN(h) && h > 0) {
+      settingsData.math.weeklyHours = h;
+      payload.weeklyHours = h;
+    }
+  }
   const btn = document.getElementById('saveObjBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: fsDoc, setDoc, serverTimestamp } = window.__firestoreHelpers;
     await setDoc(
       fsDoc(window.db, SUBJECTS[subj].collection, 'year7-8'),
-      { objPrefixes: prefixes, updatedAt: serverTimestamp() },
+      { ...payload, updatedAt: serverTimestamp() },
       { merge: true }
     );
+    if (subj === 'math') buildTeachingWeeks();
     showToast(`Settings saved for ${SUBJECTS[subj].label}.`);
   } catch (err) {
     console.error('Save obj settings error:', err);
@@ -1344,6 +1375,125 @@ async function loadSyllabus() {
   } catch (e) {
     console.warn('Could not load syllabus:', e);
   }
+}
+
+// ── Calendar data loader ──────────────────────────────────────────
+// Uses onSnapshot so topic dates update automatically when public holidays change.
+let _calDataReady = false;
+
+async function loadCalendarData() {
+  const db = window.db;
+
+  // Load math weeklyHours (one-time; save handler keeps it in sync)
+  try {
+    const mathSnap = await getDoc(doc(db, SUBJECTS.math.collection, 'year7-8'));
+    if (mathSnap.exists() && typeof mathSnap.data().weeklyHours === 'number') {
+      settingsData.math.weeklyHours = mathSnap.data().weeklyHours;
+    }
+  } catch (e) { console.warn('Could not load math settings:', e); }
+
+  // Listen to calendar_settings/current
+  onSnapshot(doc(db, 'calendar_settings', 'current'), snap => {
+    if (snap.exists()) {
+      const d = snap.data();
+      calYearStart = d.academicYearStart ? new Date(d.academicYearStart + 'T00:00:00') : null;
+    } else {
+      calYearStart = null;
+    }
+    if (_calDataReady) { buildTeachingWeeks(); render(); }
+  }, e => console.warn('calendar_settings snapshot error:', e));
+
+  // Listen to public holidays in calendar_events
+  return new Promise(resolve => {
+    onSnapshot(
+      query(collection(db, 'calendar_events'), where('category', '==', 'Public Holiday')),
+      snap => {
+        publicHolidays = [];
+        snap.forEach(d => {
+          const ev = d.data();
+          if (ev.date_start) publicHolidays.push({ date_start: ev.date_start, date_end: ev.date_end || ev.date_start });
+        });
+        buildTeachingWeeks();
+        if (!_calDataReady) { _calDataReady = true; resolve(); }
+        else { render(); }
+      },
+      e => { console.warn('calendar_events snapshot error:', e); resolve(); }
+    );
+  });
+}
+
+// ── Teaching week builder ─────────────────────────────────────────
+// Builds an ordered array of { weekNo, mon, fri } for teaching weeks only.
+// A calendar week is skipped if it contains at least one full-day public holiday
+// that falls Mon–Fri (i.e. any holiday that overlaps the Mon–Fri window of that week).
+function buildTeachingWeeks() {
+  teachingWeeks = [];
+  if (!calYearStart) return;
+
+  // Find the Monday of the week containing academicYearStart
+  const start = new Date(calYearStart);
+  const dayOfWeek = start.getDay(); // 0=Sun,1=Mon,...
+  const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  start.setDate(start.getDate() + diffToMon);
+
+  // Build a Set of ISO date strings that are public holidays (Mon–Fri only)
+  const holidayDates = new Set();
+  publicHolidays.forEach(h => {
+    const s = new Date(h.date_start + 'T00:00:00');
+    const e = new Date(h.date_end   + 'T00:00:00');
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      const wd = d.getDay();
+      if (wd >= 1 && wd <= 5) holidayDates.add(d.toISOString().slice(0, 10));
+    }
+  });
+
+  // Walk up to 70 calendar weeks (covers any 2-year academic year safely)
+  let weekNo = 0;
+  for (let w = 0; w < 70; w++) {
+    const mon = new Date(start);
+    mon.setDate(start.getDate() + w * 7);
+    const fri = new Date(mon);
+    fri.setDate(mon.getDate() + 4);
+
+    // Check if any Mon–Fri day of this week is a public holiday
+    let hasHoliday = false;
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + i);
+      if (holidayDates.has(d.toISOString().slice(0, 10))) { hasHoliday = true; break; }
+    }
+
+    if (!hasHoliday) {
+      weekNo++;
+      teachingWeeks.push({ weekNo, mon: new Date(mon), fri: new Date(fri) });
+    }
+  }
+}
+
+// ── Topic date label ──────────────────────────────────────────────
+// cumulativeBefore: total lesson hours of all topics before this one (in the same chapter list)
+// duration: lesson hours of this topic
+// weeklyHours: lesson hours per week for the subject
+// Returns "Week N: D Mon – D Mon" or null if calendar not configured.
+function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
+  if (!teachingWeeks.length || !weeklyHours || weeklyHours <= 0) return null;
+
+  // Which teaching week does this topic START in?
+  const startWeekIdx = Math.floor(cumulativeBefore / weeklyHours);
+  // Which teaching week does it END in?
+  const endHour = cumulativeBefore + duration - 1; // last hour (0-indexed)
+  const endWeekIdx = Math.floor(endHour / weeklyHours);
+
+  const startW = teachingWeeks[startWeekIdx];
+  const endW   = teachingWeeks[endWeekIdx];
+  if (!startW) return null;
+
+  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  if (!endW || startWeekIdx === endWeekIdx) {
+    return `Week ${startW.weekNo}: ${fmt(startW.mon)} – ${fmt(startW.fri)}`;
+  }
+  return `Week ${startW.weekNo}–${endW.weekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
 }
 
 function lookupSyllabus(subjCode, code) {
@@ -1932,25 +2082,44 @@ window.openPrintView = function() {
   const totalHours = toGlh(printChapters.reduce((s, ch) =>
     s + (ch.topics || []).reduce((ts, t) => ts + (t.duration || t.hour || 0), 0), 0));
 
+  const isMathPrint = currentSubject === 'math';
+  let printCumHours = 0;
+  // Pre-compute cumulative hours per chapter across ALL chapters (not just printed ones)
+  const allChapterCumHours = [];
+  let _runH = 0;
+  chapters.forEach((ch, ci) => {
+    allChapterCumHours[ci] = _runH;
+    (ch.topics || []).forEach(t => { _runH += (t.duration || t.hour || 0); });
+  });
+
   let tableRows = '';
-  printChapters.forEach((ch, ci) => {
+  printChapters.forEach((ch) => {
+    const ci     = chapters.indexOf(ch);
     const topics  = ch.topics || [];
     const chHours = toGlh(topics.reduce((s, t) => s + (t.duration || t.hour || 0), 0));
     tableRows += `<tr class="ch-row">
-      <td colspan="5"><strong>Chapter ${ci+1}: ${escHtml(ch.chapter || ch.title || '')}</strong>
+      <td colspan="5"><strong>${escHtml(ch.chapter || ch.title || '')}</strong>
         <span class="ch-meta-print"> — ${escHtml(ch.year || '')} · ${topics.length} topics · ${chHours} GLH</span>
       </td></tr>`;
+    let topicCumH = ci >= 0 ? allChapterCumHours[ci] : null;
     topics.forEach((t, ti) => {
       const refs  = (t.syllabusRefs || []).join(', ') || '—';
       const hours = (t.duration || t.hour) ?? '—';
-      const week  = t.week ? 'Wk ' + t.week : '—';
+      let dateCell = '';
+      if (isMathPrint && topicCumH !== null && typeof hours === 'number') {
+        const lbl = getTopicDateLabel(topicCumH, hours, settingsData.math.weeklyHours);
+        dateCell = lbl ? escHtml(lbl) : '—';
+      } else {
+        dateCell = t.week ? 'Wk ' + t.week : '—';
+      }
+      if (topicCumH !== null) topicCumH += (typeof hours === 'number' ? hours : 0);
       const note  = t.coordNote ? `<br><em style="font-size:.82em;color:#666">${escHtml(t.coordNote)}</em>` : '';
       tableRows += `<tr>
         <td>${ti+1}</td>
         <td>${escHtml(t.title || t.topic || '')}</td>
         <td style="font-size:.85em">${escHtml(refs)}</td>
         <td>${hours}h</td>
-        <td>${week}${note}</td>
+        <td>${dateCell}${note}</td>
       </tr>`;
     });
   });
@@ -2055,7 +2224,19 @@ function render() {
     [...document.querySelectorAll('.chapter-block:not(.collapsed)')].map(b => b.dataset.chid)
   );
 
-  list.innerHTML = pageItems.map(ch => renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics)).join('');
+  // Pre-compute cumulative lesson hours per chapter (for Math date labels).
+  // Cumulative is across ALL chapters (full list), not just the current page.
+  const isMath = currentSubject === 'math';
+  const chapterCumulativeHours = [];  // chapterCumulativeHours[ci] = hours before first topic of chapter ci
+  if (isMath) {
+    let running = 0;
+    chapters.forEach((ch, ci) => {
+      chapterCumulativeHours[ci] = running;
+      (ch.topics || []).forEach(t => { running += (t.duration || t.hour || 0); });
+    });
+  }
+
+  list.innerHTML = pageItems.map(ch => renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics, isMath ? chapterCumulativeHours[ch._ci] : null)).join('');
 
   // When searching, expand all matched chapters; otherwise restore collapse state
   if (isSearching) {
@@ -2085,13 +2266,22 @@ function render() {
   });
 })();
 
-function renderChapter(ch, ci, q = '', matchedTopics = null) {
+function renderChapter(ch, ci, q = '', matchedTopics = null, chapterStartHours = null) {
   const allTopics = ch.topics || [];
   const displayTopics = matchedTopics ?? allTopics;
+
+  // Build per-topic cumulative hours within this chapter (relative to chapter start)
+  const topicCumulative = [];
+  let runningHours = chapterStartHours ?? null;
+  allTopics.forEach(t => {
+    topicCumulative.push(runningHours);
+    if (runningHours !== null) runningHours += (t.duration || t.hour || 0);
+  });
+
   const topicRows = displayTopics.length > 0
     ? `<div class="topics-list">${displayTopics.map((t) => {
         const ti = allTopics.indexOf(t);
-        return renderTopic(t, ti, ci, q);
+        return renderTopic(t, ti, ci, q, topicCumulative[ti]);
       }).join('')}</div>`
     : `<div class="no-topics">No topics yet — add one below.</div>`;
 
@@ -2120,7 +2310,7 @@ function renderChapter(ch, ci, q = '', matchedTopics = null) {
     </div>`;
 }
 
-function renderTopic(t, ti, ci, q = '') {
+function renderTopic(t, ti, ci, q = '', cumulativeBefore = null) {
   const objRaw = t.objectives || t.objective || '';
   let objHtml = '';
   if (objRaw) {
@@ -2132,8 +2322,17 @@ function renderTopic(t, ti, ci, q = '') {
   }
 
   const dur = t.duration || t.hour;
+
+  // Date label — only for Math, only when calendar + weeklyHours are configured
+  let dateLabelHtml = '';
+  if (currentSubject === 'math' && cumulativeBefore !== null && dur != null) {
+    const label = getTopicDateLabel(cumulativeBefore, dur, settingsData.math.weeklyHours);
+    if (label) dateLabelHtml = `<span class="meta-chip chip-date" title="Estimated teaching dates">📆 ${escHtml(label)}</span>`;
+  }
+
   const metaChips = [
     `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur == 1 ? '' : 's') : '—'}</span>`,
+    dateLabelHtml,
     `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 ${t.week != null ? 'Week ' + t.week : '—'}</span>`,
     t.semester === 1 ? `<span class="meta-chip chip-sem1" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem I</span>` :
     t.semester === 2 ? `<span class="meta-chip chip-sem2" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem II</span>` :
