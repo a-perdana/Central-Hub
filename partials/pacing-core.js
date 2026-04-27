@@ -184,13 +184,13 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     const ql = q.toLowerCase();
     return Object.entries(syllabusIndex)
       .filter(([docId, d]) => {
-        const displayCode = (d.code || '').toLowerCase();
+        const displayCode = (d.code || docId.split('_').slice(1).join('_')).toLowerCase();
         const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
-        return subjectMatch && displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
+        return subjectMatch && displayCode.startsWith(ql) && !confirmedCodes.has(d.code || docId.split('_').slice(1).join('_'));
       })
-      .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
+      .sort(([aId,a],[bId,b]) => (a.code||aId.split('_').slice(1).join('_')).localeCompare(b.code||bId.split('_').slice(1).join('_')))
       .slice(0, 12)
-      .map(([, d]) => [d.code || '', d]);
+      .map(([docId, d]) => [d.code || docId.split('_').slice(1).join('_'), d]);
   }
 
   function renderDrop(matches, loading) {
@@ -218,8 +218,10 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
-      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) => {
+      const code = d.code || docId.split('_').slice(1).join('_');
+      return code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_'));
+    });
     if (!valid) return;
     confirmedCodes.add(displayCode);
     inp.value = '';
@@ -281,7 +283,7 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   function restorePills(objective) {
     const codes = _parseObjCodes(objective);
     wrapEl.innerHTML = codes.map(c => {
-      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+      const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
       const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
       return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
     }).join('') + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
@@ -331,12 +333,13 @@ function initModalCodesAC(initialObjective) {
     const ql = q.toLowerCase();
     const matches = Object.entries(syllabusIndex)
       .filter(([docId, d]) => {
+        const displayCode = (d.code || docId.split('_').slice(1).join('_')).toLowerCase();
         const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
-        return subjectMatch && (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||'');
+        return subjectMatch && displayCode.startsWith(ql) && !_modalConfirmedCodes.has(d.code || docId.split('_').slice(1).join('_'));
       })
-      .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
+      .sort(([aId,a],[bId,b]) => (a.code||aId.split('_').slice(1).join('_')).localeCompare(b.code||bId.split('_').slice(1).join('_')))
       .slice(0, 12)
-      .map(([, d]) => [d.code||'', d]);
+      .map(([docId, d]) => [d.code || docId.split('_').slice(1).join('_'), d]);
     return { loading: false, matches };
   }
 
@@ -362,8 +365,10 @@ function initModalCodesAC(initialObjective) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
-      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) => {
+      const code = d.code || docId.split('_').slice(1).join('_');
+      return code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_'));
+    });
     if (!valid) return;
     _modalConfirmedCodes.add(displayCode);
     inp.value = '';
@@ -469,7 +474,7 @@ function renderChapters() {
                 <td>
                   <div class="inline-codes-wrap" onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes">
                     ${codes.map(c => {
-                      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+                      const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
                       const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
                       return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
                     }).join('')}
