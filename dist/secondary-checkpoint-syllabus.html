@@ -512,19 +512,6 @@
       padding-bottom: 14px; border-bottom: 1px solid var(--border);
     }
 
-    /* ===== TEACHER PROGRESS ===== */
-    .teacher-progress-panel {
-      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 20px 22px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
-    }
-    .tp-panel-head { font-size: 0.85rem; font-weight: 700; color: var(--ink); margin-bottom: 14px; }
-    .tp-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    .tp-table th { text-align: left; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); padding: 0 0 8px; border-bottom: 1px solid var(--border); }
-    .tp-table td { padding: 10px 0; border-bottom: 1px solid var(--paper-2); }
-    .tp-table tr:last-child td { border-bottom: none; }
-    .tp-pct { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-    .tp-bar-wrap { height: 7px; border-radius: 100px; background: var(--paper-2); overflow: hidden; }
-    .tp-bar-fill { height: 100%; border-radius: 100px; background: var(--accent); transition: width 0.4s; }
 
     /* ===== TOAST ===== */
     .toast {
@@ -1434,10 +1421,9 @@
     overflow: visible;
     background: transparent;
   }
-  .nav-edit-mode .ch-dd-item[draggable="true"] { pointer-events: auto; }
-
-  /* Prevent link navigation in edit mode */
-  .nav-edit-mode .ch-dd-item[data-edit-blocked] { pointer-events: none; }
+  /* In edit mode: items are draggable and labels are editable — no navigation */
+  .nav-edit-mode .ch-dd-item[draggable="true"] { cursor: grab; }
+  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-item-label { pointer-events: auto; cursor: text; }
 </style>
 
 <nav class="top-nav" aria-label="Main navigation">
@@ -2119,10 +2105,23 @@ function getConfig() {
   PANELS.forEach(panelId => {
     const panel = document.getElementById(panelId);
     if (!panel) return;
-    cfg[panelId] = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]')).map(a => ({
-      key: a.dataset.navKey,
-      label: a.querySelector('.nav-item-label')?.textContent.trim() || ''
-    }));
+    // For multi-column panels, record which column each item belongs to
+    const cols = panel.querySelectorAll('.ch-dd-col');
+    if (cols.length > 0) {
+      cfg[panelId] = Array.from(cols).map(col =>
+        Array.from(col.querySelectorAll(':scope > .ch-dd-item[data-nav-key]')).map(a => ({
+          key:   a.dataset.navKey,
+          label: a.querySelector('.nav-item-label')?.textContent.trim() || '',
+          col:   Array.from(cols).indexOf(col),
+        }))
+      ).flat();
+    } else {
+      cfg[panelId] = Array.from(panel.querySelectorAll(':scope > .ch-dd-item[data-nav-key]')).map(a => ({
+        key:   a.dataset.navKey,
+        label: a.querySelector('.nav-item-label')?.textContent.trim() || '',
+        col:   0,
+      }));
+    }
   });
   return cfg;
 }
@@ -2131,15 +2130,15 @@ function applyConfig(cfg) {
   PANELS.forEach(panelId => {
     const panel = document.getElementById(panelId);
     if (!panel || !cfg[panelId]) return;
-    const order = cfg[panelId];
-    order.forEach(({ key, label }) => {
+    const cols = Array.from(panel.querySelectorAll('.ch-dd-col'));
+    cfg[panelId].forEach(({ key, label, col }) => {
       const item = panel.querySelector(`.ch-dd-item[data-nav-key="${key}"]`);
       if (!item) return;
-      // Update label text
       const labelEl = item.querySelector('.nav-item-label');
       if (labelEl && label) labelEl.textContent = label;
-      // Move to end of panel (respects order array sequence)
-      panel.appendChild(item);
+      // Append to the correct column (or directly to panel for single-col)
+      const target = (cols.length > 0 && col != null) ? (cols[col] || cols[0]) : panel;
+      target.appendChild(item);
     });
   });
 }
@@ -2184,6 +2183,11 @@ function exitEditMode(save) {
     item.removeEventListener('click', blockNav, true);
     item._navEditInit = false;
     item.classList.remove('dragging', 'drag-over');
+    // Restore stashed href
+    if (item.dataset.navHref) {
+      item.setAttribute('href', item.dataset.navHref);
+      delete item.dataset.navHref;
+    }
     const lbl = item.querySelector('.nav-item-label');
     if (lbl) lbl.contentEditable = 'false';
   });
@@ -2211,15 +2215,24 @@ function exitEditMode(save) {
   savedConfig = null;
 }
 
-function blockNav(e) { e.preventDefault(); }
+function blockNav(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
 
 function initItem(item) {
   item.setAttribute('draggable', 'true');
+  // Stash and remove href so the <a> cannot navigate
+  if (item.hasAttribute('href')) {
+    item.dataset.navHref = item.getAttribute('href');
+    item.removeAttribute('href');
+  }
   item.addEventListener('dragstart', onDragStart);
   item.addEventListener('dragover', onDragOver);
   item.addEventListener('dragleave', onDragLeave);
   item.addEventListener('drop', onDrop);
   item.addEventListener('dragend', onDragEnd);
+  // Block click in capture phase (prevents any residual navigation)
   item.addEventListener('click', blockNav, true);
   item._navEditInit = true;
 
@@ -2227,7 +2240,6 @@ function initItem(item) {
   if (lbl) {
     lbl.contentEditable = 'true';
     lbl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbl.blur(); } });
-    lbl.addEventListener('mousedown', e => e.stopPropagation());
   }
 }
 
@@ -2254,20 +2266,22 @@ function onDragLeave() {
 function onDrop(e) {
   e.preventDefault();
   if (!dragSrc || dragSrc === this) return;
-  const panel = this.closest('.ch-dd-panel');
-  if (!panel || dragSrc.closest('.ch-dd-panel') !== panel) return;
+  if (dragSrc.closest('.ch-dd-panel') !== this.closest('.ch-dd-panel')) return;
 
   this.classList.remove('drag-over');
 
-  // Insert dragSrc before this item
-  const items = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]'));
-  const srcIdx = items.indexOf(dragSrc);
-  const tgtIdx = items.indexOf(this);
+  // Insert relative to target's actual parent (may be .ch-dd-col, not .ch-dd-panel)
+  const tgtParent = this.parentNode;
+  const srcParent = dragSrc.parentNode;
+  const tgtItems  = Array.from(tgtParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcItems  = Array.from(srcParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcIdx    = srcItems.indexOf(dragSrc);
+  const tgtIdx    = tgtItems.indexOf(this);
 
-  if (srcIdx < tgtIdx) {
+  if (tgtParent === srcParent && srcIdx < tgtIdx) {
     this.after(dragSrc);
   } else {
-    panel.insertBefore(dragSrc, this);
+    tgtParent.insertBefore(dragSrc, this);
   }
 }
 
@@ -2544,7 +2558,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               <button class="btn btn-secondary btn-sm" onclick="addClassGroup()">+ Add</button>
             </div>
             <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="saveClassGroups()">Save Class Groups</button>
+              <button class="btn btn-primary btn-sm" id="saveClassGroupsBtn" onclick="saveClassGroups()">Save Class Groups</button>
             </div>
           </div>
         </div>
@@ -2568,17 +2582,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               <input class="form-input" id="objPrefixInput" type="text" placeholder="e.g. C, E">
               <p class="form-hint">Used to detect codes like <strong>C1.1</strong> or <strong>E2.3</strong> in objectives. Leave blank to auto-detect.</p>
             </div>
-            <div class="form-group" style="margin-bottom:10px">
-              <label class="form-label" for="termStartInput">Term start date (for pace alerts)</label>
-              <input class="form-input" id="termStartInput" type="date">
-              <p class="form-hint">Applies to all subjects. Teachers Hub uses this to calculate overdue/behind alerts.</p>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label" for="totalWeeksInput">Total teaching weeks per year</label>
-              <input class="form-input" id="totalWeeksInput" type="number" min="1" max="52" placeholder="e.g. 36">
+            <div id="calSettingsInfo" style="padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1D4ED8;font-size:12px;line-height:1.6;margin-bottom:10px">
+              Term start date and total teaching weeks are managed in
+              <a href="academic-calendar" style="font-weight:700;color:#1D4ED8;text-decoration:underline">Academic Calendar → Year Settings</a>.
+              Teachers Hub reads those values automatically.
+              <div id="calSettingsDisplay" style="margin-top:6px;color:#1e40af;font-weight:500"></div>
             </div>
             <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" onclick="saveObjSettings()">Save Settings</button>
+              <button class="btn btn-primary btn-sm" id="saveObjBtn" onclick="saveObjSettings()">Save Settings</button>
             </div>
           </div>
         </div>
@@ -2614,7 +2625,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          Teacher Progress
+          View Progress Report
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true" style="margin-left:2px;opacity:0.6"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
         <button class="btn btn-primary" onclick="openAddChapterModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -2634,13 +2646,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="glh-chart-body" id="glhChartBody" style="display:none"></div>
     </div>
 
-    <!-- Teacher Progress Panel -->
-    <div id="teacherProgressPanel" style="display:none">
-      <div class="teacher-progress-panel">
-        <div class="tp-panel-head">Teacher Progress — <span id="tpSubjLabel">Mathematics</span></div>
-        <div id="teacherProgressContent"></div>
-      </div>
-    </div>
 
     <!-- Search -->
     <div class="pacing-search-wrap">
@@ -2690,11 +2695,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="form-group">
         <label class="form-label" for="chTitleInput">Chapter Title</label>
         <input class="form-input" id="chTitleInput" type="text" placeholder="e.g. Number and Algebra"
-          onkeydown="if(event.key==='Enter')saveChapterModal()">
+          onkeydown="if(event.key==='Enter')saveChapterModal()" oninput="_modalDirty=true">
       </div>
       <div class="form-group">
         <label class="form-label" for="chYearSelect">Year Group</label>
-        <select class="form-select" id="chYearSelect">
+        <select class="form-select" id="chYearSelect" onchange="_modalDirty=true">
           <option value="Year 7">Year 7</option>
           <option value="Year 8">Year 8</option>
         </select>
@@ -2716,16 +2721,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label" for="topTitleInput">Topic Title</label>
-        <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number">
+        <input class="form-input" id="topTitleInput" type="text" placeholder="e.g. Types of Number" oninput="_modalDirty=true">
       </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label" for="topDurationInput">Lesson Hours</label>
-          <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 2">
+          <input class="form-input" id="topDurationInput" type="number" min="1" max="200" placeholder="e.g. 2" oninput="_modalDirty=true">
         </div>
         <div class="form-group">
           <label class="form-label" for="topStartWeekInput">Week</label>
-          <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5">
+          <input class="form-input" id="topStartWeekInput" type="number" min="1" max="52" placeholder="e.g. 5" oninput="_modalDirty=true">
         </div>
       </div>
       <div class="form-group">
@@ -2739,7 +2744,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="rte-sep"></div>
             <button class="rte-btn" type="button" title="Clear formatting" onclick="_rteClear()">Clear</button>
           </div>
-          <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="e.g. C1.1 Estimate and add…"></div>
+          <div class="rte-editor" id="topObjectivesEditor" contenteditable="true" data-placeholder="e.g. C1.1 Estimate and add…" oninput="_modalDirty=true"></div>
         </div>
       </div>
       <!-- Syllabus Objectives -->
@@ -2866,11 +2871,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, getDoc, getDocs, collection, onSnapshot, setDoc, updateDoc, serverTimestamp }
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, setDoc, updateDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -2880,9 +2886,9 @@ window.__firestoreHelpers = { doc, getDoc, setDoc, serverTimestamp };
 
 // ── Subject config ────────────────────────────────────────────────
 const SUBJECTS = {
-  math:    { label: 'Mathematics', code: '1112', collection: 'checkpoint_math_pacing' },
-  english: { label: 'English',     code: '1111', collection: 'checkpoint_english_pacing' },
-  science: { label: 'Science',     code: '1113', collection: 'checkpoint_science_pacing' },
+  math:    { label: 'Mathematics', code: '1112', collection: 'checkpoint_math_pacing',     pacingUrl: 'checkpoint-math-pacing' },
+  english: { label: 'English',     code: '1111', collection: 'checkpoint_english_pacing',  pacingUrl: 'checkpoint-english-pacing' },
+  science: { label: 'Science',     code: '1113', collection: 'checkpoint_science_pacing',  pacingUrl: 'checkpoint-science-pacing' },
 };
 const DOC_ID = 'year7-8';
 
@@ -2900,6 +2906,7 @@ let editChIdx  = null;
 let editTopIdx = null;
 let modalResources    = [];  // working copy of resources in topic modal
 let modalSyllabusRefs = [];  // syllabus codes selected in current modal session
+let _modalDirty = false;
 
 // Syllabus index: { "1112_C1.1": { code, tier, topicArea, title, description } }
 let syllabusIndex  = {};
@@ -2907,9 +2914,9 @@ let syllabusLoaded = false;
 
 // Settings state — keyed by subject
 let settingsData = {
-  math:    { classes: [], objPrefixes: 'C, E', termStart: '', totalWeeks: '' },
-  english: { classes: [], objPrefixes: 'E',    termStart: '', totalWeeks: '' },
-  science: { classes: [], objPrefixes: 'C, B', termStart: '', totalWeeks: '' },
+  math:    { classes: [], objPrefixes: 'C, E' },
+  english: { classes: [], objPrefixes: 'E'    },
+  science: { classes: [], objPrefixes: 'C, B' },
 };
 let settingsClassSubj = 'math';
 let settingsObjSubj   = 'math';
@@ -2969,28 +2976,35 @@ function hideSettingsPanel() {
 }
 
 function loadAllSettings() {
-  // Fetch settings meta from each subject's Firestore doc (just once)
   if (settingsUnsub) { settingsUnsub(); settingsUnsub = null; }
-
-  // We read all 3 subject docs in parallel
   const db = window.db;
+  const { getDoc, doc: fsDoc } = window.__firestoreHelpers;
   Object.keys(SUBJECTS).forEach(subj => {
-    const { getDoc, doc: fsDoc } = window.__firestoreHelpers;
     getDoc(fsDoc(db, SUBJECTS[subj].collection, 'year7-8')).then(snap => {
       if (snap.exists()) {
         const d = snap.data();
         settingsData[subj] = {
           classes:    Array.isArray(d.classes) ? d.classes : [],
           objPrefixes: Array.isArray(d.objPrefixes) ? d.objPrefixes.join(', ') : (settingsData[subj].objPrefixes || ''),
-          termStart:  d.termStart || '',
-          totalWeeks: d.totalWeeks || '',
         };
       }
-      // Re-render whichever panel is currently active
       renderClassGroups();
       renderObjSettings();
     }).catch(err => console.error('Settings load error:', err));
   });
+  // Load calendar_settings/current to display term info read-only
+  getDoc(fsDoc(db, 'calendar_settings', 'current')).then(snap => {
+    const display = document.getElementById('calSettingsDisplay');
+    if (!display) return;
+    if (snap.exists()) {
+      const d = snap.data();
+      const start = d.academicYearStart ? new Date(d.academicYearStart).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+      const weeks = d.totalTeachingWeeks ?? '—';
+      display.textContent = `Academic year start: ${start} · Teaching weeks: ${weeks}`;
+    } else {
+      display.textContent = 'No calendar settings configured yet.';
+    }
+  }).catch(() => {});
 }
 
 window.switchClassSubj = function switchClassSubj(subj, btn) {
@@ -3041,6 +3055,8 @@ window.removeClassGroup = function removeClassGroup(i) {
 window.saveClassGroups = async function saveClassGroups() {
   const subj = settingsClassSubj;
   const data = settingsData[subj];
+  const btn = document.getElementById('saveClassGroupsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: fsDoc, setDoc, serverTimestamp } = window.__firestoreHelpers;
     await setDoc(
@@ -3052,54 +3068,53 @@ window.saveClassGroups = async function saveClassGroups() {
   } catch (err) {
     console.error('Save class groups error:', err);
     showToast('Save failed.', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Class Groups'; }
   }
 }
 
 function renderObjSettings() {
   const data = settingsData[settingsObjSubj];
   const prefInp = document.getElementById('objPrefixInput');
-  const termInp = document.getElementById('termStartInput');
-  const weeksInp = document.getElementById('totalWeeksInput');
-  if (prefInp)  prefInp.value  = data.objPrefixes || '';
-  if (termInp)  termInp.value  = data.termStart   || '';
-  if (weeksInp) weeksInp.value = data.totalWeeks  || '';
+  if (prefInp) prefInp.value = data.objPrefixes || '';
 }
 
 window.saveObjSettings = async function saveObjSettings() {
-  const subj = settingsObjSubj;
-  const prefRaw   = (document.getElementById('objPrefixInput').value  || '').trim();
-  const termStart = (document.getElementById('termStartInput').value  || '').trim();
-  const totalWeeks= parseInt(document.getElementById('totalWeeksInput').value) || null;
-
+  const subj   = settingsObjSubj;
+  const prefRaw = (document.getElementById('objPrefixInput').value || '').trim();
   const prefixes = prefRaw.split(',').map(s => s.trim()).filter(Boolean);
   settingsData[subj].objPrefixes = prefRaw;
-  settingsData[subj].termStart   = termStart;
-  settingsData[subj].totalWeeks  = totalWeeks;
-
+  const btn = document.getElementById('saveObjBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const { doc: fsDoc, setDoc, serverTimestamp } = window.__firestoreHelpers;
     await setDoc(
       fsDoc(window.db, SUBJECTS[subj].collection, 'year7-8'),
-      {
-        objPrefixes: prefixes,
-        termStart:   termStart || null,
-        totalWeeks:  totalWeeks || null,
-        updatedAt:   serverTimestamp(),
-      },
+      { objPrefixes: prefixes, updatedAt: serverTimestamp() },
       { merge: true }
     );
     showToast(`Settings saved for ${SUBJECTS[subj].label}.`);
   } catch (err) {
     console.error('Save obj settings error:', err);
     showToast('Save failed.', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Settings'; }
   }
 }
 
 // ── Syllabus loader ──────────────────────────────────────────────
 async function loadSyllabus() {
   try {
-    const snap = await getDocs(collection(window.db, 'cambridge_syllabus'));
-    snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
+    const subjectCodes = Object.values(SUBJECTS).map(s => s.code);
+    const snaps = await Promise.all(
+      subjectCodes.map(code =>
+        getDocs(query(
+          collection(window.db, 'cambridge_syllabus'),
+          where('subjectCode', '==', code)
+        ))
+      )
+    );
+    snaps.forEach(snap => snap.forEach(d => { syllabusIndex[d.id] = d.data(); }));
     syllabusLoaded = true;
     const hint = document.getElementById('syllabusPickerHint');
     if (hint) hint.textContent = '';
@@ -3418,64 +3433,11 @@ function _sylEdEsc(e) {
 }
 
 // ── Teacher Progress ─────────────────────────────────────────────
-let tpVisible = false;
-
-async function toggleTeacherProgress() {
-  const panel = document.getElementById('teacherProgressPanel');
-  tpVisible = !tpVisible;
-  panel.style.display = tpVisible ? '' : 'none';
-  if (tpVisible) await loadTeacherProgress();
+function toggleTeacherProgress() {
+  const url = SUBJECTS[currentSubject]?.pacingUrl;
+  if (url) window.location.href = url;
 }
 
-async function loadTeacherProgress() {
-  const contentEl = document.getElementById('teacherProgressContent');
-  const labelEl   = document.getElementById('tpSubjLabel');
-  contentEl.innerHTML = '<p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">Loading…</p>';
-  if (labelEl) labelEl.textContent = SUBJECTS[currentSubject].label;
-
-  const cfg = SUBJECTS[currentSubject];
-  const totalTopics = chapters.reduce((s, ch) => s + (ch.topics?.length || 0), 0);
-
-  try {
-    const snap = await getDocs(collection(window.db, 'userProgress'));
-    const rows = [];
-    snap.forEach(d => {
-      const data = d.data();
-      const statuses = data.statuses || data[`statuses_${cfg.collection}`] || {};
-      const done = Object.values(statuses).filter(v => v === 'done').length;
-      if (done > 0 || Object.keys(statuses).length > 0) {
-        rows.push({ uid: d.id, name: data.displayName || d.id, done, total: totalTopics });
-      }
-    });
-
-    if (!rows.length) {
-      contentEl.innerHTML = '<p style="color:var(--ink-3);font-size:0.875rem;text-align:center;padding:24px">No teacher progress recorded yet.</p>';
-      return;
-    }
-
-    rows.sort((a, b) => b.done - a.done);
-    contentEl.innerHTML = `
-      <table class="tp-table">
-        <thead><tr><th>Teacher</th><th>Done</th><th>Progress</th></tr></thead>
-        <tbody>${rows.map(r => {
-          const pct = totalTopics ? Math.round(r.done / totalTopics * 100) : 0;
-          return `<tr>
-            <td>${escHtml(r.name)}</td>
-            <td><span class="tp-pct">${r.done} / ${totalTopics}</span></td>
-            <td style="min-width:140px">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="tp-bar-wrap" style="flex:1"><div class="tp-bar-fill" style="width:${pct}%"></div></div>
-                <span style="font-size:0.75rem;color:var(--ink-3);width:32px;text-align:right">${pct}%</span>
-              </div>
-            </td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
-  } catch (err) {
-    contentEl.innerHTML = '<p style="color:#dc2626;font-size:0.875rem;text-align:center;padding:24px">Failed to load progress data.</p>';
-    console.error('Teacher progress error:', err);
-  }
-}
 
 // ── Load subject ─────────────────────────────────────────────────
 function loadSubject(subj) {
@@ -4005,6 +3967,7 @@ function genId() {
 function openAddChapterModal() {
   modalMode = 'add-chapter';
   editChIdx = null;
+  _modalDirty = false;
   document.getElementById('chModalTitle').textContent = 'Add Chapter';
   document.getElementById('chTitleInput').value       = '';
   document.getElementById('chYearSelect').value       = 'Year 7';
@@ -4015,6 +3978,7 @@ function openAddChapterModal() {
 function editChapter(ci) {
   modalMode = 'edit-chapter';
   editChIdx = ci;
+  _modalDirty = false;
   const ch = chapters[ci];
   document.getElementById('chModalTitle').textContent = 'Edit Chapter';
   document.getElementById('chTitleInput').value       = ch.chapter || ch.title || '';
@@ -4034,24 +3998,29 @@ async function saveChapterModal() {
     chapters[editChIdx] = { ...chapters[editChIdx], chapter: title, year };
   }
 
+  _modalDirty = false;
   closeChapterModal();
   await saveChapters();
   showToast(modalMode === 'add-chapter' ? 'Chapter added.' : 'Chapter updated.');
 }
 
 function closeChapterModal() {
+  if (_modalDirty) {
+    showToast('Changes discarded.');
+    _modalDirty = false;
+  }
   document.getElementById('chapterModal').classList.remove('open');
 }
 
 async function deleteChapter(e, ci) {
   e.stopPropagation();
-  const ch = chapters[ci];
-  const n  = (ch.topics || []).length;
-  const chName = ch.chapter || ch.title;
-  const msg = n > 0
-    ? `Delete "${chName}"? This will also delete all ${n} topic${n !== 1 ? 's' : ''}.`
-    : `Delete chapter "${chName}"?`;
-  if (!confirm(msg)) return;
+  const btn = e.currentTarget;
+  if (btn.dataset.confirming !== 'true') {
+    btn.dataset.confirming = 'true';
+    btn.textContent = 'Confirm?';
+    setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Delete'; }, 3000);
+    return;
+  }
   chapters.splice(ci, 1);
   await saveChapters();
   showToast('Chapter deleted.');
@@ -4072,6 +4041,7 @@ function openAddTopicModal(ci) {
   modalMode  = 'add-topic';
   editChIdx  = ci;
   editTopIdx = null;
+  _modalDirty = false;
   modalResources    = [];
   modalSyllabusRefs = [];
   document.getElementById('topModalTitle').textContent     = 'Add Topic';
@@ -4090,6 +4060,7 @@ function editTopic(ci, ti) {
   modalMode  = 'edit-topic';
   editChIdx  = ci;
   editTopIdx = ti;
+  _modalDirty = false;
   const t = chapters[ci].topics[ti];
   modalResources    = (t.resources || []).map(r => ({ ...r }));
   modalSyllabusRefs = (t.syllabusRefs || []).slice();
@@ -4098,7 +4069,7 @@ function editTopic(ci, ti) {
   document.getElementById('topDurationInput').value        = t.duration   || t.hour       || '';
   document.getElementById('topStartWeekInput').value       = t.week  || '';
   const rawObj = t.objectives || t.objective || '';
-  document.getElementById('topObjectivesEditor').innerHTML = rawObj;
+  document.getElementById('topObjectivesEditor').innerHTML = DOMPurify.sanitize(rawObj);
   renderModalResources();
   renderSyllabusChips();
   initSyllabusPicker();
@@ -4169,19 +4140,29 @@ async function saveTopicModal() {
     };
   }
 
+  _modalDirty = false;
   closeTopicModal();
   await saveChapters();
   showToast(modalMode === 'add-topic' ? 'Topic added.' : 'Topic updated.');
 }
 
 function closeTopicModal() {
+  if (_modalDirty) {
+    showToast('Changes discarded.');
+    _modalDirty = false;
+  }
   document.getElementById('topicModal').classList.remove('open');
 }
 
 async function deleteTopic(e, ci, ti) {
   e.stopPropagation();
-  const t = chapters[ci].topics[ti];
-  if (!confirm(`Delete topic "${t.title || t.topic}"?`)) return;
+  const btn = e.currentTarget;
+  if (btn.dataset.confirming !== 'true') {
+    btn.dataset.confirming = 'true';
+    btn.textContent = 'Confirm?';
+    setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Delete'; }, 3000);
+    return;
+  }
   chapters[ci].topics.splice(ti, 1);
   await saveChapters();
   showToast('Topic deleted.');

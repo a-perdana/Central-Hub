@@ -1073,6 +1073,7 @@ const GLH_TARGET = 130;
 // ── State ─────────────────────────────────────────────────────────
 let currentSubject = 'math';
 let chapters       = [];
+window.chapters    = chapters;
 let unsub          = null;
 let saving         = false;
 
@@ -1619,7 +1620,7 @@ function toggleTeacherProgress() {
 function loadSubject(subj) {
   if (unsub) { unsub(); unsub = null; }
   currentSubject = subj;
-  chapters = [];
+  chapters = []; window.chapters = chapters;
 
   const cfg = SUBJECTS[subj];
   document.getElementById('subjTitle').textContent = `Cambridge Secondary Checkpoint ${cfg.label}`;
@@ -1640,6 +1641,7 @@ function loadSubject(subj) {
     document.getElementById('loadingState').style.display = 'none';
     chapters = (snap.exists() && Array.isArray(snap.data().chapters))
       ? snap.data().chapters : [];
+    window.chapters = chapters;
     render();
   }, err => {
     document.getElementById('loadingState').style.display = 'none';
@@ -1666,7 +1668,7 @@ window.inlineEditChip = function(e, field, ci, ti) {
     if (!isNaN(val) && val > 0) {
       if (field === 'hours') { topic.duration = val; topic.hour = val; }
       else                   { topic.week = val; }
-      saveChapters();
+      saveChapters().then(() => showToast(field === 'hours' ? 'Lesson hours updated.' : 'Week updated.'));
     }
     render();
   }
@@ -1964,11 +1966,20 @@ function render() {
     }
   }
 
+  // Snapshot which chapters are currently open before wiping the DOM
+  const openIds = new Set(
+    [...document.querySelectorAll('.chapter-block:not(.collapsed)')].map(b => b.dataset.chid)
+  );
+
   list.innerHTML = pageItems.map(ch => renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics)).join('');
 
   // When searching, expand all matched chapters; otherwise restore collapse state
   if (isSearching) {
     document.querySelectorAll('.chapter-block').forEach(b => b.classList.remove('collapsed'));
+  } else if (openIds.size > 0) {
+    document.querySelectorAll('.chapter-block').forEach(b => {
+      if (openIds.has(b.dataset.chid)) b.classList.remove('collapsed');
+    });
   }
 
   renderGlhBanner();
@@ -2048,7 +2059,7 @@ function renderTopic(t, ti, ci, q = '') {
           class="activity-chip ${escHtml(t.activity.type)}" title="${escHtml(t.activity.title)}"
         >${escHtml(t.activity.type === 'igcsetools' ? 'IGCSE Tools' : t.activity.type === 'pdf' ? 'PDF' : 'Link')} — ${escHtml(t.activity.title)}</a>
        <button class="btn btn-edit" style="font-size:0.7rem;padding:2px 7px"
-         onclick="openAssessmentModal({type:'topic',ci:${ci},ti:${ti}},chapters[${ci}].topics[${ti}].activity)">Edit</button>
+         onclick="openAssessmentModal({type:'topic',ci:${ci},ti:${ti}},window.chapters[${ci}].topics[${ti}].activity)">Edit</button>
        <button class="btn btn-danger" style="font-size:0.7rem;padding:2px 7px"
          onclick="removeActivity(event,${ci},${ti})">Remove</button>`
     : `<button class="btn btn-secondary btn-sm" style="font-size:0.7rem;padding:2px 8px"
@@ -2109,7 +2120,7 @@ function renderChapterAssessment(ch, ci) {
       <span class="asmnt-title">${escHtml(a.title)}</span>
       ${a.duration ? `<span class="asmnt-duration">${escHtml(a.duration)}</span>` : ''}
       <a href="${safeUrl(a.url)}" target="_blank" rel="noopener noreferrer" class="asmnt-open-link">Open ↗</a>
-      <button class="btn btn-edit btn-sm" onclick="openAssessmentModal({type:'chapter',ci:${ci}},chapters[${ci}].assessment)">Edit</button>
+      <button class="btn btn-edit btn-sm" onclick="openAssessmentModal({type:'chapter',ci:${ci}},window.chapters[${ci}].assessment)">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="removeAssessment(event,${ci})">Remove</button>
     ` : `
       <button class="btn btn-secondary btn-sm" onclick="openAssessmentModal({type:'chapter',ci:${ci}})">+ Add Assessment</button>
