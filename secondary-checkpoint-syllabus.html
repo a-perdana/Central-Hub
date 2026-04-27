@@ -1725,7 +1725,7 @@ async function saveChapters() {
 // ── Year Filter ───────────────────────────────────────────────────
 let activeYearFilter = 'Year 7';
 
-function setYearFilter(val) {
+window.setYearFilter = function setYearFilter(val) {
   activeYearFilter = val;
   document.getElementById('yfY7').className  = 'btn-year-filter' + (val === 'Year 7' ? ' active-y7' : '');
   document.getElementById('yfY8').className  = 'btn-year-filter' + (val === 'Year 8' ? ' active-y8' : '');
@@ -1962,16 +1962,17 @@ function render() {
     return;
   }
 
-  const filtered = getFilteredChapters(); // null = no search
-  const workList = filtered ?? chapters.map((ch, i) => ({ ...ch, _ci: i, _matchedTopics: ch.topics || [] }));
+  const filtered     = getFilteredChapters(); // null = no active filter at all
+  const workList     = filtered ?? chapters.map((ch, i) => ({ ...ch, _ci: i, _matchedTopics: ch.topics || [] }));
+  const isSearching  = !!searchQuery; // only text search triggers expand-all + no pagination
 
-  // Search result count
-  if (filtered !== null) {
-    const topicCount = filtered.reduce((s, ch) => s + ch._matchedTopics.length, 0);
+  // Search result count — only for text search
+  if (isSearching) {
+    const topicCount = workList.reduce((s, ch) => s + ch._matchedTopics.length, 0);
     resCount.style.display = '';
-    resCount.textContent = filtered.length === 0
+    resCount.textContent = workList.length === 0
       ? 'No results.'
-      : `${filtered.length} chapter${filtered.length !== 1 ? 's' : ''}, ${topicCount} topic${topicCount !== 1 ? 's' : ''} found`;
+      : `${workList.length} chapter${workList.length !== 1 ? 's' : ''}, ${topicCount} topic${topicCount !== 1 ? 's' : ''} found`;
   } else {
     resCount.style.display = 'none';
   }
@@ -1979,16 +1980,14 @@ function render() {
   if (workList.length === 0) {
     list.style.display  = 'none';
     pager.style.display = 'none';
-    empty.style.display = filtered !== null ? '' : '';
+    empty.style.display = '';
     return;
   }
 
   empty.style.display = 'none';
   list.style.display  = '';
 
-  const isSearching = filtered !== null;
-
-  // Pagination — bypass when searching (show all matches)
+  // Pagination — bypass only when text-searching (show all matches)
   let pageItems;
   if (isSearching) {
     pageItems = workList;
