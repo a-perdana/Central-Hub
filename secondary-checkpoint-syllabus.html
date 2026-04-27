@@ -1402,10 +1402,13 @@ window.syncCalendarData = async function syncCalendarData() {
       getDoc(doc(db, 'calendar_settings', 'current')),
     ]);
 
-    // 2. Get academic year start
+    // 2. Get academic year start + terms
     let yearStartIso = '2025-07-21'; // fallback
-    if (calSnap.exists() && calSnap.data().academicYearStart) {
-      yearStartIso = calSnap.data().academicYearStart;
+    let terms = [];
+    if (calSnap.exists()) {
+      const cd = calSnap.data();
+      if (cd.academicYearStart) yearStartIso = cd.academicYearStart;
+      if (Array.isArray(cd.terms)) terms = cd.terms;
     }
 
     // 3. Extract public holidays from Sheets
@@ -1428,7 +1431,7 @@ window.syncCalendarData = async function syncCalendarData() {
 
     setSyncStatus(`Found ${holidays.length} public holiday(s). Computing teaching weeks…`);
 
-    // 4. Build teaching weeks — same logic as buildTeachingWeeks() but self-contained
+    // 4. Build teaching weeks with semester labels
     const yearStart = new Date(yearStartIso + 'T00:00:00');
     const dow = yearStart.getDay();
     const diffToMon = dow === 0 ? -6 : 1 - dow;
@@ -1444,8 +1447,19 @@ window.syncCalendarData = async function syncCalendarData() {
       }
     });
 
+    // Build semester boundaries: [{label, start: Date, end: Date, semWeekNo counter}]
+    // Each semester resets its own week counter.
+    const semBounds = terms.map(t => ({
+      label: t.label || '',
+      start: new Date(t.start + 'T00:00:00'),
+      end:   new Date(t.end   + 'T23:59:59'),
+    }));
+
+    // Per-semester week counters
+    const semWeekCounters = semBounds.map(() => 0);
+
     const weeks = [];
-    let weekNo = 0;
+    let globalWeekNo = 0;
     for (let w = 0; w < 70; w++) {
       const mon = new Date(yearStart);
       mon.setDate(yearStart.getDate() + w * 7);
@@ -1460,9 +1474,23 @@ window.syncCalendarData = async function syncCalendarData() {
       }
 
       if (!hasHoliday) {
-        weekNo++;
+        globalWeekNo++;
+        // Find which semester this Monday falls in (use Wednesday for mid-week safety)
+        const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
+        let semLabel = '';
+        let semWeekNo = globalWeekNo;
+        for (let si = 0; si < semBounds.length; si++) {
+          if (mid >= semBounds[si].start && mid <= semBounds[si].end) {
+            semWeekCounters[si]++;
+            semLabel  = semBounds[si].label;
+            semWeekNo = semWeekCounters[si];
+            break;
+          }
+        }
         weeks.push({
-          weekNo,
+          weekNo: globalWeekNo,
+          semLabel,
+          semWeekNo,
           mon: mon.toISOString().slice(0, 10),
           fri: fri.toISOString().slice(0, 10),
         });
@@ -1473,17 +1501,19 @@ window.syncCalendarData = async function syncCalendarData() {
     await setDoc(
       doc(db, 'teaching_schedule', 'checkpoint_math'),
       {
-        academicYearStart: calSnap.exists() ? (calSnap.data().academicYearStart || yearStartIso) : yearStartIso,
+        academicYearStart: yearStartIso,
         publicHolidayCount: holidays.length,
         teachingWeekCount: weeks.length,
-        weeks,                          // [{weekNo, mon, fri}]
+        weeks,   // [{weekNo, semLabel, semWeekNo, mon, fri}]
         syncedAt: serverTimestamp(),
       }
     );
 
     // 6. Update local state so current page reflects new data immediately
     teachingWeeks = weeks.map(w => ({
-      weekNo: w.weekNo,
+      weekNo:    w.weekNo,
+      semLabel:  w.semLabel,
+      semWeekNo: w.semWeekNo,
       mon: new Date(w.mon + 'T00:00:00'),
       fri: new Date(w.fri + 'T00:00:00'),
     }));
@@ -1540,7 +1570,9 @@ async function loadCalendarData() {
 
   if (schedSnap && schedSnap.exists() && Array.isArray(schedSnap.data().weeks)) {
     teachingWeeks = schedSnap.data().weeks.map(w => ({
-      weekNo: w.weekNo,
+      weekNo:    w.weekNo,
+      semLabel:  w.semLabel  || '',
+      semWeekNo: w.semWeekNo || w.weekNo,
       mon: new Date(w.mon + 'T00:00:00'),
       fri: new Date(w.fri + 'T00:00:00'),
     }));
@@ -1574,10 +1606,19 @@ function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
 
   const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
+  // Use semester-relative week number if available, otherwise global
+  const semPrefix = startW.semLabel ? `${startW.semLabel} · ` : '';
+
   if (!endW || startWeekIdx === endWeekIdx) {
-    return `Week ${startW.weekNo}: ${fmt(startW.mon)} – ${fmt(startW.fri)}`;
+    return `${semPrefix}Week ${startW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(startW.fri)}`;
   }
-  return `Week ${startW.weekNo}–${endW.weekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
+
+  // Topic spans multiple weeks — may cross semester boundary
+  if (startW.semLabel && endW.semLabel && startW.semLabel === endW.semLabel) {
+    return `${semPrefix}Week ${startW.semWeekNo}–${endW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
+  }
+  // Cross-semester or no labels: show dates only
+  return `${semPrefix}Week ${startW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
 }
 
 function lookupSyllabus(subjCode, code) {
