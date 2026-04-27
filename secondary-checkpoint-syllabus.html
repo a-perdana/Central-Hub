@@ -1413,6 +1413,11 @@ window.syncCalendarData = async function syncCalendarData() {
       if (cd.academicYearStart) yearStartIso = cd.academicYearStart;
       if (Array.isArray(cd.terms)) terms = cd.terms;
     }
+    // Advance to the Monday of the academic year start week
+    const yearStartRaw = new Date(yearStartIso + 'T00:00:00');
+    const dow = yearStartRaw.getDay(); // 0=Sun,1=Mon,...
+    const yearStart = new Date(yearStartRaw);
+    yearStart.setDate(yearStartRaw.getDate() - (dow === 0 ? 6 : dow - 1));
 
     // 3. Extract public holidays from Sheets
     function normalizeDate(str) {
@@ -1425,30 +1430,54 @@ window.syncCalendarData = async function syncCalendarData() {
       return null;
     }
 
-    const holidays = Array.isArray(sheetsRes)
-      ? sheetsRes
-          .filter(e => e && e.category === 'Public Holiday')
-          .map(e => ({ date_start: normalizeDate(e.date_start), date_end: normalizeDate(e.date_end) || normalizeDate(e.date_start) }))
-          .filter(e => e.date_start)
-      : [];
+    const events = Array.isArray(sheetsRes) ? sheetsRes.map(e => ({
+      ...e,
+      date_start: normalizeDate(e.date_start),
+      date_end:   normalizeDate(e.date_end) || normalizeDate(e.date_start),
+    })).filter(e => e.date_start) : [];
 
-    setSyncStatus(`Found ${holidays.length} public holiday(s). Computing teaching weeks…`);
+    // ── Collect non-teaching date ranges ─────────────────────────────
+    // 1. Public holidays (individual days)
+    const holidays = events.filter(e => e.category === 'Public Holiday');
 
-    // 4. Build teaching weeks with semester labels
-    const yearStart = new Date(yearStartIso + 'T00:00:00');
-    const dow = yearStart.getDay();
-    const diffToMon = dow === 0 ? -6 : 1 - dow;
-    yearStart.setDate(yearStart.getDate() + diffToMon); // Monday of week 1
+    // 2. EASE weeks (Assessment events with 'EASE' in the title)
+    const easeEvents = events.filter(e =>
+      e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')
+    );
 
-    const holidayDates = new Set();
-    holidays.forEach(h => {
-      const s = new Date(h.date_start + 'T00:00:00');
-      const e = new Date(h.date_end   + 'T00:00:00');
+    // 3. School holiday blocks — derive from Sheets events by title keywords
+    //    "Start of Semester X Holiday" → block starts; ends at next "Start of Semester X+1"
+    //    "Start of Ramadhan Holiday"   → block starts; ends at "End of Ramadhan Holiday"
+    const schoolHolidayRanges = [];
+
+    const sem1HolStart = events.find(e => /start of semester 1 holiday/i.test(e.title));
+    const sem2Start    = events.find(e => /start of semester 2/i.test(e.title) && !/holiday/i.test(e.title));
+    if (sem1HolStart && sem2Start) {
+      schoolHolidayRanges.push({ date_start: sem1HolStart.date_start, date_end: sem2Start.date_start });
+    }
+
+    const ramadhanStart = events.find(e => /start of ramadhan holiday/i.test(e.title));
+    const ramadhanEnd   = events.find(e => /end of ramadhan holiday/i.test(e.title));
+    if (ramadhanStart && ramadhanEnd) {
+      schoolHolidayRanges.push({ date_start: ramadhanStart.date_start, date_end: ramadhanEnd.date_start });
+    }
+
+    // ── Build skip-date Set (Mon–Fri only) ───────────────────────────
+    const skipDates = new Set();
+    const addRangeToSkip = (dateStart, dateEnd) => {
+      const s = new Date(dateStart + 'T00:00:00');
+      const e = new Date(dateEnd   + 'T00:00:00');
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
         const wd = d.getDay();
-        if (wd >= 1 && wd <= 5) holidayDates.add(d.toISOString().slice(0, 10));
+        if (wd >= 1 && wd <= 5) skipDates.add(d.toISOString().slice(0, 10));
       }
-    });
+    };
+
+    holidays.forEach(h => addRangeToSkip(h.date_start, h.date_end));
+    easeEvents.forEach(e => addRangeToSkip(e.date_start, e.date_end));
+    schoolHolidayRanges.forEach(r => addRangeToSkip(r.date_start, r.date_end));
+
+    setSyncStatus(`Found ${holidays.length} public holiday(s), ${easeEvents.length} EASE week(s), ${schoolHolidayRanges.length} school holiday block(s). Computing teaching weeks…`);
 
     // Build semester boundaries: [{label, start: Date, end: Date, semWeekNo counter}]
     // Each semester resets its own week counter.
@@ -1469,14 +1498,14 @@ window.syncCalendarData = async function syncCalendarData() {
       const fri = new Date(mon);
       fri.setDate(mon.getDate() + 4);
 
-      let hasHoliday = false;
+      let shouldSkip = false;
       for (let i = 0; i < 5; i++) {
         const d = new Date(mon);
         d.setDate(mon.getDate() + i);
-        if (holidayDates.has(d.toISOString().slice(0, 10))) { hasHoliday = true; break; }
+        if (skipDates.has(d.toISOString().slice(0, 10))) { shouldSkip = true; break; }
       }
 
-      if (!hasHoliday) {
+      if (!shouldSkip) {
         globalWeekNo++;
         // Find which semester this Monday falls in (use Wednesday for mid-week safety)
         const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
@@ -1505,7 +1534,7 @@ window.syncCalendarData = async function syncCalendarData() {
       doc(db, 'teaching_schedule', 'checkpoint_math'),
       {
         academicYearStart: yearStartIso,
-        publicHolidayCount: holidays.length,
+        skippedWeekCount: 70 - weeks.length,
         teachingWeekCount: weeks.length,
         weeks,   // [{weekNo, semLabel, semWeekNo, mon, fri}]
         syncedAt: serverTimestamp(),
@@ -1525,7 +1554,7 @@ window.syncCalendarData = async function syncCalendarData() {
     const lastRun = document.getElementById('syncLastRun');
     if (lastRun) lastRun.textContent = `Last synced: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
-    setSyncStatus(`✓ Synced — ${weeks.length} teaching weeks saved (${holidays.length} holiday weeks skipped).`);
+    setSyncStatus(`✓ Synced — ${weeks.length} teaching weeks saved (${70 - weeks.length} weeks skipped: holidays, EASE, school breaks).`);
   } catch (err) {
     console.error('Sync error:', err);
     setSyncStatus(`Sync failed: ${err.message}`, true);
