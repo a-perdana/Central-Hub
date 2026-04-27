@@ -806,6 +806,22 @@
         </div>
 
       </div>
+
+      <!-- Sync Card -->
+      <div class="settings-card" style="margin-top:20px">
+        <div class="settings-card-head">
+          <div>
+            <h3 class="settings-card-title">Teaching Week Sync</h3>
+            <p class="settings-card-desc">Reads public holidays from the Academic Calendar (Google Sheets) and the academic year start date, then saves a pre-computed teaching week schedule to Firestore. Run this once after updating holidays in the Academic Calendar.</p>
+          </div>
+        </div>
+        <div id="syncStatusBox" style="display:none;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" id="syncCalBtn" onclick="syncCalendarData()">⟳ Sync from Academic Calendar</button>
+          <span id="syncLastRun" style="font-size:11px;color:var(--ink-3)"></span>
+        </div>
+      </div>
+
     </div>
 
     <!-- Action Bar (hidden in settings mode) -->
@@ -1100,7 +1116,7 @@
 <script type="module" src="auth-guard.js"></script>
 
 <script type="module">
-import { doc, getDoc, getDocs, collection, query, where, onSnapshot, setDoc, updateDoc, serverTimestamp }
+import { doc, getDoc, getDocs, collection, query, where, setDoc, updateDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -1152,10 +1168,8 @@ let settingsObjSubj   = 'math';
 let settingsUnsub = null;
 
 // ── Calendar / schedule state ─────────────────────────────────────
-let calYearStart    = null;   // Date object — Monday of week 1
-let publicHolidays  = [];     // [{ date_start, date_end }] — ISO strings
-// teachingWeeks: array of { weekNo, mon: Date, fri: Date } — public holiday weeks excluded
-let teachingWeeks   = [];
+// teachingWeeks: [{weekNo, mon: Date, fri: Date}] — loaded from teaching_schedule/checkpoint_math
+let teachingWeeks = [];
 
 // ── Auth ─────────────────────────────────────────────────────────
 document.addEventListener('authReady', async ({ detail: { profile } }) => {
@@ -1356,6 +1370,137 @@ window.saveObjSettings = async function saveObjSettings() {
   }
 }
 
+// ── Calendar Sync ─────────────────────────────────────────────────
+// Reads Google Sheets (via Academic Calendar API) + calendar_settings/current,
+// computes teaching weeks (skipping public holiday weeks), and saves the result
+// to Firestore as teaching_schedule/checkpoint_math so the syllabus page only
+// needs one cheap read on load — no runtime calculation needed.
+
+const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec';
+
+function setSyncStatus(msg, isError = false) {
+  const box = document.getElementById('syncStatusBox');
+  if (!box) return;
+  box.style.display = '';
+  box.style.background = isError ? '#FEF2F2' : '#F0FDF4';
+  box.style.border     = `1px solid ${isError ? '#FECACA' : '#BBF7D0'}`;
+  box.style.color      = isError ? '#991B1B' : '#166534';
+  box.textContent = msg;
+}
+
+window.syncCalendarData = async function syncCalendarData() {
+  const btn = document.getElementById('syncCalBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Syncing…'; }
+  setSyncStatus('Fetching Academic Calendar data…');
+
+  try {
+    const db = window.db;
+
+    // 1. Fetch Google Sheets events + calendar_settings in parallel
+    const [sheetsRes, calSnap] = await Promise.all([
+      fetch(SHEETS_API_URL).then(r => r.json()),
+      getDoc(doc(db, 'calendar_settings', 'current')),
+    ]);
+
+    // 2. Get academic year start
+    let yearStartIso = '2025-07-21'; // fallback
+    if (calSnap.exists() && calSnap.data().academicYearStart) {
+      yearStartIso = calSnap.data().academicYearStart;
+    }
+
+    // 3. Extract public holidays from Sheets
+    function normalizeDate(str) {
+      if (!str) return null;
+      const s = String(str);
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+      const MM = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+      const m = s.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+      if (m && MM[m[1]]) return `${m[3]}-${MM[m[1]]}-${String(m[2]).padStart(2,'0')}`;
+      return null;
+    }
+
+    const holidays = Array.isArray(sheetsRes)
+      ? sheetsRes
+          .filter(e => e && e.category === 'Public Holiday')
+          .map(e => ({ date_start: normalizeDate(e.date_start), date_end: normalizeDate(e.date_end) || normalizeDate(e.date_start) }))
+          .filter(e => e.date_start)
+      : [];
+
+    setSyncStatus(`Found ${holidays.length} public holiday(s). Computing teaching weeks…`);
+
+    // 4. Build teaching weeks — same logic as buildTeachingWeeks() but self-contained
+    const yearStart = new Date(yearStartIso + 'T00:00:00');
+    const dow = yearStart.getDay();
+    const diffToMon = dow === 0 ? -6 : 1 - dow;
+    yearStart.setDate(yearStart.getDate() + diffToMon); // Monday of week 1
+
+    const holidayDates = new Set();
+    holidays.forEach(h => {
+      const s = new Date(h.date_start + 'T00:00:00');
+      const e = new Date(h.date_end   + 'T00:00:00');
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        const wd = d.getDay();
+        if (wd >= 1 && wd <= 5) holidayDates.add(d.toISOString().slice(0, 10));
+      }
+    });
+
+    const weeks = [];
+    let weekNo = 0;
+    for (let w = 0; w < 70; w++) {
+      const mon = new Date(yearStart);
+      mon.setDate(yearStart.getDate() + w * 7);
+      const fri = new Date(mon);
+      fri.setDate(mon.getDate() + 4);
+
+      let hasHoliday = false;
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(mon);
+        d.setDate(mon.getDate() + i);
+        if (holidayDates.has(d.toISOString().slice(0, 10))) { hasHoliday = true; break; }
+      }
+
+      if (!hasHoliday) {
+        weekNo++;
+        weeks.push({
+          weekNo,
+          mon: mon.toISOString().slice(0, 10),
+          fri: fri.toISOString().slice(0, 10),
+        });
+      }
+    }
+
+    // 5. Save to Firestore: teaching_schedule/checkpoint_math
+    await setDoc(
+      doc(db, 'teaching_schedule', 'checkpoint_math'),
+      {
+        academicYearStart: calSnap.exists() ? (calSnap.data().academicYearStart || yearStartIso) : yearStartIso,
+        publicHolidayCount: holidays.length,
+        teachingWeekCount: weeks.length,
+        weeks,                          // [{weekNo, mon, fri}]
+        syncedAt: serverTimestamp(),
+      }
+    );
+
+    // 6. Update local state so current page reflects new data immediately
+    teachingWeeks = weeks.map(w => ({
+      weekNo: w.weekNo,
+      mon: new Date(w.mon + 'T00:00:00'),
+      fri: new Date(w.fri + 'T00:00:00'),
+    }));
+    render();
+
+    const lastRun = document.getElementById('syncLastRun');
+    if (lastRun) lastRun.textContent = `Last synced: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+
+    setSyncStatus(`✓ Synced — ${weeks.length} teaching weeks saved (${holidays.length} holiday weeks skipped).`);
+  } catch (err) {
+    console.error('Sync error:', err);
+    setSyncStatus(`Sync failed: ${err.message}`, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ Sync from Academic Calendar'; }
+  }
+};
+
 // ── Syllabus loader ──────────────────────────────────────────────
 async function loadSyllabus() {
   try {
@@ -1378,122 +1523,50 @@ async function loadSyllabus() {
 }
 
 // ── Calendar data loader ──────────────────────────────────────────
-// Uses onSnapshot so topic dates update automatically when public holidays change.
-let _calDataReady = false;
-
+// Reads the pre-computed teaching schedule from Firestore (teaching_schedule/checkpoint_math).
+// Admin populates this via the "Sync from Academic Calendar" button in Settings.
 async function loadCalendarData() {
   const db = window.db;
 
-  // Load math weeklyHours (one-time; save handler keeps it in sync)
-  try {
-    const mathSnap = await getDoc(doc(db, SUBJECTS.math.collection, 'year7-8'));
-    if (mathSnap.exists() && typeof mathSnap.data().weeklyHours === 'number') {
-      settingsData.math.weeklyHours = mathSnap.data().weeklyHours;
+  // Load math weeklyHours alongside schedule doc in parallel
+  const [schedSnap, mathSnap] = await Promise.all([
+    getDoc(doc(db, 'teaching_schedule', 'checkpoint_math')).catch(() => null),
+    getDoc(doc(db, SUBJECTS.math.collection, 'year7-8')).catch(() => null),
+  ]);
+
+  if (mathSnap && mathSnap.exists() && typeof mathSnap.data().weeklyHours === 'number') {
+    settingsData.math.weeklyHours = mathSnap.data().weeklyHours;
+  }
+
+  if (schedSnap && schedSnap.exists() && Array.isArray(schedSnap.data().weeks)) {
+    teachingWeeks = schedSnap.data().weeks.map(w => ({
+      weekNo: w.weekNo,
+      mon: new Date(w.mon + 'T00:00:00'),
+      fri: new Date(w.fri + 'T00:00:00'),
+    }));
+
+    // Show last sync info in settings panel if open
+    const d = schedSnap.data();
+    const lastRun = document.getElementById('syncLastRun');
+    if (lastRun && d.syncedAt) {
+      const ts = d.syncedAt.toDate ? d.syncedAt.toDate() : new Date(d.syncedAt);
+      lastRun.textContent = `Last synced: ${ts.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
     }
-  } catch (e) { console.warn('Could not load math settings:', e); }
-
-  // Both listeners must fire at least once before we resolve.
-  // We track readiness separately and only call resolve() when both have fired.
-  let _calSettingsReady = false;
-  let _holsReady        = false;
-
-  return new Promise(resolve => {
-    function maybeResolve() {
-      if (_calSettingsReady && _holsReady) {
-        buildTeachingWeeks();
-        _calDataReady = true;
-        resolve();
-      }
-    }
-
-    onSnapshot(doc(db, 'calendar_settings', 'current'), snap => {
-      if (snap.exists()) {
-        const d = snap.data();
-        calYearStart = d.academicYearStart ? new Date(d.academicYearStart + 'T00:00:00') : null;
-      } else {
-        calYearStart = null;
-      }
-      if (!_calSettingsReady) { _calSettingsReady = true; maybeResolve(); }
-      else { buildTeachingWeeks(); render(); }
-    }, e => { console.warn('calendar_settings snapshot error:', e); _calSettingsReady = true; maybeResolve(); });
-
-    onSnapshot(
-      query(collection(db, 'calendar_events'), where('category', '==', 'Public Holiday')),
-      snap => {
-        publicHolidays = [];
-        snap.forEach(d => {
-          const ev = d.data();
-          if (ev.date_start) publicHolidays.push({ date_start: ev.date_start, date_end: ev.date_end || ev.date_start });
-        });
-        if (!_holsReady) { _holsReady = true; maybeResolve(); }
-        else { buildTeachingWeeks(); render(); }
-      },
-      e => { console.warn('calendar_events snapshot error:', e); _holsReady = true; maybeResolve(); }
-    );
-  });
-}
-
-// ── Teaching week builder ─────────────────────────────────────────
-// Builds an ordered array of { weekNo, mon, fri } for teaching weeks only.
-// A calendar week is skipped if it contains at least one full-day public holiday
-// that falls Mon–Fri (i.e. any holiday that overlaps the Mon–Fri window of that week).
-function buildTeachingWeeks() {
-  teachingWeeks = [];
-  if (!calYearStart) return;
-
-  // Find the Monday of the week containing academicYearStart
-  const start = new Date(calYearStart);
-  const dayOfWeek = start.getDay(); // 0=Sun,1=Mon,...
-  const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  start.setDate(start.getDate() + diffToMon);
-
-  // Build a Set of ISO date strings that are public holidays (Mon–Fri only)
-  const holidayDates = new Set();
-  publicHolidays.forEach(h => {
-    const s = new Date(h.date_start + 'T00:00:00');
-    const e = new Date(h.date_end   + 'T00:00:00');
-    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-      const wd = d.getDay();
-      if (wd >= 1 && wd <= 5) holidayDates.add(d.toISOString().slice(0, 10));
-    }
-  });
-
-  // Walk up to 70 calendar weeks (covers any 2-year academic year safely)
-  let weekNo = 0;
-  for (let w = 0; w < 70; w++) {
-    const mon = new Date(start);
-    mon.setDate(start.getDate() + w * 7);
-    const fri = new Date(mon);
-    fri.setDate(mon.getDate() + 4);
-
-    // Check if any Mon–Fri day of this week is a public holiday
-    let hasHoliday = false;
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(mon);
-      d.setDate(mon.getDate() + i);
-      if (holidayDates.has(d.toISOString().slice(0, 10))) { hasHoliday = true; break; }
-    }
-
-    if (!hasHoliday) {
-      weekNo++;
-      teachingWeeks.push({ weekNo, mon: new Date(mon), fri: new Date(fri) });
-    }
+    const display = document.getElementById('calSettingsDisplay');
+    if (display) display.textContent = `${teachingWeeks.length} teaching weeks loaded · ${d.publicHolidayCount ?? 0} holidays skipped`;
+  } else {
+    teachingWeeks = [];
+    const display = document.getElementById('calSettingsDisplay');
+    if (display) display.textContent = 'No schedule synced yet — use the Sync button in Settings.';
   }
 }
 
 // ── Topic date label ──────────────────────────────────────────────
-// cumulativeBefore: total lesson hours of all topics before this one (in the same chapter list)
-// duration: lesson hours of this topic
-// weeklyHours: lesson hours per week for the subject
-// Returns "Week N: D Mon – D Mon" or null if calendar not configured.
 function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
   if (!teachingWeeks.length || !weeklyHours || weeklyHours <= 0) return null;
 
-  // Which teaching week does this topic START in?
   const startWeekIdx = Math.floor(cumulativeBefore / weeklyHours);
-  // Which teaching week does it END in?
-  const endHour = cumulativeBefore + duration - 1; // last hour (0-indexed)
-  const endWeekIdx = Math.floor(endHour / weeklyHours);
+  const endWeekIdx   = Math.floor((cumulativeBefore + duration - 1) / weeklyHours);
 
   const startW = teachingWeeks[startWeekIdx];
   const endW   = teachingWeeks[endWeekIdx];
