@@ -2083,5 +2083,6 @@ export function initSyllabusPage(config) {
     // Settings (in addition to window.switch* already assigned above)
     showSettingsPanel,
     hideSettingsPanel,
+    toggleSettingsPanel: showSettingsPanel, // alias for modal-mode onclick handlers
   });
 }
