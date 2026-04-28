@@ -289,6 +289,93 @@
     .status-pending .tc-status-dot { background: #d1d5db; }
     .empty-week { color: var(--ink-3); font-size: 0.75rem; font-style: italic; }
 
+    /* ── Month pagination ── */
+    .month-pager {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .month-pager.visible { display: flex; }
+    .month-pager-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--ink-3);
+      margin-right: 4px;
+    }
+    .month-pager-btn {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--white);
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .month-pager-btn:hover:not(.active) { background: var(--paper); border-color: var(--accent); color: var(--accent); }
+    .month-pager-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+    /* ── Chapter view subject + month pagers ── */
+    .chapter-pagers {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .chapter-pagers.visible { display: flex; }
+    .subject-pager {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .subject-pager-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      min-width: 90px;
+    }
+    .subject-pager-btn {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--white);
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .subject-pager-btn:hover:not(.active) { background: var(--paper); border-color: currentColor; }
+    .subject-pager-btn.active { color: #fff; font-weight: 600; }
+
+    /* ── Month separator row ── */
+    .month-separator-row td { padding: 0; border-bottom: none; }
+    .month-separator-cell {
+      position: sticky;
+      left: 0;
+      padding: 6px 14px 5px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--accent);
+      background: var(--accent-2);
+      border-top: 2px solid #ddd6fe;
+      border-bottom: 1px solid #ddd6fe;
+    }
+    .month-separator-row:first-child .month-separator-cell { border-top: none; }
+
     /* ── GAP PANEL ── */
     .gap-panel {
       background: #fff8f8;
@@ -521,6 +608,7 @@
       animation: spin 0.7s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
 
     @media (max-width: 900px) {
       .page-wrap { padding: 24px 20px 60px; }
@@ -1305,10 +1393,9 @@
     overflow: visible;
     background: transparent;
   }
-  .nav-edit-mode .ch-dd-item[draggable="true"] { pointer-events: auto; }
-
-  /* Prevent link navigation in edit mode */
-  .nav-edit-mode .ch-dd-item[data-edit-blocked] { pointer-events: none; }
+  /* In edit mode: items are draggable and labels are editable — no navigation */
+  .nav-edit-mode .ch-dd-item[draggable="true"] { cursor: grab; }
+  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-item-label { pointer-events: auto; cursor: text; }
 </style>
 
 <nav class="top-nav" aria-label="Main navigation">
@@ -1990,10 +2077,23 @@ function getConfig() {
   PANELS.forEach(panelId => {
     const panel = document.getElementById(panelId);
     if (!panel) return;
-    cfg[panelId] = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]')).map(a => ({
-      key: a.dataset.navKey,
-      label: a.querySelector('.nav-item-label')?.textContent.trim() || ''
-    }));
+    // For multi-column panels, record which column each item belongs to
+    const cols = panel.querySelectorAll('.ch-dd-col');
+    if (cols.length > 0) {
+      cfg[panelId] = Array.from(cols).map(col =>
+        Array.from(col.querySelectorAll(':scope > .ch-dd-item[data-nav-key]')).map(a => ({
+          key:   a.dataset.navKey,
+          label: a.querySelector('.nav-item-label')?.textContent.trim() || '',
+          col:   Array.from(cols).indexOf(col),
+        }))
+      ).flat();
+    } else {
+      cfg[panelId] = Array.from(panel.querySelectorAll(':scope > .ch-dd-item[data-nav-key]')).map(a => ({
+        key:   a.dataset.navKey,
+        label: a.querySelector('.nav-item-label')?.textContent.trim() || '',
+        col:   0,
+      }));
+    }
   });
   return cfg;
 }
@@ -2002,15 +2102,15 @@ function applyConfig(cfg) {
   PANELS.forEach(panelId => {
     const panel = document.getElementById(panelId);
     if (!panel || !cfg[panelId]) return;
-    const order = cfg[panelId];
-    order.forEach(({ key, label }) => {
+    const cols = Array.from(panel.querySelectorAll('.ch-dd-col'));
+    cfg[panelId].forEach(({ key, label, col }) => {
       const item = panel.querySelector(`.ch-dd-item[data-nav-key="${key}"]`);
       if (!item) return;
-      // Update label text
       const labelEl = item.querySelector('.nav-item-label');
       if (labelEl && label) labelEl.textContent = label;
-      // Move to end of panel (respects order array sequence)
-      panel.appendChild(item);
+      // Append to the correct column (or directly to panel for single-col)
+      const target = (cols.length > 0 && col != null) ? (cols[col] || cols[0]) : panel;
+      target.appendChild(item);
     });
   });
 }
@@ -2055,6 +2155,11 @@ function exitEditMode(save) {
     item.removeEventListener('click', blockNav, true);
     item._navEditInit = false;
     item.classList.remove('dragging', 'drag-over');
+    // Restore stashed href
+    if (item.dataset.navHref) {
+      item.setAttribute('href', item.dataset.navHref);
+      delete item.dataset.navHref;
+    }
     const lbl = item.querySelector('.nav-item-label');
     if (lbl) lbl.contentEditable = 'false';
   });
@@ -2082,15 +2187,24 @@ function exitEditMode(save) {
   savedConfig = null;
 }
 
-function blockNav(e) { e.preventDefault(); }
+function blockNav(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
 
 function initItem(item) {
   item.setAttribute('draggable', 'true');
+  // Stash and remove href so the <a> cannot navigate
+  if (item.hasAttribute('href')) {
+    item.dataset.navHref = item.getAttribute('href');
+    item.removeAttribute('href');
+  }
   item.addEventListener('dragstart', onDragStart);
   item.addEventListener('dragover', onDragOver);
   item.addEventListener('dragleave', onDragLeave);
   item.addEventListener('drop', onDrop);
   item.addEventListener('dragend', onDragEnd);
+  // Block click in capture phase (prevents any residual navigation)
   item.addEventListener('click', blockNav, true);
   item._navEditInit = true;
 
@@ -2098,7 +2212,6 @@ function initItem(item) {
   if (lbl) {
     lbl.contentEditable = 'true';
     lbl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbl.blur(); } });
-    lbl.addEventListener('mousedown', e => e.stopPropagation());
   }
 }
 
@@ -2125,20 +2238,22 @@ function onDragLeave() {
 function onDrop(e) {
   e.preventDefault();
   if (!dragSrc || dragSrc === this) return;
-  const panel = this.closest('.ch-dd-panel');
-  if (!panel || dragSrc.closest('.ch-dd-panel') !== panel) return;
+  if (dragSrc.closest('.ch-dd-panel') !== this.closest('.ch-dd-panel')) return;
 
   this.classList.remove('drag-over');
 
-  // Insert dragSrc before this item
-  const items = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]'));
-  const srcIdx = items.indexOf(dragSrc);
-  const tgtIdx = items.indexOf(this);
+  // Insert relative to target's actual parent (may be .ch-dd-col, not .ch-dd-panel)
+  const tgtParent = this.parentNode;
+  const srcParent = dragSrc.parentNode;
+  const tgtItems  = Array.from(tgtParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcItems  = Array.from(srcParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcIdx    = srcItems.indexOf(dragSrc);
+  const tgtIdx    = tgtItems.indexOf(this);
 
-  if (srcIdx < tgtIdx) {
+  if (tgtParent === srcParent && srcIdx < tgtIdx) {
     this.after(dragSrc);
   } else {
-    panel.insertBefore(dragSrc, this);
+    tgtParent.insertBefore(dragSrc, this);
   }
 }
 
@@ -2361,10 +2476,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       </select>
       <select id="selSubject">
         <option value="all">All Subjects</option>
-        <option value="math">Mathematics</option>
-        <option value="biology">Biology</option>
-        <option value="chemistry">Chemistry</option>
-        <option value="physics">Physics</option>
       </select>
       <div class="toolbar-sep"></div>
       <div class="view-toggle">
@@ -2372,6 +2483,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <button class="view-btn" data-view="chapter">Chapter View</button>
       </div>
     </div>
+
+    <!-- Month pagination (week view) -->
+    <div class="month-pager" id="monthPager">
+      <span class="month-pager-label">Month:</span>
+    </div>
+
+    <!-- Subject + month pagination (chapter view) -->
+    <div class="chapter-pagers" id="chapterPagers"></div>
 
     <!-- Legend -->
     <div class="legend">
@@ -2390,9 +2509,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="sum-sub">across all selected subjects</div>
       </div>
       <div class="sum-card sc-green">
-        <div class="sum-label">Coverage</div>
+        <div class="sum-label">Completion</div>
         <div class="sum-val" id="sumCoverage"><span class="skel" style="width:56px;height:28px;border-radius:6px;display:inline-block"></span></div>
-        <div class="sum-sub">syllabus codes mapped</div>
+        <div class="sum-sub">topics completed</div>
       </div>
       <div class="sum-card sc-amber">
         <div class="sum-label">Planned Hours</div>
@@ -2400,9 +2519,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="sum-sub">total teaching hours</div>
       </div>
       <div class="sum-card sc-red">
-        <div class="sum-label">Syllabus Gaps</div>
+        <div class="sum-label">Done / Total</div>
         <div class="sum-val" id="sumGaps"><span class="skel" style="width:32px;height:28px;border-radius:6px;display:inline-block"></span></div>
-        <div class="sum-sub">uncovered objectives</div>
+        <div class="sum-sub">topics finished</div>
       </div>
     </div>
 
@@ -2451,8 +2570,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       ],
       checkpoint: [
         { key: 'math',    label: 'Mathematics', col: 'checkpoint_math_pacing',    docId: 'year7-8', syllabusPrefix: '1112', color: '#7c3aed' },
-        { key: 'biology', label: 'Science',     col: 'checkpoint_science_pacing', docId: 'year7-8', syllabusPrefix: '1113', color: '#059669' },
-        { key: 'physics', label: 'English',     col: 'checkpoint_english_pacing', docId: 'year7-8', syllabusPrefix: '1111', color: '#0891b2' },
+        { key: 'science', label: 'Science',     col: 'checkpoint_science_pacing', docId: 'year7-8', syllabusPrefix: '1113', color: '#059669' },
+        { key: 'english', label: 'English',     col: 'checkpoint_english_pacing', docId: 'year7-8', syllabusPrefix: '1111', color: '#0891b2' },
       ],
       asalevel: [
         { key: 'math',      label: 'Mathematics', col: 'asalevel_math_pacing',      docId: 'year11-12', syllabusPrefix: '9709', color: '#7c3aed' },
@@ -2462,31 +2581,70 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       ],
     };
 
+    // ── Academic calendar months (Jul 2025 → May 2026) ───────────
+    const AC_MONTHS = [
+      { name:'July',      short:'Jul', year:2025 },
+      { name:'August',    short:'Aug', year:2025 },
+      { name:'September', short:'Sep', year:2025 },
+      { name:'October',   short:'Oct', year:2025 },
+      { name:'November',  short:'Nov', year:2025 },
+      { name:'December',  short:'Dec', year:2025 },
+      { name:'January',   short:'Jan', year:2026 },
+      { name:'February',  short:'Feb', year:2026 },
+      { name:'March',     short:'Mar', year:2026 },
+      { name:'April',     short:'Apr', year:2026 },
+      { name:'May',       short:'May', year:2026 },
+    ];
+    function weekToMonth(w)    { return Math.floor((w - 1) / 4); }
+    function weekWithinMonth(w){ return ((w - 1) % 4) + 1; }
+
     // ── State ──────────────────────────────────────────────────────
     let db;
-    let currentLevel   = 'igcse';
-    let currentSubject = 'all';
-    let currentView    = 'week';
-    let syllabusCache  = {};   // code → doc data
-    let pacingData     = {};   // subjectKey → { chapters }
-    let progressCache  = {};   // subjectKey_topicKey → status
+    let currentLevel          = 'igcse';
+    let currentSubject        = 'all';
+    let currentView           = 'week';
+    let currentMonth          = null; // week view: AC_MONTHS index
+    let currentChapterSubject = null; // chapter view: cfg.key
+    let currentChapterMonth   = {};   // chapter view: { [cfg.key]: mIdx }
+    let syllabusCache         = {};
+    let pacingData            = {};
 
     // ── Boot ──────────────────────────────────────────────────────
     document.addEventListener('authReady', async ({ detail: { profile } }) => {
       db = window.db;
+      updateSubjectDropdown();
       bindControls();
       await loadAndRender();
     });
 
+    function updateSubjectDropdown() {
+      const sel      = document.getElementById('selSubject');
+      const configs  = SUBJECT_CONFIGS[currentLevel] || [];
+      const prev     = currentSubject;
+      sel.innerHTML  = '<option value="all">All Subjects</option>' +
+        configs.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
+      // keep selection if key still exists in new level, else reset to 'all'
+      const stillValid = configs.some(c => c.key === prev);
+      sel.value      = stillValid ? prev : 'all';
+      currentSubject = sel.value;
+    }
+
     function bindControls() {
       document.getElementById('selLevel').addEventListener('change', e => {
-        currentLevel = e.target.value;
-        pacingData   = {};
-        syllabusCache = {};
-        loadAndRender();
+        currentLevel          = e.target.value;
+        currentMonth          = null;
+        currentChapterSubject = null;
+        currentChapterMonth   = {};
+        pacingData            = {};
+        syllabusCache         = {};
+        updateSubjectDropdown();
+        setControlsDisabled(true);
+        loadAndRender().finally(() => setControlsDisabled(false));
       });
       document.getElementById('selSubject').addEventListener('change', e => {
-        currentSubject = e.target.value;
+        currentSubject        = e.target.value;
+        currentChapterSubject = null;
+        currentChapterMonth   = {};
         render();
       });
       document.querySelectorAll('.view-btn').forEach(btn => {
@@ -2494,6 +2652,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           currentView = btn.dataset.view;
+          document.getElementById('monthPager').classList.toggle('visible', currentView === 'week');
+          if (currentView !== 'week') {
+            document.getElementById('chapterPagers').classList.remove('visible');
+            document.getElementById('chapterPagers').innerHTML = '';
+          }
           render();
         });
       });
@@ -2501,50 +2664,100 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       document.getElementById('detailOverlay').addEventListener('click', e => {
         if (e.target === document.getElementById('detailOverlay')) closeDetail();
       });
+
+      // Event delegation for pager buttons (replaces per-render addEventListener calls)
+      document.getElementById('monthPager').addEventListener('click', e => {
+        const btn = e.target.closest('.month-pager-btn');
+        if (!btn) return;
+        currentMonth = Number(btn.dataset.mth);
+        render();
+      });
+      document.getElementById('chapterPagers').addEventListener('click', e => {
+        const subjBtn = e.target.closest('[data-subj]');
+        if (subjBtn) { currentChapterSubject = subjBtn.dataset.subj; render(); return; }
+        const mthBtn = e.target.closest('[data-mth]');
+        if (mthBtn) {
+          const key = mthBtn.dataset.key;
+          if (key) currentChapterMonth[key] = Number(mthBtn.dataset.mth);
+          render();
+        }
+      });
+      document.getElementById('mapContent').addEventListener('click', e => {
+        const chip = e.target.closest('.topic-chip[data-tid]');
+        if (chip) {
+          const data = topicRegistry.get(chip.dataset.tid);
+          if (data) openDetail(data);
+          return;
+        }
+        const head = e.target.closest('.chapter-head[data-chid]');
+        if (head) {
+          document.getElementById(head.dataset.chid)?.classList.toggle('open');
+          return;
+        }
+        const badge = e.target.closest('.obj-badge[data-tid]');
+        if (badge) {
+          e.stopPropagation();
+          const data = topicRegistry.get(badge.dataset.tid);
+          if (data) openDetail(data);
+        }
+      });
     }
 
-    // ── Load all pacing + syllabus data ───────────────────────────
+    function setControlsDisabled(disabled) {
+      document.getElementById('selLevel').disabled   = disabled;
+      document.getElementById('selSubject').disabled = disabled;
+      document.querySelectorAll('.view-btn').forEach(b => b.disabled = disabled);
+    }
+
+    function showError(msg) {
+      document.getElementById('mapContent').innerHTML =
+        `<div class="map-loading" style="color:#dc2626;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          ${esc(msg)}
+        </div>`;
+    }
+
+    // ── Lazy-load syllabus codes on demand ───────────────────────
+    async function fetchSyllabusCodesIfNeeded(codes) {
+      const missing = codes.filter(c => !(c in syllabusCache));
+      if (!missing.length) return;
+      for (let i = 0; i < missing.length; i += 30) {
+        const chunk = missing.slice(i, i + 30);
+        try {
+          const snaps = await getDocs(query(
+            collection(db, 'cambridge_syllabus'),
+            where('code', 'in', chunk),
+          ));
+          snaps.forEach(s => { syllabusCache[s.data().code] = s.data(); });
+        } catch {}
+      }
+      missing.forEach(c => { if (!(c in syllabusCache)) syllabusCache[c] = null; });
+    }
+
+    // ── Load pacing data ─────────────────────────────────────────
     async function loadAndRender() {
       document.getElementById('mapContent').innerHTML =
         '<div class="map-loading"><div class="spinner"></div>Loading curriculum data…</div>';
 
       const configs = getActiveConfigs();
+      let pacingFailed = false;
 
-      // Load pacing documents in parallel
+      // Load pacing documents in parallel (skip already cached)
       await Promise.all(configs.map(async cfg => {
         if (pacingData[cfg.key]) return;
         try {
           const snap = await getDoc(doc(db, cfg.col, cfg.docId));
           pacingData[cfg.key] = snap.exists() ? snap.data() : { chapters: [] };
-        } catch { pacingData[cfg.key] = { chapters: [] }; }
+        } catch (err) {
+          console.error('Pacing load failed:', cfg.key, err);
+          pacingData[cfg.key] = { chapters: [] };
+          pacingFailed = true;
+        }
       }));
 
-      // Load syllabus codes referenced in pacing
-      const allCodes = new Set();
-      configs.forEach(cfg => {
-        (pacingData[cfg.key]?.chapters || []).forEach(ch => {
-          (ch.topics || []).forEach(t => {
-            (t.objective || '').split(/\s+/).filter(Boolean).forEach(c => allCodes.add(c));
-          });
-        });
-      });
-
-      // Load syllabus docs not yet cached
-      const uncached = [...allCodes].filter(c => !(c in syllabusCache));
-      if (uncached.length) {
-        // Batch into chunks of 30 (Firestore 'in' limit)
-        for (let i = 0; i < uncached.length; i += 30) {
-          const chunk = uncached.slice(i, i + 30);
-          try {
-            const snaps = await getDocs(query(
-              collection(db, 'cambridge_syllabus'),
-              where('code', 'in', chunk),
-            ));
-            snaps.forEach(s => { syllabusCache[s.data().code] = s.data(); });
-          } catch {}
-        }
-        // Mark any not found
-        uncached.forEach(c => { if (!(c in syllabusCache)) syllabusCache[c] = null; });
+      if (pacingFailed) {
+        showError('Some curriculum data could not be loaded. Check your connection and refresh.');
+        return;
       }
 
       render();
@@ -2554,9 +2767,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     function render() {
       const configs = getActiveConfigs();
       renderSummary(configs);
-      renderGaps(configs);
-      if (currentView === 'week') renderWeekView(configs);
-      else renderChapterView(configs);
+      renderGaps();
+      if (currentView === 'week') {
+        document.getElementById('chapterPagers').classList.remove('visible');
+        document.getElementById('chapterPagers').innerHTML = '';
+        renderWeekView(configs);
+      } else {
+        document.getElementById('monthPager').classList.remove('visible');
+        renderChapterView(configs);
+      }
     }
 
     function getActiveConfigs() {
@@ -2564,72 +2783,62 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       return currentSubject === 'all' ? all : all.filter(c => c.key === currentSubject);
     }
 
+    // ── Helpers ───────────────────────────────────────────────────
+    function getCodes(objective) {
+      return (objective || '').split(/\s+/).filter(Boolean);
+    }
+
+    function getStatusDisplay(status) {
+      if (status === 'done')       return { cls: 'sp-done',       label: 'Done' };
+      if (status === 'inprogress') return { cls: 'sp-inprogress', label: 'In Progress' };
+      return { cls: 'sp-pending', label: 'Pending' };
+    }
+
+    function getTopicData(t, ch, cfg) {
+      return {
+        name: t.topic, week: t.week, hours: (t.hour ?? t.hours),
+        chapter: ch.chapter || ch.name || '', status: t.status || 'pending',
+        objective: t.objective || '',
+        subjectKey: cfg.key,
+        color: /^#[0-9a-fA-F]{3,8}$/.test(cfg.color) ? cfg.color : '#7c3aed',
+      };
+    }
+
     // ── Summary cards ─────────────────────────────────────────────
     function renderSummary(configs) {
-      let totalTopics = 0, totalHours = 0;
-      const mappedCodes = new Set(), allSyllabusCodes = new Set();
+      let totalTopics = 0, doneTopics = 0, totalHours = 0;
 
       configs.forEach(cfg => {
         (pacingData[cfg.key]?.chapters || []).forEach(ch => {
           (ch.topics || []).forEach(t => {
             totalTopics++;
-            totalHours += Number(t.hours) || 0;
-            (t.objective || '').split(/\s+/).filter(Boolean).forEach(c => mappedCodes.add(c));
+            totalHours += Number(t.hour ?? t.hours) || 0;
+            if (t.status === 'done') doneTopics++;
           });
         });
       });
 
-      // All syllabus codes for these subjects
-      Object.entries(syllabusCache).forEach(([code]) => allSyllabusCodes.add(code));
-      const pct = allSyllabusCodes.size
-        ? Math.round((mappedCodes.size / (mappedCodes.size + countGaps(configs).length)) * 100)
-        : 100;
-      const gaps = countGaps(configs).length;
-
+      const pct = totalTopics ? Math.round((doneTopics / totalTopics) * 100) : 0;
       document.getElementById('sumTopics').textContent   = totalTopics;
-      document.getElementById('sumCoverage').textContent = pct + '%';
+      document.getElementById('sumCoverage').textContent = `${pct}%`;
       document.getElementById('sumHours').textContent    = totalHours + 'h';
-      document.getElementById('sumGaps').textContent     = gaps;
-    }
-
-    function countGaps(configs) {
-      // Gaps = syllabus codes in igcse_syllabus (for these prefixes) not in any topic objective
-      const mapped = new Set();
-      configs.forEach(cfg => {
-        (pacingData[cfg.key]?.chapters || []).forEach(ch =>
-          (ch.topics || []).forEach(t =>
-            (t.objective || '').split(/\s+/).filter(Boolean).forEach(c => mapped.add(c))
-          )
-        );
-      });
-      return Object.entries(syllabusCache)
-        .filter(([code, data]) => data && !mapped.has(code))
-        .map(([code, data]) => ({ code, title: data.title || '' }));
+      document.getElementById('sumGaps').textContent     = `${doneTopics} / ${totalTopics}`;
     }
 
     // ── Gap panel ─────────────────────────────────────────────────
-    function renderGaps(configs) {
-      const gaps  = countGaps(configs);
-      const panel = document.getElementById('gapPanel');
-      const list  = document.getElementById('gapList');
-      document.getElementById('gapBadge').textContent = gaps.length;
-
-      if (gaps.length === 0) {
-        panel.style.display = '';
-        list.innerHTML = '<div class="no-gaps"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>All syllabus objectives are covered.</div>';
-      } else {
-        panel.style.display = '';
-        list.innerHTML = gaps.map(g => `
-          <span class="gap-chip">
-            ${esc(g.code)}
-            ${g.title ? `<span class="gap-chip-title">— ${esc(g.title)}</span>` : ''}
-          </span>`).join('');
-      }
+    function renderGaps() {
+      document.getElementById('gapPanel').style.display = 'none';
     }
+
+    // ── Topic registry for event delegation ──────────────────────
+    const topicRegistry = new Map(); // chipId → topic data object
+    let   topicIdSeq    = 0;
 
     // ── Week View ─────────────────────────────────────────────────
     function renderWeekView(configs) {
-      // Build map: week → { subjectKey → [topics] }
+      topicRegistry.clear();
+      topicIdSeq = 0;
+
       const weekMap = {};
       let maxWeek = 0;
 
@@ -2641,43 +2850,74 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             if (w > maxWeek) maxWeek = w;
             if (!weekMap[w]) weekMap[w] = {};
             if (!weekMap[w][cfg.key]) weekMap[w][cfg.key] = [];
-            weekMap[w][cfg.key].push({ ...t, chapterName: ch.name, cfg });
+            weekMap[w][cfg.key].push({ ...t, chapterName: ch.chapter || ch.name, cfg });
           });
         });
       });
 
       if (maxWeek === 0) {
+        const subjectLabel = configs.length === 1 ? configs[0].label : 'the selected subjects';
+        const levelLabel   = document.getElementById('selLevel').selectedOptions[0]?.text || currentLevel;
         document.getElementById('mapContent').innerHTML =
-          '<div class="map-loading">No pacing data available for this selection.</div>';
+          `<div class="map-loading">No pacing data for <strong>${esc(subjectLabel)}</strong> in <strong>${esc(levelLabel)}</strong>. Add chapters via the pacing admin page.</div>`;
+        document.getElementById('monthPager').classList.remove('visible');
         return;
       }
 
-      // Build table header
+      // Determine which months have data (clamped to AC_MONTHS)
+      const monthsWithData = new Set();
+      for (let w = 1; w <= maxWeek; w++) {
+        const mIdx = weekToMonth(w);
+        if (mIdx >= AC_MONTHS.length) continue;
+        const hasTopics = configs.some(cfg => (weekMap[w]?.[cfg.key] || []).length > 0);
+        if (hasTopics) monthsWithData.add(mIdx);
+      }
+      const sortedMonths = [...monthsWithData].sort((a, b) => a - b);
+
+      if (currentMonth === null || !monthsWithData.has(currentMonth)) {
+        currentMonth = sortedMonths[0];
+      }
+
+      // Build month pager
+      const pager = document.getElementById('monthPager');
+      pager.classList.add('visible');
+      pager.innerHTML = `<span class="month-pager-label">Month:</span>` +
+        sortedMonths.map(mIdx => {
+          const m = AC_MONTHS[mIdx];
+          const label = m ? m.short : `M${mIdx + 1}`;
+          return `<button class="month-pager-btn${mIdx === currentMonth ? ' active' : ''}" data-mth="${mIdx}">${esc(label)}</button>`;
+        }).join('');
+
+      const colCount    = configs.length + 1;
       const subjectCols = configs.map(cfg =>
-        `<th style="border-top: 3px solid ${cfg.color}">${esc(cfg.label)}</th>`
+        `<th style="border-top: 3px solid ${esc(cfg.color)}">${esc(cfg.label)}</th>`
       ).join('');
 
-      let rows = '';
-      for (let w = 1; w <= maxWeek; w++) {
+      const activeMonth = AC_MONTHS[currentMonth];
+      const monthLabel  = activeMonth ? `${activeMonth.name} ${activeMonth.year}` : `Month ${currentMonth + 1}`;
+
+      let rows = `<tr class="month-separator-row">
+        <td colspan="${colCount}" class="month-separator-cell">${esc(monthLabel)}</td>
+      </tr>`;
+
+      for (let wInMonth = 1; wInMonth <= 4; wInMonth++) {
+        const w        = currentMonth * 4 + wInMonth;
         const weekData = weekMap[w] || {};
         const cells = configs.map(cfg => {
           const topics = weekData[cfg.key] || [];
           if (!topics.length) return `<td><span class="empty-week">—</span></td>`;
           const chips = topics.map(t => {
-            const status  = t.status || 'pending';
-            const codes   = (t.objective || '').split(/\s+/).filter(Boolean);
+            const status = t.status || 'pending';
+            const codes  = getCodes(t.objective);
+            const id     = `t${++topicIdSeq}`;
+            topicRegistry.set(id, getTopicData(t, { chapter: t.chapterName }, cfg));
             return `
-              <span class="topic-chip status-${esc(status)}" data-topic='${JSON.stringify({
-                name: t.topic, week: t.week, hours: t.hours,
-                chapter: t.chapterName, status,
-                objective: t.objective || '',
-                subjectKey: cfg.key, color: cfg.color,
-              }).replace(/'/g, '&#39;')}'>
+              <span class="topic-chip status-${esc(status)}" data-tid="${id}">
                 <span class="tc-status-dot"></span>
                 <span>
                   <div class="tc-name">${esc(t.topic)}</div>
                   <div class="tc-meta">
-                    ${t.hours ? `<span class="tc-hours">${t.hours}h</span>` : ''}
+                    ${(t.hour ?? t.hours) ? `<span class="tc-hours">${t.hour ?? t.hours}h</span>` : ''}
                     ${codes.length ? `<span class="tc-codes">${codes.slice(0,2).map(esc).join(' ')}${codes.length > 2 ? ` +${codes.length - 2}` : ''}</span>` : ''}
                   </div>
                 </span>
@@ -2686,69 +2926,147 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           return `<td>${chips}</td>`;
         }).join('');
 
-        rows += `<tr>
-          <td class="td-week">Wk ${w}</td>
-          ${cells}
-        </tr>`;
+        rows += `<tr><td class="td-week">W${wInMonth}</td>${cells}</tr>`;
       }
 
-      document.getElementById('mapContent').innerHTML = `
+      const content = document.getElementById('mapContent');
+      content.innerHTML = `
         <div class="grid-wrap">
           <table class="week-grid">
-            <thead>
-              <tr>
-                <th class="th-week">Week</th>
-                ${subjectCols}
-              </tr>
-            </thead>
+            <thead><tr><th class="th-week">Week</th>${subjectCols}</tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>`;
 
-      // Bind click to topic chips
-      document.querySelectorAll('.topic-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-          try { openDetail(JSON.parse(chip.dataset.topic.replace(/&#39;/g, "'"))); }
-          catch {}
-        });
-      });
     }
 
     // ── Chapter View ──────────────────────────────────────────────
     function renderChapterView(configs) {
-      if (!configs.length) {
-        document.getElementById('mapContent').innerHTML =
-          '<div class="map-loading">No pacing data available for this selection.</div>';
+      topicRegistry.clear();
+      topicIdSeq = 0;
+
+      const pagerEl = document.getElementById('chapterPagers');
+      const content = document.getElementById('mapContent');
+
+      const validConfigs = configs.filter(cfg => (pacingData[cfg.key]?.chapters || []).length > 0);
+      if (!validConfigs.length) {
+        const subjectLabel = configs.length === 1 ? configs[0].label : 'the selected subjects';
+        const levelLabel   = document.getElementById('selLevel').selectedOptions[0]?.text || currentLevel;
+        content.innerHTML  = `<div class="map-loading">No pacing data for <strong>${esc(subjectLabel)}</strong> in <strong>${esc(levelLabel)}</strong>. Add chapters via the pacing admin page.</div>`;
+        pagerEl.classList.remove('visible');
+        pagerEl.innerHTML = '';
         return;
       }
 
+      // Default subject
+      if (!currentChapterSubject || !validConfigs.find(c => c.key === currentChapterSubject)) {
+        currentChapterSubject = validConfigs[0].key;
+      }
+      const cfg       = validConfigs.find(c => c.key === currentChapterSubject);
+      const safeColor = esc(cfg.color);
+      const chapters  = pacingData[cfg.key]?.chapters || [];
+
+      // Months with data for this subject (clamped to AC_MONTHS)
+      const monthsWithData = new Set();
+      chapters.forEach(ch => {
+        (ch.topics || []).forEach(t => {
+          const w = Number(t.week) || 0;
+          if (!w) return;
+          const mIdx = weekToMonth(w);
+          if (mIdx < AC_MONTHS.length) monthsWithData.add(mIdx);
+        });
+      });
+      const sortedMonths = [...monthsWithData].sort((a, b) => a - b);
+
+      if (currentChapterMonth[cfg.key] == null || !monthsWithData.has(currentChapterMonth[cfg.key])) {
+        currentChapterMonth[cfg.key] = sortedMonths[0] ?? null;
+      }
+      const activeMIdx = currentChapterMonth[cfg.key];
+
+      // Build pagers
+      const subjectRow = `<div class="subject-pager">
+        <span class="subject-pager-label" style="color:var(--ink-3)">Subject:</span>
+        ${validConfigs.map(c => {
+          const active = c.key === cfg.key;
+          return `<button class="subject-pager-btn${active ? ' active' : ''}" data-subj="${c.key}"
+            style="${active ? `background:${c.color};border-color:${c.color}` : `border-color:${c.color};color:${c.color}`}"
+          >${esc(c.label)}</button>`;
+        }).join('')}
+      </div>`;
+
+      const monthRow = sortedMonths.length > 1 ? `<div class="subject-pager">
+        <span class="subject-pager-label" style="color:${safeColor}">${esc(cfg.label)}:</span>
+        ${sortedMonths.map(mIdx => {
+          const m = AC_MONTHS[mIdx];
+          const label  = m ? m.short : `M${mIdx + 1}`;
+          const active = mIdx === activeMIdx;
+          return `<button class="subject-pager-btn${active ? ' active' : ''}" data-mth="${mIdx}" data-key="${cfg.key}"
+            style="${active ? `background:${cfg.color};border-color:${cfg.color}` : `border-color:${cfg.color};color:${cfg.color}`}"
+          >${esc(label)}</button>`;
+        }).join('')}
+      </div>` : '';
+
+      pagerEl.innerHTML = subjectRow + monthRow;
+      pagerEl.classList.add('visible');
+
+      // Filter chapters to active month
+      const filteredChapters = activeMIdx == null ? chapters : chapters.map(ch => ({
+        ...ch,
+        topics: (ch.topics || []).filter(t => weekToMonth(Number(t.week) || 0) === activeMIdx),
+      })).filter(ch => ch.topics.length > 0);
+
+      const thStyle = 'padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)';
+
       let html = '';
-      configs.forEach(cfg => {
-        const chapters = pacingData[cfg.key]?.chapters || [];
-        if (!chapters.length) return;
-
-        html += `<h3 style="font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${cfg.color};margin:24px 0 10px;display:flex;align-items:center;gap:8px;">
-          <span style="width:10px;height:10px;border-radius:2px;background:${cfg.color};display:inline-block"></span>
-          ${esc(cfg.label)}
-        </h3>
-        <div class="chapter-list">`;
-
-        chapters.forEach((ch, ci) => {
+      if (!filteredChapters.length) {
+        html = '<div class="map-loading">No topics for this month.</div>';
+      } else {
+        html = '<div class="chapter-list">';
+        filteredChapters.forEach((ch, ci) => {
           const topics  = ch.topics || [];
           const done    = topics.filter(t => t.status === 'done').length;
           const pct     = topics.length ? Math.round((done / topics.length) * 100) : 0;
-          const totalH  = topics.reduce((s, t) => s + (Number(t.hours) || 0), 0);
+          const totalH  = topics.reduce((s, t) => s + (Number(t.hour ?? t.hours) || 0), 0);
+          const origIdx = chapters.findIndex(c => c.chapter === ch.chapter);
+          const chNum   = origIdx >= 0 ? origIdx + 1 : ci + 1;
+          const chName  = ch.chapter || ch.name || `Chapter ${chNum}`;
+          const chId    = `ch_${cfg.key}_${ci}`;
+
+          const topicRows = topics.map((t, ti) => {
+            const codes  = getCodes(t.objective);
+            const status = t.status || 'pending';
+            const sp     = getStatusDisplay(status);
+            const tid    = `t${++topicIdSeq}`;
+            topicRegistry.set(tid, getTopicData(t, { chapter: chName }, cfg));
+
+            const codeBadges = codes.map(c => {
+              return `<span class="obj-badge${syllabusCache[c] === null ? ' uncovered' : ''}" data-tid="${tid}">${esc(c)}</span>`;
+            }).join('');
+
+            const weekLabel = t.week
+              ? `W${weekWithinMonth(Number(t.week))} · ${AC_MONTHS[weekToMonth(Number(t.week))]?.short ?? ''}`
+              : '—';
+
+            return `<tr>
+              <td style="padding:10px 20px;border-bottom:1px solid var(--paper-2);font-size:0.72rem;color:var(--ink-3)">${chNum}.${ti + 1}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.83rem;color:var(--ink);font-weight:500;line-height:1.4">${esc(t.topic)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${esc(weekLabel)}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${(t.hour ?? t.hours) ? `${t.hour ?? t.hours}h` : '—'}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2)">${codeBadges || '<span style="color:var(--ink-3);font-size:0.75rem">—</span>'}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);text-align:right"><span class="status-pill ${sp.cls}">${sp.label}</span></td>
+            </tr>`;
+          }).join('');
 
           html += `
-          <div class="chapter-card" id="ch_${cfg.key}_${ci}">
-            <div class="chapter-head" onclick="toggleChapter('ch_${cfg.key}_${ci}')">
-              <span class="ch-number" style="background:${cfg.color}1a;color:${cfg.color}">${ci + 1}</span>
-              <span class="ch-name">${esc(ch.name)}</span>
+          <div class="chapter-card" id="${chId}">
+            <div class="chapter-head" data-chid="${chId}">
+              <span class="ch-number" style="background:${safeColor}1a;color:${safeColor}">${chNum}</span>
+              <span class="ch-name">${esc(chName)}</span>
               <span class="ch-meta">
                 <span>${topics.length} topics</span>
                 <span>${totalH}h</span>
                 <span class="ch-progress-wrap">
-                  <span class="ch-progress-bar"><span class="ch-progress-fill" style="width:${pct}%"></span></span>
+                  <span class="ch-progress-bar"><span class="ch-progress-fill" style="width:${pct}%;background:${safeColor}"></span></span>
                   <span>${pct}%</span>
                 </span>
               </span>
@@ -2756,82 +3074,35 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             </div>
             <div class="chapter-topics">
               <table style="width:100%;border-collapse:collapse">
-                <thead>
-                  <tr style="background:var(--paper)">
-                    <th style="padding:8px 20px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">#</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Topic</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Week</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Hours</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:left;border-bottom:1px solid var(--border)">Syllabus Codes</th>
-                    <th style="padding:8px 12px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);text-align:right;border-bottom:1px solid var(--border)">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${topics.map((t, ti) => {
-                    const codes  = (t.objective || '').split(/\s+/).filter(Boolean);
-                    const status = t.status || 'pending';
-                    const spClass = status === 'done' ? 'sp-done' : status === 'inprogress' ? 'sp-inprogress' : 'sp-pending';
-                    const spLabel = status === 'done' ? 'Done' : status === 'inprogress' ? 'In Progress' : 'Pending';
-                    const codeBadges = codes.map(c => {
-                      const inSyllabus = syllabusCache[c] !== undefined;
-                      return `<span class="obj-badge${!inSyllabus && syllabusCache[c] === null ? ' uncovered' : ''}"
-                        data-topic='${JSON.stringify({ name: t.topic, week: t.week, hours: t.hours, chapter: ch.name, status, objective: t.objective || '', subjectKey: cfg.key, color: cfg.color }).replace(/'/g, '&#39;')}'
-                        onclick="event.stopPropagation();openDetailFromEl(this)"
-                      >${esc(c)}</span>`;
-                    }).join('');
-
-                    return `<tr>
-                      <td style="padding:10px 20px;border-bottom:1px solid var(--paper-2);font-size:0.72rem;color:var(--ink-3)">${ci + 1}.${ti + 1}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.83rem;color:var(--ink);font-weight:500;line-height:1.4">${esc(t.topic)}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${t.week ? `Wk ${t.week}` : '—'}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);font-size:0.78rem;color:var(--ink-3)">${t.hours ? `${t.hours}h` : '—'}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2)">${codeBadges || '<span style="color:var(--ink-3);font-size:0.75rem">—</span>'}</td>
-                      <td style="padding:10px 12px;border-bottom:1px solid var(--paper-2);text-align:right"><span class="status-pill ${spClass}">${spLabel}</span></td>
-                    </tr>`;
-                  }).join('')}
-                </tbody>
+                <thead><tr style="background:var(--paper)">
+                  <th style="${thStyle};padding-left:20px">#</th>
+                  <th style="${thStyle}">Topic</th>
+                  <th style="${thStyle}">Week</th>
+                  <th style="${thStyle}">Hours</th>
+                  <th style="${thStyle}">Syllabus Codes</th>
+                  <th style="${thStyle};text-align:right">Status</th>
+                </tr></thead>
+                <tbody>${topicRows}</tbody>
               </table>
             </div>
           </div>`;
         });
-
         html += '</div>';
-      });
+      }
 
-      document.getElementById('mapContent').innerHTML = html || '<div class="map-loading">No pacing data available.</div>';
+      content.innerHTML = html;
     }
 
-    // ── Toggle chapter (chapter view) ─────────────────────────────
-    window.toggleChapter = function(id) {
-      document.getElementById(id)?.classList.toggle('open');
-    };
-
     // ── Detail modal ──────────────────────────────────────────────
-    window.openDetailFromEl = function(el) {
-      try { openDetail(JSON.parse(el.dataset.topic.replace(/&#39;/g, "'"))); } catch {}
-    };
-
-    function openDetail(data) {
+    async function openDetail(data) {
       const { name, week, hours, chapter, status, objective, color } = data;
-      const codes  = (objective || '').split(/\s+/).filter(Boolean);
-      const spClass = status === 'done' ? 'sp-done' : status === 'inprogress' ? 'sp-inprogress' : 'sp-pending';
-      const spLabel = status === 'done' ? 'Done' : status === 'inprogress' ? 'In Progress' : 'Pending';
-
-      const codeCards = codes.length ? codes.map(c => {
-        const s = syllabusCache[c];
-        if (!s) return `<div class="dm-code-card"><div class="dm-code-id">${esc(c)}</div><div class="dm-code-desc" style="color:var(--ink-3);font-style:italic">Not found in syllabus database.</div></div>`;
-        return `
-          <div class="dm-code-card">
-            <div class="dm-code-id">${esc(s.code)}${s.tier ? ` <span style="font-family:'DM Sans';font-size:0.7rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${s.tier==='Core'?'#e0f2fe':'#ede9fe'};color:${s.tier==='Core'?'#0891b2':'#7c3aed'}">${s.tier}</span>` : ''}</div>
-            <div class="dm-code-title">${esc(s.title || '')}</div>
-            ${s.description ? `<div class="dm-code-desc">${esc(s.description)}</div>` : ''}
-          </div>`;
-      }).join('') : '<p class="dm-no-codes">No syllabus codes linked to this topic.</p>';
+      const codes = getCodes(objective);
+      const sp    = getStatusDisplay(status);
 
       document.getElementById('detailTitle').textContent = name;
       document.getElementById('detailBody').innerHTML = `
         <div class="dm-header">
-          <div class="dm-icon" style="background:${color}1a;color:${color}">
+          <div class="dm-icon" style="background:${esc(color)}1a;color:${esc(color)}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
           </div>
           <div>
@@ -2844,15 +3115,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.83rem;color:var(--ink-2)">
             ${week  ? `<span>📅 Week ${week}</span>`  : ''}
             ${hours ? `<span>⏱ ${hours} hours</span>` : ''}
-            <span class="status-pill ${spClass}" style="margin-left:auto">${spLabel}</span>
+            <span class="status-pill ${sp.cls}" style="margin-left:auto">${sp.label}</span>
           </div>
         </div>
         <div class="dm-section">
           <div class="dm-section-label">Cambridge Syllabus Objectives (${codes.length})</div>
-          <div style="display:flex;flex-direction:column;gap:8px">${codeCards}</div>
+          <div id="codeCardsArea" style="display:flex;flex-direction:column;gap:8px">
+            ${codes.length ? '<div class="map-loading" style="padding:16px 0"><div class="spinner"></div>Loading syllabus…</div>' : '<p class="dm-no-codes">No syllabus codes linked to this topic.</p>'}
+          </div>
         </div>`;
 
       document.getElementById('detailOverlay').classList.add('open');
+
+      if (!codes.length) return;
+
+      await fetchSyllabusCodesIfNeeded(codes);
+
+      const TIER_STYLES = {
+        Core:     { bg: '#e0f2fe', color: '#0891b2' },
+        Extended: { bg: '#ede9fe', color: '#7c3aed' },
+      };
+
+      const codeCards = codes.map(c => {
+        const s = syllabusCache[c];
+        if (s === null) {
+          return `<div class="dm-code-card"><div class="dm-code-id">${esc(c)}</div><div class="dm-code-desc" style="color:var(--ink-3);font-style:italic">Not found in syllabus database.</div></div>`;
+        }
+        const tier = s.tier === 'Core' || s.tier === 'Extended' ? s.tier : null;
+        const ts   = tier ? TIER_STYLES[tier] : null;
+        return `
+          <div class="dm-code-card">
+            <div class="dm-code-id">${esc(s.code)}${tier ? ` <span style="font-family:'DM Sans';font-size:0.7rem;font-weight:600;padding:1px 6px;border-radius:3px;background:${ts.bg};color:${ts.color}">${esc(tier)}</span>` : ''}</div>
+            <div class="dm-code-title">${esc(s.title || '')}</div>
+            ${s.description ? `<div class="dm-code-desc">${esc(s.description)}</div>` : ''}
+          </div>`;
+      }).join('');
+
+      const area = document.getElementById('codeCardsArea');
+      if (area) area.innerHTML = codeCards;
     }
 
     function closeDetail() {

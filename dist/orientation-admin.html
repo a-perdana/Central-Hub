@@ -1013,10 +1013,9 @@
     overflow: visible;
     background: transparent;
   }
-  .nav-edit-mode .ch-dd-item[draggable="true"] { pointer-events: auto; }
-
-  /* Prevent link navigation in edit mode */
-  .nav-edit-mode .ch-dd-item[data-edit-blocked] { pointer-events: none; }
+  /* In edit mode: items are draggable and labels are editable — no navigation */
+  .nav-edit-mode .ch-dd-item[draggable="true"] { cursor: grab; }
+  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-item-label { pointer-events: auto; cursor: text; }
 </style>
 
 <nav class="top-nav" aria-label="Main navigation">
@@ -1698,10 +1697,23 @@ function getConfig() {
   PANELS.forEach(panelId => {
     const panel = document.getElementById(panelId);
     if (!panel) return;
-    cfg[panelId] = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]')).map(a => ({
-      key: a.dataset.navKey,
-      label: a.querySelector('.nav-item-label')?.textContent.trim() || ''
-    }));
+    // For multi-column panels, record which column each item belongs to
+    const cols = panel.querySelectorAll('.ch-dd-col');
+    if (cols.length > 0) {
+      cfg[panelId] = Array.from(cols).map(col =>
+        Array.from(col.querySelectorAll(':scope > .ch-dd-item[data-nav-key]')).map(a => ({
+          key:   a.dataset.navKey,
+          label: a.querySelector('.nav-item-label')?.textContent.trim() || '',
+          col:   Array.from(cols).indexOf(col),
+        }))
+      ).flat();
+    } else {
+      cfg[panelId] = Array.from(panel.querySelectorAll(':scope > .ch-dd-item[data-nav-key]')).map(a => ({
+        key:   a.dataset.navKey,
+        label: a.querySelector('.nav-item-label')?.textContent.trim() || '',
+        col:   0,
+      }));
+    }
   });
   return cfg;
 }
@@ -1710,15 +1722,15 @@ function applyConfig(cfg) {
   PANELS.forEach(panelId => {
     const panel = document.getElementById(panelId);
     if (!panel || !cfg[panelId]) return;
-    const order = cfg[panelId];
-    order.forEach(({ key, label }) => {
+    const cols = Array.from(panel.querySelectorAll('.ch-dd-col'));
+    cfg[panelId].forEach(({ key, label, col }) => {
       const item = panel.querySelector(`.ch-dd-item[data-nav-key="${key}"]`);
       if (!item) return;
-      // Update label text
       const labelEl = item.querySelector('.nav-item-label');
       if (labelEl && label) labelEl.textContent = label;
-      // Move to end of panel (respects order array sequence)
-      panel.appendChild(item);
+      // Append to the correct column (or directly to panel for single-col)
+      const target = (cols.length > 0 && col != null) ? (cols[col] || cols[0]) : panel;
+      target.appendChild(item);
     });
   });
 }
@@ -1763,6 +1775,11 @@ function exitEditMode(save) {
     item.removeEventListener('click', blockNav, true);
     item._navEditInit = false;
     item.classList.remove('dragging', 'drag-over');
+    // Restore stashed href
+    if (item.dataset.navHref) {
+      item.setAttribute('href', item.dataset.navHref);
+      delete item.dataset.navHref;
+    }
     const lbl = item.querySelector('.nav-item-label');
     if (lbl) lbl.contentEditable = 'false';
   });
@@ -1790,15 +1807,24 @@ function exitEditMode(save) {
   savedConfig = null;
 }
 
-function blockNav(e) { e.preventDefault(); }
+function blockNav(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
 
 function initItem(item) {
   item.setAttribute('draggable', 'true');
+  // Stash and remove href so the <a> cannot navigate
+  if (item.hasAttribute('href')) {
+    item.dataset.navHref = item.getAttribute('href');
+    item.removeAttribute('href');
+  }
   item.addEventListener('dragstart', onDragStart);
   item.addEventListener('dragover', onDragOver);
   item.addEventListener('dragleave', onDragLeave);
   item.addEventListener('drop', onDrop);
   item.addEventListener('dragend', onDragEnd);
+  // Block click in capture phase (prevents any residual navigation)
   item.addEventListener('click', blockNav, true);
   item._navEditInit = true;
 
@@ -1806,7 +1832,6 @@ function initItem(item) {
   if (lbl) {
     lbl.contentEditable = 'true';
     lbl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbl.blur(); } });
-    lbl.addEventListener('mousedown', e => e.stopPropagation());
   }
 }
 
@@ -1833,20 +1858,22 @@ function onDragLeave() {
 function onDrop(e) {
   e.preventDefault();
   if (!dragSrc || dragSrc === this) return;
-  const panel = this.closest('.ch-dd-panel');
-  if (!panel || dragSrc.closest('.ch-dd-panel') !== panel) return;
+  if (dragSrc.closest('.ch-dd-panel') !== this.closest('.ch-dd-panel')) return;
 
   this.classList.remove('drag-over');
 
-  // Insert dragSrc before this item
-  const items = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]'));
-  const srcIdx = items.indexOf(dragSrc);
-  const tgtIdx = items.indexOf(this);
+  // Insert relative to target's actual parent (may be .ch-dd-col, not .ch-dd-panel)
+  const tgtParent = this.parentNode;
+  const srcParent = dragSrc.parentNode;
+  const tgtItems  = Array.from(tgtParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcItems  = Array.from(srcParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcIdx    = srcItems.indexOf(dragSrc);
+  const tgtIdx    = tgtItems.indexOf(this);
 
-  if (srcIdx < tgtIdx) {
+  if (tgtParent === srcParent && srcIdx < tgtIdx) {
     this.after(dragSrc);
   } else {
-    panel.insertBefore(dragSrc, this);
+    tgtParent.insertBefore(dragSrc, this);
   }
 }
 

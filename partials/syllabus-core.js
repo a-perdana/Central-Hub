@@ -1357,13 +1357,6 @@ export function initSyllabusPage(config) {
       ? `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur === 1 ? '' : 's') : '—'}</span>`
       : `<span class="meta-chip chip-hours">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur === 1 ? '' : 's') : '—'}</span>`;
 
-    // Week chip (right side admin, or left for non-semester pages)
-    const weekChipLeft = (!features.semesterChips && isAdmin)
-      ? `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 ${t.week != null ? 'Week ' + t.week : '—'}</span>`
-      : (!features.semesterChips
-        ? `<span class="meta-chip chip-week">📅 ${t.week != null ? 'Week ' + t.week : '—'}</span>`
-        : '');
-
     // AO badges (IGCSE)
     const aoBadgeHtml = features.aoBadges ? renderAoBadges(t) : '';
     // Paper badges (IGCSE)
@@ -1373,25 +1366,25 @@ export function initSyllabusPage(config) {
       `<a href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer" class="resource-link">${escHtml(r.name)}</a>`
     ).join('');
 
-    const chipsLeft = [hoursChip, dateLabelHtml, weekChipLeft, aoBadgeHtml, paperBadgeHtml, resources].filter(Boolean).join('');
+    const chipsLeft = [hoursChip, dateLabelHtml, aoBadgeHtml, paperBadgeHtml, resources].filter(Boolean).join('');
 
-    // Right-side chips: semester (checkpoint) or week (IGCSE/ASLevel for admin)
+    // Right-side chips: week chip + semester widget for admin
     let chipsRight = '';
-    if (features.semesterChips && isAdmin) {
+    if (isAdmin) {
+      const weekChipRight = t.week != null
+        ? `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 Week ${t.week}</span>`
+        : `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 —</span>`;
       const semChip = t.semester === 1
         ? `<span class="meta-chip chip-sem1" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem I</span>`
         : t.semester === 2
           ? `<span class="meta-chip chip-sem2" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem II</span>`
           : `<span class="meta-chip" style="opacity:0.45" title="Click to set semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem —</span>`;
-      const weekChipRight = t.week != null
-        ? `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 Week ${t.week}</span>`
-        : '';
-      chipsRight = [weekChipRight, semChip].filter(Boolean).join('');
-    } else if (!features.semesterChips && isAdmin && tierSessionKey) {
-      // IGCSE / ASLevel: week chip on right for admin
-      chipsRight = t.week != null
-        ? `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 Week ${t.week}</span>`
-        : `<span class="meta-chip chip-week" title="Click to edit week" onclick="inlineEditChip(event,'week',${ci},${ti})">📅 —</span>`;
+      chipsRight = [weekChipRight, semChip].join('');
+    } else if (!isAdmin && features.semesterChips && t.semester) {
+      // Non-admin: show semester read-only chip if set
+      const semLabel = t.semester === 1 ? 'Sem I' : t.semester === 2 ? 'Sem II' : '';
+      const semClass = t.semester === 1 ? 'chip-sem1' : 'chip-sem2';
+      chipsRight = semLabel ? `<span class="meta-chip ${semClass}">${semLabel}</span>` : '';
     }
 
     // Activity button / link

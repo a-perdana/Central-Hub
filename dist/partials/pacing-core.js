@@ -143,7 +143,11 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   const topic = chapters[ci]?.topics?.[ti];
   if (!topic) return;
 
-  const confirmedCodes = new Set(_parseObjCodes(topic.objective || ''));
+  const confirmedCodes = new Set(
+    Array.isArray(topic.syllabusRefs) && topic.syllabusRefs.length
+      ? topic.syllabusRefs
+      : _parseObjCodes(topic.objective || '')
+  );
   let acIndex = -1;
 
   wrapEl.innerHTML = `
@@ -184,13 +188,13 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     const ql = q.toLowerCase();
     return Object.entries(syllabusIndex)
       .filter(([docId, d]) => {
-        const displayCode = (d.code || '').toLowerCase();
+        const displayCode = (d.code || docId.split('_').slice(1).join('_')).toLowerCase();
         const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
-        return subjectMatch && displayCode.startsWith(ql) && !confirmedCodes.has(d.code || '');
+        return subjectMatch && displayCode.startsWith(ql) && !confirmedCodes.has(d.code || docId.split('_').slice(1).join('_'));
       })
-      .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
+      .sort(([aId,a],[bId,b]) => (a.code||aId.split('_').slice(1).join('_')).localeCompare(b.code||bId.split('_').slice(1).join('_')))
       .slice(0, 12)
-      .map(([, d]) => [d.code || '', d]);
+      .map(([docId, d]) => [d.code || docId.split('_').slice(1).join('_'), d]);
   }
 
   function renderDrop(matches, loading) {
@@ -218,8 +222,10 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
-      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) => {
+      const code = d.code || docId.split('_').slice(1).join('_');
+      return code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_'));
+    });
     if (!valid) return;
     confirmedCodes.add(displayCode);
     inp.value = '';
@@ -267,8 +273,9 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
 
   async function commit() {
     drop.style.display = 'none';
-    const objective = [...confirmedCodes].join(' ');
-    topic.objective = objective;
+    const codeList = [...confirmedCodes];
+    topic.syllabusRefs = codeList;
+    topic.objective = codeList.join(' ');
     try {
       await saveChapters();
       showToast('Codes saved ✓');
@@ -279,9 +286,11 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
   }
 
   function restorePills(objective) {
-    const codes = _parseObjCodes(objective);
+    const codes = Array.isArray(topic.syllabusRefs) && topic.syllabusRefs.length
+      ? topic.syllabusRefs
+      : _parseObjCodes(objective);
     wrapEl.innerHTML = codes.map(c => {
-      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+      const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
       const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
       return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
     }).join('') + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
@@ -331,12 +340,13 @@ function initModalCodesAC(initialObjective) {
     const ql = q.toLowerCase();
     const matches = Object.entries(syllabusIndex)
       .filter(([docId, d]) => {
+        const displayCode = (d.code || docId.split('_').slice(1).join('_')).toLowerCase();
         const subjectMatch = !SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_');
-        return subjectMatch && (d.code||'').toLowerCase().startsWith(ql) && !_modalConfirmedCodes.has(d.code||'');
+        return subjectMatch && displayCode.startsWith(ql) && !_modalConfirmedCodes.has(d.code || docId.split('_').slice(1).join('_'));
       })
-      .sort(([,a],[,b]) => (a.code||'').localeCompare(b.code||''))
+      .sort(([aId,a],[bId,b]) => (a.code||aId.split('_').slice(1).join('_')).localeCompare(b.code||bId.split('_').slice(1).join('_')))
       .slice(0, 12)
-      .map(([, d]) => [d.code||'', d]);
+      .map(([docId, d]) => [d.code || docId.split('_').slice(1).join('_'), d]);
     return { loading: false, matches };
   }
 
@@ -362,8 +372,10 @@ function initModalCodesAC(initialObjective) {
   }
 
   function selectCode(displayCode) {
-    const valid = Object.entries(syllabusIndex).some(([docId, d]) =>
-      d.code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_')));
+    const valid = Object.entries(syllabusIndex).some(([docId, d]) => {
+      const code = d.code || docId.split('_').slice(1).join('_');
+      return code === displayCode && (!SYLLABUS_CODE || docId.startsWith(SYLLABUS_CODE + '_'));
+    });
     if (!valid) return;
     _modalConfirmedCodes.add(displayCode);
     inp.value = '';
@@ -455,7 +467,7 @@ function renderChapters() {
           </tr></thead>
           <tbody>
             ${topics.map((t, ti) => {
-              const codes = _parseObjCodes(t.objective);
+              const codes = Array.isArray(t.syllabusRefs) && t.syllabusRefs.length ? t.syllabusRefs : _parseObjCodes(t.objective);
               const dur   = t.duration ?? t.hour ?? '';
               const wk    = t.week ?? '';
               return `
@@ -469,7 +481,7 @@ function renderChapters() {
                 <td>
                   <div class="inline-codes-wrap" onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes">
                     ${codes.map(c => {
-                      const entry = Object.values(syllabusIndex).find(d => d.code === c);
+                      const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
                       const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
                       return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
                     }).join('')}
@@ -555,9 +567,12 @@ window.toggleCh = toggleCh;
 
 function _parseObjCodes(objStr) {
   if (!objStr) return [];
-  // Match syllabus codes: C1.1 (math) or 1.1 / 1.1.1 (other subjects)
-  const matches = String(objStr).match(/[A-Z]?\d+\.\d+(?:\.\d+)*/g) || [];
-  return [...new Set(matches)];
+  const s = String(objStr);
+  // IGCSE/A-Level codes: C1.1, E2.3, 1.1, 1.1.1
+  const igcse = s.match(/[A-Z]?\d+\.\d+(?:\.\d+)*/g) || [];
+  // Checkpoint codes: 7Ni.01, 7Nf.07, 8Sp.03
+  const checkpoint = s.match(/\d[A-Za-z]+\.\d+/g) || [];
+  return [...new Set([...igcse, ...checkpoint])];
 }
 
 // ── Chapter CRUD ─────────────────────────────────────────────
