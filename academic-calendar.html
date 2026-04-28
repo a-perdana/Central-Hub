@@ -750,7 +750,21 @@
             const d = new Date(mon); d.setDate(mon.getDate() + i); return publicHolidayDates.has(localDateStr(d));
           });
           if (skipWeekStarts.has(monStr) || allHoliday) {
-            const reason = skipWeekReasons[monStr] || 'Public Holiday';
+            let reason = skipWeekReasons[monStr];
+            if (!reason) {
+              // Collect names of public holiday events that overlap this week
+              const weekDays = new Set([0,1,2,3,4].map(i => { const d = new Date(mon); d.setDate(mon.getDate() + i); return localDateStr(d); }));
+              const names = evts
+                .filter(e => e.category === 'Public Holiday' && e.title)
+                .filter(e => {
+                  const s = new Date(e.date_start + 'T00:00:00'), en = new Date(e.date_end + 'T00:00:00');
+                  for (let d = new Date(s); d <= en; d.setDate(d.getDate() + 1)) { if (weekDays.has(localDateStr(d))) return true; }
+                  return false;
+                })
+                .map(e => e.title);
+              const unique = [...new Set(names)];
+              reason = unique.length ? unique.join(' · ') : 'Public Holiday';
+            }
             skippedWeeks.push({ mon: monStr, fri: localDateStr(fri), semLabel, reason });
           } else {
             globalWeekNo++;
