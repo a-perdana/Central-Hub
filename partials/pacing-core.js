@@ -458,18 +458,24 @@ function renderChapters() {
       ? '<div style="padding:10px 14px;font-size:.75rem;color:var(--ink-3)">No topics yet.</div>'
       : `<table class="topic-tbl">
           <thead><tr>
-            <th style="width:30%">Topic</th>
-            <th style="width:22%;color:#1d4ed8">Codes</th>
-            <th style="width:8%;color:#92400e">Hours</th>
-            <th style="width:8%;color:#166534">Week</th>
-            <th style="width:18%">Notes &amp; Tags</th>
-            <th style="width:14%">Actions</th>
+            <th style="width:28%">Topic</th>
+            <th style="width:6%;color:#166534">Week</th>
+            <th style="width:16%">Date</th>
+            <th style="width:20%;color:#1d4ed8">Codes</th>
+            <th style="width:6%;color:#92400e">Hours</th>
+            <th style="width:12%">Notes &amp; Tags</th>
+            <th style="width:12%">Actions</th>
           </tr></thead>
           <tbody>
             ${topics.map((t, ti) => {
               const codes = Array.isArray(t.syllabusRefs) && t.syllabusRefs.length ? t.syllabusRefs : _parseObjCodes(t.objective);
               const dur   = t.duration ?? t.hour ?? '';
               const wk    = t.week ?? '';
+              const info  = wk ? weekInfo(wk) : null;
+              const dateLbl = info
+                ? `${fmtShortDate(info.monDate)} – ${fmtShortDate(info.friDate)}`
+                : '';
+              const termLbl = info?.termLabel || '';
               return `
               <tr>
                 <td>
@@ -477,6 +483,18 @@ function renderChapters() {
                     title="Double-click to edit"
                     ondblclick="activateTopicNameInput(this,${ci},${ti})">${escHtml(t.topic)}</div>
                   ${t.resources && t.resources.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${t.resources.map(r => `<a class="res-chip" href="${safeUrl(r.url)}" target="_blank" rel="noopener">&#128279; ${escHtml(r.name||r.url)}</a>`).join('')}</div>` : ''}
+                </td>
+                <td>
+                  <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
+                    value="${escHtml(String(wk))}" placeholder="—"
+                    onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
+                    title="${dateLbl ? `Week ${wk}: ${dateLbl}` : 'School week number'}">
+                </td>
+                <td>
+                  ${dateLbl ? `<div class="week-date-cell">
+                    <span class="week-date-range">${escHtml(dateLbl)}</span>
+                    ${termLbl ? `<span class="week-term-chip">${escHtml(termLbl)}</span>` : ''}
+                  </div>` : '<span style="color:var(--border);font-size:.7rem">—</span>'}
                 </td>
                 <td>
                   <div class="inline-codes-wrap" onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes">
@@ -493,22 +511,6 @@ function renderChapters() {
                     value="${escHtml(String(dur))}" placeholder="—"
                     onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
                     title="Hours for this topic">
-                </td>
-                <td>
-                  ${(() => {
-                    const info = wk ? weekInfo(wk) : null;
-                    const lbl  = info
-                      ? `${fmtShortDate(info.monDate)}–${fmtShortDate(info.friDate)}${info.termLabel ? ` · ${info.termLabel}` : ''}`
-                      : '';
-                    const termCls = info?.termLabel ? ' term-lbl' : '';
-                    return `<div class="week-cell">
-                      <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
-                        value="${escHtml(String(wk))}" placeholder="—"
-                        onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
-                        title="${lbl ? `Week ${wk}: ${lbl}` : 'School week number'}">
-                      ${lbl ? `<span class="week-date-lbl${termCls}">${escHtml(lbl)}</span>` : ''}
-                    </div>`;
-                  })()}
                 </td>
                 <td>
                   ${t.coordNote ? `<div class="coord-note-text">${escHtml(t.coordNote)}</div>` : ''}
