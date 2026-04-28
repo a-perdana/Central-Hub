@@ -202,9 +202,8 @@
     /* ===== HOLIDAY BREAK ROW ===== */
     .holiday-break {
       display: flex; align-items: center; gap: 10px;
-      padding: 8px 14px; border-radius: 8px;
-      border: 1px dashed #fed7aa; background: #fff7ed;
-      font-size: 0.78rem; color: #92400e;
+      padding: 7px 16px; border-top: 1px dashed #fed7aa; border-bottom: 1px dashed #fed7aa;
+      background: #fff7ed; font-size: 0.775rem; color: #92400e;
     }
     .holiday-break.ease   { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
     .holiday-break.camp   { border-color: #a5f3fc; background: #ecfeff; color: #0e7490; }
@@ -2469,71 +2468,25 @@ function render() {
     });
   }
 
-  // Build chapter HTML, injecting holiday break banners between chapters where applicable
-  const wh = settingsData[currentSubject]?.weeklyHours || 0;
-  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-
-  // Render holiday/EASE break banners between chapters.
-  // Strategy: for each chapter boundary, find skipped weeks whose monday falls
-  // strictly between the last teaching day of the previous chapter and the
-  // first teaching day of the next chapter. Use calendar dates, not indices.
-  function chapterLastDate(ch) {
-    if (!wh) return null;
-    const ci = ch._ci;
-    const cum = chapterCumulativeHours[ci];
-    if (cum == null) return null;
-    const hours = (ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0);
-    const endTwIdx = Math.max(0, Math.floor((cum + hours - 1) / wh));
-    return teachingWeeks[endTwIdx]?.fri ?? null;
-  }
-
-  function chapterFirstDate(ch) {
-    if (!wh) return null;
-    const ci = ch._ci;
-    const cum = chapterCumulativeHours[ci];
-    if (cum == null) return null;
-    const startTwIdx = Math.floor(cum / wh);
-    return teachingWeeks[startTwIdx]?.mon ?? null;
-  }
-
-  function renderBreakBanners(afterDate, beforeDate) {
-    if (!afterDate || !beforeDate || beforeDate <= afterDate) return '';
-    const breaks = skippedWeeks.filter(sw => sw.mon > afterDate && sw.mon < beforeDate);
-    if (!breaks.length) return '';
-    // Merge consecutive same-reason weeks
-    const groups = [];
-    [...breaks].sort((a, b) => a.mon - b.mon).forEach(sw => {
-      const last = groups[groups.length - 1];
-      if (last && last.reason === sw.reason && sw.mon <= new Date(last.fri.getTime() + 8 * 86400000)) {
-        last.fri = sw.fri;
-      } else {
-        groups.push({ reason: sw.reason, mon: new Date(sw.mon), fri: new Date(sw.fri) });
-      }
-    });
-    return groups.map(g => {
-      const isEase = /ease/i.test(g.reason);
-      const isCamp = /camp/i.test(g.reason);
-      const cls  = isEase ? 'ease' : isCamp ? 'camp' : '';
-      const icon = isEase ? '📝' : isCamp ? '🏕️' : '🏖️';
-      return `<div class="holiday-break ${cls}">
-        <span class="holiday-break-icon">${icon}</span>
-        <span class="holiday-break-body">
-          <span class="holiday-break-label">${escHtml(g.reason)}</span>
-          <span class="holiday-break-dates">${fmt(g.mon)} – ${fmt(g.fri)}</span>
-        </span>
-      </div>`;
-    }).join('');
-  }
-
   const chapterHtmlParts = pageItems.map(ch =>
     renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics, hasWeeklyHours ? (chapterCumulativeHours[ch._ci] ?? null) : null)
   );
   list.innerHTML = chapterHtmlParts.map((html, i) => {
     let breaks = '';
     if (hasWeeklyHours && i > 0) {
-      const afterDate  = chapterLastDate(pageItems[i - 1]);
-      const beforeDate = chapterFirstDate(pageItems[i]);
-      breaks = renderBreakBanners(afterDate, beforeDate);
+      const afterCh  = pageItems[i - 1];
+      const beforeCh = pageItems[i];
+      const afterCi  = afterCh._ci;
+      const beforeCi = beforeCh._ci;
+      const afterCum  = chapterCumulativeHours[afterCi];
+      const beforeCum = chapterCumulativeHours[beforeCi];
+      if (afterCum != null && beforeCum != null) {
+        const wh = settingsData[currentSubject]?.weeklyHours || 0;
+        const afterHours  = (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0);
+        const afterEndDate  = twEndDate(afterCum + afterHours - 1, wh);
+        const beforeStartDate = twStartDate(beforeCum, wh);
+        breaks = renderBreakBanners(afterEndDate, beforeStartDate);
+      }
     }
     return breaks + html;
   }).join('');
@@ -2566,11 +2519,54 @@ function render() {
   });
 })();
 
+// ── Holiday break helpers (module-level so renderChapter can use them) ──────
+const fmtDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+function twEndDate(cumHoursEnd, wh) {
+  if (!wh || cumHoursEnd < 0) return null;
+  const idx = Math.floor(cumHoursEnd / wh);
+  return teachingWeeks[idx]?.fri ?? null;
+}
+
+function twStartDate(cumHoursStart, wh) {
+  if (!wh || cumHoursStart < 0) return null;
+  const idx = Math.floor(cumHoursStart / wh);
+  return teachingWeeks[idx]?.mon ?? null;
+}
+
+function renderBreakBanners(afterDate, beforeDate) {
+  if (!afterDate || !beforeDate || beforeDate <= afterDate) return '';
+  const breaks = skippedWeeks.filter(sw => sw.mon > afterDate && sw.mon < beforeDate);
+  if (!breaks.length) return '';
+  const groups = [];
+  [...breaks].sort((a, b) => a.mon - b.mon).forEach(sw => {
+    const last = groups[groups.length - 1];
+    if (last && last.reason === sw.reason && sw.mon <= new Date(last.fri.getTime() + 8 * 86400000)) {
+      last.fri = sw.fri;
+    } else {
+      groups.push({ reason: sw.reason, mon: new Date(sw.mon), fri: new Date(sw.fri) });
+    }
+  });
+  return groups.map(g => {
+    const isEase = /ease/i.test(g.reason);
+    const isCamp = /camp/i.test(g.reason);
+    const cls  = isEase ? 'ease' : isCamp ? 'camp' : '';
+    const icon = isEase ? '📝' : isCamp ? '🏕️' : '🏖️';
+    return `<div class="holiday-break ${cls}">
+      <span class="holiday-break-icon">${icon}</span>
+      <span class="holiday-break-body">
+        <span class="holiday-break-label">${escHtml(g.reason)}</span>
+        <span class="holiday-break-dates">${fmtDate(g.mon)} – ${fmtDate(g.fri)}</span>
+      </span>
+    </div>`;
+  }).join('');
+}
+
 function renderChapter(ch, ci, q = '', matchedTopics = null, chapterStartHours = null) {
   const allTopics = ch.topics || [];
   const displayTopics = matchedTopics ?? allTopics;
 
-  // Build per-topic cumulative hours within this chapter (relative to chapter start)
+  // Build per-topic cumulative hours (absolute, from year start)
   const topicCumulative = [];
   let runningHours = chapterStartHours ?? null;
   allTopics.forEach(t => {
@@ -2578,12 +2574,33 @@ function renderChapter(ch, ci, q = '', matchedTopics = null, chapterStartHours =
     if (runningHours !== null) runningHours += (t.duration || t.hour || 0);
   });
 
-  const topicRows = displayTopics.length > 0
-    ? `<div class="topics-list">${displayTopics.map((t) => {
-        const ti = allTopics.indexOf(t);
-        return renderTopic(t, ti, ci, q, topicCumulative[ti]);
-      }).join('')}</div>`
-    : `<div class="no-topics">No topics yet — add one below.</div>`;
+  // Build topic rows, inserting holiday break banners between topics where applicable
+  const wh = settingsData[currentSubject]?.weeklyHours || 0;
+  let topicRows;
+  if (displayTopics.length > 0) {
+    const parts = displayTopics.map((t, dispIdx) => {
+      const ti       = allTopics.indexOf(t);
+      const topicHtml = renderTopic(t, ti, ci, q, topicCumulative[ti]);
+      // Insert banner BEFORE this topic if there's a gap after the previous one
+      let banner = '';
+      if (dispIdx > 0 && wh && skippedWeeks.length) {
+        const prevT   = displayTopics[dispIdx - 1];
+        const prevTi  = allTopics.indexOf(prevT);
+        const prevCum = topicCumulative[prevTi];
+        const prevDur = prevT.duration || prevT.hour || 0;
+        const curCum  = topicCumulative[ti];
+        if (prevCum != null && curCum != null) {
+          const afterDate  = twEndDate(prevCum + prevDur - 1, wh);
+          const beforeDate = twStartDate(curCum, wh);
+          banner = renderBreakBanners(afterDate, beforeDate);
+        }
+      }
+      return banner + topicHtml;
+    });
+    topicRows = `<div class="topics-list">${parts.join('')}</div>`;
+  } else {
+    topicRows = `<div class="no-topics">No topics yet — add one below.</div>`;
+  }
 
   return `
     <div class="chapter-block${!q ? ' collapsed' : ''}" data-chid="${escHtml(ch.id || ch.chapter || String(ci))}">
