@@ -694,18 +694,21 @@
         })).filter(e => e.date_start) : [];
 
         const skipWeekStarts = new Set();
-        const markSkipWeek = (ds, de) => {
+        // skipWeekReasons: monStr → reason label
+        const skipWeekReasons = {};
+        const markSkipWeek = (ds, de, reason) => {
           const s = new Date(ds + 'T00:00:00'), e = new Date(de + 'T00:00:00');
-          // Walk day by day; only weekdays (Mon–Fri) trigger a week skip
           for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
             const wd = d.getDay();
-            if (wd === 0 || wd === 6) continue; // skip Sat/Sun
+            if (wd === 0 || wd === 6) continue;
             const mon = new Date(d); mon.setDate(d.getDate() - (wd - 1));
-            skipWeekStarts.add(localDateStr(mon));
+            const monStr = localDateStr(mon);
+            skipWeekStarts.add(monStr);
+            if (!skipWeekReasons[monStr]) skipWeekReasons[monStr] = reason;
           }
         };
-        evts.filter(e => e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')).forEach(e => markSkipWeek(e.date_start, e.date_end));
-        evts.filter(e => /leadership camp/i.test(e.title)).forEach(e => markSkipWeek(e.date_start, e.date_end));
+        evts.filter(e => e.category === 'Assessment' && e.title && e.title.toUpperCase().includes('EASE')).forEach(e => markSkipWeek(e.date_start, e.date_end, 'EASE Exam'));
+        evts.filter(e => /leadership camp/i.test(e.title)).forEach(e => markSkipWeek(e.date_start, e.date_end, 'Leadership Camp'));
 
         // Build a set of all Public Holiday dates (Mon–Fri only)
         const publicHolidayDates = new Set();
@@ -727,11 +730,13 @@
         const semCounters = semBounds.map(() => 0);
 
         const computedWeeks = [];
+        const skippedWeeks = [];
         let globalWeekNo = 0;
         for (let w = 0; w < 70; w++) {
           const mon = new Date(yearStart); mon.setDate(yearStart.getDate() + w * 7);
           const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
           const mid = new Date(mon); mid.setDate(mon.getDate() + 2);
+          const monStr = localDateStr(mon);
           let semLabel = '', semIdx = -1;
           for (let si = 0; si < semBounds.length; si++) {
             if (mid >= semBounds[si].start && mid <= semBounds[si].end) {
@@ -740,21 +745,26 @@
               break;
             }
           }
-          const allHoliday = semLabel && [0,1,2,3,4].every(i => {
+          if (!semLabel) continue; // outside semester bounds entirely — ignore
+          const allHoliday = [0,1,2,3,4].every(i => {
             const d = new Date(mon); d.setDate(mon.getDate() + i); return publicHolidayDates.has(localDateStr(d));
           });
-          if (semLabel && !skipWeekStarts.has(localDateStr(mon)) && !allHoliday) {
+          if (skipWeekStarts.has(monStr) || allHoliday) {
+            const reason = skipWeekReasons[monStr] || 'Public Holiday';
+            skippedWeeks.push({ mon: monStr, fri: localDateStr(fri), semLabel, reason });
+          } else {
             globalWeekNo++;
             semCounters[semIdx]++;
-            computedWeeks.push({ weekNo: globalWeekNo, semLabel, semWeekNo: semCounters[semIdx], mon: localDateStr(mon), fri: localDateStr(fri) });
+            computedWeeks.push({ weekNo: globalWeekNo, semLabel, semWeekNo: semCounters[semIdx], mon: monStr, fri: localDateStr(fri) });
           }
         }
 
         await setDoc(doc(db, 'teaching_schedule', 'main'), {
           academicYearStart: yearStartIso,
-          skippedWeekCount: 70 - computedWeeks.length,
+          skippedWeekCount: skippedWeeks.length,
           teachingWeekCount: computedWeeks.length,
           weeks: computedWeeks,
+          skippedWeeks,
           syncedAt: serverTimestamp(),
         });
 

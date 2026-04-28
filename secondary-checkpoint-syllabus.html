@@ -199,6 +199,20 @@
     .btn-danger:hover { background: #fef2f2; }
     .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
 
+    /* ===== HOLIDAY BREAK ROW ===== */
+    .holiday-break {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; border-radius: 8px;
+      border: 1px dashed #fed7aa; background: #fff7ed;
+      font-size: 0.78rem; color: #92400e;
+    }
+    .holiday-break.ease   { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+    .holiday-break.camp   { border-color: #a5f3fc; background: #ecfeff; color: #0e7490; }
+    .holiday-break-icon   { font-size: 1rem; flex-shrink: 0; }
+    .holiday-break-body   { flex: 1; min-width: 0; }
+    .holiday-break-label  { font-weight: 700; }
+    .holiday-break-dates  { opacity: 0.75; margin-left: 6px; font-weight: 400; }
+
     /* ===== CHAPTER BLOCKS ===== */
     .chapters-list { display: flex; flex-direction: column; gap: 10px; }
     .chapter-block {
@@ -1213,8 +1227,8 @@ let settingsObjSubj   = 'math';
 let settingsUnsub = null;
 
 // ── Calendar / schedule state ─────────────────────────────────────
-// teachingWeeks: [{weekNo, mon: Date, fri: Date}] — loaded from teaching_schedule/checkpoint_math
-let teachingWeeks = [];
+let teachingWeeks  = [];  // [{weekNo, semLabel, semWeekNo, mon: Date, fri: Date}]
+let skippedWeeks   = [];  // [{mon, fri, semLabel, reason}] — non-teaching weeks
 
 // ── Auth ─────────────────────────────────────────────────────────
 document.addEventListener('authReady', async ({ detail: { profile } }) => {
@@ -1659,18 +1673,25 @@ async function loadCalendarData() {
   });
 
   if (schedSnap && schedSnap.exists() && Array.isArray(schedSnap.data().weeks)) {
-    teachingWeeks = schedSnap.data().weeks.map(w => ({
+    const d = schedSnap.data();
+    teachingWeeks = d.weeks.map(w => ({
       weekNo:    w.weekNo,
       semLabel:  w.semLabel  || '',
       semWeekNo: w.semWeekNo || w.weekNo,
       mon: new Date(w.mon + 'T00:00:00'),
       fri: new Date(w.fri + 'T00:00:00'),
     }));
-    const d = schedSnap.data();
+    skippedWeeks = Array.isArray(d.skippedWeeks) ? d.skippedWeeks.map(w => ({
+      mon:      new Date(w.mon + 'T00:00:00'),
+      fri:      new Date(w.fri + 'T00:00:00'),
+      semLabel: w.semLabel || '',
+      reason:   w.reason   || 'Holiday',
+    })) : [];
     const display = document.getElementById('syncStatusBox');
     if (display) display.textContent = `${teachingWeeks.length} teaching weeks loaded — sync from Academic Calendar → ⚙ Year Settings.`;
   } else {
     teachingWeeks = [];
+    skippedWeeks  = [];
     const display = document.getElementById('syncStatusBox');
     if (display) display.textContent = 'No schedule synced yet — go to Academic Calendar → ⚙ Year Settings → Sync Teaching Weeks.';
   }
@@ -2448,7 +2469,69 @@ function render() {
     });
   }
 
-  list.innerHTML = pageItems.map(ch => renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics, hasWeeklyHours ? (chapterCumulativeHours[ch._ci] ?? null) : null)).join('');
+  // Build chapter HTML, injecting holiday break banners between chapters where applicable
+  const wh = settingsData[currentSubject]?.weeklyHours || 0;
+  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  function holidayBreaksHtml(afterCh, beforeCh) {
+    if (!skippedWeeks.length || !wh || !afterCh || !beforeCh) return '';
+    // Find the last topic's estimated end date for afterCh, and first topic start for beforeCh
+    const afterCi  = afterCh._ci;
+    const beforeCi = beforeCh._ci;
+    const afterCumEnd = (chapterCumulativeHours[afterCi] ?? null) !== null
+      ? chapterCumulativeHours[afterCi] + (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)
+      : null;
+    const beforeCumStart = chapterCumulativeHours[beforeCi] ?? null;
+    if (afterCumEnd === null || beforeCumStart === null) return '';
+
+    const afterEndWeekIdx   = Math.floor((afterCumEnd  - 1) / wh);
+    const beforeStartWeekIdx = Math.floor(beforeCumStart / wh);
+    if (beforeStartWeekIdx <= afterEndWeekIdx + 1) return '';
+
+    // Find skipped weeks that fall between these two teaching week indices
+    const afterTeachingWeek  = teachingWeeks[afterEndWeekIdx];
+    const beforeTeachingWeek = teachingWeeks[beforeStartWeekIdx];
+    if (!afterTeachingWeek || !beforeTeachingWeek) return '';
+
+    const gapStart = afterTeachingWeek.fri;
+    const gapEnd   = beforeTeachingWeek.mon;
+
+    const breaks = skippedWeeks.filter(sw => sw.mon > gapStart && sw.fri < gapEnd);
+    if (!breaks.length) return '';
+
+    // Group consecutive weeks by reason into single banners
+    const groups = [];
+    breaks.forEach(sw => {
+      const last = groups[groups.length - 1];
+      if (last && last.reason === sw.reason && sw.mon <= new Date(last.fri.getTime() + 8 * 86400000)) {
+        last.fri = sw.fri;
+      } else {
+        groups.push({ reason: sw.reason, mon: sw.mon, fri: sw.fri });
+      }
+    });
+
+    return groups.map(g => {
+      const isEase = /ease/i.test(g.reason);
+      const isCamp = /camp/i.test(g.reason);
+      const cls  = isEase ? 'ease' : isCamp ? 'camp' : '';
+      const icon = isEase ? '📝' : isCamp ? '🏕️' : '🏖️';
+      return `<div class="holiday-break ${cls}">
+        <span class="holiday-break-icon">${icon}</span>
+        <span class="holiday-break-body">
+          <span class="holiday-break-label">${escHtml(g.reason)}</span>
+          <span class="holiday-break-dates">${fmt(g.mon)} – ${fmt(g.fri)}</span>
+        </span>
+      </div>`;
+    }).join('');
+  }
+
+  const chapterHtmlParts = pageItems.map(ch =>
+    renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics, hasWeeklyHours ? (chapterCumulativeHours[ch._ci] ?? null) : null)
+  );
+  list.innerHTML = chapterHtmlParts.map((html, i) => {
+    const breaks = (hasWeeklyHours && i > 0) ? holidayBreaksHtml(pageItems[i - 1], pageItems[i]) : '';
+    return breaks + html;
+  }).join('');
 
   // When searching, expand all matched chapters; otherwise restore collapse state
   if (isSearching) {
