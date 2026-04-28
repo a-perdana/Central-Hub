@@ -1274,8 +1274,6 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
     });
   }
 
-  await Promise.all([loadSyllabus(), loadCalendarData()]);
-
   // Subject tab clicks
   document.querySelectorAll('.subj-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1294,7 +1292,14 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
     });
   });
 
+  // Start pacing data immediately — don't wait for syllabus/calendar
   loadSubject('math');
+
+  // Load calendar (weeklyHours + teaching weeks) in background; re-render when ready
+  loadCalendarData().then(() => { if (chapters.length) render(); });
+
+  // Load syllabus index in background — renders fine without it, chips appear after load
+  loadSyllabus().then(() => { if (chapters.length) render(); });
 });
 
 // ── Settings Panel ────────────────────────────────────────────────
@@ -1686,19 +1691,8 @@ async function loadSyllabus() {
 async function loadCalendarData() {
   const db = window.db;
 
-  // Load weeklyHours for all subjects alongside schedule doc in parallel
-  const subjKeys = Object.keys(SUBJECTS);
-  const [schedSnap, ...subjSnaps] = await Promise.all([
-    getDoc(doc(db, 'teaching_schedule', 'main')).catch(() => null),
-    ...subjKeys.map(k => getDoc(doc(db, SUBJECTS[k].collection, 'year7-8')).catch(() => null)),
-  ]);
-
-  subjKeys.forEach((k, i) => {
-    const snap = subjSnaps[i];
-    if (snap && snap.exists() && typeof snap.data().weeklyHours === 'number') {
-      settingsData[k].weeklyHours = snap.data().weeklyHours;
-    }
-  });
+  // weeklyHours is read per-subject from the onSnapshot in loadSubject — no extra getDoc needed here
+  const schedSnap = await getDoc(doc(db, 'teaching_schedule', 'main')).catch(() => null);
 
   if (schedSnap && schedSnap.exists() && Array.isArray(schedSnap.data().weeks)) {
     const d = schedSnap.data();
@@ -2097,9 +2091,11 @@ function loadSubject(subj) {
   const ref = doc(window.db, cfg.collection, DOC_ID);
   unsub = onSnapshot(ref, snap => {
     document.getElementById('loadingState').style.display = 'none';
-    chapters = (snap.exists() && Array.isArray(snap.data().chapters))
-      ? snap.data().chapters : [];
+    const data = snap.exists() ? snap.data() : {};
+    chapters = Array.isArray(data.chapters) ? data.chapters : [];
     window.chapters = chapters;
+    // Pick up weeklyHours from the same snapshot — no extra getDoc needed
+    if (typeof data.weeklyHours === 'number') settingsData[subj].weeklyHours = data.weeklyHours;
     render();
   }, err => {
     document.getElementById('loadingState').style.display = 'none';
