@@ -328,6 +328,34 @@
     }
     .no-topics { padding: 20px 16px; text-align: center; color: var(--ink-3); font-size: 0.82rem; }
 
+    /* Buffer row */
+    .buffer-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 16px; border-top: 1px dashed #fcd34d;
+      background: #fffbeb;
+    }
+    .buffer-icon { font-size: 1rem; flex-shrink: 0; }
+    .buffer-label { font-size: 0.82rem; font-weight: 600; color: #92400e; flex: 1; }
+    .buffer-hours { font-size: 0.75rem; color: #b45309; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px; padding: 2px 8px; }
+    .buffer-del { margin-left: auto; }
+
+    /* Buffer inline form in ch-footer */
+    .ch-footer-form { display: none; align-items: center; gap: 8px; flex: 1; }
+    .ch-footer-form.open { display: flex; }
+    .ch-footer-form input[type="text"] {
+      flex: 1; min-width: 0; padding: 5px 9px; font-size: 0.82rem;
+      border: 1px solid var(--border); border-radius: 6px; outline: none;
+      font-family: inherit;
+    }
+    .ch-footer-form input[type="text"]:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; }
+    .ch-footer-form input[type="number"] {
+      width: 70px; padding: 5px 7px; font-size: 0.82rem;
+      border: 1px solid var(--border); border-radius: 6px; outline: none;
+      font-family: inherit; text-align: center;
+    }
+    .ch-footer-form input[type="number"]:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; }
+    .ch-footer-form label { font-size: 0.75rem; color: var(--ink-3); white-space: nowrap; }
+
     /* ===== EMPTY STATE ===== */
     .empty-state { text-align: center; padding: 56px 24px; }
     .empty-icon {
@@ -2620,14 +2648,35 @@ function renderChapter(ch, ci, q = '', matchedTopics = null, chapterStartHours =
       <div class="ch-body">
         ${topicRows}
         ${renderChapterAssessment(ch, ci)}
-        ${isAdmin ? `<div class="ch-footer">
-          <button class="btn btn-secondary btn-sm" onclick="openAddTopicModal(${ci})">+ Add Topic</button>
+        ${isAdmin ? `<div class="ch-footer" id="ch-footer-${ci}">
+          <div class="ch-footer-form" id="ch-buffer-form-${ci}">
+            <input type="text" id="ch-buffer-label-${ci}" placeholder="Review Time" maxlength="60" style="max-width:200px">
+            <label>hrs:</label>
+            <input type="number" id="ch-buffer-dur-${ci}" value="1" min="1" max="20" step="1">
+            <button class="btn btn-primary btn-sm" onclick="saveBuffer(${ci})">Save</button>
+            <button class="btn btn-cancel btn-sm" onclick="cancelBuffer(${ci})">Cancel</button>
+          </div>
+          <div class="ch-footer-btns" id="ch-footer-btns-${ci}" style="display:flex;gap:8px">
+            <button class="btn btn-secondary btn-sm" onclick="openAddTopicModal(${ci})">+ Add Topic</button>
+            <button class="btn btn-secondary btn-sm" style="color:#b45309;border-color:#fcd34d;background:#fffbeb" onclick="openAddBuffer(${ci})">+ Add Buffer</button>
+          </div>
         </div>` : ''}
       </div>
     </div>`;
 }
 
 function renderTopic(t, ti, ci, q = '', cumulativeBefore = null) {
+  // Buffer topics — compact accent row, no objectives/syllabus
+  if (t.type === 'buffer') {
+    const dur = t.duration || 0;
+    return `<div class="buffer-row">
+      <span class="buffer-icon">⏳</span>
+      <span class="buffer-label">${escHtml(t.title || 'Buffer')}</span>
+      <span class="buffer-hours">⏱ ${dur} Lesson Hour${dur == 1 ? '' : 's'}</span>
+      ${isAdmin ? `<button class="btn btn-danger buffer-del btn-sm" onclick="deleteTopic(event,${ci},${ti})">Remove</button>` : ''}
+    </div>`;
+  }
+
   const objRaw = t.objectives || t.objective || '';
   let objHtml = '';
   if (objRaw) {
@@ -2857,6 +2906,33 @@ function openAddTopicModal(ci) {
   document.getElementById('topTitleInput').focus();
 }
 
+function openAddBuffer(ci) {
+  document.getElementById(`ch-footer-btns-${ci}`).style.display = 'none';
+  const form = document.getElementById(`ch-buffer-form-${ci}`);
+  form.classList.add('open');
+  const labelInput = document.getElementById(`ch-buffer-label-${ci}`);
+  labelInput.value = '';
+  document.getElementById(`ch-buffer-dur-${ci}`).value = '1';
+  labelInput.focus();
+}
+
+function cancelBuffer(ci) {
+  document.getElementById(`ch-buffer-form-${ci}`).classList.remove('open');
+  document.getElementById(`ch-footer-btns-${ci}`).style.display = 'flex';
+}
+
+async function saveBuffer(ci) {
+  const label = document.getElementById(`ch-buffer-label-${ci}`).value.trim() || 'Review Time';
+  const dur   = parseInt(document.getElementById(`ch-buffer-dur-${ci}`).value, 10) || 1;
+  if (!chapters[ci]) return;
+  chapters[ci].topics = chapters[ci].topics || [];
+  chapters[ci].topics.push({ type: 'buffer', title: label, duration: dur });
+  await saveChapters();
+  cancelBuffer(ci);
+  render();
+  showToast('Buffer added.');
+}
+
 function editTopic(ci, ti) {
   modalMode  = 'edit-topic';
   editChIdx  = ci;
@@ -2980,9 +3056,10 @@ async function deleteTopic(e, ci, ti) {
   e.stopPropagation();
   const btn = e.currentTarget;
   if (btn.dataset.confirming !== 'true') {
+    const orig = btn.textContent;
     btn.dataset.confirming = 'true';
     btn.textContent = 'Confirm?';
-    setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Delete'; }, 3000);
+    setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = orig; }, 3000);
     return;
   }
   chapters[ci].topics.splice(ti, 1);
