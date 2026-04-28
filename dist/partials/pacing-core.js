@@ -458,11 +458,12 @@ function renderChapters() {
       ? '<div style="padding:10px 14px;font-size:.75rem;color:var(--ink-3)">No topics yet.</div>'
       : `<table class="topic-tbl">
           <thead><tr>
-            <th style="width:30%">Topic</th>
-            <th style="width:22%;color:#1d4ed8">Codes</th>
-            <th style="width:8%;color:#92400e">Hours</th>
-            <th style="width:20%;color:#166534">Week</th>
-            <th style="width:20%">Notes &amp; Tags</th>
+            <th style="width:26%">Topic</th>
+            <th style="width:18%;color:#1d4ed8">Codes</th>
+            ${isAdmin ? `<th style="width:6%;color:#92400e">Hours</th>` : ''}
+            ${isAdmin ? `<th style="width:6%;color:#166534">Week</th>` : ''}
+            <th style="width:20%">Schedule</th>
+            <th style="width:${isAdmin ? '10' : '22'}%">Notes &amp; Tags</th>
             ${isAdmin ? `<th style="width:14%">Actions</th>` : ''}
           </tr></thead>
           <tbody>
@@ -496,25 +497,19 @@ function renderChapters() {
                     ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">${isAdmin ? '+ codes' : '—'}</span>` : ''}
                   </div>
                 </td>
-                <td>
-                  ${isAdmin
-                    ? `<input class="inline-input inline-input-num inline-input-hours" type="number" min="0" max="99"
-                        value="${escHtml(String(dur))}" placeholder="—"
-                        onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
-                        title="Hours for this topic">`
-                    : `<span class="dur-badge">${dur ? escHtml(String(dur)) + 'h' : '—'}</span>`}
-                </td>
-                <td>
-                  ${isAdmin
-                    ? `<div class="week-cell">
-                        <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
-                          value="${escHtml(String(wk))}" placeholder="—"
-                          onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
-                          title="School week number">
-                        ${pill}
-                      </div>`
-                    : pill || '<span style="color:var(--border);font-size:.7rem">—</span>'}
-                </td>
+                ${isAdmin ? `<td>
+                  <input class="inline-input inline-input-num inline-input-hours" type="number" min="0" max="99"
+                    value="${escHtml(String(dur))}" placeholder="—"
+                    onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
+                    title="Hours for this topic">
+                </td>` : ''}
+                ${isAdmin ? `<td>
+                  <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
+                    value="${escHtml(String(wk))}" placeholder="—"
+                    onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
+                    title="School week number">
+                </td>` : ''}
+                <td>${pill || '<span style="color:var(--border);font-size:.7rem">—</span>'}</td>
                 <td>
                   ${t.coordNote ? `<div class="coord-note-text">${escHtml(t.coordNote)}</div>` : ''}
                   ${t.diag ? `<span class="diag-badge ${escHtml(t.diag)}">${t.diag === 'weak' ? '⚠ Weak' : t.diag === 'review' ? '↻ Review' : '✓ Good'}</span>` : ''}
