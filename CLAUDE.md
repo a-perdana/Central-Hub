@@ -243,7 +243,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `igcse-syllabus.html`              | `/igcse-syllabus`               | IGCSE syllabus guide — view/edit syllabus entries, GLH, chapter hours. Redirects to Teacher Progress (math only). Old URL `/igcse-pacing` redirects here. |
 | `igcse-math-pacing.html`          | `/igcse-math-pacing`            | IGCSE Math pacing admin — chapter/topic structure, inline edit (codes autocomplete from `cambridge_syllabus`, hours, week), Teacher Progress, Coverage Heatmap, Hours Report. Old URL `/igcse-math-admin` redirects here. |
 | `as-alevel-pacing.html`            | `/as-alevel-pacing`             | A-Level pacing guide                              |
-| `primary-checkpoint-pacing.html`   | `/primary-checkpoint-pacing`    | Primary checkpoint pacing (Year 4–6)              |
+| `primary-checkpoint-syllabus.html` | `/primary-checkpoint-syllabus`  | Primary Checkpoint syllabus admin — chapter/topic/objective structure (Year 4–6). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
 | `secondary-checkpoint-pacing.html` | `/secondary-checkpoint-pacing`  | Secondary checkpoint pacing (Year 7–8)            |
 | `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
