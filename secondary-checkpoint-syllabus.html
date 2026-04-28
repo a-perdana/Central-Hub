@@ -2473,30 +2473,36 @@ function render() {
   const wh = settingsData[currentSubject]?.weeklyHours || 0;
   const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-  // Map each skipped week to the teaching week index it falls AFTER.
-  // teachingWeeks[i].fri < skippedWeek.mon < teachingWeeks[i+1].mon → belongs to slot i
-  const skippedAfterTwIdx = {};
-  if (hasWeeklyHours && skippedWeeks.length && teachingWeeks.length) {
-    skippedWeeks.forEach(sw => {
-      let slot = -1;
-      for (let i = 0; i < teachingWeeks.length; i++) {
-        if (teachingWeeks[i].fri < sw.mon) slot = i;
-        else break;
-      }
-      if (slot < 0) return;
-      if (!skippedAfterTwIdx[slot]) skippedAfterTwIdx[slot] = [];
-      skippedAfterTwIdx[slot].push({ reason: sw.reason, mon: sw.mon, fri: sw.fri });
-    });
+  // Render holiday/EASE break banners between chapters.
+  // Strategy: for each chapter boundary, find skipped weeks whose monday falls
+  // strictly between the last teaching day of the previous chapter and the
+  // first teaching day of the next chapter. Use calendar dates, not indices.
+  function chapterLastDate(ch) {
+    if (!wh) return null;
+    const ci = ch._ci;
+    const cum = chapterCumulativeHours[ci];
+    if (cum == null) return null;
+    const hours = (ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0);
+    const endTwIdx = Math.max(0, Math.floor((cum + hours - 1) / wh));
+    return teachingWeeks[endTwIdx]?.fri ?? null;
   }
 
-  function renderBreakBanners(fromTwIdx, toTwIdx) {
-    const collected = [];
-    for (let i = fromTwIdx; i < toTwIdx; i++) {
-      (skippedAfterTwIdx[i] || []).forEach(sw => collected.push(sw));
-    }
-    if (!collected.length) return '';
+  function chapterFirstDate(ch) {
+    if (!wh) return null;
+    const ci = ch._ci;
+    const cum = chapterCumulativeHours[ci];
+    if (cum == null) return null;
+    const startTwIdx = Math.floor(cum / wh);
+    return teachingWeeks[startTwIdx]?.mon ?? null;
+  }
+
+  function renderBreakBanners(afterDate, beforeDate) {
+    if (!afterDate || !beforeDate || beforeDate <= afterDate) return '';
+    const breaks = skippedWeeks.filter(sw => sw.mon > afterDate && sw.mon < beforeDate);
+    if (!breaks.length) return '';
+    // Merge consecutive same-reason weeks
     const groups = [];
-    collected.forEach(sw => {
+    [...breaks].sort((a, b) => a.mon - b.mon).forEach(sw => {
       const last = groups[groups.length - 1];
       if (last && last.reason === sw.reason && sw.mon <= new Date(last.fri.getTime() + 8 * 86400000)) {
         last.fri = sw.fri;
@@ -2519,27 +2525,16 @@ function render() {
     }).join('');
   }
 
-  function holidayBreaksHtml(afterCh, beforeCh) {
-    if (!hasWeeklyHours || !wh || !afterCh || !beforeCh) return '';
-    const afterCi  = afterCh._ci;
-    const beforeCi = beforeCh._ci;
-    const afterCumEnd    = (chapterCumulativeHours[afterCi] ?? null) !== null
-      ? chapterCumulativeHours[afterCi] + (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)
-      : null;
-    const beforeCumStart = chapterCumulativeHours[beforeCi] ?? null;
-    if (afterCumEnd === null || beforeCumStart === null) return '';
-    // Teaching week indices (0-based into teachingWeeks array)
-    const afterEndTwIdx    = Math.max(0, Math.floor((afterCumEnd  - 1) / wh));
-    const beforeStartTwIdx = Math.floor(beforeCumStart / wh);
-    if (beforeStartTwIdx <= afterEndTwIdx) return '';
-    return renderBreakBanners(afterEndTwIdx, beforeStartTwIdx);
-  }
-
   const chapterHtmlParts = pageItems.map(ch =>
     renderChapter(ch, ch._ci, searchQuery, ch._matchedTopics, hasWeeklyHours ? (chapterCumulativeHours[ch._ci] ?? null) : null)
   );
   list.innerHTML = chapterHtmlParts.map((html, i) => {
-    const breaks = (hasWeeklyHours && i > 0) ? holidayBreaksHtml(pageItems[i - 1], pageItems[i]) : '';
+    let breaks = '';
+    if (hasWeeklyHours && i > 0) {
+      const afterDate  = chapterLastDate(pageItems[i - 1]);
+      const beforeDate = chapterFirstDate(pageItems[i]);
+      breaks = renderBreakBanners(afterDate, beforeDate);
+    }
     return breaks + html;
   }).join('');
 
