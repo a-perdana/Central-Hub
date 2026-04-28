@@ -266,6 +266,31 @@ export function initSyllabusPage(config) {
     isAdmin = profile.role_centralhub === 'central_admin';
     document.getElementById('mainContent').style.display = '';
 
+    // Build subject tabs dynamically if the container is empty (IGCSE uses dynamic tabs)
+    const tabsContainer = document.querySelector('.subject-tabs');
+    if (tabsContainer && tabsContainer.querySelectorAll('.subj-tab').length === 0) {
+      const firstSubj = Object.keys(subjects)[0];
+      Object.entries(subjects).forEach(([key, s]) => {
+        const btn = document.createElement('button');
+        btn.className = 'subj-tab' + (key === firstSubj ? ' active' : '');
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('data-subj', key);
+        btn.setAttribute('aria-selected', key === firstSubj ? 'true' : 'false');
+        btn.innerHTML = `<span class="subj-icon">${s.icon || '📚'}</span> ${s.label}`;
+        tabsContainer.appendChild(btn);
+      });
+      // Settings tab (admin only, appended after subjects)
+      const settingsBtn = document.createElement('button');
+      settingsBtn.className = 'subj-tab';
+      settingsBtn.id = 'settingsTab';
+      settingsBtn.setAttribute('role', 'tab');
+      settingsBtn.setAttribute('data-subj', '__settings');
+      settingsBtn.setAttribute('aria-selected', 'false');
+      settingsBtn.style.cssText = 'margin-left:auto;flex:0 0 auto;color:var(--ink-3);display:none';
+      settingsBtn.innerHTML = '<span class="subj-icon">⚙</span> Settings';
+      tabsContainer.appendChild(settingsBtn);
+    }
+
     if (isAdmin) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
