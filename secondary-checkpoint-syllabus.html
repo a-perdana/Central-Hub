@@ -2473,43 +2473,37 @@ function render() {
   const wh = settingsData[currentSubject]?.weeklyHours || 0;
   const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-  function holidayBreaksHtml(afterCh, beforeCh) {
-    if (!skippedWeeks.length || !wh || !afterCh || !beforeCh) return '';
-    // Find the last topic's estimated end date for afterCh, and first topic start for beforeCh
-    const afterCi  = afterCh._ci;
-    const beforeCi = beforeCh._ci;
-    const afterCumEnd = (chapterCumulativeHours[afterCi] ?? null) !== null
-      ? chapterCumulativeHours[afterCi] + (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)
-      : null;
-    const beforeCumStart = chapterCumulativeHours[beforeCi] ?? null;
-    if (afterCumEnd === null || beforeCumStart === null) return '';
+  // Map each skipped week to the teaching week index it falls AFTER.
+  // teachingWeeks[i].fri < skippedWeek.mon < teachingWeeks[i+1].mon → belongs to slot i
+  const skippedAfterTwIdx = {};
+  if (hasWeeklyHours && skippedWeeks.length && teachingWeeks.length) {
+    skippedWeeks.forEach(sw => {
+      let slot = -1;
+      for (let i = 0; i < teachingWeeks.length; i++) {
+        if (teachingWeeks[i].fri < sw.mon) slot = i;
+        else break;
+      }
+      if (slot < 0) return;
+      if (!skippedAfterTwIdx[slot]) skippedAfterTwIdx[slot] = [];
+      skippedAfterTwIdx[slot].push({ reason: sw.reason, mon: sw.mon, fri: sw.fri });
+    });
+  }
 
-    const afterEndWeekIdx   = Math.floor((afterCumEnd  - 1) / wh);
-    const beforeStartWeekIdx = Math.floor(beforeCumStart / wh);
-    if (beforeStartWeekIdx <= afterEndWeekIdx + 1) return '';
-
-    // Find skipped weeks that fall between these two teaching week indices
-    const afterTeachingWeek  = teachingWeeks[afterEndWeekIdx];
-    const beforeTeachingWeek = teachingWeeks[beforeStartWeekIdx];
-    if (!afterTeachingWeek || !beforeTeachingWeek) return '';
-
-    const gapStart = afterTeachingWeek.fri;
-    const gapEnd   = beforeTeachingWeek.mon;
-
-    const breaks = skippedWeeks.filter(sw => sw.mon > gapStart && sw.fri < gapEnd);
-    if (!breaks.length) return '';
-
-    // Group consecutive weeks by reason into single banners
+  function renderBreakBanners(fromTwIdx, toTwIdx) {
+    const collected = [];
+    for (let i = fromTwIdx; i < toTwIdx; i++) {
+      (skippedAfterTwIdx[i] || []).forEach(sw => collected.push(sw));
+    }
+    if (!collected.length) return '';
     const groups = [];
-    breaks.forEach(sw => {
+    collected.forEach(sw => {
       const last = groups[groups.length - 1];
       if (last && last.reason === sw.reason && sw.mon <= new Date(last.fri.getTime() + 8 * 86400000)) {
         last.fri = sw.fri;
       } else {
-        groups.push({ reason: sw.reason, mon: sw.mon, fri: sw.fri });
+        groups.push({ reason: sw.reason, mon: new Date(sw.mon), fri: new Date(sw.fri) });
       }
     });
-
     return groups.map(g => {
       const isEase = /ease/i.test(g.reason);
       const isCamp = /camp/i.test(g.reason);
@@ -2523,6 +2517,22 @@ function render() {
         </span>
       </div>`;
     }).join('');
+  }
+
+  function holidayBreaksHtml(afterCh, beforeCh) {
+    if (!hasWeeklyHours || !wh || !afterCh || !beforeCh) return '';
+    const afterCi  = afterCh._ci;
+    const beforeCi = beforeCh._ci;
+    const afterCumEnd    = (chapterCumulativeHours[afterCi] ?? null) !== null
+      ? chapterCumulativeHours[afterCi] + (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)
+      : null;
+    const beforeCumStart = chapterCumulativeHours[beforeCi] ?? null;
+    if (afterCumEnd === null || beforeCumStart === null) return '';
+    // Teaching week indices (0-based into teachingWeeks array)
+    const afterEndTwIdx    = Math.max(0, Math.floor((afterCumEnd  - 1) / wh));
+    const beforeStartTwIdx = Math.floor(beforeCumStart / wh);
+    if (beforeStartTwIdx <= afterEndTwIdx) return '';
+    return renderBreakBanners(afterEndTwIdx, beforeStartTwIdx);
   }
 
   const chapterHtmlParts = pageItems.map(ch =>
@@ -3191,6 +3201,5 @@ document.addEventListener('keydown', e => {
   }
 });
 </script>
-
 </body>
 </html>
