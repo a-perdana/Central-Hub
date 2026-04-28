@@ -335,12 +335,14 @@ export function initSyllabusPage(config) {
     // Populate year select in chapter modal
     rebuildYearSelect();
 
-    // Start loading
-    loadSubject(currentSubject);
+    // Start loading — calendar data must be ready before the first render
+    const calReady = (features.calendarDates || features.holidayBanners)
+      ? loadCalendarData()
+      : Promise.resolve();
 
-    if (features.calendarDates || features.holidayBanners) {
-      loadCalendarData().then(() => { if (chapters.length) render(); });
-    }
+    calReady.then(() => {
+      loadSubject(currentSubject);
+    });
 
     loadSyllabus().then(() => { if (chapters.length) render(); });
   });
