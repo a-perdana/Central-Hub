@@ -1084,7 +1084,7 @@ export function initSyllabusPage(config) {
 
     const filtered = getFilteredChapters();
     const workList = filtered ?? chapters.map((ch, i) => ({ ...ch, _ci: i, _matchedTopics: ch.topics || [] }));
-    const isSearching = filtered !== null;
+    const isSearching = !!searchQuery;
 
     if (filtered !== null) {
       const topicCount = filtered.reduce((s, ch) => s + ch._matchedTopics.length, 0);
