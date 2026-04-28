@@ -458,13 +458,12 @@ function renderChapters() {
       ? '<div style="padding:10px 14px;font-size:.75rem;color:var(--ink-3)">No topics yet.</div>'
       : `<table class="topic-tbl">
           <thead><tr>
-            <th style="width:28%">Topic</th>
-            <th style="width:6%;color:#166534">Week</th>
-            <th style="width:16%">Date</th>
-            <th style="width:20%;color:#1d4ed8">Codes</th>
-            <th style="width:6%;color:#92400e">Hours</th>
-            <th style="width:12%">Notes &amp; Tags</th>
-            <th style="width:12%">Actions</th>
+            <th style="width:30%">Topic</th>
+            <th style="width:22%;color:#1d4ed8">Codes</th>
+            <th style="width:8%;color:#92400e">Hours</th>
+            <th style="width:20%;color:#166534">Week</th>
+            <th style="width:20%">Notes &amp; Tags</th>
+            ${isAdmin ? `<th style="width:14%">Actions</th>` : ''}
           </tr></thead>
           <tbody>
             ${topics.map((t, ti) => {
@@ -472,58 +471,62 @@ function renderChapters() {
               const dur   = t.duration ?? t.hour ?? '';
               const wk    = t.week ?? '';
               const info  = wk ? weekInfo(wk) : null;
-              const dateLbl = info
-                ? `${fmtShortDate(info.monDate)} – ${fmtShortDate(info.friDate)}`
-                : '';
-              const termLbl = info?.termLabel || '';
+              const pill  = (() => {
+                if (!info) return '';
+                const parts = [];
+                if (info.termLabel) parts.push(info.termLabel);
+                parts.push(`Week ${wk}`);
+                parts.push(`${fmtShortDate(info.monDate)} – ${fmtShortDate(info.friDate)}`);
+                return `<div class="week-pill">&#128197; ${escHtml(parts.join(' · '))}</div>`;
+              })();
               return `
               <tr>
                 <td>
-                  <div class="topic-name-cell" style="font-weight:500;font-size:.82rem;cursor:text"
-                    title="Double-click to edit"
-                    ondblclick="activateTopicNameInput(this,${ci},${ti})">${escHtml(t.topic)}</div>
+                  <div class="topic-name-cell" style="font-weight:500;font-size:.82rem;${isAdmin ? 'cursor:text' : ''}"
+                    ${isAdmin ? `title="Double-click to edit" ondblclick="activateTopicNameInput(this,${ci},${ti})"` : ''}>${escHtml(t.topic)}</div>
                   ${t.resources && t.resources.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${t.resources.map(r => `<a class="res-chip" href="${safeUrl(r.url)}" target="_blank" rel="noopener">&#128279; ${escHtml(r.name||r.url)}</a>`).join('')}</div>` : ''}
                 </td>
                 <td>
-                  <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
-                    value="${escHtml(String(wk))}" placeholder="—"
-                    onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
-                    title="${dateLbl ? `Week ${wk}: ${dateLbl}` : 'School week number'}">
-                </td>
-                <td>
-                  ${dateLbl ? `<div class="week-date-cell">
-                    <span class="week-date-range">${escHtml(dateLbl)}</span>
-                    ${termLbl ? `<span class="week-term-chip">${escHtml(termLbl)}</span>` : ''}
-                  </div>` : '<span style="color:var(--border);font-size:.7rem">—</span>'}
-                </td>
-                <td>
-                  <div class="inline-codes-wrap" onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes">
+                  <div class="inline-codes-wrap" ${isAdmin ? `onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes"` : ''}>
                     ${codes.map(c => {
                       const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
                       const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
                       return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
                     }).join('')}
-                    ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : ''}
+                    ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">${isAdmin ? '+ codes' : '—'}</span>` : ''}
                   </div>
                 </td>
                 <td>
-                  <input class="inline-input inline-input-num inline-input-hours" type="number" min="0" max="99"
-                    value="${escHtml(String(dur))}" placeholder="—"
-                    onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
-                    title="Hours for this topic">
+                  ${isAdmin
+                    ? `<input class="inline-input inline-input-num inline-input-hours" type="number" min="0" max="99"
+                        value="${escHtml(String(dur))}" placeholder="—"
+                        onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
+                        title="Hours for this topic">`
+                    : `<span class="dur-badge">${dur ? escHtml(String(dur)) + 'h' : '—'}</span>`}
+                </td>
+                <td>
+                  ${isAdmin
+                    ? `<div class="week-cell">
+                        <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
+                          value="${escHtml(String(wk))}" placeholder="—"
+                          onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
+                          title="School week number">
+                        ${pill}
+                      </div>`
+                    : pill || '<span style="color:var(--border);font-size:.7rem">—</span>'}
                 </td>
                 <td>
                   ${t.coordNote ? `<div class="coord-note-text">${escHtml(t.coordNote)}</div>` : ''}
                   ${t.diag ? `<span class="diag-badge ${escHtml(t.diag)}">${t.diag === 'weak' ? '⚠ Weak' : t.diag === 'review' ? '↻ Review' : '✓ Good'}</span>` : ''}
                 </td>
-                <td>
+                ${isAdmin ? `<td>
                   <div style="display:flex;gap:4px;flex-wrap:wrap">
                     <button class="icon-btn edit" onclick="editTopic(${ci},${ti})" title="Edit topic">✎</button>
                     <button class="icon-btn del" onclick="deleteTopic(${ci},${ti})" title="Delete topic">✕</button>
                     ${ti > 0 ? `<button class="icon-btn move" onclick="moveTopic(${ci},${ti},-1)" title="Move up">↑</button>` : ''}
                     ${ti < topics.length-1 ? `<button class="icon-btn move" onclick="moveTopic(${ci},${ti},1)" title="Move down">↓</button>` : ''}
                   </div>
-                </td>
+                </td>` : ''}
               </tr>`;
             }).join('')}
           </tbody>
@@ -536,17 +539,17 @@ function renderChapters() {
           <span class="ch-name">${escHtml(ch.chapter)}</span>
           <span class="ch-year-badge ${yearCls}">${escHtml(ch.year||'')}</span>
           <span style="font-size:.65rem;color:var(--ink-3);font-family:'DM Mono',monospace">${topics.length} topics</span>
-          <div class="ch-actions" onclick="event.stopPropagation()">
+          ${isAdmin ? `<div class="ch-actions" onclick="event.stopPropagation()">
             <button class="icon-btn edit" onclick="editChapter(${ci})" title="Edit chapter">✎</button>
             <button class="icon-btn del" onclick="deleteChapter(${ci})" title="Delete chapter">✕</button>
             ${ci > 0 ? `<button class="icon-btn move" onclick="moveChapter(${ci},-1)" title="Move up">↑</button>` : ''}
             ${ci < chapters.length-1 ? `<button class="icon-btn move" onclick="moveChapter(${ci},1)" title="Move down">↓</button>` : ''}
-          </div>
+          </div>` : ''}
           <span class="ch-caret">▾</span>
         </div>
         <div class="ch-body">
           ${topicsHtml}
-          <button class="add-topic-btn" onclick="openAddTopicModal(${ci})">+ Add Topic</button>
+          ${isAdmin ? `<button class="add-topic-btn" onclick="openAddTopicModal(${ci})">+ Add Topic</button>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -1410,13 +1413,13 @@ function renderCalStrip() {
 document.addEventListener('authReady', ({ detail: { user, profile } }) => {
   isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
 
-  if (!isAdmin) {
-    document.getElementById('accessDenied').style.display = '';
-    return;
-  }
-
   db = window.db;
   document.getElementById('mainContent').style.display = '';
+  if (isAdmin) {
+    document.querySelectorAll('.btn-add').forEach(b => b.style.display = '');
+  } else {
+    document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'none');
+  }
 
   getDoc(doc(db, 'calendar_settings', 'current')).then(snap => {
     if (snap.exists()) {
