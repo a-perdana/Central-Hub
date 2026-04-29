@@ -205,6 +205,7 @@ export function initSyllabusPage(config) {
       .btn-exclude:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
       .topic-excluded .btn-exclude { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
       .topic-excluded .btn-exclude:hover { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+      #pagingToggleBtn.btn-active-state { background: var(--accent-2); color: var(--accent-dk); border-color: #6ee7b7; }
     `;
     document.head.appendChild(s);
   }
@@ -260,6 +261,7 @@ export function initSyllabusPage(config) {
   // Pagination
   const PAGE_SIZE = 5;
   let currentPage = 0;
+  let noPaging = false;
 
   // GLH chart state
   let _glhChartOpen = false;
@@ -322,6 +324,28 @@ export function initSyllabusPage(config) {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
+    }
+
+    // Paging toggle button — inject before editSyllabusBtn for admin/coordinator
+    if (isAdmin || isCoordinator) {
+      const editBtn = document.getElementById('editSyllabusBtn');
+      const pagingBtn = document.createElement('button');
+      pagingBtn.id = 'pagingToggleBtn';
+      pagingBtn.className = 'btn btn-secondary';
+      pagingBtn.title = 'Toggle chapter pagination';
+      pagingBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+      pagingBtn.addEventListener('click', () => {
+        noPaging = !noPaging;
+        currentPage = 0;
+        pagingBtn.innerHTML = noPaging
+          ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Paginate`
+          : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+        pagingBtn.classList.toggle('btn-active-state', noPaging);
+        render();
+      });
+      if (editBtn) {
+        editBtn.parentNode.insertBefore(pagingBtn, editBtn);
+      }
     }
 
     // Subject tab clicks
@@ -1132,7 +1156,7 @@ export function initSyllabusPage(config) {
     if (list)  list.style.display  = '';
 
     let pageItems;
-    if (isSearching) {
+    if (isSearching || noPaging) {
       pageItems = workList;
       if (pager) pager.style.display = 'none';
     } else {
