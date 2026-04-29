@@ -199,6 +199,7 @@ export function initSyllabusPage(config) {
   let unsub          = null;
   let saving         = false;
   let isAdmin        = false;
+  let isCoordinator  = false;
 
   // Modal state
   let modalMode         = null;
@@ -264,6 +265,7 @@ export function initSyllabusPage(config) {
     }
 
     isAdmin = profile.role_centralhub === 'central_admin';
+    isCoordinator = profile.role_centralhub === 'central_user' && Array.isArray(profile.ch_sub_roles) && profile.ch_sub_roles.includes('coordinator');
     document.getElementById('mainContent').style.display = '';
 
     // Build subject tabs dynamically if the container is empty (IGCSE uses dynamic tabs)
@@ -1354,8 +1356,8 @@ export function initSyllabusPage(config) {
       }
     }
 
-    // Hours chip — clickable for admin
-    const hoursChip = isAdmin
+    // Hours chip — clickable for admin or coordinator
+    const hoursChip = (isAdmin || isCoordinator)
       ? `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur === 1 ? '' : 's') : '—'}</span>`
       : `<span class="meta-chip chip-hours">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur === 1 ? '' : 's') : '—'}</span>`;
 
