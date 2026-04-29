@@ -538,8 +538,19 @@ service cloud.firestore {
     }
 
     // -- userProgress (per-user pacing progress) -------------
+    // Academic Hub users can read progress of teachers at their same school
+    // (for the Syllabus Coverage dashboard). Uses schoolId field on user profiles.
+    function isAHUserAtSameSchool(targetUid) {
+      return isAcademicUser() &&
+        get(/databases/$(database)/documents/users/$(targetUid)).data.schoolId ==
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId;
+    }
+
     match /userProgress/{uid} {
-      allow read:  if (isSignedIn() && request.auth.uid == uid) || isAdmin();
+      allow get:   if (isSignedIn() && request.auth.uid == uid)
+                   || isAdmin()
+                   || isAHUserAtSameSchool(uid);
+      allow list:  if isAdmin() || isAcademicUser();
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
