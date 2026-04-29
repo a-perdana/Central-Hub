@@ -51,21 +51,23 @@ function safeUrl(url) {
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
+function escapeRegex(q) {
+  return q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 function highlight(text, q) {
   if (!q) return escHtml(text);
   const safe = escHtml(text);
-  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return safe.replace(new RegExp(safeQ, 'gi'), m => `<mark class="hl">${m}</mark>`);
+  return safe.replace(new RegExp(escapeRegex(q), 'gi'), m => `<mark class="hl">${m}</mark>`);
 }
 function stripHtml(html) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 function highlightInHtml(html, q) {
   if (!q) return html;
-  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escapeRegex(q), 'gi');
   return html.replace(/(<[^>]*>)|([^<]+)/g, (m, tag, text) => {
     if (tag) return tag;
-    return text.replace(new RegExp(safeQ, 'gi'), m2 => `<mark class="hl">${m2}</mark>`);
+    return text.replace(re, m2 => `<mark class="hl">${m2}</mark>`);
   });
 }
 function showToast(msg, isError = false) {
@@ -387,11 +389,13 @@ export function initSyllabusPage(config) {
       ? loadCalendarData()
       : Promise.resolve();
 
-    calReady.then(() => {
-      loadSubject(currentSubject);
-    });
+    calReady
+      .then(() => { loadSubject(currentSubject); })
+      .catch(err => { console.error('Calendar load error:', err); showToast('Failed to load calendar data.', true); });
 
-    loadSyllabus().then(() => { if (chapters.length) render(); });
+    loadSyllabus()
+      .then(() => { if (chapters.length) render(); })
+      .catch(err => { console.error('Syllabus index load error:', err); });
   });
 
   // ── Rebuild year select ────────────────────────────────────────────────────
@@ -405,12 +409,11 @@ export function initSyllabusPage(config) {
   async function loadSyllabus() {
     try {
       const subjectCodes = Object.values(subjects).map(s => s.code);
-      const snaps = await Promise.all(
-        subjectCodes.map(code =>
-          getDocs(query(collection(window.db, 'cambridge_syllabus'), where('subjectCode', '==', code)))
-        )
+      // Single 'in' query instead of one getDocs per subject code
+      const snap = await getDocs(
+        query(collection(window.db, 'cambridge_syllabus'), where('subjectCode', 'in', subjectCodes))
       );
-      snaps.forEach(snap => snap.forEach(d => { syllabusIndex[d.id] = d.data(); }));
+      snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
       syllabusLoaded = true;
       const hint = document.getElementById('syllabusPickerHint');
       if (hint) hint.textContent = '';
@@ -618,15 +621,13 @@ export function initSyllabusPage(config) {
 
     document.getElementById('syllabusDetailTitle').textContent = entry?.code || indexKey.split('_').slice(1).join('_');
     modal.classList.add('open');
-    document.addEventListener('keydown', _syllabusDetailEsc);
+    // Escape is handled by the global keydown listener at the bottom of init
   }
 
   function closeSyllabusDetail() {
     const modal = document.getElementById('syllabusDetailModal');
     if (modal) modal.classList.remove('open');
-    document.removeEventListener('keydown', _syllabusDetailEsc);
   }
-  function _syllabusDetailEsc(e) { if (e.key === 'Escape') closeSyllabusDetail(); }
 
   // ── Syllabus editor modal ──────────────────────────────────────────────────
   function openSyllabusEditor(selectKey = null) {
@@ -669,7 +670,7 @@ export function initSyllabusPage(config) {
     };
 
     modal.classList.add('open');
-    document.addEventListener('keydown', _sylEdEsc);
+    // Escape is handled by the global keydown listener at the bottom of init
 
     if (selectKey) {
       const item = list.querySelector(`[data-key="${CSS.escape(selectKey)}"]`);
@@ -751,17 +752,9 @@ export function initSyllabusPage(config) {
   function closeSyllabusEditor() {
     const modal = document.getElementById('syllabusEditorModal');
     if (modal) modal.classList.remove('open');
-    document.removeEventListener('keydown', _sylEdEsc);
     _sylEdCurrentKey = null;
     const saveBtn = document.getElementById('syllabusEditorSaveBtn');
     if (saveBtn) saveBtn.style.display = 'none';
-  }
-  function _sylEdEsc(e) { if (e.key === 'Escape') closeSyllabusEditor(); }
-
-  // ── Teacher Progress ───────────────────────────────────────────────────────
-  function toggleTeacherProgress() {
-    const url = subjects[currentSubject]?.pacingUrl;
-    if (url) window.location.href = url;
   }
 
   // ── Load subject ───────────────────────────────────────────────────────────
@@ -1270,7 +1263,7 @@ export function initSyllabusPage(config) {
     if (displayTopics.length > 0) {
       const parts = displayTopics.map((t, dispIdx) => {
         const ti        = allTopics.indexOf(t);
-        const topicHtml = renderTopic(t, ti, ci, q, topicCumulative[ti]);
+        const topicHtml = renderTopic(t, ti, ci, q, topicCumulative[ti], wh);
         let banner = '';
         if (features.holidayBanners && dispIdx > 0 && wh && skippedWeeks.length) {
           const prevT   = displayTopics[dispIdx - 1];
@@ -1338,7 +1331,7 @@ export function initSyllabusPage(config) {
   }
 
   // ── renderTopic ────────────────────────────────────────────────────────────
-  function renderTopic(t, ti, ci, q = '', cumulativeBefore = null) {
+  function renderTopic(t, ti, ci, q = '', cumulativeBefore = null, wh = 0) {
     // Buffer row
     if (t.type === 'buffer') {
       const dur = t.duration || 0;
@@ -1390,7 +1383,6 @@ export function initSyllabusPage(config) {
     // Date label (calendar dates feature)
     let dateLabelHtml = '';
     if (features.calendarDates && cumulativeBefore !== null && dur != null) {
-      const wh = settingsData[currentSubject]?.weeklyHours || 0;
       if (wh > 0) {
         const label = getTopicDateLabel(cumulativeBefore, dur, wh);
         if (label === '__beyond__') {
@@ -1974,11 +1966,14 @@ export function initSyllabusPage(config) {
     if (sw) sw.style.display = '';
   }
 
-  function loadAllSettings() {
+  async function loadAllSettings() {
     const db = window.db;
     const { getDoc: _getDoc, doc: _doc } = window.__firestoreHelpers;
-    Object.keys(subjects).forEach(subj => {
-      _getDoc(_doc(db, subjects[subj].collection, docId)).then(snap => {
+
+    // Load all subject docs in parallel, then render once
+    await Promise.all(Object.keys(subjects).map(async subj => {
+      try {
+        const snap = await _getDoc(_doc(db, subjects[subj].collection, docId));
         if (snap.exists()) {
           const d = snap.data();
           settingsData[subj] = {
@@ -1987,12 +1982,14 @@ export function initSyllabusPage(config) {
             weeklyHours: typeof d.weeklyHours === 'number' ? d.weeklyHours : (settingsData[subj].weeklyHours || 0),
           };
         }
-        renderClassGroups();
-        renderObjSettings();
-      }).catch(err => console.error('Settings load error:', err));
-    });
+      } catch (err) { console.error('Settings load error:', err); }
+    }));
+    renderClassGroups();
+    renderObjSettings();
+
     // Calendar settings read-only display
-    _getDoc(_doc(db, 'calendar_settings', 'current')).then(snap => {
+    try {
+      const snap = await _getDoc(_doc(db, 'calendar_settings', 'current'));
       const display = document.getElementById('calSettingsDisplay');
       if (!display) return;
       if (snap.exists()) {
@@ -2005,7 +2002,7 @@ export function initSyllabusPage(config) {
       } else {
         display.textContent = 'No calendar settings configured yet.';
       }
-    }).catch(() => {});
+    } catch { /* calendar settings display is non-critical */ }
   }
 
   window.switchClassSubj = function(subj, btn) {
@@ -2164,8 +2161,6 @@ export function initSyllabusPage(config) {
     // Reorder
     moveChapter,
     moveTopic,
-    // Teacher progress
-    toggleTeacherProgress,
     // Settings (in addition to window.switch* already assigned above)
     showSettingsPanel,
     hideSettingsPanel,
