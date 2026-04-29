@@ -225,6 +225,10 @@ function renderCmdWordSection(entry) {
     .syl-rich b, .syl-rich strong { font-weight: 600; color: var(--ink); }
     .syl-rich i, .syl-rich em { font-style: italic; }
     .syl-description.syl-rich { background: var(--paper); border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; border-left: 3px solid var(--accent); }
+    /* Rich content in pacing guide inline reference */
+    .srl-desc.syl-rich { display: block; margin-top: 3px; }
+    .srl-desc.syl-rich ul, .srl-desc.syl-rich ol { padding-left: 16px; margin: 2px 0; }
+    .srl-desc.syl-rich li { margin: 1px 0; }
   `;
   document.head.appendChild(s);
 })();
@@ -1456,14 +1460,15 @@ export function initSyllabusPage(config) {
         const rawC        = entry?.content;
         const contentArr  = Array.isArray(rawC) ? rawC : (rawC ? [stripHtml(rawC)] : []);
         const rawDesc     = entry?.description || '';
-        const descPlain   = rawDesc ? stripHtml(rawDesc) : '';
-        const descText    = descPlain ? escHtml(descPlain)
-          : contentArr.length ? escHtml(contentArr.slice(0, 3).join(' · ') + (contentArr.length > 3 ? ' …' : '')) : '';
+        // Prefer rich description; fall back to content items as plain text
+        const descHtmlInline = rawDesc
+          ? _sylSafeHtml(rawDesc)
+          : (contentArr.length ? escHtml(contentArr.slice(0, 3).join(' · ') + (contentArr.length > 3 ? ' …' : '')) : '');
         return `<div class="syllabus-ref-line">
           <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
           <span class="srl-topic">${topicText}</span>
           <span class="srl-title">${titleText}</span>
-          ${descText ? `<span class="srl-desc">${descText}</span>` : ''}
+          ${descHtmlInline ? `<div class="srl-desc syl-rich">${descHtmlInline}</div>` : ''}
         </div>`;
       }).join('');
       syllabusBlock = `<div class="topic-syllabus-block"><div class="topic-refs-list">${chipLines}</div></div>`;
