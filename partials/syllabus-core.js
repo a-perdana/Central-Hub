@@ -1476,11 +1476,14 @@ export function initSyllabusPage(config) {
     const inp = chip.querySelector('input');
     inp.focus(); inp.select();
     function commit() {
-      const val = parseInt(inp.value);
-      if (!isNaN(val) && val > 0) {
-        if (field === 'hours') { topic.duration = val; topic.hour = val; }
-        else                   { topic.week = val; }
-        saveChapters().then(() => showToast(field === 'hours' ? 'Lesson hours updated.' : 'Week updated.'));
+      const raw = inp.value.trim();
+      const val = parseInt(raw);
+      if (field === 'hours') {
+        if (!isNaN(val) && val > 0) { topic.duration = val; topic.hour = val; saveChapters().then(() => showToast('Lesson hours updated.')); }
+      } else {
+        // Allow clearing week to null (empty input = no scheduled week)
+        if (raw === '' || raw === '0') { topic.week = null; saveChapters().then(() => showToast('Week cleared.')); }
+        else if (!isNaN(val) && val > 0) { topic.week = val; saveChapters().then(() => showToast('Week updated.')); }
       }
       render();
     }
