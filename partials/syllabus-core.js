@@ -45,6 +45,28 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
 function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// Sanitize rich HTML for display; falls back to escaping plain text if no HTML detected
+function _sylSafeHtml(html) {
+  if (!html) return '';
+  if (typeof DOMPurify !== 'undefined') return DOMPurify.sanitize(html);
+  // Fallback: if it looks like HTML pass through, otherwise escape
+  return /<[a-z]/i.test(html) ? html : escHtml(html);
+}
+// Convert plain text to RTE-compatible HTML (preserves existing HTML, wraps plain text)
+function _sylToRteHtml(str) {
+  if (!str) return '';
+  if (/<[a-z]/i.test(str)) return str; // already HTML
+  return str.split('\n').filter(Boolean).map(l => `<p>${escHtml(l)}</p>`).join('');
+}
+// RTE helpers for the syllabus editor
+window._sylRteExec = function(id, cmd) {
+  const el = document.getElementById(id);
+  if (el) { el.focus(); document.execCommand(cmd, false, null); }
+};
+window._sylRteClear = function(id) {
+  const el = document.getElementById(id);
+  if (el) { el.innerHTML = ''; el.focus(); }
+};
 function safeUrl(url) {
   return /^https?:\/\//i.test(url) ? url : '#';
 }
@@ -149,11 +171,14 @@ const CAMBRIDGE_CMD_WORDS = {
 
 function detectCmdWords(entry) {
   if (!entry) return [];
+  const contentItems = Array.isArray(entry.content)
+    ? entry.content
+    : [stripHtml(entry.content || '')];
   const haystack = [
     entry.title || '',
-    entry.description || '',
-    ...(entry.content || []),
-    ...(entry.notes || entry.notesExamples || []),
+    stripHtml(entry.description || ''),
+    ...contentItems,
+    ...(Array.isArray(entry.notes) ? entry.notes : [entry.notes || '']),
   ].join(' ').toLowerCase();
   return Object.keys(CAMBRIDGE_CMD_WORDS).filter(w => haystack.includes(w.toLowerCase()));
 }
@@ -173,6 +198,36 @@ function renderCmdWordSection(entry) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Main init function
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Inject RTE styles once (shared across all syllabus pages)
+(function _injectSylRteStyles() {
+  if (document.getElementById('syl-rte-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'syl-rte-styles';
+  s.textContent = `
+    /* Syllabus RTE editor */
+    .syl-rte-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--white); transition: border-color 0.15s; margin-bottom: 0; }
+    .syl-rte-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .syl-rte-toolbar { display: flex; gap: 2px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--paper); border-radius: 8px 8px 0 0; }
+    .syl-rte-btn { background: none; border: none; cursor: pointer; padding: 3px 7px; border-radius: 5px; font-size: 0.82rem; color: var(--ink-2); transition: background 0.15s, color 0.15s; }
+    .syl-rte-btn:hover { background: var(--accent-2); color: var(--accent-dk); }
+    .syl-rte-sep { width: 1px; background: var(--border); margin: 3px 4px; align-self: stretch; }
+    .syl-rte-editor { padding: 9px 12px; min-height: 90px; max-height: 260px; overflow-y: auto; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink); outline: none; line-height: 1.6; }
+    .syl-rte-editor:empty:before { content: attr(data-placeholder); color: var(--ink-3); pointer-events: none; }
+    .syl-rte-editor ul, .syl-rte-editor ol { padding-left: 20px; margin: 4px 0; }
+    .syl-rte-editor li { margin: 2px 0; }
+    .syl-rte-editor b, .syl-rte-editor strong { font-weight: 600; }
+    .syl-rte-editor i, .syl-rte-editor em { font-style: italic; }
+    /* Rich content display in detail panel */
+    .syl-rich { font-size: 0.875rem; color: var(--ink-2); line-height: 1.65; }
+    .syl-rich ul, .syl-rich ol { padding-left: 20px; margin: 4px 0; }
+    .syl-rich li { margin: 3px 0; }
+    .syl-rich b, .syl-rich strong { font-weight: 600; color: var(--ink); }
+    .syl-rich i, .syl-rich em { font-style: italic; }
+    .syl-description.syl-rich { background: var(--paper); border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; border-left: 3px solid var(--accent); }
+  `;
+  document.head.appendChild(s);
+})();
 
 export function initSyllabusPage(config) {
   const {
@@ -585,20 +640,31 @@ export function initSyllabusPage(config) {
       const topic       = entry.topicArea || entry.topic || '';
       const tier        = entry.tier || '';
       const description = entry.description || '';
-      const content = Array.isArray(entry.content) ? entry.content : (entry.content || '').split('\n').filter(Boolean);
-      const notes   = Array.isArray(entry.notes)   ? entry.notes   : (entry.notes   || '').split('\n').filter(Boolean);
+      const rawContent  = entry.content;
+      const notes       = Array.isArray(entry.notes) ? entry.notes : (entry.notes || '').split('\n').filter(Boolean);
 
-      const descHtml  = description ? `<p class="syl-description">${escHtml(description)}</p>` : '';
-      const leftHtml  = content.length
-        ? `<p class="syl-section-label">Learning Objectives</p>
-           <ul class="syl-content-list">${content.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>`
+      // description may be rich HTML (new) or plain text (legacy)
+      const descHtml = description
+        ? `<div class="syl-description syl-rich">${_sylSafeHtml(description)}</div>`
+        : '';
+
+      // content may be rich HTML string (new) or string array (legacy)
+      const contentHtml = Array.isArray(rawContent)
+        ? (rawContent.length
+            ? `<ul class="syl-content-list">${rawContent.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>`
+            : '')
+        : (rawContent ? `<div class="syl-rich">${_sylSafeHtml(rawContent)}</div>` : '');
+
+      const leftHtml = contentHtml
+        ? `<p class="syl-section-label">Learning Objectives</p>${contentHtml}`
         : `<p class="syl-no-detail">No objectives listed.</p>`;
       const rightHtml = notes.length
         ? `<p class="syl-section-label">Notes &amp; Guidance</p>
            <ul class="syl-notes-list">${notes.map(n => `<li>${escHtml(n)}</li>`).join('')}</ul>`
         : '';
 
-      const colsHtml = (content.length && notes.length)
+      const hasContent = contentHtml.length > 0;
+      const colsHtml = (hasContent && notes.length)
         ? `<div class="syl-cols"><div class="syl-col">${leftHtml}</div><div class="syl-col">${rightHtml}</div></div>`
         : leftHtml + rightHtml || `<p class="syl-no-detail">No detailed content available.</p>`;
 
@@ -690,9 +756,15 @@ export function initSyllabusPage(config) {
     const title   = entry.title   || '';
     const topic   = entry.topicArea || entry.topic || '';
     const tier    = entry.tier    || '';
-    const desc    = entry.description || '';
-    const content = Array.isArray(entry.content) ? entry.content.join('\n') : (entry.content || '');
-    const notes   = Array.isArray(entry.notes)   ? entry.notes.join('\n')   : (entry.notes || entry.notesExamples || '');
+    const rawDesc    = entry.description || '';
+    const rawContent = entry.content;
+    const notes      = Array.isArray(entry.notes) ? entry.notes.join('\n') : (entry.notes || entry.notesExamples || '');
+
+    // Convert legacy plain-text / array data to HTML for the RTE
+    const descHtmlInit    = _sylToRteHtml(rawDesc);
+    const contentHtmlInit = Array.isArray(rawContent)
+      ? (rawContent.length ? `<ul>${rawContent.map(l => `<li>${escHtml(l)}</li>`).join('')}</ul>` : '')
+      : _sylToRteHtml(rawContent || '');
 
     form.innerHTML = `
       <div class="syl-ed-entry-head">
@@ -710,15 +782,39 @@ export function initSyllabusPage(config) {
         <option value="Extended" ${tier==='Extended'?'selected':''}>Extended</option>
         <option value=""         ${!tier            ?'selected':''}>— Not set —</option>
       </select>
-      <label class="syl-ed-field-label" for="sylEdDesc">Description</label>
-      <textarea class="syl-ed-textarea" id="sylEdDesc" rows="3" style="min-height:72px">${escHtml(desc)}</textarea>
-      <p class="syl-ed-hint">Short summary shown inline on the pacing guide.</p>
-      <label class="syl-ed-field-label" for="sylEdContent">Learning Objectives</label>
-      <textarea class="syl-ed-textarea" id="sylEdContent" rows="8" style="min-height:140px">${escHtml(content)}</textarea>
-      <p class="syl-ed-hint">One objective per line.</p>
-      <label class="syl-ed-field-label" for="sylEdNotes">Notes and Guidance</label>
+      <label class="syl-ed-field-label">Description</label>
+      <div class="syl-rte-wrap">
+        <div class="syl-rte-toolbar">
+          <button type="button" class="syl-rte-btn" title="Bold" onclick="_sylRteExec('sylEdDescRte','bold')"><b>B</b></button>
+          <button type="button" class="syl-rte-btn" title="Italic" onclick="_sylRteExec('sylEdDescRte','italic')"><i>I</i></button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Bullet list" onclick="_sylRteExec('sylEdDescRte','insertUnorderedList')">&#8226; List</button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Clear formatting" onclick="_sylRteClear('sylEdDescRte')">Clear</button>
+        </div>
+        <div class="syl-rte-editor" id="sylEdDescRte" contenteditable="true" data-placeholder="Short summary shown inline on the pacing guide…"></div>
+      </div>
+      <label class="syl-ed-field-label" style="margin-top:12px">Learning Objectives</label>
+      <div class="syl-rte-wrap">
+        <div class="syl-rte-toolbar">
+          <button type="button" class="syl-rte-btn" title="Bold" onclick="_sylRteExec('sylEdContentRte','bold')"><b>B</b></button>
+          <button type="button" class="syl-rte-btn" title="Italic" onclick="_sylRteExec('sylEdContentRte','italic')"><i>I</i></button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Bullet list" onclick="_sylRteExec('sylEdContentRte','insertUnorderedList')">&#8226; List</button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Clear formatting" onclick="_sylRteClear('sylEdContentRte')">Clear</button>
+        </div>
+        <div class="syl-rte-editor" id="sylEdContentRte" contenteditable="true" data-placeholder="Learning objectives for this syllabus point…"></div>
+      </div>
+      <label class="syl-ed-field-label" for="sylEdNotes" style="margin-top:12px">Notes and Guidance</label>
       <textarea class="syl-ed-textarea" id="sylEdNotes" rows="6" style="min-height:100px">${escHtml(notes)}</textarea>
       <p class="syl-ed-hint">One note per line.</p>`;
+
+    // Set RTE content after injection (innerHTML can't be set via template safely)
+    const descEl    = document.getElementById('sylEdDescRte');
+    const contentEl = document.getElementById('sylEdContentRte');
+    if (descEl)    descEl.innerHTML    = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(descHtmlInit)    : descHtmlInit;
+    if (contentEl) contentEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(contentHtmlInit) : contentHtmlInit;
 
     if (saveBtn) saveBtn.style.display = '';
   }
@@ -729,9 +825,11 @@ export function initSyllabusPage(config) {
     const title   = document.getElementById('sylEdTitle')?.value.trim()  || '';
     const topic   = document.getElementById('sylEdTopic')?.value.trim()  || '';
     const tier    = document.getElementById('sylEdTier')?.value          || '';
-    const desc    = document.getElementById('sylEdDesc')?.value.trim()   || '';
-    const content = (document.getElementById('sylEdContent')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
-    const notes   = (document.getElementById('sylEdNotes')?.value   || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const descRaw = document.getElementById('sylEdDescRte')?.innerHTML.trim()    || '';
+    const contentRaw = document.getElementById('sylEdContentRte')?.innerHTML.trim() || '';
+    const desc    = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(descRaw)    : descRaw;
+    const content = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(contentRaw) : contentRaw;
+    const notes   = (document.getElementById('sylEdNotes')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
 
     if (saveBtn) { saveBtn.textContent = 'Saving…'; saveBtn.disabled = true; }
     try {
@@ -1355,9 +1453,12 @@ export function initSyllabusPage(config) {
         const displayCode = q ? highlight(code, q) : escHtml(code);
         const titleText   = entry ? (q ? highlight(entry.title || '', q) : escHtml(entry.title || '')) : '';
         const topicText   = entry ? escHtml(entry.topicArea || '') : '';
-        const content     = Array.isArray(entry?.content) ? entry.content : (entry?.content || '').split('\n').filter(Boolean);
-        const descText    = entry?.description ? escHtml(entry.description)
-          : content.length ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : '')) : '';
+        const rawC        = entry?.content;
+        const contentArr  = Array.isArray(rawC) ? rawC : (rawC ? [stripHtml(rawC)] : []);
+        const rawDesc     = entry?.description || '';
+        const descPlain   = rawDesc ? stripHtml(rawDesc) : '';
+        const descText    = descPlain ? escHtml(descPlain)
+          : contentArr.length ? escHtml(contentArr.slice(0, 3).join(' · ') + (contentArr.length > 3 ? ' …' : '')) : '';
         return `<div class="syllabus-ref-line">
           <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
           <span class="srl-topic">${topicText}</span>
