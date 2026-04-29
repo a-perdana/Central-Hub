@@ -188,6 +188,27 @@ export function initSyllabusPage(config) {
   // Expose Firestore helpers for settings functions called from inline onclick
   window.__firestoreHelpers = { doc, getDoc, setDoc, serverTimestamp };
 
+  // ── Inject excluded-topic CSS once per page ────────────────────────────────
+  if (!document.getElementById('syllabus-excluded-css')) {
+    const s = document.createElement('style');
+    s.id = 'syllabus-excluded-css';
+    s.textContent = `
+      .topic-row.topic-excluded { opacity: 0.38; }
+      .topic-row.topic-excluded .topic-title { text-decoration: line-through; color: var(--ink-3); }
+      .topic-row.topic-excluded .chip-hours { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+      .btn-exclude {
+        font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 500;
+        padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border);
+        background: var(--paper-2); color: var(--ink-3); cursor: pointer;
+        transition: all 0.15s; white-space: nowrap; line-height: 1.4;
+      }
+      .btn-exclude:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+      .topic-excluded .btn-exclude { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+      .topic-excluded .btn-exclude:hover { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+    `;
+    document.head.appendChild(s);
+  }
+
   // ── Conversion (checkpoint uses GLH = lesson hours × 2/3)
   const LESSON_TO_GLH = features.calendarDates ? (2 / 3) : 1;
   const toGlh = h => features.calendarDates ? Math.round(h * LESSON_TO_GLH * 10) / 10 : h;
@@ -906,7 +927,7 @@ export function initSyllabusPage(config) {
 
     const visible = getVisibleChapters();
     let totalLH = 0;
-    visible.forEach(ch => { (ch.topics || []).forEach(t => { totalLH += (t.duration || t.hour || 1); }); });
+    visible.forEach(ch => { (ch.topics || []).forEach(t => { if (!t.excluded) totalLH += (t.duration || t.hour || 1); }); });
     const totalPlanned   = toGlh(totalLH);
     const effectiveTarget = getEffectiveGlhTarget();
     const plannedPct      = Math.min(100, (totalPlanned / effectiveTarget) * 100);
@@ -943,7 +964,7 @@ export function initSyllabusPage(config) {
     const visible = getVisibleChapters();
     const totals  = visible.map(ch => ({
       name:  ch.chapter || ch.title || 'Chapter',
-      hours: toGlh((ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)),
+      hours: toGlh((ch.topics || []).reduce((s, t) => s + (t.excluded ? 0 : (t.duration || t.hour || 0)), 0)),
     }));
     const maxH = Math.max(...totals.map(c => c.hours), 1);
     body.innerHTML = totals.map(c => {
@@ -1154,7 +1175,7 @@ export function initSyllabusPage(config) {
       chapters.forEach((ch, ci) => {
         if (features.gradeFilter && lastYear !== null && ch.year !== lastYear) running = 0;
         chapterCumulativeHours[ci] = running;
-        (ch.topics || []).forEach(t => { running += (t.duration || t.hour || 0); });
+        (ch.topics || []).forEach(t => { if (!t.excluded) running += (t.duration || t.hour || 0); });
         lastYear = ch.year;
       });
     }
@@ -1172,7 +1193,7 @@ export function initSyllabusPage(config) {
           const afterCum   = chapterCumulativeHours[afterCh._ci];
           const beforeCum  = chapterCumulativeHours[beforeCh._ci];
           if (afterCum != null && beforeCum != null) {
-            const afterHours    = (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0);
+            const afterHours    = (afterCh.topics || []).reduce((s, t) => s + (t.excluded ? 0 : (t.duration || t.hour || 0)), 0);
             const afterEndDate  = twEndDate(afterCum + afterHours - 1, wh);
             const beforeStart   = twStartDate(beforeCum, wh);
             breaks = renderBreakBanners(afterEndDate, beforeStart);
@@ -1217,7 +1238,7 @@ export function initSyllabusPage(config) {
     let runningHours = chapterStartHours ?? null;
     allTopics.forEach(t => {
       topicCumulative.push(runningHours);
-      if (runningHours !== null) runningHours += (t.duration || t.hour || 0);
+      if (runningHours !== null && !t.excluded) runningHours += (t.duration || t.hour || 0);
     });
 
     const wh = settingsData[currentSubject]?.weeklyHours || 0;
@@ -1410,13 +1431,19 @@ export function initSyllabusPage(config) {
         <button class="btn-reorder" onclick="moveTopic(${ci},${ti},1)" title="Move down" ${ti===chapters[ci].topics.length-1?'disabled':''}>↓</button>
       </div>` : '';
 
+    const canEditHours = isAdmin || isCoordinator;
+    const excludeBtn = canEditHours
+      ? `<button class="btn-exclude" onclick="toggleExcluded(${ci},${ti})" title="${t.excluded ? 'Mark as covered' : 'Mark as not covered'}">${t.excluded ? '↩ Include' : '✕ Not Covered'}</button>`
+      : '';
+
     const actionsHtml = isAdmin ? `<div class="topic-actions">
       ${topicReorderHtml}
+      ${excludeBtn}
       <button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>
       <button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>
-    </div>` : '';
+    </div>` : (canEditHours ? `<div class="topic-actions">${excludeBtn}</div>` : '');
 
-    return `<div class="topic-row">
+    return `<div class="topic-row${t.excluded ? ' topic-excluded' : ''}">
       <div class="topic-num">${ti + 1}</div>
       <div class="topic-main">
         <div class="topic-title">${highlight(t.title || t.topic || '', q)}</div>
@@ -1494,6 +1521,16 @@ export function initSyllabusPage(config) {
       if (ev.key === 'Enter')  { ev.preventDefault(); inp.removeEventListener('blur', commit); commit(); }
       if (ev.key === 'Escape') { ev.preventDefault(); inp.removeEventListener('blur', commit); render(); }
     });
+  };
+
+  // ── Toggle excluded ────────────────────────────────────────────────────────
+  window.toggleExcluded = async function(ci, ti) {
+    if (!isAdmin && !isCoordinator) return;
+    const t = chapters[ci].topics[ti];
+    t.excluded = !t.excluded;
+    await saveChapters();
+    showToast(t.excluded ? 'Topic marked as not covered.' : 'Topic included.');
+    render();
   };
 
   // ── Chapter CRUD ───────────────────────────────────────────────────────────
