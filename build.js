@@ -269,6 +269,7 @@ const htmlFiles = [
   "secondary-checkpoint-syllabus.html",
   "igcse-pacing.html",
   "igcse-syllabus.html",
+  "schedule-settings.html",
   "igcse-math-admin.html",
   "igcse-math-pacing.html",
   "igcse-biology-pacing.html",
