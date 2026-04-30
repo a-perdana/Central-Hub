@@ -1507,7 +1507,29 @@ let _progSearch = '';
 let _progOverrideRows = null; // null = not yet loaded / not present; [] = loaded but empty
 let _progCoverageByCode = null; // { '7Ni.02': { totalClasses, doneClasses, classes: [{cls, status, teacher}] } }
 let _progCoverageLoading = false;
-const _progCollapsed = new Set(); // components the user has collapsed in this session
+const _progCollapsed = new Set();   // components the user has collapsed in this session
+let _progDefaultsApplied = false;   // flips after the first render so subsequent
+                                    // re-renders (search/filter) don't reset state
+
+// Distinct colour per component, used both by chips and accordion headers so
+// the user keeps a consistent visual mental map across filter/grid views.
+const PROG_COMPONENT_COLOR = {
+  // Math (0862)
+  'Number':                          '#7c3aed', // violet
+  'Algebra':                         '#d97706', // amber
+  'Geometry and Measure':            '#0891b2', // cyan
+  'Statistics and Probability':      '#059669', // emerald
+  // Science (0893)
+  'Science in Context':              '#4f46e5', // indigo
+  'Thinking and Working Scientifically': '#64748b', // slate
+  'Biology':                         '#16a34a', // green
+  'Chemistry':                       '#db2777', // pink
+  'Physics':                         '#0284c7', // sky
+  'Earth and Space':                 '#92400e', // brown
+};
+function _progColor(component) {
+  return PROG_COMPONENT_COLOR[component] || '#64748b';
+}
 
 function _progParseCode(code) {
   // e.g. "7Ni.02" → { stage: 7, strand: 'Ni', num: 2 }
@@ -1743,9 +1765,13 @@ function renderProgressionGrid() {
   const chipBar = document.getElementById('progStrandFilter');
   if (chipBar && !chipBar.dataset.built) {
     const components = ['all', ...new Set(rows.map(r => r.component))];
-    chipBar.innerHTML = components.map(c =>
-      `<button class="prog-chip${c === _progFilter ? ' on' : ''}" data-comp="${escHtml(c)}">${c === 'all' ? 'All strands' : escHtml(c)}</button>`
-    ).join('');
+    chipBar.innerHTML = components.map(c => {
+      if (c === 'all') {
+        return `<button class="prog-chip${c === _progFilter ? ' on' : ''}" data-comp="${escHtml(c)}">All strands</button>`;
+      }
+      const color = _progColor(c);
+      return `<button class="prog-chip${c === _progFilter ? ' on' : ''}" data-comp="${escHtml(c)}" data-cmp-color="${color}" style="color:${color}">${escHtml(c)}</button>`;
+    }).join('');
     chipBar.dataset.built = '1';
     chipBar.querySelectorAll('.prog-chip').forEach(btn => {
       btn.onclick = () => {
@@ -1790,6 +1816,19 @@ function renderProgressionGrid() {
     if (!groups.has(r.component)) groups.set(r.component, []);
     groups.get(r.component).push(r);
   });
+
+  // Default accordion state — applied only once per session: keep the first
+  // component open, collapse the rest. After this, _progCollapsed reflects
+  // user-driven open/close decisions and is preserved across re-renders
+  // (filter, search) within the same session.
+  if (!_progDefaultsApplied) {
+    let i = 0;
+    groups.forEach((_, component) => {
+      if (i > 0) _progCollapsed.add(component);
+      i++;
+    });
+    _progDefaultsApplied = true;
+  }
 
   // Aggregate coverage across the codes in this component (skip "not in
   // pacing" — only count codes that actually appear in topic.syllabusRefs).
@@ -1843,7 +1882,8 @@ function renderProgressionGrid() {
     });
     body += `</tbody></table>`;
 
-    html += `<details class="prog-acc" data-component="${escHtml(component)}"${collapsed ? '' : ' open'}>
+    const color = _progColor(component);
+    html += `<details class="prog-acc" data-component="${escHtml(component)}" style="--cmp-color: ${color}"${collapsed ? '' : ' open'}>
       <summary class="prog-acc-summary">
         <span class="prog-acc-caret" aria-hidden="true">▸</span>
         <span class="prog-acc-title">${escHtml(component)}</span>
@@ -1855,6 +1895,7 @@ function renderProgressionGrid() {
   });
 
   wrap.innerHTML = html;
+  _progSyncToggleAllLabel();
   wrap.querySelectorAll('.prog-code, .prog-title').forEach(el => {
     el.onclick = () => openProgressionModal(el.dataset.key);
   });
@@ -1864,9 +1905,57 @@ function renderProgressionGrid() {
       const c = d.dataset.component;
       if (d.open) _progCollapsed.delete(c);
       else        _progCollapsed.add(c);
+      _progSyncToggleAllLabel();
     });
   });
 }
+
+// Update the "Expand all" / "Collapse all" button label based on current
+// accordion state — shows whichever action would change more sections.
+function _progSyncToggleAllLabel() {
+  const label = document.getElementById('progToggleAllLabel');
+  if (!label) return;
+  const all = document.querySelectorAll('#progressionGrid details.prog-acc');
+  if (!all.length) return;
+  const openCount = Array.from(all).filter(d => d.open).length;
+  // If at least half are open, offer to collapse; otherwise to expand.
+  label.textContent = openCount >= all.length / 2 ? 'Collapse all' : 'Expand all';
+}
+
+window.toggleAllProgAccordions = function() {
+  const all = document.querySelectorAll('#progressionGrid details.prog-acc');
+  if (!all.length) return;
+  const openCount = Array.from(all).filter(d => d.open).length;
+  const shouldCollapse = openCount >= all.length / 2;
+  all.forEach(d => {
+    const c = d.dataset.component;
+    d.open = !shouldCollapse;
+    if (d.open) _progCollapsed.delete(c);
+    else        _progCollapsed.add(c);
+  });
+  _progSyncToggleAllLabel();
+};
+
+// Dismissible info banner — preference persists per browser via
+// localStorage so users don't see the explanation on every visit.
+const _PROG_INFO_KEY = 'centralhub.progInfoDismissed.v1';
+window.dismissProgInfo = function() {
+  const el = document.getElementById('progInfoBanner');
+  if (el) el.style.display = 'none';
+  try { localStorage.setItem(_PROG_INFO_KEY, '1'); } catch (e) {}
+};
+function _progApplyInfoPreference() {
+  const el = document.getElementById('progInfoBanner');
+  if (!el) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(_PROG_INFO_KEY) === '1'; } catch (e) {}
+  if (dismissed) el.style.display = 'none';
+}
+// Apply on each authReady so the banner respects past dismissals.
+document.addEventListener('authReady', () => {
+  // Run after the next tick so the DOM has been laid out.
+  setTimeout(_progApplyInfoPreference, 0);
+});
 
 window.openProgressionModal = function(key) {
   const entry = syllabusIndex[key];
