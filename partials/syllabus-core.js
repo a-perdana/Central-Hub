@@ -951,11 +951,11 @@ export function initSyllabusPage(config) {
           <style>
             .ts-tooltip { position:relative;display:inline-block;cursor:help }
             .ts-tooltip .ts-tooltiptext {
-              visibility:hidden;width:max-content;max-width:200px;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;
-              position:absolute;z-index:10000;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:normal;
-              box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;opacity:0;transition:opacity 0.2s
+              visibility:hidden;width:max-content;max-width:220px;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;
+              position:absolute;z-index:10000;bottom:auto;top:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:normal;
+              box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;opacity:0;transition:opacity 0.2s;margin:0
             }
-            .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;top:100%;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:#0F172A transparent transparent transparent }
+            .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;bottom:100%;top:auto;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:transparent transparent #0F172A transparent }
             .ts-tooltip:hover .ts-tooltiptext { visibility:visible;opacity:1 }
           </style>
           <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px">
