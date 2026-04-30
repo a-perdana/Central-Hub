@@ -898,6 +898,8 @@ export function initSyllabusPage(config) {
           _calEvents = snap.docs.map(d => d.data());
         }
         body.innerHTML = renderTeachingSchedule(_schedData, _calEvents);
+        const tw = parseInt(body.querySelector('.ts-layout')?.dataset.tw, 10) || 0;
+        if (tw && typeof window.tsRecalc === 'function') window.tsRecalc(tw);
       } catch(e) {
         body.innerHTML = `<div style="padding:24px;color:#DC2626">Failed to load: ${e.message}</div>`;
       }
@@ -915,6 +917,7 @@ export function initSyllabusPage(config) {
     }
 
     const { academicYearStart, skippedWeekCount = 0, weeks = [], skippedWeeks = [] } = schedData;
+    const numTeachingWeeks = weeks.length;
 
     const weekHasHoliday = (mon, fri) => {
       return calEvents.filter(ev => {
@@ -932,94 +935,206 @@ export function initSyllabusPage(config) {
     ].sort((a, b) => (a.data.mon || '').localeCompare(b.data.mon || ''));
 
     let html = `
-      <div style="padding:24px">
-        <div style="margin-bottom:20px;padding:16px;background:#F0F9FF;border:1px solid #BFDBFE;border-radius:8px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:14px">
-            <div>
-              <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Academic Year Start</div>
-              <div style="color:#0F172A;font-weight:600">${formatDate(academicYearStart)}</div>
+      <div class="ts-layout" data-tw="${numTeachingWeeks}">
+
+        <!-- LEFT: table column -->
+        <div class="ts-table-col">
+          <div style="padding:20px 24px 0">
+            <div style="margin-bottom:20px;padding:16px;background:#F0F9FF;border:1px solid #BFDBFE;border-radius:8px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:14px">
+                <div>
+                  <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Academic Year Start</div>
+                  <div style="color:#0F172A;font-weight:600">${formatDate(academicYearStart)}</div>
+                </div>
+                <div>
+                  <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Teaching Weeks</div>
+                  <div style="color:#0F172A;font-weight:600">${weeks.length} weeks${skippedWeekCount > 0 ? ` (${skippedWeekCount} skipped)` : ''}</div>
+                </div>
+              </div>
             </div>
-            <div>
-              <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Teaching Weeks</div>
-              <div style="color:#0F172A;font-weight:600">${weeks.length} weeks${skippedWeekCount > 0 ? ` (${skippedWeekCount} skipped)` : ''}</div>
+            <h4 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
+          </div>
+
+          <div style="padding:0 24px 24px;position:relative">
+            <style>
+              .ts-tooltip { position:relative;display:inline-block;cursor:help }
+              .ts-tooltip .ts-tooltiptext {
+                visibility:hidden;width:max-content;max-width:240px;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:10px 14px;font-size:13px;line-height:1.4;
+                position:absolute;z-index:10000;bottom:auto;top:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:normal;
+                box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;opacity:0;transition:opacity 0.2s;margin:0
+              }
+              .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;bottom:100%;top:auto;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:transparent transparent #0F172A transparent }
+              .ts-tooltip:hover .ts-tooltiptext { visibility:visible;opacity:1 }
+            </style>
+            <div style="border:1px solid #E2E8F0;border-radius:8px">
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr style="background:#F8FAFC">
+                    <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px">Week</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:60px">Sem Week</th>
+                    <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+                    <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+                  </tr>
+                </thead>
+              <tbody>
+                ${allRows.map((row, idx) => {
+                  const isSkipped = row.type === 'skipped';
+                  const w = row.data;
+                  const holidays = isSkipped ? [] : weekHasHoliday(w.mon, w.fri);
+                  const bgColor = isSkipped ? '#FEF2F2' : (idx % 2 === 0 ? 'white' : '#FAFBFC');
+                  const borderLeft = isSkipped ? '4px solid #DC2626' : 'none';
+
+                  if (isSkipped) {
+                    return `
+                      <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9;border-left:${borderLeft};padding-left:4px">
+                        <td style="padding:10px 12px;text-align:center;color:#DC2626;font-weight:700">—</td>
+                        <td style="padding:10px 12px;text-align:center">
+                          <div class="ts-tooltip">
+                            <span style="font-size:13px;cursor:help;color:#DC2626;font-weight:700">ⓘ</span>
+                            <span class="ts-tooltiptext">${w.reason || 'Skipped week'}</span>
+                          </div>
+                        </td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
+                        <td></td>
+                      </tr>
+                    `;
+                  } else {
+                    const hasHoliday = holidays.length > 0;
+                    return `
+                      <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9">
+                        <td style="padding:10px 12px;text-align:center;color:#0F172A;font-weight:700">${w.weekNo}</td>
+                        <td style="padding:10px 12px;text-align:center;color:#64748B;font-size:12px">
+                          ${hasHoliday
+                            ? `<div class="ts-tooltip">
+                                <span style="font-size:13px;cursor:help;color:#F59E0B;font-weight:700">ⓘ</span>
+                                <span class="ts-tooltiptext">${holidays.map(h => h.title).join(', ')}</span>
+                              </div>`
+                            : w.semWeekNo || '—'
+                          }
+                        </td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
+                        <td></td>
+                      </tr>
+                    `;
+                  }
+                }).join('')}
+              </tbody>
+            </table>
             </div>
           </div>
         </div>
 
-        <h4 style="margin:20px 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
-        <div style="position:relative">
-          <style>
-            .ts-tooltip { position:relative;display:inline-block;cursor:help }
-            .ts-tooltip .ts-tooltiptext {
-              visibility:hidden;width:max-content;max-width:240px;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:10px 14px;font-size:13px;line-height:1.4;
-              position:absolute;z-index:10000;bottom:auto;top:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:normal;
-              box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;opacity:0;transition:opacity 0.2s;margin:0
-            }
-            .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;bottom:100%;top:auto;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:transparent transparent #0F172A transparent }
-            .ts-tooltip:hover .ts-tooltiptext { visibility:visible;opacity:1 }
-          </style>
-          <div style="border:1px solid #E2E8F0;border-radius:8px">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
-              <thead>
-                <tr style="background:#F8FAFC">
-                  <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px">Week</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:60px">Sem Week</th>
-                  <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
-                  <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
-                </tr>
-              </thead>
-            <tbody>
-              ${allRows.map((row, idx) => {
-                const isSkipped = row.type === 'skipped';
-                const w = row.data;
-                const holidays = isSkipped ? [] : weekHasHoliday(w.mon, w.fri);
-                const bgColor = isSkipped ? '#FEF2F2' : (idx % 2 === 0 ? 'white' : '#FAFBFC');
-                const borderLeft = isSkipped ? '4px solid #DC2626' : 'none';
+        <!-- RIGHT: simulator column -->
+        <div class="ts-sim-col">
+          <div class="ts-sim-heading">Lesson Time Simulator</div>
 
-                if (isSkipped) {
-                  return `
-                    <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9;border-left:${borderLeft};padding-left:4px">
-                      <td style="padding:10px 12px;text-align:center;color:#DC2626;font-weight:700">—</td>
-                      <td style="padding:10px 12px;text-align:center">
-                        <div class="ts-tooltip">
-                          <span style="font-size:13px;cursor:help;color:#DC2626;font-weight:700">ⓘ</span>
-                          <span class="ts-tooltiptext">${w.reason || 'Skipped week'}</span>
-                        </div>
-                      </td>
-                      <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
-                      <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
-                      <td></td>
-                    </tr>
-                  `;
-                } else {
-                  const hasHoliday = holidays.length > 0;
-                  return `
-                    <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9">
-                      <td style="padding:10px 12px;text-align:center;color:#0F172A;font-weight:700">${w.weekNo}</td>
-                      <td style="padding:10px 12px;text-align:center;color:#64748B;font-size:12px">
-                        ${hasHoliday
-                          ? `<div class="ts-tooltip">
-                              <span style="font-size:13px;cursor:help;color:#F59E0B;font-weight:700">ⓘ</span>
-                              <span class="ts-tooltiptext">${holidays.map(h => h.title).join(', ')}</span>
-                            </div>`
-                          : w.semWeekNo || '—'
-                        }
-                      </td>
-                      <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
-                      <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
-                      <td></td>
-                    </tr>
-                  `;
-                }
-              }).join('')}
-            </tbody>
-          </table>
+          <div class="ts-sim-card">
+            <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsLessonsPerWeek">Lessons per week</label>
+              <input class="ts-sim-input" type="number" id="tsLessonsPerWeek" min="1" max="20" step="1" value="3" oninput="tsRecalc(${numTeachingWeeks})">
+            </div>
+            <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsLessonDuration">Lesson duration (minutes)</label>
+              <input class="ts-sim-input" type="number" id="tsLessonDuration" min="1" max="240" step="5" value="40" oninput="tsRecalc(${numTeachingWeeks})">
+            </div>
+            <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsTargetHours">Target hours (GLH)</label>
+              <input class="ts-sim-input" type="number" id="tsTargetHours" min="1" max="9999" step="1" value="130" oninput="tsRecalc(${numTeachingWeeks})">
+            </div>
+          </div>
+
+          <div class="ts-sim-card">
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Teaching weeks</span>
+              <span class="ts-stat-value" id="tsOutWeeks">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Total lessons</span>
+              <span class="ts-stat-value" id="tsOutLessons">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Total teaching time</span>
+              <span class="ts-stat-value" id="tsOutTime">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Target</span>
+              <span class="ts-stat-value" id="tsOutTarget">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Gap</span>
+              <span class="ts-stat-value" id="tsOutGap">—</span>
+            </div>
+
+            <div style="margin-top:12px">
+              <div class="ts-progress-bar-bg">
+                <div class="ts-progress-bar-fill" id="tsProgressFill" style="width:0%"></div>
+              </div>
+              <div class="ts-progress-pct" id="tsProgressPct">0%</div>
+            </div>
+
+            <div style="text-align:center">
+              <span class="ts-gap-badge exact" id="tsGapBadge">—</span>
+            </div>
           </div>
         </div>
+
       </div>
     `;
     return html;
   }
+
+  // ── Teaching Schedule Simulation Calculator ────────────────────────────────
+  window.tsRecalc = function(numTeachingWeeks) {
+    const lpw     = Math.max(0, parseFloat(document.getElementById('tsLessonsPerWeek')?.value) || 0);
+    const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
+    const targetH = Math.max(0, parseFloat(document.getElementById('tsTargetHours')?.value)     || 0);
+
+    const totalLessons = numTeachingWeeks * lpw;
+    const totalMins    = totalLessons * dur;
+    const targetMins   = targetH * 60;
+    const gapMins      = totalMins - targetMins;
+    const pct          = targetMins > 0 ? Math.round(totalMins / targetMins * 100) : 0;
+
+    const fmtTime = (mins) => {
+      const h = Math.floor(mins / 60), m = mins % 60;
+      if (h === 0) return `${m} min`;
+      return m === 0 ? `${h} hrs` : `${h} hrs ${m} min`;
+    };
+    const fmtGap = (mins) => {
+      const abs = Math.abs(mins);
+      const sign = mins >= 0 ? '+' : '−';
+      return sign + fmtTime(abs);
+    };
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+    set('tsOutWeeks',    numTeachingWeeks);
+    set('tsOutLessons',  totalLessons);
+    set('tsOutTime',     fmtTime(totalMins));
+    set('tsOutTarget',   targetH > 0 ? fmtTime(targetMins) : '—');
+    set('tsOutGap',      targetH > 0 ? fmtGap(gapMins) : '—');
+    set('tsProgressPct', `${pct}%`);
+
+    const fill = document.getElementById('tsProgressFill');
+    if (fill) {
+      fill.style.width = `${Math.min(pct, 100)}%`;
+      fill.style.background = pct >= 95 ? '#059669' : pct >= 80 ? '#d97706' : '#dc2626';
+    }
+
+    const badge = document.getElementById('tsGapBadge');
+    if (badge) {
+      if (!targetH) {
+        badge.textContent = '—'; badge.className = 'ts-gap-badge exact';
+      } else if (gapMins > 0) {
+        badge.textContent = `Surplus: ${fmtTime(gapMins)}`; badge.className = 'ts-gap-badge surplus';
+      } else if (gapMins < 0) {
+        badge.textContent = `Deficit: ${fmtTime(Math.abs(gapMins))}`; badge.className = 'ts-gap-badge deficit';
+      } else {
+        badge.textContent = 'Exact match'; badge.className = 'ts-gap-badge exact';
+      }
+    }
+  };
 
   // ── Load subject ───────────────────────────────────────────────────────────
   function loadSubject(subj) {

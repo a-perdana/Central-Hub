@@ -45,27 +45,51 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
 function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// Sanitize rich HTML for display; falls back to escaping plain text if no HTML detected
+function _sylSafeHtml(html) {
+  if (!html) return '';
+  if (typeof DOMPurify !== 'undefined') return DOMPurify.sanitize(html);
+  // Fallback: if it looks like HTML pass through, otherwise escape
+  return /<[a-z]/i.test(html) ? html : escHtml(html);
+}
+// Convert plain text to RTE-compatible HTML (preserves existing HTML, wraps plain text)
+function _sylToRteHtml(str) {
+  if (!str) return '';
+  if (/<[a-z]/i.test(str)) return str; // already HTML
+  return str.split('\n').filter(Boolean).map(l => `<p>${escHtml(l)}</p>`).join('');
+}
+// RTE helpers for the syllabus editor
+window._sylRteExec = function(id, cmd) {
+  const el = document.getElementById(id);
+  if (el) { el.focus(); document.execCommand(cmd, false, null); }
+};
+window._sylRteClear = function(id) {
+  const el = document.getElementById(id);
+  if (el) { el.innerHTML = ''; el.focus(); }
+};
 function safeUrl(url) {
   return /^https?:\/\//i.test(url) ? url : '#';
 }
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
+function escapeRegex(q) {
+  return q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 function highlight(text, q) {
   if (!q) return escHtml(text);
   const safe = escHtml(text);
-  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return safe.replace(new RegExp(safeQ, 'gi'), m => `<mark class="hl">${m}</mark>`);
+  return safe.replace(new RegExp(escapeRegex(q), 'gi'), m => `<mark class="hl">${m}</mark>`);
 }
 function stripHtml(html) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 function highlightInHtml(html, q) {
   if (!q) return html;
-  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escapeRegex(q), 'gi');
   return html.replace(/(<[^>]*>)|([^<]+)/g, (m, tag, text) => {
     if (tag) return tag;
-    return text.replace(new RegExp(safeQ, 'gi'), m2 => `<mark class="hl">${m2}</mark>`);
+    return text.replace(re, m2 => `<mark class="hl">${m2}</mark>`);
   });
 }
 function showToast(msg, isError = false) {
@@ -147,11 +171,14 @@ const CAMBRIDGE_CMD_WORDS = {
 
 function detectCmdWords(entry) {
   if (!entry) return [];
+  const contentItems = Array.isArray(entry.content)
+    ? entry.content
+    : [stripHtml(entry.content || '')];
   const haystack = [
     entry.title || '',
-    entry.description || '',
-    ...(entry.content || []),
-    ...(entry.notes || entry.notesExamples || []),
+    stripHtml(entry.description || ''),
+    ...contentItems,
+    ...(Array.isArray(entry.notes) ? entry.notes : [entry.notes || '']),
   ].join(' ').toLowerCase();
   return Object.keys(CAMBRIDGE_CMD_WORDS).filter(w => haystack.includes(w.toLowerCase()));
 }
@@ -172,6 +199,40 @@ function renderCmdWordSection(entry) {
 // Main init function
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Inject RTE styles once (shared across all syllabus pages)
+(function _injectSylRteStyles() {
+  if (document.getElementById('syl-rte-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'syl-rte-styles';
+  s.textContent = `
+    /* Syllabus RTE editor */
+    .syl-rte-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--white); transition: border-color 0.15s; margin-bottom: 0; }
+    .syl-rte-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .syl-rte-toolbar { display: flex; gap: 2px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--paper); border-radius: 8px 8px 0 0; }
+    .syl-rte-btn { background: none; border: none; cursor: pointer; padding: 3px 7px; border-radius: 5px; font-size: 0.82rem; color: var(--ink-2); transition: background 0.15s, color 0.15s; }
+    .syl-rte-btn:hover { background: var(--accent-2); color: var(--accent-dk); }
+    .syl-rte-sep { width: 1px; background: var(--border); margin: 3px 4px; align-self: stretch; }
+    .syl-rte-editor { padding: 9px 12px; min-height: 90px; max-height: 260px; overflow-y: auto; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink); outline: none; line-height: 1.6; }
+    .syl-rte-editor:empty:before { content: attr(data-placeholder); color: var(--ink-3); pointer-events: none; }
+    .syl-rte-editor ul, .syl-rte-editor ol { padding-left: 20px; margin: 4px 0; }
+    .syl-rte-editor li { margin: 2px 0; }
+    .syl-rte-editor b, .syl-rte-editor strong { font-weight: 600; }
+    .syl-rte-editor i, .syl-rte-editor em { font-style: italic; }
+    /* Rich content display in detail panel */
+    .syl-rich { font-size: 0.875rem; color: var(--ink-2); line-height: 1.65; }
+    .syl-rich ul, .syl-rich ol { padding-left: 20px; margin: 4px 0; }
+    .syl-rich li { margin: 3px 0; }
+    .syl-rich b, .syl-rich strong { font-weight: 600; color: var(--ink); }
+    .syl-rich i, .syl-rich em { font-style: italic; }
+    .syl-description.syl-rich { background: var(--paper); border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; border-left: 3px solid var(--accent); }
+    /* Rich content in pacing guide inline reference */
+    .srl-desc.syl-rich { display: block; margin-top: 3px; }
+    .srl-desc.syl-rich ul, .srl-desc.syl-rich ol { padding-left: 16px; margin: 2px 0; }
+    .srl-desc.syl-rich li { margin: 1px 0; }
+  `;
+  document.head.appendChild(s);
+})();
+
 export function initSyllabusPage(config) {
   const {
     subjects,
@@ -187,6 +248,28 @@ export function initSyllabusPage(config) {
 
   // Expose Firestore helpers for settings functions called from inline onclick
   window.__firestoreHelpers = { doc, getDoc, setDoc, serverTimestamp };
+
+  // ── Inject excluded-topic CSS once per page ────────────────────────────────
+  if (!document.getElementById('syllabus-excluded-css')) {
+    const s = document.createElement('style');
+    s.id = 'syllabus-excluded-css';
+    s.textContent = `
+      .topic-row.topic-excluded { opacity: 0.38; }
+      .topic-row.topic-excluded .topic-title { text-decoration: line-through; color: var(--ink-3); }
+      .topic-row.topic-excluded .chip-hours { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+      .btn-exclude {
+        font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 500;
+        padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border);
+        background: var(--paper-2); color: var(--ink-3); cursor: pointer;
+        transition: all 0.15s; white-space: nowrap; line-height: 1.4;
+      }
+      .btn-exclude:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+      .topic-excluded .btn-exclude { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+      .topic-excluded .btn-exclude:hover { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+      #pagingToggleBtn.btn-active-state { background: var(--accent-2); color: var(--accent-dk); border-color: #6ee7b7; }
+    `;
+    document.head.appendChild(s);
+  }
 
   // ── Conversion (checkpoint uses GLH = lesson hours × 2/3)
   const LESSON_TO_GLH = features.calendarDates ? (2 / 3) : 1;
@@ -225,6 +308,10 @@ export function initSyllabusPage(config) {
   let teachingWeeks = [];
   let skippedWeeks  = [];
 
+  // Teaching schedule modal cache
+  let _schedData = null;
+  let _calEvents = null;
+
   // Grade filter (checkpoint only)
   let activeYearFilter = years[0] || 'all';
 
@@ -239,6 +326,7 @@ export function initSyllabusPage(config) {
   // Pagination
   const PAGE_SIZE = 5;
   let currentPage = 0;
+  let noPaging = false;
 
   // GLH chart state
   let _glhChartOpen = false;
@@ -297,10 +385,36 @@ export function initSyllabusPage(config) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
     } else {
-      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn'].forEach(id => {
+      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
+    }
+
+    // Show teaching schedule button for all users
+    const teachSchedBtn = document.getElementById('teachSchedBtn');
+    if (teachSchedBtn) teachSchedBtn.style.display = '';
+
+    // Paging toggle button — inject before editSyllabusBtn for admin/coordinator
+    if (isAdmin || isCoordinator) {
+      const editBtn = document.getElementById('editSyllabusBtn');
+      const pagingBtn = document.createElement('button');
+      pagingBtn.id = 'pagingToggleBtn';
+      pagingBtn.className = 'btn btn-secondary';
+      pagingBtn.title = 'Toggle chapter pagination';
+      pagingBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+      pagingBtn.addEventListener('click', () => {
+        noPaging = !noPaging;
+        currentPage = 0;
+        pagingBtn.innerHTML = noPaging
+          ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Paginate`
+          : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+        pagingBtn.classList.toggle('btn-active-state', noPaging);
+        render();
+      });
+      if (editBtn) {
+        editBtn.parentNode.insertBefore(pagingBtn, editBtn);
+      }
     }
 
     // Subject tab clicks
@@ -337,14 +451,18 @@ export function initSyllabusPage(config) {
     // Populate year select in chapter modal
     rebuildYearSelect();
 
-    // Start loading
-    loadSubject(currentSubject);
+    // Start loading — calendar data must be ready before the first render
+    const calReady = (features.calendarDates || features.holidayBanners)
+      ? loadCalendarData()
+      : Promise.resolve();
 
-    if (features.calendarDates || features.holidayBanners) {
-      loadCalendarData().then(() => { if (chapters.length) render(); });
-    }
+    calReady
+      .then(() => { loadSubject(currentSubject); })
+      .catch(err => { console.error('Calendar load error:', err); showToast('Failed to load calendar data.', true); });
 
-    loadSyllabus().then(() => { if (chapters.length) render(); });
+    loadSyllabus()
+      .then(() => { if (chapters.length) render(); })
+      .catch(err => { console.error('Syllabus index load error:', err); });
   });
 
   // ── Rebuild year select ────────────────────────────────────────────────────
@@ -358,12 +476,11 @@ export function initSyllabusPage(config) {
   async function loadSyllabus() {
     try {
       const subjectCodes = Object.values(subjects).map(s => s.code);
-      const snaps = await Promise.all(
-        subjectCodes.map(code =>
-          getDocs(query(collection(window.db, 'cambridge_syllabus'), where('subjectCode', '==', code)))
-        )
+      // Single 'in' query instead of one getDocs per subject code
+      const snap = await getDocs(
+        query(collection(window.db, 'cambridge_syllabus'), where('subjectCode', 'in', subjectCodes))
       );
-      snaps.forEach(snap => snap.forEach(d => { syllabusIndex[d.id] = d.data(); }));
+      snap.forEach(d => { syllabusIndex[d.id] = d.data(); });
       syllabusLoaded = true;
       const hint = document.getElementById('syllabusPickerHint');
       if (hint) hint.textContent = '';
@@ -535,20 +652,31 @@ export function initSyllabusPage(config) {
       const topic       = entry.topicArea || entry.topic || '';
       const tier        = entry.tier || '';
       const description = entry.description || '';
-      const content = Array.isArray(entry.content) ? entry.content : (entry.content || '').split('\n').filter(Boolean);
-      const notes   = Array.isArray(entry.notes)   ? entry.notes   : (entry.notes   || '').split('\n').filter(Boolean);
+      const rawContent  = entry.content;
+      const notes       = Array.isArray(entry.notes) ? entry.notes : (entry.notes || '').split('\n').filter(Boolean);
 
-      const descHtml  = description ? `<p class="syl-description">${escHtml(description)}</p>` : '';
-      const leftHtml  = content.length
-        ? `<p class="syl-section-label">Learning Objectives</p>
-           <ul class="syl-content-list">${content.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>`
+      // description may be rich HTML (new) or plain text (legacy)
+      const descHtml = description
+        ? `<div class="syl-description syl-rich">${_sylSafeHtml(description)}</div>`
+        : '';
+
+      // content may be rich HTML string (new) or string array (legacy)
+      const contentHtml = Array.isArray(rawContent)
+        ? (rawContent.length
+            ? `<ul class="syl-content-list">${rawContent.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>`
+            : '')
+        : (rawContent ? `<div class="syl-rich">${_sylSafeHtml(rawContent)}</div>` : '');
+
+      const leftHtml = contentHtml
+        ? `<p class="syl-section-label">Learning Objectives</p>${contentHtml}`
         : `<p class="syl-no-detail">No objectives listed.</p>`;
       const rightHtml = notes.length
         ? `<p class="syl-section-label">Notes &amp; Guidance</p>
            <ul class="syl-notes-list">${notes.map(n => `<li>${escHtml(n)}</li>`).join('')}</ul>`
         : '';
 
-      const colsHtml = (content.length && notes.length)
+      const hasContent = contentHtml.length > 0;
+      const colsHtml = (hasContent && notes.length)
         ? `<div class="syl-cols"><div class="syl-col">${leftHtml}</div><div class="syl-col">${rightHtml}</div></div>`
         : leftHtml + rightHtml || `<p class="syl-no-detail">No detailed content available.</p>`;
 
@@ -571,15 +699,13 @@ export function initSyllabusPage(config) {
 
     document.getElementById('syllabusDetailTitle').textContent = entry?.code || indexKey.split('_').slice(1).join('_');
     modal.classList.add('open');
-    document.addEventListener('keydown', _syllabusDetailEsc);
+    // Escape is handled by the global keydown listener at the bottom of init
   }
 
   function closeSyllabusDetail() {
     const modal = document.getElementById('syllabusDetailModal');
     if (modal) modal.classList.remove('open');
-    document.removeEventListener('keydown', _syllabusDetailEsc);
   }
-  function _syllabusDetailEsc(e) { if (e.key === 'Escape') closeSyllabusDetail(); }
 
   // ── Syllabus editor modal ──────────────────────────────────────────────────
   function openSyllabusEditor(selectKey = null) {
@@ -622,7 +748,7 @@ export function initSyllabusPage(config) {
     };
 
     modal.classList.add('open');
-    document.addEventListener('keydown', _sylEdEsc);
+    // Escape is handled by the global keydown listener at the bottom of init
 
     if (selectKey) {
       const item = list.querySelector(`[data-key="${CSS.escape(selectKey)}"]`);
@@ -642,9 +768,15 @@ export function initSyllabusPage(config) {
     const title   = entry.title   || '';
     const topic   = entry.topicArea || entry.topic || '';
     const tier    = entry.tier    || '';
-    const desc    = entry.description || '';
-    const content = Array.isArray(entry.content) ? entry.content.join('\n') : (entry.content || '');
-    const notes   = Array.isArray(entry.notes)   ? entry.notes.join('\n')   : (entry.notes || entry.notesExamples || '');
+    const rawDesc    = entry.description || '';
+    const rawContent = entry.content;
+    const notes      = Array.isArray(entry.notes) ? entry.notes.join('\n') : (entry.notes || entry.notesExamples || '');
+
+    // Convert legacy plain-text / array data to HTML for the RTE
+    const descHtmlInit    = _sylToRteHtml(rawDesc);
+    const contentHtmlInit = Array.isArray(rawContent)
+      ? (rawContent.length ? `<ul>${rawContent.map(l => `<li>${escHtml(l)}</li>`).join('')}</ul>` : '')
+      : _sylToRteHtml(rawContent || '');
 
     form.innerHTML = `
       <div class="syl-ed-entry-head">
@@ -662,17 +794,42 @@ export function initSyllabusPage(config) {
         <option value="Extended" ${tier==='Extended'?'selected':''}>Extended</option>
         <option value=""         ${!tier            ?'selected':''}>— Not set —</option>
       </select>
-      <label class="syl-ed-field-label" for="sylEdDesc">Description</label>
-      <textarea class="syl-ed-textarea" id="sylEdDesc" rows="3" style="min-height:72px">${escHtml(desc)}</textarea>
-      <p class="syl-ed-hint">Short summary shown inline on the pacing guide.</p>
-      <label class="syl-ed-field-label" for="sylEdContent">Learning Objectives</label>
-      <textarea class="syl-ed-textarea" id="sylEdContent" rows="8" style="min-height:140px">${escHtml(content)}</textarea>
-      <p class="syl-ed-hint">One objective per line.</p>
-      <label class="syl-ed-field-label" for="sylEdNotes">Notes and Guidance</label>
+      <label class="syl-ed-field-label">Description</label>
+      <div class="syl-rte-wrap">
+        <div class="syl-rte-toolbar">
+          <button type="button" class="syl-rte-btn" title="Bold" onclick="_sylRteExec('sylEdDescRte','bold')"><b>B</b></button>
+          <button type="button" class="syl-rte-btn" title="Italic" onclick="_sylRteExec('sylEdDescRte','italic')"><i>I</i></button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Bullet list" onclick="_sylRteExec('sylEdDescRte','insertUnorderedList')">&#8226; List</button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Clear formatting" onclick="_sylRteClear('sylEdDescRte')">Clear</button>
+        </div>
+        <div class="syl-rte-editor" id="sylEdDescRte" contenteditable="true" data-placeholder="Short summary shown inline on the pacing guide…"></div>
+      </div>
+      <label class="syl-ed-field-label" style="margin-top:12px">Learning Objectives</label>
+      <div class="syl-rte-wrap">
+        <div class="syl-rte-toolbar">
+          <button type="button" class="syl-rte-btn" title="Bold" onclick="_sylRteExec('sylEdContentRte','bold')"><b>B</b></button>
+          <button type="button" class="syl-rte-btn" title="Italic" onclick="_sylRteExec('sylEdContentRte','italic')"><i>I</i></button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Bullet list" onclick="_sylRteExec('sylEdContentRte','insertUnorderedList')">&#8226; List</button>
+          <div class="syl-rte-sep"></div>
+          <button type="button" class="syl-rte-btn" title="Clear formatting" onclick="_sylRteClear('sylEdContentRte')">Clear</button>
+        </div>
+        <div class="syl-rte-editor" id="sylEdContentRte" contenteditable="true" data-placeholder="Learning objectives for this syllabus point…"></div>
+      </div>
+      <label class="syl-ed-field-label" for="sylEdNotes" style="margin-top:12px">Notes and Guidance</label>
       <textarea class="syl-ed-textarea" id="sylEdNotes" rows="6" style="min-height:100px">${escHtml(notes)}</textarea>
       <p class="syl-ed-hint">One note per line.</p>`;
 
+    // Set RTE content after injection (innerHTML can't be set via template safely)
+    const descEl    = document.getElementById('sylEdDescRte');
+    const contentEl = document.getElementById('sylEdContentRte');
+    if (descEl)    descEl.innerHTML    = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(descHtmlInit)    : descHtmlInit;
+    if (contentEl) contentEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(contentHtmlInit) : contentHtmlInit;
+
     if (saveBtn) saveBtn.style.display = isAdmin ? '' : 'none';
+    // Non-admin: read-only view
     if (!isAdmin) {
       form.querySelectorAll('input,select,textarea,[contenteditable]').forEach(el => {
         if (el.hasAttribute('contenteditable')) el.setAttribute('contenteditable', 'false');
@@ -687,9 +844,11 @@ export function initSyllabusPage(config) {
     const title   = document.getElementById('sylEdTitle')?.value.trim()  || '';
     const topic   = document.getElementById('sylEdTopic')?.value.trim()  || '';
     const tier    = document.getElementById('sylEdTier')?.value          || '';
-    const desc    = document.getElementById('sylEdDesc')?.value.trim()   || '';
-    const content = (document.getElementById('sylEdContent')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
-    const notes   = (document.getElementById('sylEdNotes')?.value   || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const descRaw = document.getElementById('sylEdDescRte')?.innerHTML.trim()    || '';
+    const contentRaw = document.getElementById('sylEdContentRte')?.innerHTML.trim() || '';
+    const desc    = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(descRaw)    : descRaw;
+    const content = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(contentRaw) : contentRaw;
+    const notes   = (document.getElementById('sylEdNotes')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
 
     if (saveBtn) { saveBtn.textContent = 'Saving…'; saveBtn.disabled = true; }
     try {
@@ -710,18 +869,272 @@ export function initSyllabusPage(config) {
   function closeSyllabusEditor() {
     const modal = document.getElementById('syllabusEditorModal');
     if (modal) modal.classList.remove('open');
-    document.removeEventListener('keydown', _sylEdEsc);
     _sylEdCurrentKey = null;
     const saveBtn = document.getElementById('syllabusEditorSaveBtn');
     if (saveBtn) saveBtn.style.display = 'none';
   }
-  function _sylEdEsc(e) { if (e.key === 'Escape') closeSyllabusEditor(); }
 
-  // ── Teacher Progress ───────────────────────────────────────────────────────
-  function toggleTeacherProgress() {
-    const url = subjects[currentSubject]?.pacingUrl;
-    if (url) window.location.href = url;
+  // ── Teaching Schedule Modal ────────────────────────────────────────────────
+  function openTeachingScheduleModal() {
+    const modal = document.getElementById('teachSchedModal');
+    if (!modal) return;
+    modal.classList.add('open');
+
+    const body = document.getElementById('teachSchedBody');
+    if (!body) return;
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#64748B">Loading…</div>';
+
+    (async () => {
+      try {
+        if (!_schedData) {
+          const snap = await getDoc(doc(window.db, 'teaching_schedule', scheduleDocId));
+          _schedData = snap.exists() ? snap.data() : null;
+        }
+        if (!_calEvents) {
+          const snap = await getDocs(query(
+            collection(window.db, 'calendar_events'),
+            where('category', '==', 'Public Holiday')
+          ));
+          _calEvents = snap.docs.map(d => d.data());
+        }
+        body.innerHTML = renderTeachingSchedule(_schedData, _calEvents);
+        const tw = parseInt(body.querySelector('.ts-layout')?.dataset.tw, 10) || 0;
+        if (tw && typeof window.tsRecalc === 'function') window.tsRecalc(tw);
+      } catch(e) {
+        body.innerHTML = `<div style="padding:24px;color:#DC2626">Failed to load: ${e.message}</div>`;
+      }
+    })();
   }
+
+  function closeTeachingScheduleModal() {
+    const modal = document.getElementById('teachSchedModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function renderTeachingSchedule(schedData, calEvents) {
+    if (!schedData || !calEvents) {
+      return '<div style="padding:24px;color:#64748B">No data available</div>';
+    }
+
+    const { academicYearStart, skippedWeekCount = 0, weeks = [], skippedWeeks = [] } = schedData;
+    const numTeachingWeeks = weeks.length;
+
+    const weekHasHoliday = (mon, fri) => {
+      return calEvents.filter(ev => {
+        const start = ev.date_start, end = ev.date_end || ev.date_start;
+        return start <= fri && end >= mon;
+      });
+    };
+
+    const formatDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    // Merge teaching weeks and skipped weeks in chronological order
+    const allRows = [
+      ...weeks.map(w => ({ type: 'teaching', data: w })),
+      ...skippedWeeks.map(sw => ({ type: 'skipped', data: sw }))
+    ].sort((a, b) => (a.data.mon || '').localeCompare(b.data.mon || ''));
+
+    let html = `
+      <div class="ts-layout" data-tw="${numTeachingWeeks}">
+
+        <!-- LEFT: table column -->
+        <div class="ts-table-col">
+          <div style="padding:20px 24px 0">
+            <div style="margin-bottom:20px;padding:16px;background:#F0F9FF;border:1px solid #BFDBFE;border-radius:8px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:14px">
+                <div>
+                  <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Academic Year Start</div>
+                  <div style="color:#0F172A;font-weight:600">${formatDate(academicYearStart)}</div>
+                </div>
+                <div>
+                  <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Teaching Weeks</div>
+                  <div style="color:#0F172A;font-weight:600">${weeks.length} weeks${skippedWeekCount > 0 ? ` (${skippedWeekCount} skipped)` : ''}</div>
+                </div>
+              </div>
+            </div>
+            <h4 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
+          </div>
+
+          <div style="padding:0 24px 24px;position:relative">
+            <style>
+              .ts-tooltip { position:relative;display:inline-block;cursor:help }
+              .ts-tooltip .ts-tooltiptext {
+                visibility:hidden;width:max-content;max-width:240px;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:10px 14px;font-size:13px;line-height:1.4;
+                position:absolute;z-index:10000;bottom:auto;top:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:normal;
+                box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;opacity:0;transition:opacity 0.2s;margin:0
+              }
+              .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;bottom:100%;top:auto;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:transparent transparent #0F172A transparent }
+              .ts-tooltip:hover .ts-tooltiptext { visibility:visible;opacity:1 }
+            </style>
+            <div style="border:1px solid #E2E8F0;border-radius:8px">
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr style="background:#F8FAFC">
+                    <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px">Week</th>
+                    <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:60px">Sem Week</th>
+                    <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+                    <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+                  </tr>
+                </thead>
+              <tbody>
+                ${allRows.map((row, idx) => {
+                  const isSkipped = row.type === 'skipped';
+                  const w = row.data;
+                  const holidays = isSkipped ? [] : weekHasHoliday(w.mon, w.fri);
+                  const bgColor = isSkipped ? '#FEF2F2' : (idx % 2 === 0 ? 'white' : '#FAFBFC');
+                  const borderLeft = isSkipped ? '4px solid #DC2626' : 'none';
+
+                  if (isSkipped) {
+                    return `
+                      <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9;border-left:${borderLeft};padding-left:4px">
+                        <td style="padding:10px 12px;text-align:center;color:#DC2626;font-weight:700">—</td>
+                        <td style="padding:10px 12px;text-align:center">
+                          <div class="ts-tooltip">
+                            <span style="font-size:13px;cursor:help;color:#DC2626;font-weight:700">ⓘ</span>
+                            <span class="ts-tooltiptext">${w.reason || 'Skipped week'}</span>
+                          </div>
+                        </td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
+                        <td></td>
+                      </tr>
+                    `;
+                  } else {
+                    const hasHoliday = holidays.length > 0;
+                    return `
+                      <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9">
+                        <td style="padding:10px 12px;text-align:center;color:#0F172A;font-weight:700">${w.weekNo}</td>
+                        <td style="padding:10px 12px;text-align:center;color:#64748B;font-size:12px">
+                          ${hasHoliday
+                            ? `<div class="ts-tooltip">
+                                <span style="font-size:13px;cursor:help;color:#F59E0B;font-weight:700">ⓘ</span>
+                                <span class="ts-tooltiptext">${holidays.map(h => h.title).join(', ')}</span>
+                              </div>`
+                            : w.semWeekNo || '—'
+                          }
+                        </td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
+                        <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
+                        <td></td>
+                      </tr>
+                    `;
+                  }
+                }).join('')}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: simulator column -->
+        <div class="ts-sim-col">
+          <div class="ts-sim-heading">Lesson Time Simulator</div>
+
+          <div class="ts-sim-card">
+            <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsLessonsPerWeek">Lessons per week</label>
+              <input class="ts-sim-input" type="number" id="tsLessonsPerWeek" min="1" max="20" step="1" value="3" oninput="tsRecalc(${numTeachingWeeks})">
+            </div>
+            <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsLessonDuration">Lesson duration (minutes)</label>
+              <input class="ts-sim-input" type="number" id="tsLessonDuration" min="1" max="240" step="5" value="40" oninput="tsRecalc(${numTeachingWeeks})">
+            </div>
+            <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsTargetHours">Target hours (GLH)</label>
+              <input class="ts-sim-input" type="number" id="tsTargetHours" min="1" max="9999" step="1" value="130" oninput="tsRecalc(${numTeachingWeeks})">
+            </div>
+          </div>
+
+          <div class="ts-sim-card">
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Teaching weeks</span>
+              <span class="ts-stat-value" id="tsOutWeeks">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Total lessons</span>
+              <span class="ts-stat-value" id="tsOutLessons">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Total teaching time</span>
+              <span class="ts-stat-value" id="tsOutTime">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Target</span>
+              <span class="ts-stat-value" id="tsOutTarget">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Gap</span>
+              <span class="ts-stat-value" id="tsOutGap">—</span>
+            </div>
+
+            <div style="margin-top:12px">
+              <div class="ts-progress-bar-bg">
+                <div class="ts-progress-bar-fill" id="tsProgressFill" style="width:0%"></div>
+              </div>
+              <div class="ts-progress-pct" id="tsProgressPct">0%</div>
+            </div>
+
+            <div style="text-align:center">
+              <span class="ts-gap-badge exact" id="tsGapBadge">—</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    `;
+    return html;
+  }
+
+  // ── Teaching Schedule Simulation Calculator ────────────────────────────────
+  window.tsRecalc = function(numTeachingWeeks) {
+    const lpw     = Math.max(0, parseFloat(document.getElementById('tsLessonsPerWeek')?.value) || 0);
+    const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
+    const targetH = Math.max(0, parseFloat(document.getElementById('tsTargetHours')?.value)     || 0);
+
+    const totalLessons = numTeachingWeeks * lpw;
+    const totalMins    = totalLessons * dur;
+    const targetMins   = targetH * 60;
+    const gapMins      = totalMins - targetMins;
+    const pct          = targetMins > 0 ? Math.round(totalMins / targetMins * 100) : 0;
+
+    const fmtTime = (mins) => {
+      const h = Math.floor(mins / 60), m = mins % 60;
+      if (h === 0) return `${m} min`;
+      return m === 0 ? `${h} hrs` : `${h} hrs ${m} min`;
+    };
+    const fmtGap = (mins) => {
+      const abs = Math.abs(mins);
+      const sign = mins >= 0 ? '+' : '−';
+      return sign + fmtTime(abs);
+    };
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+    set('tsOutWeeks',    numTeachingWeeks);
+    set('tsOutLessons',  totalLessons);
+    set('tsOutTime',     fmtTime(totalMins));
+    set('tsOutTarget',   targetH > 0 ? fmtTime(targetMins) : '—');
+    set('tsOutGap',      targetH > 0 ? fmtGap(gapMins) : '—');
+    set('tsProgressPct', `${pct}%`);
+
+    const fill = document.getElementById('tsProgressFill');
+    if (fill) {
+      fill.style.width = `${Math.min(pct, 100)}%`;
+      fill.style.background = pct >= 95 ? '#059669' : pct >= 80 ? '#d97706' : '#dc2626';
+    }
+
+    const badge = document.getElementById('tsGapBadge');
+    if (badge) {
+      if (!targetH) {
+        badge.textContent = '—'; badge.className = 'ts-gap-badge exact';
+      } else if (gapMins > 0) {
+        badge.textContent = `Surplus: ${fmtTime(gapMins)}`; badge.className = 'ts-gap-badge surplus';
+      } else if (gapMins < 0) {
+        badge.textContent = `Deficit: ${fmtTime(Math.abs(gapMins))}`; badge.className = 'ts-gap-badge deficit';
+      } else {
+        badge.textContent = 'Exact match'; badge.className = 'ts-gap-badge exact';
+      }
+    }
+  };
 
   // ── Load subject ───────────────────────────────────────────────────────────
   function loadSubject(subj) {
@@ -910,7 +1323,7 @@ export function initSyllabusPage(config) {
 
     const visible = getVisibleChapters();
     let totalLH = 0;
-    visible.forEach(ch => { (ch.topics || []).forEach(t => { totalLH += (t.duration || t.hour || 1); }); });
+    visible.forEach(ch => { (ch.topics || []).forEach(t => { if (!t.excluded) totalLH += (t.duration || t.hour || 1); }); });
     const totalPlanned   = toGlh(totalLH);
     const effectiveTarget = getEffectiveGlhTarget();
     const plannedPct      = Math.min(100, (totalPlanned / effectiveTarget) * 100);
@@ -947,7 +1360,7 @@ export function initSyllabusPage(config) {
     const visible = getVisibleChapters();
     const totals  = visible.map(ch => ({
       name:  ch.chapter || ch.title || 'Chapter',
-      hours: toGlh((ch.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0)),
+      hours: toGlh((ch.topics || []).reduce((s, t) => s + (t.excluded ? 0 : (t.duration || t.hour || 0)), 0)),
     }));
     const maxH = Math.max(...totals.map(c => c.hours), 1);
     body.innerHTML = totals.map(c => {
@@ -1090,7 +1503,7 @@ export function initSyllabusPage(config) {
 
     const filtered = getFilteredChapters();
     const workList = filtered ?? chapters.map((ch, i) => ({ ...ch, _ci: i, _matchedTopics: ch.topics || [] }));
-    const isSearching = filtered !== null;
+    const isSearching = !!searchQuery;
 
     if (filtered !== null) {
       const topicCount = filtered.reduce((s, ch) => s + ch._matchedTopics.length, 0);
@@ -1115,7 +1528,7 @@ export function initSyllabusPage(config) {
     if (list)  list.style.display  = '';
 
     let pageItems;
-    if (isSearching) {
+    if (isSearching || noPaging) {
       pageItems = workList;
       if (pager) pager.style.display = 'none';
     } else {
@@ -1158,7 +1571,7 @@ export function initSyllabusPage(config) {
       chapters.forEach((ch, ci) => {
         if (features.gradeFilter && lastYear !== null && ch.year !== lastYear) running = 0;
         chapterCumulativeHours[ci] = running;
-        (ch.topics || []).forEach(t => { running += (t.duration || t.hour || 0); });
+        (ch.topics || []).forEach(t => { if (!t.excluded) running += (t.duration || t.hour || 0); });
         lastYear = ch.year;
       });
     }
@@ -1176,7 +1589,7 @@ export function initSyllabusPage(config) {
           const afterCum   = chapterCumulativeHours[afterCh._ci];
           const beforeCum  = chapterCumulativeHours[beforeCh._ci];
           if (afterCum != null && beforeCum != null) {
-            const afterHours    = (afterCh.topics || []).reduce((s, t) => s + (t.duration || t.hour || 0), 0);
+            const afterHours    = (afterCh.topics || []).reduce((s, t) => s + (t.excluded ? 0 : (t.duration || t.hour || 0)), 0);
             const afterEndDate  = twEndDate(afterCum + afterHours - 1, wh);
             const beforeStart   = twStartDate(beforeCum, wh);
             breaks = renderBreakBanners(afterEndDate, beforeStart);
@@ -1221,7 +1634,7 @@ export function initSyllabusPage(config) {
     let runningHours = chapterStartHours ?? null;
     allTopics.forEach(t => {
       topicCumulative.push(runningHours);
-      if (runningHours !== null) runningHours += (t.duration || t.hour || 0);
+      if (runningHours !== null && !t.excluded) runningHours += (t.duration || t.hour || 0);
     });
 
     const wh = settingsData[currentSubject]?.weeklyHours || 0;
@@ -1229,7 +1642,7 @@ export function initSyllabusPage(config) {
     if (displayTopics.length > 0) {
       const parts = displayTopics.map((t, dispIdx) => {
         const ti        = allTopics.indexOf(t);
-        const topicHtml = renderTopic(t, ti, ci, q, topicCumulative[ti]);
+        const topicHtml = renderTopic(t, ti, ci, q, topicCumulative[ti], wh);
         let banner = '';
         if (features.holidayBanners && dispIdx > 0 && wh && skippedWeeks.length) {
           const prevT   = displayTopics[dispIdx - 1];
@@ -1299,7 +1712,7 @@ export function initSyllabusPage(config) {
   }
 
   // ── renderTopic ────────────────────────────────────────────────────────────
-  function renderTopic(t, ti, ci, q = '', cumulativeBefore = null) {
+  function renderTopic(t, ti, ci, q = '', cumulativeBefore = null, wh = 0) {
     // Buffer row
     if (t.type === 'buffer') {
       const dur = t.duration || 0;
@@ -1323,14 +1736,18 @@ export function initSyllabusPage(config) {
         const displayCode = q ? highlight(code, q) : escHtml(code);
         const titleText   = entry ? (q ? highlight(entry.title || '', q) : escHtml(entry.title || '')) : '';
         const topicText   = entry ? escHtml(entry.topicArea || '') : '';
-        const content     = Array.isArray(entry?.content) ? entry.content : (entry?.content || '').split('\n').filter(Boolean);
-        const descText    = entry?.description ? escHtml(entry.description)
-          : content.length ? escHtml(content.slice(0, 3).join(' · ') + (content.length > 3 ? ' …' : '')) : '';
+        const rawC        = entry?.content;
+        const contentArr  = Array.isArray(rawC) ? rawC : (rawC ? [stripHtml(rawC)] : []);
+        const rawDesc     = entry?.description || '';
+        // Prefer rich description; fall back to content items as plain text
+        const descHtmlInline = rawDesc
+          ? _sylSafeHtml(rawDesc)
+          : (contentArr.length ? escHtml(contentArr.slice(0, 3).join(' · ') + (contentArr.length > 3 ? ' …' : '')) : '');
         return `<div class="syllabus-ref-line">
           <span class="srl-code" data-syl-key="${escHtml(indexKey)}" title="Click to view full detail">${displayCode}</span>
           <span class="srl-topic">${topicText}</span>
           <span class="srl-title">${titleText}</span>
-          ${descText ? `<span class="srl-desc">${descText}</span>` : ''}
+          ${descHtmlInline ? `<div class="srl-desc syl-rich">${descHtmlInline}</div>` : ''}
         </div>`;
       }).join('');
       syllabusBlock = `<div class="topic-syllabus-block"><div class="topic-refs-list">${chipLines}</div></div>`;
@@ -1351,7 +1768,6 @@ export function initSyllabusPage(config) {
     // Date label (calendar dates feature)
     let dateLabelHtml = '';
     if (features.calendarDates && cumulativeBefore !== null && dur != null) {
-      const wh = settingsData[currentSubject]?.weeklyHours || 0;
       if (wh > 0) {
         const label = getTopicDateLabel(cumulativeBefore, dur, wh);
         if (label === '__beyond__') {
@@ -1362,8 +1778,8 @@ export function initSyllabusPage(config) {
       }
     }
 
-    // Hours chip — clickable for admin
-    const hoursChip = isAdmin
+    // Hours chip — clickable for admin or coordinator
+    const hoursChip = (isAdmin || isCoordinator)
       ? `<span class="meta-chip chip-hours" title="Click to edit lesson hours" onclick="inlineEditChip(event,'hours',${ci},${ti})">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur === 1 ? '' : 's') : '—'}</span>`
       : `<span class="meta-chip chip-hours">⏱ ${dur != null ? dur + ' Lesson Hour' + (dur === 1 ? '' : 's') : '—'}</span>`;
 
@@ -1411,16 +1827,21 @@ export function initSyllabusPage(config) {
         <button class="btn-reorder" onclick="moveTopic(${ci},${ti},1)" title="Move down" ${ti===chapters[ci].topics.length-1?'disabled':''}>↓</button>
       </div>` : '';
 
-    const canEditTopic = isAdmin || isCoordinator;
-    const editBtn   = canEditTopic ? `<button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>` : '';
+    const canEditHours = isAdmin || isCoordinator;
+    const excludeBtn = canEditHours
+      ? `<button class="btn-exclude" onclick="toggleExcluded(${ci},${ti})" title="${t.excluded ? 'Mark as covered' : 'Mark as not covered'}">${t.excluded ? '↩ Include' : '✕ Not Covered'}</button>`
+      : '';
+
+    const editBtn   = canEditHours ? `<button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>` : '';
     const deleteBtn = isAdmin      ? `<button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>` : '';
-    const actionsHtml = canEditTopic ? `<div class="topic-actions">
+    const actionsHtml = (canEditHours || isAdmin) ? `<div class="topic-actions">
       ${topicReorderHtml}
+      ${excludeBtn}
       ${editBtn}
       ${deleteBtn}
     </div>` : '';
 
-    return `<div class="topic-row">
+    return `<div class="topic-row${t.excluded ? ' topic-excluded' : ''}">
       <div class="topic-num">${ti + 1}</div>
       <div class="topic-main">
         <div class="topic-title">${highlight(t.title || t.topic || '', q)}</div>
@@ -1484,11 +1905,14 @@ export function initSyllabusPage(config) {
     const inp = chip.querySelector('input');
     inp.focus(); inp.select();
     function commit() {
-      const val = parseInt(inp.value);
-      if (!isNaN(val) && val > 0) {
-        if (field === 'hours') { topic.duration = val; topic.hour = val; }
-        else                   { topic.week = val; }
-        saveChapters().then(() => showToast(field === 'hours' ? 'Lesson hours updated.' : 'Week updated.'));
+      const raw = inp.value.trim();
+      const val = parseInt(raw);
+      if (field === 'hours') {
+        if (!isNaN(val) && val > 0) { topic.duration = val; topic.hour = val; saveChapters().then(() => showToast('Lesson hours updated.')); }
+      } else {
+        // Allow clearing week to null (empty input = no scheduled week)
+        if (raw === '' || raw === '0') { topic.week = null; saveChapters().then(() => showToast('Week cleared.')); }
+        else if (!isNaN(val) && val > 0) { topic.week = val; saveChapters().then(() => showToast('Week updated.')); }
       }
       render();
     }
@@ -1497,6 +1921,16 @@ export function initSyllabusPage(config) {
       if (ev.key === 'Enter')  { ev.preventDefault(); inp.removeEventListener('blur', commit); commit(); }
       if (ev.key === 'Escape') { ev.preventDefault(); inp.removeEventListener('blur', commit); render(); }
     });
+  };
+
+  // ── Toggle excluded ────────────────────────────────────────────────────────
+  window.toggleExcluded = async function(ci, ti) {
+    if (!isAdmin && !isCoordinator) return;
+    const t = chapters[ci].topics[ti];
+    t.excluded = !t.excluded;
+    await saveChapters();
+    showToast(t.excluded ? 'Topic marked as not covered.' : 'Topic included.');
+    render();
   };
 
   // ── Chapter CRUD ───────────────────────────────────────────────────────────
@@ -1916,11 +2350,14 @@ export function initSyllabusPage(config) {
     if (sw) sw.style.display = '';
   }
 
-  function loadAllSettings() {
+  async function loadAllSettings() {
     const db = window.db;
     const { getDoc: _getDoc, doc: _doc } = window.__firestoreHelpers;
-    Object.keys(subjects).forEach(subj => {
-      _getDoc(_doc(db, subjects[subj].collection, docId)).then(snap => {
+
+    // Load all subject docs in parallel, then render once
+    await Promise.all(Object.keys(subjects).map(async subj => {
+      try {
+        const snap = await _getDoc(_doc(db, subjects[subj].collection, docId));
         if (snap.exists()) {
           const d = snap.data();
           settingsData[subj] = {
@@ -1929,12 +2366,14 @@ export function initSyllabusPage(config) {
             weeklyHours: typeof d.weeklyHours === 'number' ? d.weeklyHours : (settingsData[subj].weeklyHours || 0),
           };
         }
-        renderClassGroups();
-        renderObjSettings();
-      }).catch(err => console.error('Settings load error:', err));
-    });
+      } catch (err) { console.error('Settings load error:', err); }
+    }));
+    renderClassGroups();
+    renderObjSettings();
+
     // Calendar settings read-only display
-    _getDoc(_doc(db, 'calendar_settings', 'current')).then(snap => {
+    try {
+      const snap = await _getDoc(_doc(db, 'calendar_settings', 'current'));
       const display = document.getElementById('calSettingsDisplay');
       if (!display) return;
       if (snap.exists()) {
@@ -1947,7 +2386,7 @@ export function initSyllabusPage(config) {
       } else {
         display.textContent = 'No calendar settings configured yet.';
       }
-    }).catch(() => {});
+    } catch { /* calendar settings display is non-critical */ }
   }
 
   window.switchClassSubj = function(subj, btn) {
@@ -2064,6 +2503,7 @@ export function initSyllabusPage(config) {
   document.getElementById('chapterModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeChapterModal(); });
   document.getElementById('topicModal')?.addEventListener('click',   e => { if (e.target === e.currentTarget) closeTopicModal(); });
   document.getElementById('assessmentModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeAssessmentModal(); });
+  document.getElementById('teachSchedModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeTeachingScheduleModal(); });
 
   // Escape key
   document.addEventListener('keydown', e => {
@@ -2072,6 +2512,7 @@ export function initSyllabusPage(config) {
       closeTopicModal();
       closeAssessmentModal();
       closeSyllabusDetail();
+      closeTeachingScheduleModal();
     }
   });
 
@@ -2103,11 +2544,12 @@ export function initSyllabusPage(config) {
     closeSyllabusEditor,
     saveSyllabusEntry,
     removeSyllabusChip,
+    // Teaching Schedule
+    openTeachingScheduleModal,
+    closeTeachingScheduleModal,
     // Reorder
     moveChapter,
     moveTopic,
-    // Teacher progress
-    toggleTeacherProgress,
     // Settings (in addition to window.switch* already assigned above)
     showSettingsPanel,
     hideSettingsPanel,
