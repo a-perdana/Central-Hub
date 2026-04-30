@@ -1391,7 +1391,7 @@ export function initSyllabusPage(config) {
       topicRows = `<div class="no-topics">No topics yet.${isAdmin ? ' Add one below.' : ''}</div>`;
     }
 
-    const reorderBtns = features.topicReorder && isAdmin ? `
+    const reorderBtns = features.topicReorder && (isAdmin || isCoordinator) ? `
       <button class="btn-reorder" onclick="moveChapter(event,${ci},-1)" title="Move up" ${ci===0?'disabled':''}>↑</button>
       <button class="btn-reorder" onclick="moveChapter(event,${ci},1)"  title="Move down" ${ci===chapters.length-1?'disabled':''}>↓</button>` : '';
 
