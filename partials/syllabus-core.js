@@ -961,7 +961,7 @@ export function initSyllabusPage(config) {
                 <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Semester</th>
                 <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
                 <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
-                <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px"></th>
+                <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px">Info</th>
               </tr>
             </thead>
             <tbody>
