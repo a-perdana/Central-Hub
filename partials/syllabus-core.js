@@ -1211,8 +1211,11 @@ export function initSyllabusPage(config) {
         gradeOptions.innerHTML = '';
       } else {
         gradeField.style.display = '';
+        gradeOptions.style.display = 'grid';
+        gradeOptions.style.gridTemplateColumns = `repeat(${cfg.gradeOptions.length > 1 ? 2 : 1}, minmax(0, 1fr))`;
+        gradeOptions.style.gap = '8px';
         gradeOptions.innerHTML = cfg.gradeOptions.map(grade => `
-          <label style="display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #E2E8F0;border-radius:7px;background:#fff;font-size:0.78rem;color:#334155;cursor:pointer">
+          <label style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:34px;padding:7px 10px;border:1px solid #E2E8F0;border-radius:7px;background:#fff;font-size:0.78rem;color:#334155;cursor:pointer">
             <input type="checkbox" class="ts-grade-check" value="${grade}" checked onchange="tsGradeChange(${numTeachingWeeks})" ${cfg.gradeOptions.length === 1 ? 'disabled' : ''}>
             <span>${grade}</span>
           </label>
