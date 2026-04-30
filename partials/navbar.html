@@ -790,9 +790,27 @@
     margin: 4px 0 4px 16px;
     animation: none;
     min-width: 0;
+    min-height: 28px; /* keep an empty submenu droppable */
   }
   .nav-edit-mode .ch-dd-submenu-trigger { cursor: default; }
   .nav-edit-mode .ch-dd-submenu-trigger > .submenu-caret { display: none; }
+  /* Container-level drop highlight (column or submenu panel) when a drag is hovering it */
+  .nav-edit-mode .ch-dd-col.drop-into,
+  .nav-edit-mode .ch-dd-submenu-panel.drop-into,
+  .nav-edit-mode .ch-dd-panel.drop-into {
+    background: #fffbeb;
+    border-color: #fbbf24;
+  }
+  /* Hint text inside an empty submenu panel */
+  .nav-edit-mode .ch-dd-submenu-panel:empty::before {
+    content: 'Drop items here';
+    display: block;
+    font-size: 0.72rem;
+    color: #b8b8c8;
+    font-style: italic;
+    padding: 4px 8px;
+    pointer-events: none;
+  }
 
   /* ===== RESPONSIVE BREAKPOINT ===== */
   /* Hide desktop nav links and show hamburger when nav would wrap */
@@ -1098,6 +1116,11 @@
                   <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
                   <span class="nav-item-label">Curriculum Map</span>
+                </a>
+                <a href="national-alignment" class="ch-dd-item" data-nav-page="national-alignment" data-nav-key="national-alignment">
+                  <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M12 3v18M5 8l4 4-4 4M19 8l-4 4 4 4"/></svg>
+                  <span class="nav-item-label">National Alignment</span>
                 </a>
               </div>
             </div>
@@ -1414,6 +1437,7 @@
           <a href="event-calendar"     class="mobile-nav-link" data-mob-page="event-calendar">Event Calendar</a>
           <a href="cambridge-calendar" class="mobile-nav-link" data-mob-page="cambridge-calendar">Cambridge Exam Calendar</a>
           <a href="curriculum-map"     class="mobile-nav-link" data-mob-page="curriculum-map">Curriculum Map</a>
+          <a href="national-alignment" class="mobile-nav-link" data-mob-page="national-alignment">National Alignment</a>
           <div class="mob-nav-subheader">Syllabus</div>
           <a href="igcse-syllabus"                class="mobile-nav-link" data-mob-page="igcse-syllabus">IGCSE Syllabus</a>
           <a href="as-alevel-syllabus"             class="mobile-nav-link" data-mob-page="as-alevel-syllabus">AS / A-Level Syllabus</a>
@@ -1492,7 +1516,7 @@
         academics: ['academic-calendar','event-calendar','igcse-syllabus',
                     'igcse-math-pacing',
                     'igcse-biology-pacing','igcse-chemistry-pacing','igcse-physics-pacing',
-                    'cambridge-calendar','curriculum-map',
+                    'cambridge-calendar','curriculum-map','national-alignment',
                     'as-alevel-syllabus','secondary-checkpoint-syllabus','primary-checkpoint-syllabus',
                     'ease-system','assessments','assessment-management',
                     'school-appraisals','teacher-appraisals','appraisals','school-visits',
@@ -1753,6 +1777,25 @@ function enterEditMode() {
 
   // Make items draggable and labels editable
   document.querySelectorAll('.nav-edit-mode .ch-dd-item[data-nav-key]').forEach(initItem);
+
+  // Wire container-level drop targets (columns + submenu panels) so admins can
+  // drop into empty groups or below the last item.
+  PANELS.forEach(panelId => {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const containers = [
+      ...panel.querySelectorAll(':scope > .ch-dd-col-group > .ch-dd-col'),
+      ...panel.querySelectorAll('.ch-dd-submenu-panel'),
+    ];
+    // If the panel itself holds items directly (single-column dropdowns like Schools/Ops)
+    if (panel.querySelector(':scope > .ch-dd-item[data-nav-key]')) containers.push(panel);
+    containers.forEach(c => {
+      c.addEventListener('dragover',  onContainerDragOver);
+      c.addEventListener('dragleave', onContainerDragLeave);
+      c.addEventListener('drop',      onContainerDrop);
+      c._navEditContainer = true;
+    });
+  });
 }
 
 function exitEditMode(save) {
@@ -1776,6 +1819,16 @@ function exitEditMode(save) {
     }
     const lbl = item.querySelector('.nav-item-label');
     if (lbl) lbl.contentEditable = 'false';
+  });
+
+  // Cleanup container-level drop targets
+  document.querySelectorAll('[data-nav-edit-container], .ch-dd-col, .ch-dd-submenu-panel, .ch-dd-panel').forEach(c => {
+    if (!c._navEditContainer) return;
+    c.removeEventListener('dragover',  onContainerDragOver);
+    c.removeEventListener('dragleave', onContainerDragLeave);
+    c.removeEventListener('drop',      onContainerDrop);
+    c.classList.remove('drop-into');
+    c._navEditContainer = false;
   });
 
   document.querySelector('.nav-links').classList.remove('nav-edit-mode');
@@ -1836,23 +1889,19 @@ function onDragStart(e) {
   e.dataTransfer.setData('text/plain', this.dataset.navKey);
 }
 
-// Reorder is only allowed within the same container (same column or same submenu panel).
-function sameDragGroup(a, b) {
-  if (!a || !b) return false;
-  if (a.closest('.ch-dd-panel') !== b.closest('.ch-dd-panel')) return false;
-  // Items inside a submenu can only be reordered within that submenu
-  if (a.closest('.ch-dd-submenu-panel') !== b.closest('.ch-dd-submenu-panel')) return false;
-  // For top-level (non-submenu) items: stay within the same column
-  if (!a.closest('.ch-dd-submenu-panel')) {
-    if (a.closest('.ch-dd-col') !== b.closest('.ch-dd-col')) return false;
-  }
-  return true;
+// Drag/drop rule: items can move freely within the same top-level dropdown panel
+// (Schools / Operations / Academics). Inside Academics that means columns AND
+// submenu panels are all valid targets — admins can move an item from the main
+// column into any submenu group, or vice versa.
+function samePanel(a, b) {
+  return a && b && a.closest('.ch-dd-panel') === b.closest('.ch-dd-panel');
 }
 
 function onDragOver(e) {
   if (!dragSrc || dragSrc === this) return;
-  if (!sameDragGroup(dragSrc, this)) return;
+  if (!samePanel(dragSrc, this)) return;
   e.preventDefault();
+  e.stopPropagation(); // don't let parent container handler also light up
   e.dataTransfer.dropEffect = 'move';
   this.classList.add('drag-over');
 }
@@ -1863,8 +1912,9 @@ function onDragLeave() {
 
 function onDrop(e) {
   e.preventDefault();
+  e.stopPropagation(); // don't let the container-level drop handler run too
   if (!dragSrc || dragSrc === this) return;
-  if (!sameDragGroup(dragSrc, this)) return;
+  if (!samePanel(dragSrc, this)) return;
 
   this.classList.remove('drag-over');
 
@@ -1881,6 +1931,26 @@ function onDrop(e) {
   } else {
     tgtParent.insertBefore(dragSrc, this);
   }
+}
+
+// Container-level drop: lets admins drop into an empty container (e.g. an empty
+// submenu panel that has no items yet) or the bottom of a column past the last item.
+function onContainerDragOver(e) {
+  if (!dragSrc) return;
+  if (!samePanel(dragSrc, this)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  this.classList.add('drop-into');
+}
+function onContainerDragLeave() { this.classList.remove('drop-into'); }
+function onContainerDrop(e) {
+  e.preventDefault();
+  this.classList.remove('drop-into');
+  if (!dragSrc) return;
+  if (!samePanel(dragSrc, this)) return;
+  // Append to the end of this container (skip if already last child)
+  if (dragSrc.parentNode === this && this.lastElementChild === dragSrc) return;
+  this.appendChild(dragSrc);
 }
 
 function onDragEnd() {

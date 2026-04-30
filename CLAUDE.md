@@ -19,16 +19,19 @@ Access is restricted to `@eduversal.org` email addresses. `central_user` can rea
 ## Monorepo Structure
 
 ```
-Eduversal Web/                    ← monorepo root (not a deployed app)
-├── Academic Hub/                 ← analytics dashboards (Vercel)
-├── Central Hub/                  ← THIS app (Vercel)
+Eduversal Web/                    ← monorepo root (no remote, not deployed)
+├── Academic Hub/                 ← embedded subrepo — analytics dashboards (Vercel)
+├── Central Hub/                  ← embedded subrepo — THIS app (Vercel)
 │   ├── firestore.rules           ← ⚠️ ONLY Firestore rules file — deploy from here
 │   └── firebase.json             ← firebase deploy config
-├── Teachers Hub/                 ← teacher tools (Vercel)
+├── Teachers Hub/                 ← embedded subrepo — teacher tools (Vercel)
+├── Research Hub/                 ← real submodule — research management (Vercel)
+├── IGCSE Tools/                  ← real submodule — uses its OWN Firebase project `igcse-tools`
+├── School Hub/                   ← untracked scratch folder (no .git)
 └── keys/                         ← service account JSON keys (gitignored)
 ```
 
-Each app has its **own GitHub repository** and its **own deployment target**, but all three share the single Firebase backend `centralhub-8727b`.
+Each app has its **own GitHub repository** and its **own Vercel deployment**. Academic / Central / Teachers / Research Hub share the single Firebase backend `centralhub-8727b`; IGCSE Tools is on its own project. Academic / Central / Teachers Hub are embedded subrepos (gitlinks without a `.gitmodules` entry); Research Hub and IGCSE Tools are properly registered submodules. See the root `CLAUDE.md` for the full explanation and git workflow.
 
 ---
 
@@ -177,6 +180,8 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 | `physics_pacing/year9-10`           | IGCSE physics pacing — same structure as math_pacing.            | central_admin |
 | `cambridge_syllabus/{docId}`            | Syllabus reference items. **Doc ID format: `{subjectCode}_{syllabusCode}` e.g. `0580_C1.1`, `0862_7Ni.02`, `0893_8Bp.04`**. Fields: `code` (display code e.g. `C1.1`), `title`, `tier` (`Core`/`Extended`), `topicArea`, `description`, `content`, `notes`, `paper` (Stage 7/8/9 for checkpoint), `subjectCode`. Autocomplete in pacing pages must search `entry.code` field, NOT the doc ID. | central_admin |
 | `cambridge_syllabus_progression/{subjectCode}` | Curated Stage 7→8→9 progression mapping per subject (one doc per `subjectCode`, e.g. `0862`, `0893`). Fields: `subjectCode`, `rows: [{component, topicArea, stage7, stage8, stage9}]` where stage values are codes or null. Used by the Progression Grid tab on checkpoint pacing pages — falls back to a title-similarity heuristic if absent. Seeded by `seed-progression-{code}.js`. | central_admin |
+| `km_curriculum/{docId}`             | Indonesian Kurikulum Merdeka textbook chapters (one doc per textbook bab/chapter). Doc ID format: `km-{subject}-kelas-{grade}-bab-{n}` or `…-bab-{n}-tl` for Matematika Tingkat Lanjut. Fields: `subject`, `fase` (`'D'`\|`'E'`\|`'F'`\|`'F+'`), `grade` (7..12), `track` (`'mainstream'`\|`'tingkat_lanjut'`), `textbook`, `bab_number`, `bab_title`, `bab_title_en`, `sections[]`, `concept_tags[]`, `source`, `createdAt`. Read open to all hubs; seeded by `seed-curriculum-alignment.js` from `curriculum-research/km-curriculum-seed.json` (gitignored). | central_admin |
+| `curriculum_master_topics/{docId}`  | Master conceptual topic taxonomy linking Cambridge G7-12 (Checkpoint+IGCSE+AS/A-Level) with KM Fase D/E/F/F+. Doc ID format: `topic-{subject}-{TOPIC_ID}`. Fields: `subject`, `topic_id`, `topic_name`, `concept_family`, `cambridge_coverage[{level,subjectCode,codes[],depth,notes?}]`, `km_coverage[{fase,grade,track,km_curriculum_doc_id,depth,notes?}]`, `comparison{cambridge_first_grade,km_first_grade,status,notes}`, `createdAt`. `comparison.status` enum: `'covered'`\|`'partial'`\|`'km_only'`\|`'cambridge_only'`\|`'depth_mismatch'`. Read open; powers the National Alignment page. Seeded by `seed-curriculum-alignment.js` from `curriculum-research/master-topics-math-seed.json` (gitignored). | central_admin |
 | `userProgress/{uid}`                | Per-teacher pacing progress written by Teachers Hub. Not read by Central Hub yet. | owner (teacher) |
 | `school_events/{eventId}`           | Partner Schools Event Calendar events. Fields: `schoolId`, `schoolName`, `title`, `category`, `date_start` (YYYY-MM-DD), `date_end`, `description`, `createdBy`, `createdAt`. | any central hub user |
 | `user_competencies/{uid}`           | Competency progress for Teachers Hub (`earned`, `matDone`) and Academic Hub (`earned_academic`, `matDone_academic`). Written by each platform, read by `competency-admin.html` for context. | owner (per platform) |
@@ -186,11 +191,11 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 
 **IMPORTANT — collection rename:** CentralHub's documents collection is `central_documents`, NOT `documents`. The rename happened during the multi-project consolidation to avoid Firestore rule conflicts with the legacy `documents` collection.
 
-**Firestore rules** live **exclusively** in `CentralHub/firestore.rules` — this is the single source of truth for all three apps (they share the same Firebase project).
+**Firestore rules** live **exclusively** in `Central Hub/firestore.rules` — this is the single source of truth for all four apps that share the `centralhub-8727b` project (Academic / Central / Teachers / Research Hub).
 
-⚠️ **Always deploy rules from the `CentralHub/` directory:**
+⚠️ **Always deploy rules from the `Central Hub/` directory:**
 ```bash
-cd "Eduversal Web/CentralHub"
+cd "Eduversal Web/Central Hub"
 firebase deploy --only firestore:rules --project centralhub-8727b
 ```
 Academic Hub and Teachers Hub do NOT have their own `firestore.rules`. Never create one there — it would overwrite the shared rules with an outdated version.
@@ -264,6 +269,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `checklist-admin.html`             | `/checklist-admin`              | Weekly checklist template admin — sets tasks and essentials for all 8 platforms (teachers, subject_leader, academic_coordinator, school_principal, foundation_representative, cambridge_coordinator, director, coordinator). central_admin only. |
 | `weekly-checklist.html`            | `/weekly-checklist`             | Weekly checklist for Central Hub users — director and coordinator ch_sub_roles. Users see only their own tab(s); central_admin sees both and can add/edit/delete tasks inline. Firestore: `weekly_templates` (read), `weekly_progress` (read/write own), `weekly_essentials` (read). |
 | `competency-admin.html`            | `/competency-admin`             | Competency evidence review dashboard — central_admin reviews pending `competency_evidence` submissions from both Teachers Hub and Academic Hub. Approve/reject with reviewer notes. Reads `competency_evidence` collection filtered by `status === 'pending'`. |
+| `national-alignment.html`          | `/national-alignment`           | Cambridge G7-12 ↔ Indonesian Kurikulum Merdeka mathematics alignment dashboard. Three views: Topic browser (master topic list with side-by-side Cambridge + KM coverage), Coverage matrix (per-grade G7-12 grid showing where each topic is taught in each curriculum), Gap list (KM-only / Cambridge-only / depth_mismatch buckets). Read-only viewer; data is seeded from JSON via `seed-curriculum-alignment.js` from monorepo root. Reads `curriculum_master_topics`, `km_curriculum`, and `cambridge_syllabus` collections. Math is the pilot subject; Sciences will be added later under the same data model. |
 
 ---
 
