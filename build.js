@@ -277,7 +277,6 @@ const htmlFiles = [
   "academics.html",
   "primary-checkpoint-syllabus.html",
   "secondary-checkpoint-syllabus.html",
-  "igcse-pacing.html",
   "igcse-syllabus.html",
   "schedule-settings.html",
   "igcse-math-admin.html",
