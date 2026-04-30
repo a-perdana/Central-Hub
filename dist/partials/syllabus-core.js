@@ -199,6 +199,7 @@ export function initSyllabusPage(config) {
   let unsub          = null;
   let saving         = false;
   let isAdmin        = false;
+  let isCoordinator  = false;
 
   // Modal state
   let modalMode         = null;
@@ -264,6 +265,7 @@ export function initSyllabusPage(config) {
     }
 
     isAdmin = profile.role_centralhub === 'central_admin';
+    isCoordinator = profile.role_centralhub === 'central_user' && Array.isArray(profile.ch_sub_roles) && profile.ch_sub_roles.includes('coordinator');
     document.getElementById('mainContent').style.display = '';
 
     // Build subject tabs dynamically if the container is empty (IGCSE uses dynamic tabs)
@@ -1407,10 +1409,13 @@ export function initSyllabusPage(config) {
         <button class="btn-reorder" onclick="moveTopic(${ci},${ti},1)" title="Move down" ${ti===chapters[ci].topics.length-1?'disabled':''}>↓</button>
       </div>` : '';
 
-    const actionsHtml = isAdmin ? `<div class="topic-actions">
+    const canEditTopic = isAdmin || isCoordinator;
+    const editBtn   = canEditTopic ? `<button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>` : '';
+    const deleteBtn = isAdmin      ? `<button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>` : '';
+    const actionsHtml = canEditTopic ? `<div class="topic-actions">
       ${topicReorderHtml}
-      <button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>
-      <button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>
+      ${editBtn}
+      ${deleteBtn}
     </div>` : '';
 
     return `<div class="topic-row">

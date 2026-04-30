@@ -1560,12 +1560,14 @@ export function initSyllabusPage(config) {
       ? `<button class="btn-exclude" onclick="toggleExcluded(${ci},${ti})" title="${t.excluded ? 'Mark as covered' : 'Mark as not covered'}">${t.excluded ? '↩ Include' : '✕ Not Covered'}</button>`
       : '';
 
-    const actionsHtml = isAdmin ? `<div class="topic-actions">
+    const editBtn   = canEditHours ? `<button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>` : '';
+    const deleteBtn = isAdmin      ? `<button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>` : '';
+    const actionsHtml = (canEditHours || isAdmin) ? `<div class="topic-actions">
       ${topicReorderHtml}
       ${excludeBtn}
-      <button class="btn btn-edit" onclick="editTopic(${ci},${ti})">Edit</button>
-      <button class="btn btn-danger" onclick="deleteTopic(event,${ci},${ti})">Delete</button>
-    </div>` : (canEditHours ? `<div class="topic-actions">${excludeBtn}</div>` : '');
+      ${editBtn}
+      ${deleteBtn}
+    </div>` : '';
 
     return `<div class="topic-row${t.excluded ? ' topic-excluded' : ''}">
       <div class="topic-num">${ti + 1}</div>
