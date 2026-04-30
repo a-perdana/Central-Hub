@@ -305,6 +305,7 @@ const htmlFiles = [
   "cambridge-calendar.html",
   "event-calendar.html",
   "curriculum-map.html",
+  "national-alignment.html",
   "kpi-admin.html",
   "reports.html",
   "school-visits.html",
