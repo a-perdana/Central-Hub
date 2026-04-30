@@ -173,7 +173,7 @@ const CHECKPOINT_SUBJECTS = {
 // AS/A-Level pacing pages — generated from igcse-pacing-template.html
 // ============================================================
 const ASALEVEL_SUBJECTS = {
-  'asalevel-math-pacing.html': {
+  'as-alevel-math-pacing.html': {
     pageTitle:    'AS & A Level Mathematics Pacing — CentralHub',
     accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
     heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
@@ -186,7 +186,7 @@ const ASALEVEL_SUBJECTS = {
     pacingConfig: `{ collection: 'asalevel_math_pacing', docId: 'year11-12', subjectKey: 'asalevel_math', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
-  'asalevel-biology-pacing.html': {
+  'as-alevel-biology-pacing.html': {
     pageTitle:    'AS & A Level Biology Pacing — CentralHub',
     accentVars:   '--accent: #1e7a4a;\n      --accent-dk: #166534;\n      --accent-2: #e9f7ef;',
     heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
@@ -199,7 +199,7 @@ const ASALEVEL_SUBJECTS = {
     pacingConfig: `{ collection: 'asalevel_biology_pacing', docId: 'year11-12', subjectKey: 'asalevel_biology', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
-  'asalevel-chemistry-pacing.html': {
+  'as-alevel-chemistry-pacing.html': {
     pageTitle:    'AS & A Level Chemistry Pacing — CentralHub',
     accentVars:   '--accent: #e67e22;\n      --accent-dk: #ca6f1e;\n      --accent-2: #fef5e7;',
     heroGradient: 'linear-gradient(135deg, #431407 0%, #7c2d12 40%, #9a3412 70%, #c2410c 100%)',
@@ -212,7 +212,7 @@ const ASALEVEL_SUBJECTS = {
     pacingConfig: `{ collection: 'asalevel_chemistry_pacing', docId: 'year11-12', subjectKey: 'asalevel_chemistry', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
-  'asalevel-physics-pacing.html': {
+  'as-alevel-physics-pacing.html': {
     pageTitle:    'AS & A Level Physics Pacing — CentralHub',
     accentVars:   '--accent: #0369a1;\n      --accent-dk: #075985;\n      --accent-2: #f0f9ff;',
     heroGradient: 'linear-gradient(135deg, #0c4a6e 0%, #075985 40%, #0369a1 70%, #0284c7 100%)',
@@ -247,7 +247,7 @@ function generateFromPacingTemplate(template, cfg) {
 
 const igcseTemplate      = fs.readFileSync('igcse-pacing-template.html', 'utf8');
 const checkpointTemplate = fs.readFileSync('checkpoint-pacing-template.html', 'utf8');
-const asalevelTemplate   = fs.readFileSync('asalevel-pacing-template.html', 'utf8');
+const asalevelTemplate   = fs.readFileSync('as-alevel-pacing-template.html', 'utf8');
 
 const generatedPacing = {};
 Object.entries(IGCSE_SUBJECTS).forEach(([f, cfg]) => {
@@ -287,10 +287,10 @@ const htmlFiles = [
   "checkpoint-math-pacing.html",
   "checkpoint-english-pacing.html",
   "checkpoint-science-pacing.html",
-  "asalevel-math-pacing.html",
-  "asalevel-biology-pacing.html",
-  "asalevel-chemistry-pacing.html",
-  "asalevel-physics-pacing.html",
+  "as-alevel-math-pacing.html",
+  "as-alevel-biology-pacing.html",
+  "as-alevel-chemistry-pacing.html",
+  "as-alevel-physics-pacing.html",
   "as-alevel-syllabus.html",
   "assessment-management.html",
   "assessments.html",
