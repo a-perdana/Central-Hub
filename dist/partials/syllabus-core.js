@@ -899,7 +899,10 @@ export function initSyllabusPage(config) {
         }
         body.innerHTML = renderTeachingSchedule(_schedData, _calEvents);
         const tw = parseInt(body.querySelector('.ts-layout')?.dataset.tw, 10) || 0;
-        if (tw && typeof window.tsRecalc === 'function') window.tsRecalc(tw);
+        if (tw) {
+          if (typeof window.tsProgrammeChange === 'function') window.tsProgrammeChange(tw);
+          else if (typeof window.tsRecalc === 'function') window.tsRecalc(tw);
+        }
       } catch(e) {
         body.innerHTML = `<div style="padding:24px;color:#DC2626">Failed to load: ${e.message}</div>`;
       }
@@ -1032,6 +1035,16 @@ export function initSyllabusPage(config) {
 
           <div class="ts-sim-card">
             <div class="ts-sim-field">
+              <label class="ts-sim-label" for="tsProgramme">Programme</label>
+              <select class="ts-sim-input" id="tsProgramme" onchange="tsProgrammeChange(${numTeachingWeeks})">
+                <option value="">— Select —</option>
+                <option value="checkpoint">Secondary Checkpoint (G7–8)</option>
+                <option value="igcse" selected>IGCSE (G9–10)</option>
+                <option value="as">AS Level (G11)</option>
+                <option value="alevel">A Level (G12)</option>
+              </select>
+            </div>
+            <div class="ts-sim-field">
               <label class="ts-sim-label" for="tsLessonsPerWeek">Lessons per week</label>
               <input class="ts-sim-input" type="number" id="tsLessonsPerWeek" min="1" max="20" step="1" value="3" oninput="tsRecalc(${numTeachingWeeks})">
             </div>
@@ -1043,6 +1056,10 @@ export function initSyllabusPage(config) {
               <label class="ts-sim-label" for="tsTargetHours">Target hours (GLH)</label>
               <input class="ts-sim-input" type="number" id="tsTargetHours" min="1" max="9999" step="1" value="130" oninput="tsRecalc(${numTeachingWeeks})">
             </div>
+          </div>
+
+          <div id="tsProgrammeInfo" class="ts-sim-card" style="background:#F0F9FF;border-color:#BFDBFE;font-size:0.78rem;color:#1e40af;padding:12px 16px">
+            <!-- populated by tsProgrammeChange() -->
           </div>
 
           <div class="ts-sim-card">
@@ -1134,6 +1151,43 @@ export function initSyllabusPage(config) {
         badge.textContent = 'Exact match'; badge.className = 'ts-gap-badge exact';
       }
     }
+  };
+
+  // ── Teaching Schedule Programme Selector ───────────────────────────────────
+  window.tsProgrammeChange = function(numTeachingWeeks) {
+    const prog = document.getElementById('tsProgramme')?.value;
+
+    const PROGRAMMES = {
+      checkpoint: { label: 'Secondary Checkpoint', grades: 'Grade 7–8', years: 2, glh: 360,
+                    note: 'Stages 7, 8 & 9 (3 × 120 hrs) compressed into 2 years' },
+      igcse:      { label: 'IGCSE',                grades: 'Grade 9–10', years: 2, glh: 130,
+                    note: '130 hrs per subject over 2 years' },
+      as:         { label: 'AS Level',             grades: 'Grade 11',   years: 1, glh: 180,
+                    note: '180 hrs per subject in 1 year' },
+      alevel:     { label: 'A Level',              grades: 'Grade 12',   years: 1, glh: 180,
+                    note: '180 hrs per subject in 1 year (continuation)' },
+    };
+
+    const cfg = PROGRAMMES[prog];
+
+    const info = document.getElementById('tsProgrammeInfo');
+    if (info) {
+      if (!cfg) {
+        info.style.display = 'none';
+      } else {
+        info.style.display = '';
+        info.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px">${cfg.label} — ${cfg.grades}</div>
+          <div style="color:#334155">${cfg.note}</div>
+          <div style="margin-top:6px;font-weight:600">Cambridge GLH: ${cfg.glh} hrs</div>
+        `;
+      }
+    }
+
+    const targetEl = document.getElementById('tsTargetHours');
+    if (targetEl && cfg) targetEl.value = cfg.glh;
+
+    window.tsRecalc(numTeachingWeeks);
   };
 
   // ── Load subject ───────────────────────────────────────────────────────────
