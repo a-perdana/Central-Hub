@@ -308,6 +308,10 @@ export function initSyllabusPage(config) {
   let teachingWeeks = [];
   let skippedWeeks  = [];
 
+  // Teaching schedule modal cache
+  let _schedData = null;
+  let _calEvents = null;
+
   // Grade filter (checkpoint only)
   let activeYearFilter = years[0] || 'all';
 
@@ -386,6 +390,10 @@ export function initSyllabusPage(config) {
         if (el) el.style.display = 'none';
       });
     }
+
+    // Show teaching schedule button for all users
+    const teachSchedBtn = document.getElementById('teachSchedBtn');
+    if (teachSchedBtn) teachSchedBtn.style.display = '';
 
     // Paging toggle button — inject before editSyllabusBtn for admin/coordinator
     if (isAdmin || isCoordinator) {
@@ -864,6 +872,139 @@ export function initSyllabusPage(config) {
     _sylEdCurrentKey = null;
     const saveBtn = document.getElementById('syllabusEditorSaveBtn');
     if (saveBtn) saveBtn.style.display = 'none';
+  }
+
+  // ── Teaching Schedule Modal ────────────────────────────────────────────────
+  function openTeachingScheduleModal() {
+    const modal = document.getElementById('teachSchedModal');
+    if (!modal) return;
+    modal.classList.add('open');
+
+    const body = document.getElementById('teachSchedBody');
+    if (!body) return;
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#64748B">Loading…</div>';
+
+    (async () => {
+      try {
+        if (!_schedData) {
+          const snap = await getDoc(doc(window.db, 'teaching_schedule', scheduleDocId));
+          _schedData = snap.exists() ? snap.data() : null;
+        }
+        if (!_calEvents) {
+          const snap = await getDocs(query(
+            collection(window.db, 'calendar_events'),
+            where('category', '==', 'Public Holiday')
+          ));
+          _calEvents = snap.docs.map(d => d.data());
+        }
+        body.innerHTML = renderTeachingSchedule(_schedData, _calEvents);
+      } catch(e) {
+        body.innerHTML = `<div style="padding:24px;color:#DC2626">Failed to load: ${e.message}</div>`;
+      }
+    })();
+  }
+
+  function closeTeachingScheduleModal() {
+    const modal = document.getElementById('teachSchedModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function renderTeachingSchedule(schedData, calEvents) {
+    if (!schedData || !calEvents) {
+      return '<div style="padding:24px;color:#64748B">No data available</div>';
+    }
+
+    const { academicYearStart, skippedWeekCount = 0, weeks = [], skippedWeeks = [] } = schedData;
+
+    const weekHasHoliday = (mon, fri) => {
+      return calEvents.filter(ev => {
+        const start = ev.date_start, end = ev.date_end || ev.date_start;
+        return start <= fri && end >= mon;
+      });
+    };
+
+    const formatDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    let html = `
+      <div style="padding:24px">
+        <div style="margin-bottom:20px;padding:16px;background:#F0F9FF;border:1px solid #BFDBFE;border-radius:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:14px">
+            <div>
+              <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Academic Year Start</div>
+              <div style="color:#0F172A;font-weight:600">${formatDate(academicYearStart)}</div>
+            </div>
+            <div>
+              <div style="color:#64748B;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:0.08em;margin-bottom:4px">Teaching Weeks</div>
+              <div style="color:#0F172A;font-weight:600">${weeks.length} weeks${skippedWeekCount > 0 ? ` (${skippedWeekCount} skipped)` : ''}</div>
+            </div>
+          </div>
+        </div>
+
+        <h4 style="margin:20px 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Teaching Weeks</h4>
+        <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#F8FAFC">
+                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">#</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Semester</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Sem Week</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+                <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Holiday</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${weeks.map((w, idx) => {
+                const holidays = weekHasHoliday(w.mon, w.fri);
+                const bgColor = idx % 2 === 0 ? 'white' : '#FAFBFC';
+                return `
+                  <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9">
+                    <td style="padding:10px 12px;color:#0F172A;font-weight:700">${w.weekNo}</td>
+                    <td style="padding:10px 12px;color:#64748B">${w.semLabel || '—'}</td>
+                    <td style="padding:10px 12px;color:#64748B">${w.semWeekNo || '—'}</td>
+                    <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
+                    <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
+                    <td style="padding:10px 12px;text-align:center">
+                      ${holidays.length > 0
+                        ? `<span style="display:inline-block;padding:4px 10px;background:#FEF3C7;color:#92400E;border-radius:4px;font-size:12px;font-weight:600">🏖 ${holidays.map(h => h.title).join(', ')}</span>`
+                        : '—'
+                      }
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        ${skippedWeeks && skippedWeeks.length > 0 ? `
+          <h4 style="margin:24px 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Skipped Weeks</h4>
+          <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="background:#F8FAFC">
+                  <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Semester</th>
+                  <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${skippedWeeks.map((sw, idx) => `
+                  <tr style="background:${idx % 2 === 0 ? 'white' : '#FAFBFC'};border-bottom:1px solid #F1F5F9">
+                    <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(sw.mon)}</td>
+                    <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(sw.fri)}</td>
+                    <td style="padding:10px 12px;color:#64748B">${sw.semLabel || '—'}</td>
+                    <td style="padding:10px 12px"><span style="display:inline-block;padding:4px 10px;background:#FEE2E2;color:#991B1B;border-radius:4px;font-size:12px;font-weight:600">${sw.reason || '—'}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      </div>
+    `;
+    return html;
   }
 
   // ── Load subject ───────────────────────────────────────────────────────────
@@ -2233,6 +2374,7 @@ export function initSyllabusPage(config) {
   document.getElementById('chapterModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeChapterModal(); });
   document.getElementById('topicModal')?.addEventListener('click',   e => { if (e.target === e.currentTarget) closeTopicModal(); });
   document.getElementById('assessmentModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeAssessmentModal(); });
+  document.getElementById('teachSchedModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeTeachingScheduleModal(); });
 
   // Escape key
   document.addEventListener('keydown', e => {
@@ -2241,6 +2383,7 @@ export function initSyllabusPage(config) {
       closeTopicModal();
       closeAssessmentModal();
       closeSyllabusDetail();
+      closeTeachingScheduleModal();
     }
   });
 
@@ -2272,6 +2415,9 @@ export function initSyllabusPage(config) {
     closeSyllabusEditor,
     saveSyllabusEntry,
     removeSyllabusChip,
+    // Teaching Schedule
+    openTeachingScheduleModal,
+    closeTeachingScheduleModal,
     // Reorder
     moveChapter,
     moveTopic,
