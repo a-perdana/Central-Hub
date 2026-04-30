@@ -246,7 +246,7 @@ function generateFromPacingTemplate(template, cfg) {
 }
 
 const igcseTemplate      = fs.readFileSync('igcse-pacing-template.html', 'utf8');
-const checkpointTemplate = fs.readFileSync('checkpoint-pacing-template.html', 'utf8');
+const checkpointTemplate = fs.readFileSync('secondary-checkpoint-pacing-template.html', 'utf8');
 const asalevelTemplate   = fs.readFileSync('as-alevel-pacing-template.html', 'utf8');
 
 const generatedPacing = {};
