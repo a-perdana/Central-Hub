@@ -1132,13 +1132,23 @@ export function initSyllabusPage(config) {
     return Math.max(0, checked);
   }
 
+  function getTsEffectiveWeeks(numTeachingWeeks, cfg) {
+    if (!cfg?.gradeOptions?.length) return numTeachingWeeks;
+    return cfg.gradeOptions.reduce((total, grade) => {
+      const key = grade.replace(/\s+/g, '-').toLowerCase();
+      const checked = document.querySelector(`#tsGradeOptions input[value="${grade}"]`)?.checked;
+      if (!checked) return total;
+      const reserve = Math.max(0, parseFloat(document.getElementById(`tsReserve-${key}`)?.value) || 0);
+      return total + Math.max(0, numTeachingWeeks - reserve);
+    }, 0);
+  }
+
   window.tsRecalc = function(numTeachingWeeks) {
     const lpw     = Math.max(0, parseFloat(document.getElementById('tsLessonsPerWeek')?.value) || 0);
     const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
     const targetH = Math.max(0, parseFloat(document.getElementById('tsTargetHours')?.value)     || 0);
     const cfg     = getTsProgrammeConfig();
-    const selectedYears = cfg ? getTsSelectedGradeCount(cfg) : 1;
-    const effectiveWeeks = numTeachingWeeks * selectedYears;
+    const effectiveWeeks = cfg ? getTsEffectiveWeeks(numTeachingWeeks, cfg) : numTeachingWeeks;
 
     const totalLessons = effectiveWeeks * lpw;
     const totalMins    = totalLessons * dur;
@@ -1214,12 +1224,19 @@ export function initSyllabusPage(config) {
         gradeOptions.style.display = 'grid';
         gradeOptions.style.gridTemplateColumns = `repeat(${cfg.gradeOptions.length > 1 ? 2 : 1}, minmax(0, 1fr))`;
         gradeOptions.style.gap = '8px';
-        gradeOptions.innerHTML = cfg.gradeOptions.map(grade => `
-          <label style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:34px;padding:7px 10px;border:1px solid #E2E8F0;border-radius:7px;background:#fff;font-size:0.78rem;color:#334155;cursor:pointer">
-            <input type="checkbox" class="ts-grade-check" value="${grade}" checked onchange="tsGradeChange(${numTeachingWeeks})" ${cfg.gradeOptions.length === 1 ? 'disabled' : ''}>
-            <span>${grade}</span>
-          </label>
-        `).join('');
+        gradeOptions.innerHTML = cfg.gradeOptions.map(grade => {
+          const key = grade.replace(/\s+/g, '-').toLowerCase();
+          return `
+          <div style="width:100%;padding:8px;border:1px solid #E2E8F0;border-radius:7px;background:#fff">
+            <label style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:24px;font-size:0.78rem;color:#334155;cursor:pointer">
+              <input type="checkbox" class="ts-grade-check" value="${grade}" checked onchange="tsGradeChange(${numTeachingWeeks})" ${cfg.gradeOptions.length === 1 ? 'disabled' : ''}>
+              <span>${grade}</span>
+            </label>
+            <label for="tsReserve-${key}" style="display:block;margin-top:7px;font-size:0.68rem;font-weight:600;color:#64748B;text-align:center">Reserved weeks</label>
+            <input type="number" id="tsReserve-${key}" min="0" max="${numTeachingWeeks}" step="1" value="0" oninput="tsRecalc(${numTeachingWeeks})" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;font-size:0.78rem;text-align:center;color:#0F172A;background:#fff">
+          </div>
+        `;
+        }).join('');
       }
     }
 
@@ -1228,6 +1245,11 @@ export function initSyllabusPage(config) {
 
   window.tsGradeChange = function(numTeachingWeeks) {
     const cfg = getTsProgrammeConfig();
+    document.querySelectorAll('#tsGradeOptions .ts-grade-check').forEach(check => {
+      const key = check.value.replace(/\s+/g, '-').toLowerCase();
+      const reserve = document.getElementById(`tsReserve-${key}`);
+      if (reserve) reserve.disabled = !check.checked;
+    });
     const targetEl = document.getElementById('tsTargetHours');
     if (targetEl && cfg) {
       const selectedYears = getTsSelectedGradeCount(cfg);
