@@ -950,9 +950,13 @@ export function initSyllabusPage(config) {
         <div style="position:relative">
           <style>
             .ts-tooltip { position:relative;display:inline-block;cursor:help }
-            .ts-tooltip .ts-tooltiptext { visibility:hidden;width:max-content;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;position:fixed;z-index:10000;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.25);pointer-events:none }
+            .ts-tooltip .ts-tooltiptext {
+              visibility:hidden;width:max-content;max-width:200px;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;
+              position:absolute;z-index:10000;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:normal;
+              box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;opacity:0;transition:opacity 0.2s
+            }
             .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;top:100%;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:#0F172A transparent transparent transparent }
-            .ts-tooltip:hover .ts-tooltiptext { visibility:visible }
+            .ts-tooltip:hover .ts-tooltiptext { visibility:visible;opacity:1 }
           </style>
           <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px">
             <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -982,7 +986,7 @@ export function initSyllabusPage(config) {
                       <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
                       <td style="padding:10px 12px;text-align:center">
                         <div class="ts-tooltip">
-                          <span style="font-size:16px;cursor:help">🚫</span>
+                          <span style="font-size:14px;cursor:help;color:#DC2626;font-weight:700">ⓘ</span>
                           <span class="ts-tooltiptext">${w.reason || 'Skipped week'}</span>
                         </div>
                       </td>
@@ -999,7 +1003,7 @@ export function initSyllabusPage(config) {
                       <td style="padding:10px 12px;text-align:center">
                         ${hasHoliday
                           ? `<div class="ts-tooltip">
-                              <span style="font-size:16px;cursor:help">🏖</span>
+                              <span style="font-size:14px;cursor:help;color:#F59E0B;font-weight:700">ⓘ</span>
                               <span class="ts-tooltiptext">${holidays.map(h => h.title).join(', ')}</span>
                             </div>`
                           : ''
