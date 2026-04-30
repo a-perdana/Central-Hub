@@ -1195,20 +1195,23 @@ export function initSyllabusPage(config) {
       return;
     }
 
-    const gradeHtml = selectedGrades.map(grade => {
+    const gradeHtml = selectedGrades.map((grade, idx) => {
       const reserve = Math.min(numTeachingWeeks, getTsReserveWeeks(grade));
       const coveredLimit = Math.max(0, numTeachingWeeks - reserve);
       let teachingOrdinal = 0;
 
       return `
-        <section style="margin-bottom:18px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:#F8FAFC;border-bottom:1px solid #E2E8F0">
-            <div style="font-weight:800;color:#0F172A">${grade}</div>
-            <div style="font-size:12px;color:#475569">
+        <details ${idx === 0 ? 'open' : ''} style="margin-bottom:18px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;background:#fff">
+          <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;cursor:pointer;list-style:none">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:800;color:#0F172A">
+              <span style="font-size:12px;color:#64748B">▸</span>
+              <span>${grade}</span>
+            </div>
+            <div style="font-size:12px;color:#475569;text-align:right">
               <span style="font-weight:700;color:#047857">${coveredLimit}</span> teaching weeks
               ${reserve ? `<span style="color:#B45309"> · ${reserve} reserved</span>` : ''}
             </div>
-          </div>
+          </summary>
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead>
               <tr style="background:#FFFFFF">
@@ -1246,7 +1249,7 @@ export function initSyllabusPage(config) {
               }).join('')}
             </tbody>
           </table>
-        </section>
+        </details>
       `;
     }).join('');
 
