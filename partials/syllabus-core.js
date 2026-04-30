@@ -381,7 +381,7 @@ export function initSyllabusPage(config) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
     } else {
-      ['addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
+      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
