@@ -1406,7 +1406,13 @@ function renderCalStrip() {
 
 // ── authReady ─────────────────────────────────────────────────
 document.addEventListener('authReady', ({ detail: { user, profile } }) => {
-  isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
+  // central_admin OR central_user with 'coordinator' sub-role can edit pacing
+  // (matches Firestore rules: isAdmin() || isCHCoordinator())
+  const isCentralAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
+  const isCoordinator  = profile?.role_centralhub === 'central_user'
+                         && Array.isArray(profile?.ch_sub_roles)
+                         && profile.ch_sub_roles.includes('coordinator');
+  isAdmin = isCentralAdmin || isCoordinator;
 
   db = window.db;
   document.getElementById('mainContent').style.display = '';
