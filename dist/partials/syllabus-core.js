@@ -295,7 +295,7 @@ export function initSyllabusPage(config) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
     } else {
-      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn'].forEach(id => {
+      ['addChapterBtn', 'addFirstChapterBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
@@ -670,7 +670,13 @@ export function initSyllabusPage(config) {
       <textarea class="syl-ed-textarea" id="sylEdNotes" rows="6" style="min-height:100px">${escHtml(notes)}</textarea>
       <p class="syl-ed-hint">One note per line.</p>`;
 
-    if (saveBtn) saveBtn.style.display = '';
+    if (saveBtn) saveBtn.style.display = isAdmin ? '' : 'none';
+    if (!isAdmin) {
+      form.querySelectorAll('input,select,textarea,[contenteditable]').forEach(el => {
+        if (el.hasAttribute('contenteditable')) el.setAttribute('contenteditable', 'false');
+        else el.disabled = true;
+      });
+    }
   }
 
   async function saveSyllabusEntry() {

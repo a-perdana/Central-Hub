@@ -381,7 +381,7 @@ export function initSyllabusPage(config) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
     } else {
-      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
+      ['addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
@@ -820,7 +820,14 @@ export function initSyllabusPage(config) {
     if (descEl)    descEl.innerHTML    = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(descHtmlInit)    : descHtmlInit;
     if (contentEl) contentEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(contentHtmlInit) : contentHtmlInit;
 
-    if (saveBtn) saveBtn.style.display = '';
+    if (saveBtn) saveBtn.style.display = isAdmin ? '' : 'none';
+    // Non-admin: read-only view
+    if (!isAdmin) {
+      form.querySelectorAll('input,select,textarea,[contenteditable]').forEach(el => {
+        if (el.hasAttribute('contenteditable')) el.setAttribute('contenteditable', 'false');
+        else el.disabled = true;
+      });
+    }
   }
 
   async function saveSyllabusEntry() {
