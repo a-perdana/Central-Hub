@@ -948,14 +948,20 @@ export function initSyllabusPage(config) {
 
         <h4 style="margin:20px 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
         <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px">
+          <style>
+            .ts-tooltip { position:relative;display:inline-block;cursor:help }
+            .ts-tooltip .ts-tooltiptext { visibility:hidden;width:max-content;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;position:absolute;z-index:1000;bottom:120%;left:50%;transform:translateX(-50%);white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15) }
+            .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;top:100%;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:#0F172A transparent transparent transparent }
+            .ts-tooltip:hover .ts-tooltiptext { visibility:visible }
+          </style>
           <table style="width:100%;border-collapse:collapse;font-size:13px">
             <thead>
               <tr style="background:#F8FAFC">
-                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Week</th>
+                <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px">Week</th>
                 <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Semester</th>
                 <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
                 <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
-                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Info</th>
+                <th style="padding:10px 12px;text-align:center;font-weight:700;color:#64748B;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:50px"></th>
               </tr>
             </thead>
             <tbody>
@@ -969,24 +975,33 @@ export function initSyllabusPage(config) {
                 if (isSkipped) {
                   return `
                     <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9;border-left:${borderLeft};padding-left:4px">
-                      <td style="padding:10px 12px;color:#DC2626;font-weight:700">—</td>
+                      <td style="padding:10px 12px;text-align:center;color:#DC2626;font-weight:700">—</td>
                       <td style="padding:10px 12px;color:#64748B">${w.semLabel || '—'}</td>
                       <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
                       <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
-                      <td style="padding:10px 12px"><span style="display:inline-block;padding:4px 10px;background:#FEE2E2;color:#991B1B;border-radius:4px;font-size:11px;font-weight:600">🚫 ${w.reason || 'Skipped'}</span></td>
+                      <td style="padding:10px 12px;text-align:center">
+                        <div class="ts-tooltip">
+                          <span style="font-size:16px;cursor:help">🚫</span>
+                          <span class="ts-tooltiptext">${w.reason || 'Skipped week'}</span>
+                        </div>
+                      </td>
                     </tr>
                   `;
                 } else {
+                  const hasHoliday = holidays.length > 0;
                   return `
                     <tr style="background:${bgColor};border-bottom:1px solid #F1F5F9">
-                      <td style="padding:10px 12px;color:#0F172A;font-weight:700">${w.weekNo}</td>
+                      <td style="padding:10px 12px;text-align:center;color:#0F172A;font-weight:700">${w.weekNo}</td>
                       <td style="padding:10px 12px;color:#64748B">${w.semLabel || '—'}</td>
                       <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.mon)}</td>
                       <td style="padding:10px 12px;color:#334155;font-family:monospace;font-size:12px">${formatDate(w.fri)}</td>
-                      <td style="padding:10px 12px">
-                        ${holidays.length > 0
-                          ? `<span style="display:inline-block;padding:4px 10px;background:#FEF3C7;color:#92400E;border-radius:4px;font-size:11px;font-weight:600">🏖 ${holidays.map(h => h.title).join(', ')}</span>`
-                          : '—'
+                      <td style="padding:10px 12px;text-align:center">
+                        ${hasHoliday
+                          ? `<div class="ts-tooltip">
+                              <span style="font-size:16px;cursor:help">🏖</span>
+                              <span class="ts-tooltiptext">${holidays.map(h => h.title).join(', ')}</span>
+                            </div>`
+                          : ''
                         }
                       </td>
                     </tr>
