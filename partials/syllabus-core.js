@@ -1059,6 +1059,16 @@ export function initSyllabusPage(config) {
               <label class="ts-sim-label">Grades included</label>
               <div id="tsGradeOptions" style="display:flex;flex-wrap:wrap;gap:8px"></div>
             </div>
+            <div class="ts-sim-field" id="tsExamField" style="display:none">
+              <label class="ts-sim-label">Exam sitting</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <select class="ts-sim-input" id="tsExamGrade" onchange="tsRecalc(${numTeachingWeeks})"></select>
+                <select class="ts-sim-input" id="tsExamSession" onchange="tsRecalc(${numTeachingWeeks})">
+                  <option value="may-jun">May-Jun</option>
+                  <option value="oct-nov">Oct-Nov</option>
+                </select>
+              </div>
+            </div>
             <div class="ts-sim-field">
               <label class="ts-sim-label" for="tsLessonsPerWeek">Lessons per week</label>
               <input class="ts-sim-input" type="number" id="tsLessonsPerWeek" min="1" max="20" step="1" value="3" oninput="tsRecalc(${numTeachingWeeks})">
@@ -1081,6 +1091,10 @@ export function initSyllabusPage(config) {
             <div class="ts-stat-row">
               <span class="ts-stat-label">Teaching weeks</span>
               <span class="ts-stat-value" id="tsOutWeeks">—</span>
+            </div>
+            <div class="ts-stat-row">
+              <span class="ts-stat-label">Exam window</span>
+              <span class="ts-stat-value" id="tsOutExamWindow">—</span>
             </div>
             <div class="ts-stat-row">
               <span class="ts-stat-label">Total lessons</span>
@@ -1123,16 +1137,16 @@ export function initSyllabusPage(config) {
     const PROGRAMMES = {
       checkpoint: { label: 'Secondary Checkpoint', grades: 'Grade 7-8', years: 2, glh: 360,
                     note: 'Stages 7, 8 & 9 (3 x 120 hrs) compressed into 2 years',
-                    gradeOptions: ['Grade 7', 'Grade 8'] },
+                    gradeOptions: ['Grade 7', 'Grade 8'], examGradeOptions: ['Grade 8', 'Grade 9'], defaultExamGrade: 'Grade 8' },
       igcse:      { label: 'IGCSE',                grades: 'Grade 9-10', years: 2, glh: 130,
                     note: '130 hrs per subject over 2 years',
-                    gradeOptions: ['Grade 9', 'Grade 10'] },
+                    gradeOptions: ['Grade 9', 'Grade 10'], examGradeOptions: ['Grade 10', 'Grade 11'], defaultExamGrade: 'Grade 10' },
       as:         { label: 'AS Level',             grades: 'Grade 11',   years: 1, glh: 180,
                     note: '180 hrs per subject in 1 year',
-                    gradeOptions: ['Grade 11'] },
+                    gradeOptions: ['Grade 11'], examGradeOptions: ['Grade 11', 'Grade 12'], defaultExamGrade: 'Grade 11' },
       alevel:     { label: 'A Level',              grades: 'Grade 11-12', years: 2, glh: 360,
                     note: '360 hrs per subject over 2 years',
-                    gradeOptions: ['Grade 11', 'Grade 12'] },
+                    gradeOptions: ['Grade 11', 'Grade 12'], examGradeOptions: ['Grade 12'], defaultExamGrade: 'Grade 12' },
     };
     return PROGRAMMES[prog] || null;
   }
@@ -1159,6 +1173,30 @@ export function initSyllabusPage(config) {
     return Math.max(0, parseFloat(document.getElementById(`tsReserve-${key}`)?.value) || 0);
   }
 
+  function getTsExamState(cfg) {
+    return {
+      grade: document.getElementById('tsExamGrade')?.value || cfg?.defaultExamGrade || cfg?.gradeOptions?.at(-1) || '',
+      session: document.getElementById('tsExamSession')?.value || 'may-jun',
+    };
+  }
+
+  function getTsExamCutoffDate(session) {
+    const start = _schedData?.academicYearStart ? new Date(`${_schedData.academicYearStart}T00:00:00`) : null;
+    if (!start || Number.isNaN(start.getTime())) return null;
+    const startYear = start.getFullYear();
+    if (session === 'oct-nov') return new Date(startYear, 10, 30);
+    return new Date(startYear + 1, 5, 30);
+  }
+
+  function getTsExamWindowWeeks(cfg) {
+    if (!cfg || !_schedData?.weeks?.length) return 0;
+    const { grade, session } = getTsExamState(cfg);
+    if (!grade || cfg.gradeOptions.includes(grade)) return 0;
+    const cutoff = getTsExamCutoffDate(session);
+    if (!cutoff) return 0;
+    return _schedData.weeks.filter(w => new Date(`${w.mon}T00:00:00`) <= cutoff).length;
+  }
+
   function tsFmtDate(iso) {
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
@@ -1182,6 +1220,9 @@ export function initSyllabusPage(config) {
     const selectedGrades = cfg.gradeOptions.filter(grade =>
       document.querySelector(`#tsGradeOptions input[value="${grade}"]`)?.checked
     );
+    const examState = getTsExamState(cfg);
+    const examWindowWeeks = getTsExamWindowWeeks(cfg);
+    const examCutoff = getTsExamCutoffDate(examState.session);
     const deficitWeeks = gapMins < 0 && lpw > 0 && dur > 0
       ? Math.ceil(Math.abs(gapMins) / (lpw * dur))
       : 0;
@@ -1252,12 +1293,49 @@ export function initSyllabusPage(config) {
         </details>
       `;
     }).join('');
+    const examRows = examWindowWeeks > 0
+      ? (_schedData.weeks || []).filter(w => new Date(`${w.mon}T00:00:00`) <= examCutoff)
+      : [];
+    const examHtml = examRows.length ? `
+      <details style="margin-bottom:18px;border:1px solid #BFDBFE;border-radius:8px;overflow:hidden;background:#fff">
+        <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:#EFF6FF;border-bottom:1px solid #BFDBFE;cursor:pointer;list-style:none">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:800;color:#1E3A8A">
+            <span style="font-size:12px;color:#3B82F6">▸</span>
+            <span>${examState.grade} exam prep window</span>
+          </div>
+          <div style="font-size:12px;color:#1D4ED8;text-align:right">
+            <span style="font-weight:800">${examRows.length}</span> weeks to ${examState.session === 'oct-nov' ? 'Oct-Nov' : 'May-Jun'}
+          </div>
+        </summary>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:#FFFFFF">
+              <th style="padding:9px 10px;text-align:center;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:58px">Week</th>
+              <th style="padding:9px 10px;text-align:left;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+              <th style="padding:9px 10px;text-align:left;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+              <th style="padding:9px 10px;text-align:center;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:90px">Use</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${examRows.map(w => `
+              <tr style="background:#EFF6FF;border-bottom:1px solid #DBEAFE">
+                <td style="padding:8px 10px;text-align:center;color:#0F172A;font-weight:800">${w.weekNo}</td>
+                <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.mon)}</td>
+                <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.fri)}</td>
+                <td style="padding:8px 10px;text-align:center"><span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#DBEAFE;color:#1E40AF;font-weight:700;font-size:11px">Exam prep</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </details>
+    ` : '';
 
     target.innerHTML = `
       <div style="margin-bottom:12px;padding:12px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;color:#475569;font-size:12px;line-height:1.45">
-        Pattern mode repeats the synced academic-year schedule for each selected grade. Green weeks are used for syllabus coverage; amber weeks are reserved for revision or past papers.
+        Pattern mode repeats the synced academic-year schedule for each selected grade. Green weeks are used for syllabus coverage; amber weeks are reserved for revision or past papers; blue weeks are extra exam-session preparation time.
       </div>
       ${gradeHtml}
+      ${examHtml}
       ${deficitWeeks ? `
         <div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:8px;padding:12px 14px;color:#991B1B">
           <div style="font-weight:800;margin-bottom:8px">Deficit equivalent: ${deficitWeeks} week${deficitWeeks === 1 ? '' : 's'}</div>
@@ -1275,7 +1353,8 @@ export function initSyllabusPage(config) {
     const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
     const targetH = Math.max(0, parseFloat(document.getElementById('tsTargetHours')?.value)     || 0);
     const cfg     = getTsProgrammeConfig();
-    const effectiveWeeks = cfg ? getTsEffectiveWeeks(numTeachingWeeks, cfg) : numTeachingWeeks;
+    const examWindowWeeks = cfg ? getTsExamWindowWeeks(cfg) : 0;
+    const effectiveWeeks = cfg ? getTsEffectiveWeeks(numTeachingWeeks, cfg) + examWindowWeeks : numTeachingWeeks;
 
     const totalLessons = effectiveWeeks * lpw;
     const totalMins    = totalLessons * dur;
@@ -1296,6 +1375,7 @@ export function initSyllabusPage(config) {
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
     set('tsOutWeeks',    effectiveWeeks);
+    set('tsOutExamWindow', examWindowWeeks ? `+${examWindowWeeks} weeks` : '—');
     set('tsOutLessons',  totalLessons);
     set('tsOutTime',     fmtTime(totalMins));
     set('tsOutTarget',   targetH > 0 ? fmtTime(targetMins) : '—');
@@ -1343,6 +1423,8 @@ export function initSyllabusPage(config) {
 
     const gradeField = document.getElementById('tsGradeField');
     const gradeOptions = document.getElementById('tsGradeOptions');
+    const examField = document.getElementById('tsExamField');
+    const examGrade = document.getElementById('tsExamGrade');
     if (gradeField && gradeOptions) {
       if (!cfg?.gradeOptions?.length) {
         gradeField.style.display = 'none';
@@ -1365,6 +1447,17 @@ export function initSyllabusPage(config) {
           </div>
         `;
         }).join('');
+      }
+    }
+    if (examField && examGrade) {
+      if (!cfg?.examGradeOptions?.length) {
+        examField.style.display = 'none';
+        examGrade.innerHTML = '';
+      } else {
+        examField.style.display = '';
+        examGrade.innerHTML = cfg.examGradeOptions.map(grade =>
+          `<option value="${grade}" ${grade === cfg.defaultExamGrade ? 'selected' : ''}>${grade}</option>`
+        ).join('');
       }
     }
 
