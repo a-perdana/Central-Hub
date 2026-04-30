@@ -955,10 +955,16 @@ export function initSyllabusPage(config) {
                 </div>
               </div>
             </div>
-            <h4 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px">
+              <h4 style="margin:0;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
+              <div style="display:flex;gap:6px">
+                <button type="button" id="tsViewCalendarBtn" onclick="tsScheduleView('calendar')" style="border:1px solid #059669;background:#ECFDF5;color:#047857;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">Calendar</button>
+                <button type="button" id="tsViewSimulationBtn" onclick="tsScheduleView('simulation')" style="border:1px solid #CBD5E1;background:#fff;color:#475569;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">Simulation</button>
+              </div>
+            </div>
           </div>
 
-          <div style="padding:0 24px 24px;position:relative">
+          <div id="tsCalendarScheduleView" style="padding:0 24px 24px;position:relative">
             <style>
               .ts-tooltip { position:relative;display:inline-block;cursor:help }
               .ts-tooltip .ts-tooltiptext {
@@ -1027,6 +1033,11 @@ export function initSyllabusPage(config) {
             </table>
             </div>
           </div>
+          <div id="tsSimulationScheduleView" style="display:none;padding:0 24px 24px;position:relative">
+            <div style="border:1px solid #E2E8F0;border-radius:8px;padding:16px;color:#64748B;font-size:13px">
+              Select a programme to generate the simulation plan.
+            </div>
+          </div>
         </div>
 
         <!-- RIGHT: simulator column -->
@@ -1041,8 +1052,12 @@ export function initSyllabusPage(config) {
                 <option value="checkpoint">Secondary Checkpoint (G7–8)</option>
                 <option value="igcse" selected>IGCSE (G9–10)</option>
                 <option value="as">AS Level (G11)</option>
-                <option value="alevel">A Level (G12)</option>
+                <option value="alevel">A Level (G11-12)</option>
               </select>
+            </div>
+            <div class="ts-sim-field" id="tsGradeField" style="display:none">
+              <label class="ts-sim-label">Grades included</label>
+              <div id="tsGradeOptions" style="display:flex;flex-wrap:wrap;gap:8px"></div>
             </div>
             <div class="ts-sim-field">
               <label class="ts-sim-label" for="tsLessonsPerWeek">Lessons per week</label>
@@ -1103,12 +1118,163 @@ export function initSyllabusPage(config) {
   }
 
   // ── Teaching Schedule Simulation Calculator ────────────────────────────────
+  function getTsProgrammeConfig() {
+    const prog = document.getElementById('tsProgramme')?.value;
+    const PROGRAMMES = {
+      checkpoint: { label: 'Secondary Checkpoint', grades: 'Grade 7-8', years: 2, glh: 360,
+                    note: 'Stages 7, 8 & 9 (3 x 120 hrs) compressed into 2 years',
+                    gradeOptions: ['Grade 7', 'Grade 8'] },
+      igcse:      { label: 'IGCSE',                grades: 'Grade 9-10', years: 2, glh: 130,
+                    note: '130 hrs per subject over 2 years',
+                    gradeOptions: ['Grade 9', 'Grade 10'] },
+      as:         { label: 'AS Level',             grades: 'Grade 11',   years: 1, glh: 180,
+                    note: '180 hrs per subject in 1 year',
+                    gradeOptions: ['Grade 11'] },
+      alevel:     { label: 'A Level',              grades: 'Grade 11-12', years: 2, glh: 360,
+                    note: '360 hrs per subject over 2 years',
+                    gradeOptions: ['Grade 11', 'Grade 12'] },
+    };
+    return PROGRAMMES[prog] || null;
+  }
+
+  function getTsSelectedGradeCount(cfg) {
+    if (!cfg?.gradeOptions?.length) return 1;
+    const checked = document.querySelectorAll('#tsGradeOptions input[type="checkbox"]:checked').length;
+    return Math.max(0, checked);
+  }
+
+  function getTsEffectiveWeeks(numTeachingWeeks, cfg) {
+    if (!cfg?.gradeOptions?.length) return numTeachingWeeks;
+    return cfg.gradeOptions.reduce((total, grade) => {
+      const key = grade.replace(/\s+/g, '-').toLowerCase();
+      const checked = document.querySelector(`#tsGradeOptions input[value="${grade}"]`)?.checked;
+      if (!checked) return total;
+      const reserve = Math.max(0, parseFloat(document.getElementById(`tsReserve-${key}`)?.value) || 0);
+      return total + Math.max(0, numTeachingWeeks - reserve);
+    }, 0);
+  }
+
+  function getTsReserveWeeks(grade) {
+    const key = grade.replace(/\s+/g, '-').toLowerCase();
+    return Math.max(0, parseFloat(document.getElementById(`tsReserve-${key}`)?.value) || 0);
+  }
+
+  function tsFmtDate(iso) {
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function renderTsSimulationSchedule(numTeachingWeeks, cfg, gapMins, lpw, dur) {
+    const target = document.getElementById('tsSimulationScheduleView');
+    if (!target) return;
+    if (!cfg || !_schedData?.weeks?.length) {
+      target.innerHTML = `
+        <div style="border:1px solid #E2E8F0;border-radius:8px;padding:16px;color:#64748B;font-size:13px">
+          Select a programme to generate the simulation plan.
+        </div>
+      `;
+      return;
+    }
+
+    const rows = [
+      ...(_schedData.weeks || []).map(w => ({ type: 'teaching', data: w })),
+      ...(_schedData.skippedWeeks || []).map(w => ({ type: 'skipped', data: w }))
+    ].sort((a, b) => (a.data.mon || '').localeCompare(b.data.mon || ''));
+    const selectedGrades = cfg.gradeOptions.filter(grade =>
+      document.querySelector(`#tsGradeOptions input[value="${grade}"]`)?.checked
+    );
+    const deficitWeeks = gapMins < 0 && lpw > 0 && dur > 0
+      ? Math.ceil(Math.abs(gapMins) / (lpw * dur))
+      : 0;
+
+    if (!selectedGrades.length) {
+      target.innerHTML = `
+        <div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:8px;padding:14px;color:#991B1B;font-size:13px;font-weight:600">
+          No grades selected for this simulation.
+        </div>
+      `;
+      return;
+    }
+
+    const gradeHtml = selectedGrades.map(grade => {
+      const reserve = Math.min(numTeachingWeeks, getTsReserveWeeks(grade));
+      const coveredLimit = Math.max(0, numTeachingWeeks - reserve);
+      let teachingOrdinal = 0;
+
+      return `
+        <section style="margin-bottom:18px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:#F8FAFC;border-bottom:1px solid #E2E8F0">
+            <div style="font-weight:800;color:#0F172A">${grade}</div>
+            <div style="font-size:12px;color:#475569">
+              <span style="font-weight:700;color:#047857">${coveredLimit}</span> teaching weeks
+              ${reserve ? `<span style="color:#B45309"> · ${reserve} reserved</span>` : ''}
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#FFFFFF">
+                <th style="padding:9px 10px;text-align:center;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:58px">Week</th>
+                <th style="padding:9px 10px;text-align:left;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+                <th style="padding:9px 10px;text-align:left;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+                <th style="padding:9px 10px;text-align:center;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:90px">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => {
+                if (row.type === 'skipped') {
+                  const w = row.data;
+                  return `
+                    <tr style="background:#FEF2F2;border-bottom:1px solid #FEE2E2">
+                      <td style="padding:8px 10px;text-align:center;color:#DC2626;font-weight:800">-</td>
+                      <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.mon)}</td>
+                      <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.fri)}</td>
+                      <td style="padding:8px 10px;text-align:center"><span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#FEE2E2;color:#991B1B;font-weight:700;font-size:11px">Skipped</span></td>
+                    </tr>
+                  `;
+                }
+
+                const w = row.data;
+                teachingOrdinal += 1;
+                const isReserved = teachingOrdinal > coveredLimit;
+                return `
+                  <tr style="background:${isReserved ? '#FFFBEB' : '#F0FDF4'};border-bottom:1px solid ${isReserved ? '#FEF3C7' : '#DCFCE7'}">
+                    <td style="padding:8px 10px;text-align:center;color:#0F172A;font-weight:800">${w.weekNo}</td>
+                    <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.mon)}</td>
+                    <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.fri)}</td>
+                    <td style="padding:8px 10px;text-align:center"><span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:${isReserved ? '#FEF3C7' : '#DCFCE7'};color:${isReserved ? '#92400E' : '#166534'};font-weight:700;font-size:11px">${isReserved ? 'Reserved' : 'Covered'}</span></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </section>
+      `;
+    }).join('');
+
+    target.innerHTML = `
+      <div style="margin-bottom:12px;padding:12px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;color:#475569;font-size:12px;line-height:1.45">
+        Pattern mode repeats the synced academic-year schedule for each selected grade. Green weeks are used for syllabus coverage; amber weeks are reserved for revision or past papers.
+      </div>
+      ${gradeHtml}
+      ${deficitWeeks ? `
+        <div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:8px;padding:12px 14px;color:#991B1B">
+          <div style="font-weight:800;margin-bottom:8px">Deficit equivalent: ${deficitWeeks} week${deficitWeeks === 1 ? '' : 's'}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:6px">
+            ${Array.from({ length: Math.min(deficitWeeks, 24) }, (_, i) => `<div style="height:28px;border-radius:6px;background:#DC2626;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">${i + 1}</div>`).join('')}
+          </div>
+          ${deficitWeeks > 24 ? `<div style="margin-top:8px;font-size:12px;font-weight:700">+${deficitWeeks - 24} more weeks</div>` : ''}
+        </div>
+      ` : ''}
+    `;
+  }
+
   window.tsRecalc = function(numTeachingWeeks) {
     const lpw     = Math.max(0, parseFloat(document.getElementById('tsLessonsPerWeek')?.value) || 0);
     const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
     const targetH = Math.max(0, parseFloat(document.getElementById('tsTargetHours')?.value)     || 0);
+    const cfg     = getTsProgrammeConfig();
+    const effectiveWeeks = cfg ? getTsEffectiveWeeks(numTeachingWeeks, cfg) : numTeachingWeeks;
 
-    const totalLessons = numTeachingWeeks * lpw;
+    const totalLessons = effectiveWeeks * lpw;
     const totalMins    = totalLessons * dur;
     const targetMins   = targetH * 60;
     const gapMins      = totalMins - targetMins;
@@ -1126,7 +1292,7 @@ export function initSyllabusPage(config) {
     };
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
-    set('tsOutWeeks',    numTeachingWeeks);
+    set('tsOutWeeks',    effectiveWeeks);
     set('tsOutLessons',  totalLessons);
     set('tsOutTime',     fmtTime(totalMins));
     set('tsOutTarget',   targetH > 0 ? fmtTime(targetMins) : '—');
@@ -1151,24 +1317,12 @@ export function initSyllabusPage(config) {
         badge.textContent = 'Exact match'; badge.className = 'ts-gap-badge exact';
       }
     }
+    renderTsSimulationSchedule(numTeachingWeeks, cfg, gapMins, lpw, dur);
   };
 
-  // ── Teaching Schedule Programme Selector ───────────────────────────────────
+  // ── Teaching Schedule Grade Selector ───────────────────────────────────────
   window.tsProgrammeChange = function(numTeachingWeeks) {
-    const prog = document.getElementById('tsProgramme')?.value;
-
-    const PROGRAMMES = {
-      checkpoint: { label: 'Secondary Checkpoint', grades: 'Grade 7–8', years: 2, glh: 360,
-                    note: 'Stages 7, 8 & 9 (3 × 120 hrs) compressed into 2 years' },
-      igcse:      { label: 'IGCSE',                grades: 'Grade 9–10', years: 2, glh: 130,
-                    note: '130 hrs per subject over 2 years' },
-      as:         { label: 'AS Level',             grades: 'Grade 11',   years: 1, glh: 180,
-                    note: '180 hrs per subject in 1 year' },
-      alevel:     { label: 'A Level',              grades: 'Grade 12',   years: 1, glh: 180,
-                    note: '180 hrs per subject in 1 year (continuation)' },
-    };
-
-    const cfg = PROGRAMMES[prog];
+    const cfg = getTsProgrammeConfig();
 
     const info = document.getElementById('tsProgrammeInfo');
     if (info) {
@@ -1177,15 +1331,57 @@ export function initSyllabusPage(config) {
       } else {
         info.style.display = '';
         info.innerHTML = `
-          <div style="font-weight:700;margin-bottom:4px">${cfg.label} — ${cfg.grades}</div>
+          <div style="font-weight:700;margin-bottom:4px">${cfg.label} - ${cfg.grades}</div>
           <div style="color:#334155">${cfg.note}</div>
           <div style="margin-top:6px;font-weight:600">Cambridge GLH: ${cfg.glh} hrs</div>
         `;
       }
     }
 
+    const gradeField = document.getElementById('tsGradeField');
+    const gradeOptions = document.getElementById('tsGradeOptions');
+    if (gradeField && gradeOptions) {
+      if (!cfg?.gradeOptions?.length) {
+        gradeField.style.display = 'none';
+        gradeOptions.innerHTML = '';
+      } else {
+        gradeField.style.display = '';
+        gradeOptions.style.display = 'grid';
+        gradeOptions.style.gridTemplateColumns = `repeat(${cfg.gradeOptions.length > 1 ? 2 : 1}, minmax(0, 1fr))`;
+        gradeOptions.style.gap = '8px';
+        gradeOptions.innerHTML = cfg.gradeOptions.map(grade => {
+          const key = grade.replace(/\s+/g, '-').toLowerCase();
+          return `
+          <div style="width:100%;padding:8px;border:1px solid #E2E8F0;border-radius:7px;background:#fff">
+            <label style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:24px;font-size:0.78rem;color:#334155;cursor:pointer">
+              <input type="checkbox" class="ts-grade-check" value="${grade}" checked onchange="tsGradeChange(${numTeachingWeeks})" ${cfg.gradeOptions.length === 1 ? 'disabled' : ''}>
+              <span>${grade}</span>
+            </label>
+            <label for="tsReserve-${key}" style="display:block;margin-top:7px;font-size:0.68rem;font-weight:600;color:#64748B;text-align:center">Reserved weeks</label>
+            <input type="number" id="tsReserve-${key}" min="0" max="${numTeachingWeeks}" step="1" value="0" oninput="tsRecalc(${numTeachingWeeks})" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;font-size:0.78rem;text-align:center;color:#0F172A;background:#fff">
+          </div>
+        `;
+        }).join('');
+      }
+    }
+
+    window.tsGradeChange(numTeachingWeeks);
+  };
+
+  window.tsGradeChange = function(numTeachingWeeks) {
+    const cfg = getTsProgrammeConfig();
+    document.querySelectorAll('#tsGradeOptions .ts-grade-check').forEach(check => {
+      const key = check.value.replace(/\s+/g, '-').toLowerCase();
+      const reserve = document.getElementById(`tsReserve-${key}`);
+      if (reserve) reserve.disabled = !check.checked;
+    });
     const targetEl = document.getElementById('tsTargetHours');
-    if (targetEl && cfg) targetEl.value = cfg.glh;
+    if (targetEl && cfg) {
+      const selectedYears = getTsSelectedGradeCount(cfg);
+      const totalYears = Math.max(1, cfg.gradeOptions?.length || cfg.years || 1);
+      const scopedGlh = selectedYears > 0 ? cfg.glh * selectedYears / totalYears : 0;
+      targetEl.value = Number.isInteger(scopedGlh) ? scopedGlh : scopedGlh.toFixed(1);
+    }
 
     window.tsRecalc(numTeachingWeeks);
   };

@@ -955,10 +955,16 @@ export function initSyllabusPage(config) {
                 </div>
               </div>
             </div>
-            <h4 style="margin:0 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px">
+              <h4 style="margin:0;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
+              <div style="display:flex;gap:6px">
+                <button type="button" id="tsViewCalendarBtn" onclick="tsScheduleView('calendar')" style="border:1px solid #059669;background:#ECFDF5;color:#047857;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">Calendar</button>
+                <button type="button" id="tsViewSimulationBtn" onclick="tsScheduleView('simulation')" style="border:1px solid #CBD5E1;background:#fff;color:#475569;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">Simulation</button>
+              </div>
+            </div>
           </div>
 
-          <div style="padding:0 24px 24px;position:relative">
+          <div id="tsCalendarScheduleView" style="padding:0 24px 24px;position:relative">
             <style>
               .ts-tooltip { position:relative;display:inline-block;cursor:help }
               .ts-tooltip .ts-tooltiptext {
@@ -1025,6 +1031,11 @@ export function initSyllabusPage(config) {
                 }).join('')}
               </tbody>
             </table>
+            </div>
+          </div>
+          <div id="tsSimulationScheduleView" style="display:none;padding:0 24px 24px;position:relative">
+            <div style="border:1px solid #E2E8F0;border-radius:8px;padding:16px;color:#64748B;font-size:13px">
+              Select a programme to generate the simulation plan.
             </div>
           </div>
         </div>
@@ -1143,6 +1154,119 @@ export function initSyllabusPage(config) {
     }, 0);
   }
 
+  function getTsReserveWeeks(grade) {
+    const key = grade.replace(/\s+/g, '-').toLowerCase();
+    return Math.max(0, parseFloat(document.getElementById(`tsReserve-${key}`)?.value) || 0);
+  }
+
+  function tsFmtDate(iso) {
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function renderTsSimulationSchedule(numTeachingWeeks, cfg, gapMins, lpw, dur) {
+    const target = document.getElementById('tsSimulationScheduleView');
+    if (!target) return;
+    if (!cfg || !_schedData?.weeks?.length) {
+      target.innerHTML = `
+        <div style="border:1px solid #E2E8F0;border-radius:8px;padding:16px;color:#64748B;font-size:13px">
+          Select a programme to generate the simulation plan.
+        </div>
+      `;
+      return;
+    }
+
+    const rows = [
+      ...(_schedData.weeks || []).map(w => ({ type: 'teaching', data: w })),
+      ...(_schedData.skippedWeeks || []).map(w => ({ type: 'skipped', data: w }))
+    ].sort((a, b) => (a.data.mon || '').localeCompare(b.data.mon || ''));
+    const selectedGrades = cfg.gradeOptions.filter(grade =>
+      document.querySelector(`#tsGradeOptions input[value="${grade}"]`)?.checked
+    );
+    const deficitWeeks = gapMins < 0 && lpw > 0 && dur > 0
+      ? Math.ceil(Math.abs(gapMins) / (lpw * dur))
+      : 0;
+
+    if (!selectedGrades.length) {
+      target.innerHTML = `
+        <div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:8px;padding:14px;color:#991B1B;font-size:13px;font-weight:600">
+          No grades selected for this simulation.
+        </div>
+      `;
+      return;
+    }
+
+    const gradeHtml = selectedGrades.map(grade => {
+      const reserve = Math.min(numTeachingWeeks, getTsReserveWeeks(grade));
+      const coveredLimit = Math.max(0, numTeachingWeeks - reserve);
+      let teachingOrdinal = 0;
+
+      return `
+        <section style="margin-bottom:18px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:#F8FAFC;border-bottom:1px solid #E2E8F0">
+            <div style="font-weight:800;color:#0F172A">${grade}</div>
+            <div style="font-size:12px;color:#475569">
+              <span style="font-weight:700;color:#047857">${coveredLimit}</span> teaching weeks
+              ${reserve ? `<span style="color:#B45309"> · ${reserve} reserved</span>` : ''}
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#FFFFFF">
+                <th style="padding:9px 10px;text-align:center;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:58px">Week</th>
+                <th style="padding:9px 10px;text-align:left;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Mon</th>
+                <th style="padding:9px 10px;text-align:left;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0">Fri</th>
+                <th style="padding:9px 10px;text-align:center;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E2E8F0;width:90px">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => {
+                if (row.type === 'skipped') {
+                  const w = row.data;
+                  return `
+                    <tr style="background:#FEF2F2;border-bottom:1px solid #FEE2E2">
+                      <td style="padding:8px 10px;text-align:center;color:#DC2626;font-weight:800">-</td>
+                      <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.mon)}</td>
+                      <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.fri)}</td>
+                      <td style="padding:8px 10px;text-align:center"><span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#FEE2E2;color:#991B1B;font-weight:700;font-size:11px">Skipped</span></td>
+                    </tr>
+                  `;
+                }
+
+                const w = row.data;
+                teachingOrdinal += 1;
+                const isReserved = teachingOrdinal > coveredLimit;
+                return `
+                  <tr style="background:${isReserved ? '#FFFBEB' : '#F0FDF4'};border-bottom:1px solid ${isReserved ? '#FEF3C7' : '#DCFCE7'}">
+                    <td style="padding:8px 10px;text-align:center;color:#0F172A;font-weight:800">${w.weekNo}</td>
+                    <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.mon)}</td>
+                    <td style="padding:8px 10px;color:#334155;font-family:monospace">${tsFmtDate(w.fri)}</td>
+                    <td style="padding:8px 10px;text-align:center"><span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:${isReserved ? '#FEF3C7' : '#DCFCE7'};color:${isReserved ? '#92400E' : '#166534'};font-weight:700;font-size:11px">${isReserved ? 'Reserved' : 'Covered'}</span></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </section>
+      `;
+    }).join('');
+
+    target.innerHTML = `
+      <div style="margin-bottom:12px;padding:12px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;color:#475569;font-size:12px;line-height:1.45">
+        Pattern mode repeats the synced academic-year schedule for each selected grade. Green weeks are used for syllabus coverage; amber weeks are reserved for revision or past papers.
+      </div>
+      ${gradeHtml}
+      ${deficitWeeks ? `
+        <div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:8px;padding:12px 14px;color:#991B1B">
+          <div style="font-weight:800;margin-bottom:8px">Deficit equivalent: ${deficitWeeks} week${deficitWeeks === 1 ? '' : 's'}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:6px">
+            ${Array.from({ length: Math.min(deficitWeeks, 24) }, (_, i) => `<div style="height:28px;border-radius:6px;background:#DC2626;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">${i + 1}</div>`).join('')}
+          </div>
+          ${deficitWeeks > 24 ? `<div style="margin-top:8px;font-size:12px;font-weight:700">+${deficitWeeks - 24} more weeks</div>` : ''}
+        </div>
+      ` : ''}
+    `;
+  }
+
   window.tsRecalc = function(numTeachingWeeks) {
     const lpw     = Math.max(0, parseFloat(document.getElementById('tsLessonsPerWeek')?.value) || 0);
     const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
@@ -1193,6 +1317,7 @@ export function initSyllabusPage(config) {
         badge.textContent = 'Exact match'; badge.className = 'ts-gap-badge exact';
       }
     }
+    renderTsSimulationSchedule(numTeachingWeeks, cfg, gapMins, lpw, dur);
   };
 
   // ── Teaching Schedule Grade Selector ───────────────────────────────────────
@@ -1262,6 +1387,26 @@ export function initSyllabusPage(config) {
   };
 
   // ── Load subject ───────────────────────────────────────────────────────────
+  window.tsScheduleView = function(view) {
+    const calendar = document.getElementById('tsCalendarScheduleView');
+    const simulation = document.getElementById('tsSimulationScheduleView');
+    const calBtn = document.getElementById('tsViewCalendarBtn');
+    const simBtn = document.getElementById('tsViewSimulationBtn');
+    const isSimulation = view === 'simulation';
+    if (calendar) calendar.style.display = isSimulation ? 'none' : '';
+    if (simulation) simulation.style.display = isSimulation ? '' : 'none';
+    if (calBtn) {
+      calBtn.style.borderColor = isSimulation ? '#CBD5E1' : '#059669';
+      calBtn.style.background = isSimulation ? '#fff' : '#ECFDF5';
+      calBtn.style.color = isSimulation ? '#475569' : '#047857';
+    }
+    if (simBtn) {
+      simBtn.style.borderColor = isSimulation ? '#059669' : '#CBD5E1';
+      simBtn.style.background = isSimulation ? '#ECFDF5' : '#fff';
+      simBtn.style.color = isSimulation ? '#047857' : '#475569';
+    }
+  };
+
   function loadSubject(subj) {
     if (unsub) { unsub(); unsub = null; }
     currentSubject = subj;
