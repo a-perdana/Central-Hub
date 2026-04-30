@@ -1507,6 +1507,7 @@ let _progSearch = '';
 let _progOverrideRows = null; // null = not yet loaded / not present; [] = loaded but empty
 let _progCoverageByCode = null; // { '7Ni.02': { totalClasses, doneClasses, classes: [{cls, status, teacher}] } }
 let _progCoverageLoading = false;
+const _progCollapsed = new Set(); // components the user has collapsed in this session
 
 function _progParseCode(code) {
   // e.g. "7Ni.02" → { stage: 7, strand: 'Ni', num: 2 }
@@ -1776,41 +1777,95 @@ function renderProgressionGrid() {
     return true;
   });
 
-  // Render: insert area-divider rows whenever component or topicArea changes.
-  let html = `<table class="prog-table">
-    <thead><tr>
-      <th class="col-topic">Topic Area</th>
-      <th class="col-stage">Stage 7</th>
-      <th class="col-stage">Stage 8</th>
-      <th class="col-stage">Stage 9</th>
-    </tr></thead><tbody>`;
-
-  let lastComponent = '', lastArea = '';
-  filtered.forEach(r => {
-    if (r.component !== lastComponent) {
-      html += `<tr class="area-divider"><td colspan="4">${escHtml(r.component)}</td></tr>`;
-      lastComponent = r.component;
-      lastArea = '';
-    }
-    const topicLabel = r.topicArea && r.topicArea !== lastArea ? r.topicArea : '';
-    if (topicLabel) lastArea = r.topicArea;
-    html += `<tr class="prog-row">
-      <td class="topic-cell">${escHtml(topicLabel)}</td>
-      <td>${_progRenderCell(r.stage7)}</td>
-      <td>${_progRenderCell(r.stage8)}</td>
-      <td>${_progRenderCell(r.stage9)}</td>
-    </tr>`;
-  });
-  html += `</tbody></table>`;
-
   if (!filtered.length) {
     wrap.innerHTML = `<div class="prog-empty">No matching objectives.</div>`;
-  } else {
-    wrap.innerHTML = html;
-    wrap.querySelectorAll('.prog-code, .prog-title').forEach(el => {
-      el.onclick = () => openProgressionModal(el.dataset.key);
-    });
+    return;
   }
+
+  // Group filtered rows by component, preserving original order (rows are
+  // already sorted by the override doc / heuristic). One <details> block
+  // per component lets the user collapse strands they aren't reviewing.
+  const groups = new Map(); // component → rows[]
+  filtered.forEach(r => {
+    if (!groups.has(r.component)) groups.set(r.component, []);
+    groups.get(r.component).push(r);
+  });
+
+  // Aggregate coverage across the codes in this component (skip "not in
+  // pacing" — only count codes that actually appear in topic.syllabusRefs).
+  function componentCoverage(rows) {
+    if (!_progCoverageByCode) return null;
+    let done = 0, total = 0;
+    rows.forEach(r => {
+      [r.stage7, r.stage8, r.stage9].forEach(item => {
+        if (!item) return;
+        const b = _progCoverageByCode[item.code];
+        if (!b || !b.totalClasses) return;
+        done  += b.doneClasses;
+        total += b.totalClasses;
+      });
+    });
+    if (!total) return null;
+    return { pct: Math.round(done / total * 100), done, total };
+  }
+
+  let html = '';
+  groups.forEach((groupRows, component) => {
+    const collapsed = _progCollapsed.has(component);
+    const cov = componentCoverage(groupRows);
+
+    let covHtml = '';
+    if (cov) {
+      let covCls = 'prog-acc-cov-zero';
+      if (cov.pct >= 90)      covCls = 'prog-acc-cov-full';
+      else if (cov.pct >= 50) covCls = 'prog-acc-cov-mid';
+      else if (cov.pct > 0)   covCls = 'prog-acc-cov-low';
+      covHtml = `<span class="prog-acc-cov ${covCls}" title="${cov.done} of ${cov.total} class-objective slots completed across this strand.">${cov.pct}% avg coverage</span>`;
+    }
+
+    let body = `<table class="prog-table">
+      <thead><tr>
+        <th class="col-topic">Topic Area</th>
+        <th class="col-stage">Stage 7</th>
+        <th class="col-stage">Stage 8</th>
+        <th class="col-stage">Stage 9</th>
+      </tr></thead><tbody>`;
+    let lastArea = '';
+    groupRows.forEach(r => {
+      const topicLabel = r.topicArea && r.topicArea !== lastArea ? r.topicArea : '';
+      if (topicLabel) lastArea = r.topicArea;
+      body += `<tr class="prog-row">
+        <td class="topic-cell">${escHtml(topicLabel)}</td>
+        <td>${_progRenderCell(r.stage7)}</td>
+        <td>${_progRenderCell(r.stage8)}</td>
+        <td>${_progRenderCell(r.stage9)}</td>
+      </tr>`;
+    });
+    body += `</tbody></table>`;
+
+    html += `<details class="prog-acc" data-component="${escHtml(component)}"${collapsed ? '' : ' open'}>
+      <summary class="prog-acc-summary">
+        <span class="prog-acc-caret" aria-hidden="true">▸</span>
+        <span class="prog-acc-title">${escHtml(component)}</span>
+        <span class="prog-acc-count">${groupRows.length} ${groupRows.length === 1 ? 'row' : 'rows'}</span>
+        ${covHtml}
+      </summary>
+      <div class="prog-acc-body">${body}</div>
+    </details>`;
+  });
+
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.prog-code, .prog-title').forEach(el => {
+    el.onclick = () => openProgressionModal(el.dataset.key);
+  });
+  // Persist user collapse/expand state across re-renders.
+  wrap.querySelectorAll('details.prog-acc').forEach(d => {
+    d.addEventListener('toggle', () => {
+      const c = d.dataset.component;
+      if (d.open) _progCollapsed.delete(c);
+      else        _progCollapsed.add(c);
+    });
+  });
 }
 
 window.openProgressionModal = function(key) {
