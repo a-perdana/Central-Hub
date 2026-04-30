@@ -762,7 +762,9 @@
     display: none;
     position: absolute;
     top: -6px;
-    left: calc(100% + 4px);
+    /* Touch the trigger edge — no gap — so the mouse never crosses dead space */
+    left: 100%;
+    margin-left: 4px;
     min-width: 220px;
     background: #fff;
     border: 1px solid #e0ddd6;
@@ -770,12 +772,25 @@
     box-shadow: 0 10px 40px rgba(28,28,46,0.18);
     padding: 6px;
     z-index: 10000;
-    animation: chDdOpen .14s cubic-bezier(.34,1.2,.64,1) both;
+  }
+  /* Invisible hover-bridge that fills the visual 4px gap so :hover never breaks */
+  .ch-dd-submenu-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -8px;       /* covers the 4px margin plus a small extension */
+    width: 12px;
   }
   /* Flip to the left side if there isn't enough room on the right */
   .ch-dd-submenu-wrap.flip-left > .ch-dd-submenu-panel {
     left: auto;
-    right: calc(100% + 4px);
+    right: 100%;
+    margin-left: 0;
+    margin-right: 4px;
+  }
+  .ch-dd-submenu-wrap.flip-left > .ch-dd-submenu-panel::before {
+    left: auto;
+    right: -8px;
   }
   .ch-dd-submenu-wrap:hover > .ch-dd-submenu-panel,
   .ch-dd-submenu-wrap.open > .ch-dd-submenu-panel { display: block; }
@@ -1875,13 +1890,10 @@ document.getElementById('btnNavAddGroup')?.addEventListener('click', () => {
 });
 
 // Wire one submenu wrap for edit mode: draggable wrap + editable label + delete button.
-// Submenu drag is opt-in via the trigger's mousedown to avoid hijacking item drags
-// that originate inside the submenu panel.
 function initSubmenuWrap(wrap) {
   if (wrap._navEditInit) return;
   wrap._navEditInit = true;
-  // NOTE: draggable is toggled on/off based on where the user grabs (see trigger handler below)
-  wrap.draggable = false;
+  wrap.setAttribute('draggable', 'true');
   wrap.addEventListener('dragstart', onSubmenuDragStart);
   wrap.addEventListener('dragover',  onSubmenuDragOver);
   wrap.addEventListener('dragleave', onSubmenuDragLeave);
@@ -1891,23 +1903,13 @@ function initSubmenuWrap(wrap) {
   const trigger = wrap.querySelector(':scope > .ch-dd-submenu-trigger');
   const lblEl   = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label');
   const delBtn  = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-delete');
-
-  // Enable wrap-level draggable only when the user grabs the trigger row
-  // (not when they grab an item inside the submenu panel).
-  if (trigger) {
-    trigger.addEventListener('mousedown', () => { wrap.draggable = true; });
-  }
-  // Reset after any drag ends
-  wrap.addEventListener('dragend', () => { wrap.draggable = false; });
-  document.addEventListener('mouseup', () => { wrap.draggable = false; });
-
   if (lblEl) {
     lblEl.contentEditable = 'true';
     lblEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lblEl.blur(); } });
-    lblEl.addEventListener('mousedown', e => { e.stopPropagation(); wrap.draggable = false; });
+    // Stop label drag from triggering wrap drag
+    lblEl.addEventListener('mousedown', e => e.stopPropagation());
   }
   if (delBtn) {
-    delBtn.addEventListener('mousedown', e => { e.stopPropagation(); wrap.draggable = false; });
     delBtn.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation();
       // Spill items back to the parent column, then remove the wrap
@@ -1918,24 +1920,11 @@ function initSubmenuWrap(wrap) {
       wrap.remove();
     });
   }
-
-  // Register the submenu panel as a container drop target so items can be dropped
-  // into an empty group or below the last item.
-  const subPanel = wrap.querySelector(':scope > .ch-dd-submenu-panel');
-  if (subPanel && !subPanel._navEditContainer) {
-    subPanel.addEventListener('dragover',  onContainerDragOver);
-    subPanel.addEventListener('dragleave', onContainerDragLeave);
-    subPanel.addEventListener('drop',      onContainerDrop);
-    subPanel._navEditContainer = true;
-  }
 }
 
 let dragSubmenu = null;
 function onSubmenuDragStart(e) {
-  // If the drag originated on a child item, this is an item drag — don't hijack it.
-  if (e.target.closest('.ch-dd-item[data-nav-key]')) return;
-  // Likewise, don't fire when the user is editing the label
-  if (e.target.closest('.submenu-label[contenteditable="true"]')) return;
+  // Only fire if the drag originated on the wrap itself, not on the editable label
   dragSubmenu = this;
   this.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
