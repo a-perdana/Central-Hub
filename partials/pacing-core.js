@@ -95,7 +95,13 @@ window.switchTab = function(id, btn) {
   if (id === 'progress')    loadProgressTab();
   if (id === 'heatmap')     loadHeatmapTab();
   if (id === 'hours')       loadHoursTab();
-  if (id === 'progression') renderProgressionGrid();
+  if (id === 'progression') {
+    // Refresh coverage each time the tab is opened so it reflects any
+    // recent pacing edits. Heuristic / override rendering is unaffected.
+    _progCoverageByCode = null;
+    renderProgressionGrid();
+    if (!_progCoverageLoading) _progLoadCoverage();
+  }
 };
 
 // ── Inline quick-edit ─────────────────────────────────────────
@@ -1499,6 +1505,8 @@ const STRAND_TO_COMPONENT = {
 let _progFilter = 'all';
 let _progSearch = '';
 let _progOverrideRows = null; // null = not yet loaded / not present; [] = loaded but empty
+let _progCoverageByCode = null; // { '7Ni.02': { totalClasses, doneClasses, classes: [{cls, status, teacher}] } }
+let _progCoverageLoading = false;
 
 function _progParseCode(code) {
   // e.g. "7Ni.02" → { stage: 7, strand: 'Ni', num: 2 }
@@ -1704,7 +1712,10 @@ function _progRenderCell(item) {
     ? ` <span class="syl-tier-badge ${escHtml(item.tier.toLowerCase())}" style="font-size:.55rem;padding:0 4px;border-radius:3px">${escHtml(item.tier)}</span>`
     : '';
   return `<div class="prog-cell">
-    <span class="prog-code" data-key="${escHtml(item.key)}">${escHtml(item.code)}${tierBadge}</span>
+    <span class="prog-code-row">
+      <span class="prog-code" data-key="${escHtml(item.key)}">${escHtml(item.code)}${tierBadge}</span>
+      ${_progCoverageBadge(item.code)}
+    </span>
     <span class="prog-title" data-key="${escHtml(item.key)}">${escHtml(item.title)}</span>
   </div>`;
 }
@@ -1834,3 +1845,141 @@ window.openProgressionModal = function(key) {
 window.closeProgressionModal = function() {
   document.getElementById('progressionModal').style.display = 'none';
 };
+
+// ── Pacing-aware coverage ────────────────────────────────────────
+// For each objective code that appears in any topic.syllabusRefs, compute
+// per-class coverage by joining live `chapters` (pacing structure) with
+// `userProgress/{uid}` documents (per-class status maps written by
+// teachers). The result is keyed by code so the Progression Grid can
+// annotate each cell in O(1).
+async function _progLoadCoverage() {
+  if (_progCoverageLoading) return;
+  _progCoverageLoading = true;
+  try {
+    if (!allTeachers.length) await fetchTeachers();
+
+    // class → statusMap, plus class → owning teacher (for tooltips)
+    const allowedUids   = new Set(allTeachers.map(t => t.uid));
+    const progressByCls = {};
+    const teacherByCls  = {};
+    allTeachers.forEach(t => {
+      (t.igcse_classes || []).forEach(cls => {
+        teacherByCls[cls.replace(/\s/g, '_')] = t;
+      });
+    });
+    const snap = await getDocs(collection(db, 'userProgress'));
+    snap.forEach(d => {
+      if (!allowedUids.has(d.id)) return;
+      const data = d.data();
+      Object.keys(data).forEach(key => {
+        const m = key.match(/^statuses_(.+)$/);
+        if (!m) return;
+        const cls = m[1];
+        // Take the largest snapshot if a class appears under multiple teachers.
+        if (!progressByCls[cls] ||
+            Object.keys(data[key]).length > Object.keys(progressByCls[cls]).length) {
+          progressByCls[cls] = data[key];
+        }
+      });
+    });
+
+    const classKeys = Object.keys(progressByCls);
+    const cov = {};
+
+    chapters.forEach(ch => {
+      (ch.topics || []).forEach(topic => {
+        const refs = Array.isArray(topic.syllabusRefs) ? topic.syllabusRefs : [];
+        if (!refs.length) return;
+        refs.forEach(code => {
+          cov[code] ??= {
+            totalClasses: 0,
+            doneClasses: 0,
+            inListedClasses: 0, // class has the topic in its pacing — i.e. always classKeys.length here
+            classes: [],         // [{cls, status, teacher}]
+          };
+        });
+        classKeys.forEach(cls => {
+          const status = progressByCls[cls]?.[`${ch.id}.${topic.id}`] || 'pending';
+          refs.forEach(code => {
+            // For multi-ref topics, a class status applies to each ref; we
+            // take the best (done > others) when the same code maps to
+            // multiple topics in the same class.
+            const bucket = cov[code];
+            // Avoid double counting the same (code, cls) pair from another
+            // topic by using a transient set on the bucket.
+            bucket._seen ??= new Set();
+            const k = cls;
+            if (bucket._seen.has(k)) {
+              // Upgrade if new status is "done" and previous wasn't.
+              if (status === 'done' && !bucket._doneSet?.has(k)) {
+                bucket._doneSet ??= new Set();
+                bucket._doneSet.add(k);
+                bucket.doneClasses++;
+                // Replace classes[] entry's status if better.
+                const prev = bucket.classes.find(c => c.cls === k);
+                if (prev) prev.status = 'done';
+              }
+              return;
+            }
+            bucket._seen.add(k);
+            bucket.totalClasses++;
+            bucket.classes.push({
+              cls,
+              status,
+              teacher: teacherByCls[cls] || null,
+            });
+            if (status === 'done') {
+              bucket._doneSet ??= new Set();
+              bucket._doneSet.add(k);
+              bucket.doneClasses++;
+            }
+          });
+        });
+      });
+    });
+
+    // Strip transient bookkeeping, sort classes for stable display.
+    Object.values(cov).forEach(b => {
+      delete b._seen;
+      delete b._doneSet;
+      b.classes.sort((a, b) => a.cls.localeCompare(b.cls));
+    });
+
+    _progCoverageByCode = cov;
+  } catch (e) {
+    console.warn('progression coverage load failed:', e);
+    _progCoverageByCode = {};
+  } finally {
+    _progCoverageLoading = false;
+    // Re-render now that data is in.
+    renderProgressionGrid();
+  }
+}
+
+function _progCoverageBadge(code) {
+  // Three states:
+  //  • Coverage data not yet loaded → small placeholder dot
+  //  • Code never appears in pacing structure → "Not in pacing" hint
+  //  • Code is in pacing → progress badge with done/total classes
+  if (!_progCoverageByCode) {
+    return `<span class="prog-cov prog-cov-loading" title="Loading coverage…">⋯</span>`;
+  }
+  const b = _progCoverageByCode[code];
+  if (!b || !b.totalClasses) {
+    return `<span class="prog-cov prog-cov-missing" title="This objective is not yet linked to any topic in the pacing structure.">○ not in pacing</span>`;
+  }
+  const pct = Math.round(b.doneClasses / b.totalClasses * 100);
+  let cls = 'prog-cov-low';
+  if (pct >= 90)      cls = 'prog-cov-full';
+  else if (pct >= 50) cls = 'prog-cov-mid';
+  else if (pct > 0)   cls = 'prog-cov-low';
+  else                cls = 'prog-cov-zero';
+
+  const lines = b.classes.map(c => {
+    const icon = c.status === 'done' ? '✓' : (c.status === 'pending' ? '·' : c.status[0].toUpperCase());
+    const t = c.teacher?.displayName || c.teacher?.name || '';
+    return `${icon} ${c.cls.replace(/_/g, ' ')}${t ? ' — ' + t : ''}`;
+  }).join('\n');
+  const tooltip = `${b.doneClasses}/${b.totalClasses} classes done\n\n${lines}`;
+  return `<span class="prog-cov ${cls}" title="${escHtml(tooltip)}">${b.doneClasses}/${b.totalClasses}</span>`;
+}
