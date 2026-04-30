@@ -949,8 +949,8 @@ export function initSyllabusPage(config) {
         <h4 style="margin:20px 0 12px;font-size:14px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.08em">Schedule Overview</h4>
         <div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:8px">
           <style>
-            .ts-tooltip { position:relative;display:inline-block;cursor:help }
-            .ts-tooltip .ts-tooltiptext { visibility:hidden;width:max-content;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;position:absolute;z-index:1000;bottom:120%;left:50%;transform:translateX(-50%);white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15) }
+            .ts-tooltip { position:relative;display:inline-block;cursor:help;z-index:10 }
+            .ts-tooltip .ts-tooltiptext { visibility:hidden;width:max-content;background-color:#0F172A;color:#fff;text-align:center;border-radius:6px;padding:8px 12px;font-size:12px;position:absolute;z-index:10000;bottom:120%;left:50%;transform:translateX(-50%);white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);pointer-events:none }
             .ts-tooltip .ts-tooltiptext::after { content:'';position:absolute;top:100%;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:#0F172A transparent transparent transparent }
             .ts-tooltip:hover .ts-tooltiptext { visibility:visible }
           </style>
