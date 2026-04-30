@@ -1527,11 +1527,6 @@ export function initSyllabusPage(config) {
           ? `<span class="meta-chip chip-sem2" title="Click to change semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem II</span>`
           : `<span class="meta-chip" style="opacity:0.45" title="Click to set semester" onclick="cycleSemesterChip(event,${ci},${ti})">Sem —</span>`;
       chipsRight = [weekChipRight, semChip].join('');
-    } else if (!isAdmin && features.semesterChips && t.semester) {
-      // Non-admin: show semester read-only chip if set
-      const semLabel = t.semester === 1 ? 'Sem I' : t.semester === 2 ? 'Sem II' : '';
-      const semClass = t.semester === 1 ? 'chip-sem1' : 'chip-sem2';
-      chipsRight = semLabel ? `<span class="meta-chip ${semClass}">${semLabel}</span>` : '';
     }
 
     // Activity button / link
