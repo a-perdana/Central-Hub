@@ -160,11 +160,11 @@ const CHECKPOINT_SUBJECTS = {
     heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
     heroGlow:     'rgba(21,128,61,.4)',
     heroIcon:     '🔬',
-    heroEyebrow:  'Cambridge Checkpoint Science 1113',
+    heroEyebrow:  'Cambridge Checkpoint Science 0893',
     heroTitle:    'Checkpoint Science Pacing',
     heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
-    pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'checkpoint_science', syllabusCode: '1113', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'checkpoint_science', syllabusCode: '0893', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
 };

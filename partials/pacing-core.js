@@ -1476,11 +1476,24 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
 // ══════════════════════════════════════════════════════════════════
 
 // Strand prefix → component label. Falls back to entry.component if known.
+// Used only by the heuristic path; the override path reads `component` from
+// the curated Firestore doc directly.
 const STRAND_TO_COMPONENT = {
+  // Math (0862)
   Ni: 'Number', Np: 'Number', Nf: 'Number',
   Ae: 'Algebra', As: 'Algebra',
   Gg: 'Geometry and Measure', Gp: 'Geometry and Measure',
   Ss: 'Statistics and Probability', Sp: 'Statistics and Probability',
+  // Science (0893)
+  SIC: 'Science in Context',
+  TWSm: 'Thinking and Working Scientifically',
+  TWSp: 'Thinking and Working Scientifically',
+  TWSc: 'Thinking and Working Scientifically',
+  TWSa: 'Thinking and Working Scientifically',
+  Bs: 'Biology', Bp: 'Biology', Be: 'Biology',
+  Cm: 'Chemistry', Cp: 'Chemistry', Cc: 'Chemistry',
+  Pf: 'Physics', Ps: 'Physics', Pe: 'Physics',
+  ESp: 'Earth and Space', ESc: 'Earth and Space', ESs: 'Earth and Space',
 };
 
 let _progFilter = 'all';
@@ -1489,7 +1502,8 @@ let _progOverrideRows = null; // null = not yet loaded / not present; [] = loade
 
 function _progParseCode(code) {
   // e.g. "7Ni.02" → { stage: 7, strand: 'Ni', num: 2 }
-  const m = /^(\d)([A-Za-z]{1,3})\.?(\d+)?/.exec(code || '');
+  // Strand may be 1–5 chars to cover Science codes like TWSm/TWSp/TWSc/TWSa/SIC/ESp/ESc/ESs.
+  const m = /^(\d)([A-Za-z]{1,5})\.?(\d+)?/.exec(code || '');
   if (!m) return { stage: null, strand: '', num: 0 };
   return { stage: +m[1], strand: m[2], num: +(m[3] || 0) };
 }
