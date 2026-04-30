@@ -1608,10 +1608,16 @@
       });
 
       document.addEventListener('click', function() {
+        // Don't auto-close dropdowns while the admin is in nav edit mode —
+        // they need the panels to stay open while clicking labels to rename them.
+        if (document.querySelector('.nav-links')?.classList.contains('nav-edit-mode')) return;
         document.querySelectorAll('.ch-dd-wrap.open').forEach(function(w) { w.classList.remove('open'); });
       });
       document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') document.querySelectorAll('.ch-dd-wrap.open').forEach(function(w) { w.classList.remove('open'); });
+        if (e.key === 'Escape') {
+          if (document.querySelector('.nav-links')?.classList.contains('nav-edit-mode')) return;
+          document.querySelectorAll('.ch-dd-wrap.open').forEach(function(w) { w.classList.remove('open'); });
+        }
       });
     })();
     // ──────────────────────────────────────────────────────────────────────────
@@ -2090,6 +2096,15 @@ function initItem(item) {
   if (lbl) {
     lbl.contentEditable = 'true';
     lbl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbl.blur(); } });
+    // While interacting with the label (clicking to place caret, typing), suspend
+    // the item's draggability so the browser doesn't intercept it as a drag start
+    // and so the click reaches the contentEditable target.
+    lbl.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      item.draggable = false;
+    });
+    lbl.addEventListener('blur', () => { item.draggable = true; });
+    lbl.addEventListener('focus', () => { item.draggable = false; });
   }
 }
 
