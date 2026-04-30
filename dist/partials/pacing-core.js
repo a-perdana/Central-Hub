@@ -1484,6 +1484,35 @@ function _progComponent(entry, parsed) {
   return STRAND_TO_COMPONENT[parsed.strand] || 'Other';
 }
 
+// Stop words to ignore when computing title overlap. Without these, every
+// pair would share "and", "of", "the", "use" and score artificially high.
+const _PROG_STOPWORDS = new Set([
+  'and','or','of','the','a','an','to','in','on','for','from','with','by',
+  'is','are','as','that','this','these','those','use','using','using','can',
+  'be','it','its','their','at','any','all','some','more','than','more','less',
+  'between','within','given','via','do','does','using','include','includes',
+  'including','etc','e.g.','i.e.',
+]);
+
+function _progTokens(title) {
+  return new Set(
+    String(title || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !_PROG_STOPWORDS.has(w))
+  );
+}
+
+function _progSimilarity(tokensA, tokensB) {
+  if (!tokensA.size || !tokensB.size) return 0;
+  let inter = 0;
+  tokensA.forEach(t => { if (tokensB.has(t)) inter++; });
+  // Jaccard: intersection / union
+  const union = tokensA.size + tokensB.size - inter;
+  return union ? inter / union : 0;
+}
+
 // Build progression rows: group by (component, topicArea, strand), then align
 // objectives by sequential index across stages. Matches the layout of
 // Cambridge progression grid PDFs (one row = same family across 7/8/9).
@@ -1519,6 +1548,13 @@ function _progBuildRows() {
     groups[ck][tk][sk][e.parsed.stage].push(e);
   });
 
+  // Threshold for fuzzy title-overlap matching (Jaccard). Tuned for Cambridge
+  // progression PDFs — they reuse the same key nouns across stages
+  // ("brackets", "indices", "fractions", "ratio"), so even a modest overlap
+  // is meaningful. Lower values risk false matches; higher values fragment
+  // genuine progressions.
+  const SIM_THRESHOLD = 0.18;
+
   const rows = [];
   Object.keys(groups).sort().forEach(component => {
     Object.keys(groups[component]).sort().forEach(topicArea => {
@@ -1526,16 +1562,77 @@ function _progBuildRows() {
       Object.keys(strands).sort().forEach(strand => {
         const buckets = strands[strand];
         [7, 8, 9].forEach(s => buckets[s].sort((a, b) => a.parsed.num - b.parsed.num));
-        const len = Math.max(buckets[7].length, buckets[8].length, buckets[9].length);
-        for (let i = 0; i < len; i++) {
-          rows.push({
-            component,
-            topicArea: topicArea === '_' ? '' : topicArea,
-            stage7: buckets[7][i] || null,
-            stage8: buckets[8][i] || null,
-            stage9: buckets[9][i] || null,
+
+        // Pre-compute tokens once per entry.
+        [7, 8, 9].forEach(s => buckets[s].forEach(e => { e._tokens = _progTokens(e.title); }));
+
+        // Build progression rows by walking stages in order. Each Stage 7
+        // objective seeds a row; Stage 8 / Stage 9 objectives are matched
+        // to an existing row if their title overlap exceeds the threshold,
+        // otherwise they start a new row (Stage-only progression).
+        const localRows = buckets[7].map(e => ({
+          component,
+          topicArea: topicArea === '_' ? '' : topicArea,
+          stage7: e, stage8: null, stage9: null,
+        }));
+
+        function placeIntoRow(stageKey, requiresPrevStage) {
+          buckets[+stageKey.slice(-1)].forEach(entry => {
+            // Find best unfilled row whose previous-stage cell exists and
+            // whose title is most similar to this entry.
+            let bestIdx = -1, bestSim = SIM_THRESHOLD;
+            localRows.forEach((row, idx) => {
+              if (row[stageKey]) return; // slot already taken
+              const prev = row[requiresPrevStage];
+              if (!prev) return;          // no anchor in previous stage
+              const sim = _progSimilarity(prev._tokens, entry._tokens);
+              if (sim > bestSim) { bestSim = sim; bestIdx = idx; }
+            });
+            if (bestIdx >= 0) {
+              localRows[bestIdx][stageKey] = entry;
+            } else {
+              // No good anchor — start a fresh row at this stage only.
+              localRows.push({
+                component,
+                topicArea: topicArea === '_' ? '' : topicArea,
+                stage7: null, stage8: null, stage9: null,
+                [stageKey]: entry,
+              });
+            }
           });
         }
+
+        // Stage 8 anchors to Stage 7. Stage 9 anchors to Stage 8 first
+        // (closer progression) and falls back to Stage 7 if no Stage 8 row.
+        placeIntoRow('stage8', 'stage7');
+        buckets[9].forEach(entry => {
+          let bestIdx = -1, bestSim = SIM_THRESHOLD;
+          localRows.forEach((row, idx) => {
+            if (row.stage9) return;
+            const anchor = row.stage8 || row.stage7;
+            if (!anchor) return;
+            const sim = _progSimilarity(anchor._tokens, entry._tokens);
+            if (sim > bestSim) { bestSim = sim; bestIdx = idx; }
+          });
+          if (bestIdx >= 0) {
+            localRows[bestIdx].stage9 = entry;
+          } else {
+            localRows.push({
+              component,
+              topicArea: topicArea === '_' ? '' : topicArea,
+              stage7: null, stage8: null, stage9: entry,
+            });
+          }
+        });
+
+        // Sort rows so the table reads naturally: by lowest stage code present.
+        localRows.sort((a, b) => {
+          const aRef = a.stage7 || a.stage8 || a.stage9;
+          const bRef = b.stage7 || b.stage8 || b.stage9;
+          return aRef.parsed.num - bRef.parsed.num;
+        });
+
+        rows.push(...localRows);
       });
     });
   });
