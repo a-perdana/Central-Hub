@@ -2650,7 +2650,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         { key: 'physics',   label: 'Physics',     col: 'physics_pacing',   docId: 'year9-10', syllabusPrefix: '0625', color: '#0891b2' },
       ],
       checkpoint: [
-        { key: 'math',    label: 'Mathematics', col: 'checkpoint_math_pacing',    docId: 'year7-8', syllabusPrefix: '1112', color: '#7c3aed' },
+        { key: 'math',    label: 'Mathematics', col: 'checkpoint_math_pacing',    docId: 'year7-8', syllabusPrefix: '0862', color: '#7c3aed' },
         { key: 'science', label: 'Science',     col: 'checkpoint_science_pacing', docId: 'year7-8', syllabusPrefix: '1113', color: '#059669' },
         { key: 'english', label: 'English',     col: 'checkpoint_english_pacing', docId: 'year7-8', syllabusPrefix: '1111', color: '#0891b2' },
       ],
@@ -2865,8 +2865,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     // ── Helpers ───────────────────────────────────────────────────
-    function getCodes(objective) {
-      return (objective || '').split(/\s+/).filter(Boolean);
+    function getCodes(t) {
+      if (Array.isArray(t?.syllabusRefs) && t.syllabusRefs.length) return t.syllabusRefs.filter(Boolean);
+      return (t?.objective || '').split(/\s+/).filter(Boolean);
     }
 
     function getStatusDisplay(status) {
@@ -2880,6 +2881,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         name: t.topic, week: t.week, hours: (t.hour ?? t.hours),
         chapter: ch.chapter || ch.name || '', status: t.status || 'pending',
         objective: t.objective || '',
+        syllabusRefs: Array.isArray(t.syllabusRefs) ? t.syllabusRefs : [],
         subjectKey: cfg.key,
         color: /^#[0-9a-fA-F]{3,8}$/.test(cfg.color) ? cfg.color : '#7c3aed',
       };
@@ -2989,7 +2991,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           if (!topics.length) return `<td><span class="empty-week">—</span></td>`;
           const chips = topics.map(t => {
             const status = t.status || 'pending';
-            const codes  = getCodes(t.objective);
+            const codes  = getCodes(t);
             const id     = `t${++topicIdSeq}`;
             topicRegistry.set(id, getTopicData(t, { chapter: t.chapterName }, cfg));
             return `
@@ -3114,7 +3116,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           const chId    = `ch_${cfg.key}_${ci}`;
 
           const topicRows = topics.map((t, ti) => {
-            const codes  = getCodes(t.objective);
+            const codes  = getCodes(t);
             const status = t.status || 'pending';
             const sp     = getStatusDisplay(status);
             const tid    = `t${++topicIdSeq}`;
@@ -3176,8 +3178,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     // ── Detail modal ──────────────────────────────────────────────
     async function openDetail(data) {
-      const { name, week, hours, chapter, status, objective, color } = data;
-      const codes = getCodes(objective);
+      const { name, week, hours, chapter, status, color } = data;
+      const codes = getCodes(data);
       const sp    = getStatusDisplay(status);
 
       document.getElementById('detailTitle').textContent = name;

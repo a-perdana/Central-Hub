@@ -138,7 +138,7 @@ const CHECKPOINT_SUBJECTS = {
     heroTitle:    'Checkpoint Mathematics Pacing',
     heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
-    pacingConfig: `{ collection: 'checkpoint_math_pacing', docId: 'year7-8', subjectKey: 'checkpoint_math', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    pacingConfig: `{ collection: 'checkpoint_math_pacing', docId: 'year7-8', subjectKey: 'checkpoint_math', syllabusCode: '0862', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
   'checkpoint-english-pacing.html': {
@@ -151,7 +151,7 @@ const CHECKPOINT_SUBJECTS = {
     heroTitle:    'Checkpoint English Pacing',
     heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
-    pacingConfig: `{ collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'checkpoint_english', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    pacingConfig: `{ collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'checkpoint_english', syllabusCode: '1111', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
   'checkpoint-science-pacing.html': {
@@ -164,7 +164,7 @@ const CHECKPOINT_SUBJECTS = {
     heroTitle:    'Checkpoint Science Pacing',
     heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
-    pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'checkpoint_science', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'checkpoint_science', syllabusCode: '1113', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
 };

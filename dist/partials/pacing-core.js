@@ -16,6 +16,7 @@ const COLLECTION    = window.PACING_CONFIG.collection;
 const DOC_ID        = window.PACING_CONFIG.docId;
 const SUBJECT_KEY   = window.PACING_CONFIG.subjectKey;
 const SYLLABUS_CODE = window.PACING_CONFIG.syllabusCode || '';
+const PROGRESSION_GRID = !!window.PACING_CONFIG.progressionGrid;
 const YEAR_A        = window.PACING_CONFIG.yearA || 'Year 9';
 const YEAR_B        = window.PACING_CONFIG.yearB || 'Year 10';
 const YEAR_A_KEY    = window.PACING_CONFIG.yearAKey || 'year9';
@@ -89,9 +90,12 @@ window.switchTab = function(id, btn) {
   document.getElementById('tab-progress').style.display  = id === 'progress'  ? '' : 'none';
   document.getElementById('tab-heatmap').style.display   = id === 'heatmap'   ? '' : 'none';
   document.getElementById('tab-hours').style.display     = id === 'hours'     ? '' : 'none';
-  if (id === 'progress') loadProgressTab();
-  if (id === 'heatmap')  loadHeatmapTab();
-  if (id === 'hours')    loadHoursTab();
+  const progEl = document.getElementById('tab-progression');
+  if (progEl) progEl.style.display = id === 'progression' ? '' : 'none';
+  if (id === 'progress')    loadProgressTab();
+  if (id === 'heatmap')     loadHeatmapTab();
+  if (id === 'hours')       loadHoursTab();
+  if (id === 'progression') renderProgressionGrid();
 };
 
 // ── Inline quick-edit ─────────────────────────────────────────
@@ -1422,6 +1426,11 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'none');
   }
 
+  if (PROGRESSION_GRID) {
+    const tabBtn = document.getElementById('tabBtnProgression');
+    if (tabBtn) tabBtn.style.display = '';
+  }
+
   getDoc(doc(db, 'calendar_settings', 'current')).then(snap => {
     if (snap.exists()) {
       calSettings = snap.data();
@@ -1447,3 +1456,222 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     renderChapters();
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Progression Grid (Stage 7 → 8 → 9 — Lower Secondary Checkpoint)
+// ══════════════════════════════════════════════════════════════════
+
+// Strand prefix → component label. Falls back to entry.component if known.
+const STRAND_TO_COMPONENT = {
+  Ni: 'Number', Np: 'Number', Nf: 'Number',
+  Ae: 'Algebra', As: 'Algebra',
+  Gg: 'Geometry and Measure', Gp: 'Geometry and Measure',
+  Ss: 'Statistics and Probability', Sp: 'Statistics and Probability',
+};
+
+let _progFilter = 'all';
+let _progSearch = '';
+
+function _progParseCode(code) {
+  // e.g. "7Ni.02" → { stage: 7, strand: 'Ni', num: 2 }
+  const m = /^(\d)([A-Za-z]{1,3})\.?(\d+)?/.exec(code || '');
+  if (!m) return { stage: null, strand: '', num: 0 };
+  return { stage: +m[1], strand: m[2], num: +(m[3] || 0) };
+}
+
+function _progComponent(entry, parsed) {
+  if (entry?.component) return entry.component;
+  return STRAND_TO_COMPONENT[parsed.strand] || 'Other';
+}
+
+// Build progression rows: group by (component, topicArea, strand), then align
+// objectives by sequential index across stages. Matches the layout of
+// Cambridge progression grid PDFs (one row = same family across 7/8/9).
+function _progBuildRows() {
+  if (!SYLLABUS_CODE) return [];
+  const prefix = SYLLABUS_CODE + '_';
+  const entries = [];
+  Object.entries(syllabusIndex).forEach(([key, data]) => {
+    if (!key.startsWith(prefix)) return;
+    const code = data.code || key.slice(prefix.length);
+    const parsed = _progParseCode(code);
+    if (!parsed.stage || parsed.stage < 7 || parsed.stage > 9) return;
+    entries.push({
+      key, code, parsed,
+      title: data.title || '',
+      topicArea: data.topicArea || '',
+      tier: data.tier || '',
+      component: _progComponent(data, parsed),
+      data,
+    });
+  });
+
+  // Group by (component → topicArea → strand). Within each group, sort by
+  // num and zip across stages by index.
+  const groups = {};
+  entries.forEach(e => {
+    const ck = e.component;
+    const tk = e.topicArea || '_';
+    const sk = e.parsed.strand;
+    groups[ck] ??= {};
+    groups[ck][tk] ??= {};
+    groups[ck][tk][sk] ??= { 7: [], 8: [], 9: [] };
+    groups[ck][tk][sk][e.parsed.stage].push(e);
+  });
+
+  const rows = [];
+  Object.keys(groups).sort().forEach(component => {
+    Object.keys(groups[component]).sort().forEach(topicArea => {
+      const strands = groups[component][topicArea];
+      Object.keys(strands).sort().forEach(strand => {
+        const buckets = strands[strand];
+        [7, 8, 9].forEach(s => buckets[s].sort((a, b) => a.parsed.num - b.parsed.num));
+        const len = Math.max(buckets[7].length, buckets[8].length, buckets[9].length);
+        for (let i = 0; i < len; i++) {
+          rows.push({
+            component,
+            topicArea: topicArea === '_' ? '' : topicArea,
+            stage7: buckets[7][i] || null,
+            stage8: buckets[8][i] || null,
+            stage9: buckets[9][i] || null,
+          });
+        }
+      });
+    });
+  });
+  return rows;
+}
+
+function _progRenderCell(item) {
+  if (!item) return '<div class="prog-cell-empty">—</div>';
+  const tierBadge = item.tier
+    ? ` <span class="syl-tier-badge ${escHtml(item.tier.toLowerCase())}" style="font-size:.55rem;padding:0 4px;border-radius:3px">${escHtml(item.tier)}</span>`
+    : '';
+  return `<div class="prog-cell">
+    <span class="prog-code" data-key="${escHtml(item.key)}">${escHtml(item.code)}${tierBadge}</span>
+    <span class="prog-title" data-key="${escHtml(item.key)}">${escHtml(item.title)}</span>
+  </div>`;
+}
+
+function renderProgressionGrid() {
+  const wrap = document.getElementById('progressionGrid');
+  if (!wrap) return;
+  if (!syllabusReady) {
+    wrap.innerHTML = '<div class="prog-empty">Loading syllabus…</div>';
+    setTimeout(renderProgressionGrid, 400);
+    return;
+  }
+
+  const rows = _progBuildRows();
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="prog-empty">No progression data found for syllabus code <strong>${escHtml(SYLLABUS_CODE || '?')}</strong>.</div>`;
+    return;
+  }
+
+  // Build filter chips from distinct components, on first render only.
+  const chipBar = document.getElementById('progStrandFilter');
+  if (chipBar && !chipBar.dataset.built) {
+    const components = ['all', ...new Set(rows.map(r => r.component))];
+    chipBar.innerHTML = components.map(c =>
+      `<button class="prog-chip${c === _progFilter ? ' on' : ''}" data-comp="${escHtml(c)}">${c === 'all' ? 'All strands' : escHtml(c)}</button>`
+    ).join('');
+    chipBar.dataset.built = '1';
+    chipBar.querySelectorAll('.prog-chip').forEach(btn => {
+      btn.onclick = () => {
+        _progFilter = btn.dataset.comp;
+        chipBar.querySelectorAll('.prog-chip').forEach(b => b.classList.toggle('on', b.dataset.comp === _progFilter));
+        renderProgressionGrid();
+      };
+    });
+    const searchInput = document.getElementById('progSearchInput');
+    if (searchInput) {
+      searchInput.oninput = () => {
+        _progSearch = searchInput.value.trim().toLowerCase();
+        renderProgressionGrid();
+      };
+    }
+  }
+
+  const filtered = rows.filter(r => {
+    if (_progFilter !== 'all' && r.component !== _progFilter) return false;
+    if (_progSearch) {
+      const hay = [
+        r.topicArea,
+        r.stage7?.code, r.stage7?.title,
+        r.stage8?.code, r.stage8?.title,
+        r.stage9?.code, r.stage9?.title,
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(_progSearch)) return false;
+    }
+    return true;
+  });
+
+  // Render: insert area-divider rows whenever component or topicArea changes.
+  let html = `<table class="prog-table">
+    <thead><tr>
+      <th class="col-topic">Topic Area</th>
+      <th class="col-stage">Stage 7</th>
+      <th class="col-stage">Stage 8</th>
+      <th class="col-stage">Stage 9</th>
+    </tr></thead><tbody>`;
+
+  let lastComponent = '', lastArea = '';
+  filtered.forEach(r => {
+    if (r.component !== lastComponent) {
+      html += `<tr class="area-divider"><td colspan="4">${escHtml(r.component)}</td></tr>`;
+      lastComponent = r.component;
+      lastArea = '';
+    }
+    const topicLabel = r.topicArea && r.topicArea !== lastArea ? r.topicArea : '';
+    if (topicLabel) lastArea = r.topicArea;
+    html += `<tr class="prog-row">
+      <td class="topic-cell">${escHtml(topicLabel)}</td>
+      <td>${_progRenderCell(r.stage7)}</td>
+      <td>${_progRenderCell(r.stage8)}</td>
+      <td>${_progRenderCell(r.stage9)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+
+  if (!filtered.length) {
+    wrap.innerHTML = `<div class="prog-empty">No matching objectives.</div>`;
+  } else {
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.prog-code, .prog-title').forEach(el => {
+      el.onclick = () => openProgressionModal(el.dataset.key);
+    });
+  }
+}
+
+window.openProgressionModal = function(key) {
+  const entry = syllabusIndex[key];
+  if (!entry) return;
+  const titleEl = document.getElementById('progModalTitle');
+  const bodyEl  = document.getElementById('progModalBody');
+  if (!titleEl || !bodyEl) return;
+  const code = entry.code || key.split('_').slice(1).join('_');
+  const tier = entry.tier ? `<span class="prog-modal-tier">${escHtml(entry.tier)}</span>` : '';
+  titleEl.innerHTML = `<span style="font-family:'DM Mono',monospace;font-size:.8rem;color:var(--accent-dk);margin-right:8px">${escHtml(code)}</span>${escHtml(entry.title || '')}${tier}`;
+
+  let html = '';
+  if (entry.topicArea) html += `<h4>Topic Area</h4><p>${escHtml(entry.topicArea)}</p>`;
+  if (entry.description && entry.description !== entry.title) {
+    html += `<h4>Description</h4><p>${escHtml(entry.description)}</p>`;
+  }
+  if (Array.isArray(entry.content) && entry.content.length) {
+    html += `<h4>Content</h4><ul>${entry.content.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>`;
+  } else if (typeof entry.content === 'string' && entry.content.trim()) {
+    html += `<h4>Content</h4><p>${escHtml(entry.content)}</p>`;
+  }
+  if (entry.notes) {
+    const notes = Array.isArray(entry.notes) ? entry.notes.join('\n') : entry.notes;
+    if (notes && notes.trim()) html += `<h4>Notes</h4><p style="white-space:pre-wrap">${escHtml(notes)}</p>`;
+  }
+  if (entry.paper) html += `<h4>Stage</h4><p>${escHtml(entry.paper)}</p>`;
+  bodyEl.innerHTML = html || '<p style="color:var(--ink-3)">No additional details.</p>';
+  document.getElementById('progressionModal').style.display = 'flex';
+};
+
+window.closeProgressionModal = function() {
+  document.getElementById('progressionModal').style.display = 'none';
+};

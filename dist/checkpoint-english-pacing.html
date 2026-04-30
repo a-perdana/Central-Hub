@@ -452,6 +452,79 @@
     .loading-wrap { text-align: center; padding: 40px; color: var(--ink-3); font-size: .82rem; }
     .empty-wrap { text-align: center; padding: 40px; color: var(--ink-3); font-size: .82rem; }
 
+    /* ── Progression Grid ───────────────────────────── */
+    .prog-filter-bar { display: flex; flex-wrap: wrap; gap: 6px; }
+    .prog-chip {
+      font-family: 'DM Sans', sans-serif; font-size: .72rem; font-weight: 500;
+      padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border);
+      background: var(--white); color: var(--ink-2); cursor: pointer;
+      transition: all .15s; letter-spacing: .01em;
+    }
+    .prog-chip:hover { background: var(--paper); }
+    .prog-chip.on {
+      background: var(--accent); color: white; border-color: var(--accent);
+    }
+
+    .prog-table {
+      width: 100%; border-collapse: collapse; font-size: .78rem;
+      background: white;
+    }
+    .prog-table thead th {
+      background: var(--paper); color: var(--ink-2); font-weight: 600;
+      font-size: .68rem; letter-spacing: .08em; text-transform: uppercase;
+      padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 1;
+    }
+    .prog-table thead th.col-stage { width: 27%; }
+    .prog-table thead th.col-topic { width: 19%; }
+
+    .prog-table tbody tr.area-divider td {
+      background: linear-gradient(90deg, var(--accent-2) 0%, transparent 80%);
+      padding: 8px 12px; font-weight: 600; font-size: .72rem;
+      color: var(--accent-dk); letter-spacing: .04em;
+      border-bottom: 1px solid var(--border);
+    }
+    .prog-table tbody tr.prog-row td {
+      padding: 10px 12px; vertical-align: top; border-bottom: 1px solid var(--border);
+    }
+    .prog-table tbody tr.prog-row:hover { background: #fafbfc; }
+    .prog-table .topic-cell { font-size: .72rem; color: var(--ink-3); line-height: 1.4; }
+
+    .prog-cell { display: flex; flex-direction: column; gap: 4px; }
+    .prog-cell-empty {
+      color: var(--ink-3); font-size: .9rem; text-align: center; opacity: .35;
+    }
+    .prog-code {
+      display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+      font-family: 'DM Mono', monospace; font-size: .68rem; font-weight: 600;
+      padding: 2px 7px; border-radius: 4px;
+      background: var(--accent-2); color: var(--accent-dk);
+      border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+    .prog-title {
+      font-size: .76rem; color: var(--ink); line-height: 1.45; cursor: pointer;
+    }
+    .prog-title:hover { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; }
+
+    .prog-empty {
+      text-align: center; padding: 50px 24px; color: var(--ink-3); font-size: .82rem;
+    }
+
+    /* Progression detail modal */
+    .prog-modal-body { padding: 20px 24px; max-height: 70vh; overflow-y: auto; }
+    .prog-modal-body h4 {
+      font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--ink-3); margin: 16px 0 6px;
+    }
+    .prog-modal-body h4:first-child { margin-top: 0; }
+    .prog-modal-body p, .prog-modal-body li { font-size: .82rem; line-height: 1.55; color: var(--ink-2); }
+    .prog-modal-body ul { padding-left: 20px; margin: 4px 0; }
+    .prog-modal-tier {
+      display: inline-block; font-size: .65rem; padding: 2px 8px; border-radius: 4px;
+      background: var(--accent-2); color: var(--accent-dk); margin-left: 8px;
+      letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+    }
+
     /* ── Toast ─────────────────────────────────────── */
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: white; font-size: .78rem; padding: 9px 18px; border-radius: 8px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 2000; white-space: nowrap; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -2400,6 +2473,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <!-- TAB BAR -->
     <div class="tab-bar">
       <button class="tab-btn on" onclick="switchTab('structure',this)">Pacing Structure</button>
+      <button class="tab-btn" id="tabBtnProgression" onclick="switchTab('progression',this)" style="display:none">Progression Grid</button>
       <button class="tab-btn" onclick="switchTab('progress',this)">Teacher Progress</button>
       <button class="tab-btn" onclick="switchTab('heatmap',this)">Coverage Heatmap</button>
       <button class="tab-btn" onclick="switchTab('hours',this)">Hours Report</button>
@@ -2417,6 +2491,25 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="loading-wrap">Loading pacing structure…</div>
           </div>
           <div id="structurePager" class="pager" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: PROGRESSION GRID ═══════════════════════════════ -->
+    <div id="tab-progression" style="display:none">
+      <div class="section-card">
+        <div class="section-head">
+          <span class="section-title">Stage 7 → 8 → 9 Progression</span>
+          <span style="font-size:.72rem;color:var(--ink-3);margin-left:8px">Cambridge curriculum framework</span>
+        </div>
+        <div class="section-body" style="padding:14px 16px">
+          <div id="progStrandFilter" class="prog-filter-bar"></div>
+          <div style="margin-top:10px">
+            <input id="progSearchInput" class="form-input" placeholder="Search code or title…" style="max-width:320px;font-size:.78rem">
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <div id="progressionGrid"></div>
         </div>
       </div>
     </div>
@@ -2577,10 +2670,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   </div>
 </div>
 
+<!-- ── PROGRESSION DETAIL MODAL ─────────────────────── -->
+<div class="modal-overlay" id="progressionModal" style="display:none">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-head">
+      <h3 id="progModalTitle">Objective</h3>
+      <button class="modal-close" onclick="closeProgressionModal()">&#215;</button>
+    </div>
+    <div id="progModalBody" class="prog-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeProgressionModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 
-<script>window.PACING_CONFIG = { collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'checkpoint_english', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' };</script>
+<script>window.PACING_CONFIG = { collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'checkpoint_english', syllabusCode: '1111', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' };</script>
 <script type="module" src="partials/pacing-core.js"></script>
 
 </body>
