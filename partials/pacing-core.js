@@ -1445,6 +1445,20 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     console.log(`Syllabus index loaded: ${Object.keys(syllabusIndex).length} codes`);
   }).catch(e => console.warn('cambridge_syllabus load failed:', e));
 
+  // Optional: per-subject progression override (cambridge_syllabus_progression/{code})
+  // If present, the Progression Grid uses these rows verbatim instead of
+  // running the title-similarity heuristic.
+  if (PROGRESSION_GRID && SYLLABUS_CODE) {
+    getDoc(doc(db, 'cambridge_syllabus_progression', SYLLABUS_CODE)).then(snap => {
+      if (snap.exists() && Array.isArray(snap.data().rows)) {
+        _progOverrideRows = snap.data().rows;
+        console.log(`Progression override loaded: ${_progOverrideRows.length} rows`);
+      } else {
+        _progOverrideRows = []; // explicitly mark as "checked, none"
+      }
+    }).catch(e => console.warn('progression override load failed:', e));
+  }
+
   onSnapshot(doc(db, COLLECTION, DOC_ID), snap => {
     if (snap.exists()) {
       chapters = snap.data().chapters || [];
@@ -1471,6 +1485,7 @@ const STRAND_TO_COMPONENT = {
 
 let _progFilter = 'all';
 let _progSearch = '';
+let _progOverrideRows = null; // null = not yet loaded / not present; [] = loaded but empty
 
 function _progParseCode(code) {
   // e.g. "7Ni.02" → { stage: 7, strand: 'Ni', num: 2 }
@@ -1519,6 +1534,36 @@ function _progSimilarity(tokensA, tokensB) {
 function _progBuildRows() {
   if (!SYLLABUS_CODE) return [];
   const prefix = SYLLABUS_CODE + '_';
+
+  // Helper: turn a code (e.g. "7Ni.02") into the row-cell entry rendered
+  // by _progRenderCell, looking up syllabusIndex for title/tier/etc.
+  const cellFromCode = (code) => {
+    if (!code) return null;
+    const key = prefix + code;
+    const data = syllabusIndex[key];
+    const parsed = _progParseCode(code);
+    return {
+      key, code, parsed,
+      title: data?.title || '',
+      tier: data?.tier || '',
+      data: data || {},
+    };
+  };
+
+  // ── Override path: if Firestore has a curated progression doc for this
+  // subject, render it verbatim. This matches the official Cambridge PDF
+  // exactly and avoids any heuristic mis-pairings.
+  if (Array.isArray(_progOverrideRows) && _progOverrideRows.length) {
+    return _progOverrideRows.map(r => ({
+      component: r.component || 'Other',
+      topicArea: r.topicArea || '',
+      stage7: cellFromCode(r.stage7),
+      stage8: cellFromCode(r.stage8),
+      stage9: cellFromCode(r.stage9),
+    }));
+  }
+
+  // ── Heuristic path: no override yet, infer rows from title similarity.
   const entries = [];
   Object.entries(syllabusIndex).forEach(([key, data]) => {
     if (!key.startsWith(prefix)) return;
@@ -1653,7 +1698,10 @@ function _progRenderCell(item) {
 function renderProgressionGrid() {
   const wrap = document.getElementById('progressionGrid');
   if (!wrap) return;
-  if (!syllabusReady) {
+  if (!syllabusReady || _progOverrideRows === null) {
+    // Wait for both the syllabus index and the optional override doc to
+    // settle before rendering — otherwise the heuristic path may flash
+    // briefly before the override loads.
     wrap.innerHTML = '<div class="prog-empty">Loading syllabus…</div>';
     setTimeout(renderProgressionGrid, 400);
     return;
