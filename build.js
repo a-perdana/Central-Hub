@@ -20,6 +20,16 @@ const sharedNavbar = fs.existsSync(sharedNavbarPath)
   ? fs.readFileSync(sharedNavbarPath, "utf8")
   : "";
 
+const syllabusModalsPath = path.join("partials", "syllabus-modals.html");
+const syllabusModals = fs.existsSync(syllabusModalsPath)
+  ? fs.readFileSync(syllabusModalsPath, "utf8")
+  : "";
+
+const syllabusToolbarBtnPath = path.join("partials", "syllabus-toolbar-button.html");
+const syllabusToolbarBtn = fs.existsSync(syllabusToolbarBtnPath)
+  ? fs.readFileSync(syllabusToolbarBtnPath, "utf8")
+  : "";
+
 // -- Generate firebase-config.js from Vercel env vars
 const cfg = {
   FIREBASE_API_KEY:            process.env.FIREBASE_API_KEY            || "",
@@ -326,10 +336,18 @@ htmlFiles.forEach((file) => {
   }
 
   // Inject shared navbar
-  const withSharedNavbar = sharedNavbar
+  let output = sharedNavbar
     ? source.replace("<!-- SHARED_NAVBAR -->", sharedNavbar)
     : source;
-  fs.writeFileSync(path.join("dist", file), withSharedNavbar);
+  // Inject shared syllabus modals (Teaching Schedule + toast)
+  if (syllabusModals) {
+    output = output.replace("<!-- SYLLABUS_MODALS -->", syllabusModals);
+  }
+  // Inject shared syllabus toolbar button (Teaching Schedule launcher)
+  if (syllabusToolbarBtn) {
+    output = output.replace("<!-- SYLLABUS_TEACH_SCHED_BTN -->", syllabusToolbarBtn);
+  }
+  fs.writeFileSync(path.join("dist", file), output);
   console.log(`Copied: ${file}`);
 });
 

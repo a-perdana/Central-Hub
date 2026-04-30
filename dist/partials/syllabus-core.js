@@ -1387,6 +1387,26 @@ export function initSyllabusPage(config) {
   };
 
   // ── Load subject ───────────────────────────────────────────────────────────
+  window.tsScheduleView = function(view) {
+    const calendar = document.getElementById('tsCalendarScheduleView');
+    const simulation = document.getElementById('tsSimulationScheduleView');
+    const calBtn = document.getElementById('tsViewCalendarBtn');
+    const simBtn = document.getElementById('tsViewSimulationBtn');
+    const isSimulation = view === 'simulation';
+    if (calendar) calendar.style.display = isSimulation ? 'none' : '';
+    if (simulation) simulation.style.display = isSimulation ? '' : 'none';
+    if (calBtn) {
+      calBtn.style.borderColor = isSimulation ? '#CBD5E1' : '#059669';
+      calBtn.style.background = isSimulation ? '#fff' : '#ECFDF5';
+      calBtn.style.color = isSimulation ? '#475569' : '#047857';
+    }
+    if (simBtn) {
+      simBtn.style.borderColor = isSimulation ? '#059669' : '#CBD5E1';
+      simBtn.style.background = isSimulation ? '#ECFDF5' : '#fff';
+      simBtn.style.color = isSimulation ? '#047857' : '#475569';
+    }
+  };
+
   function loadSubject(subj) {
     if (unsub) { unsub(); unsub = null; }
     currentSubject = subj;
