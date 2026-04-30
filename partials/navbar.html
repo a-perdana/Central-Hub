@@ -1875,10 +1875,13 @@ document.getElementById('btnNavAddGroup')?.addEventListener('click', () => {
 });
 
 // Wire one submenu wrap for edit mode: draggable wrap + editable label + delete button.
+// Submenu drag is opt-in via the trigger's mousedown to avoid hijacking item drags
+// that originate inside the submenu panel.
 function initSubmenuWrap(wrap) {
   if (wrap._navEditInit) return;
   wrap._navEditInit = true;
-  wrap.setAttribute('draggable', 'true');
+  // NOTE: draggable is toggled on/off based on where the user grabs (see trigger handler below)
+  wrap.draggable = false;
   wrap.addEventListener('dragstart', onSubmenuDragStart);
   wrap.addEventListener('dragover',  onSubmenuDragOver);
   wrap.addEventListener('dragleave', onSubmenuDragLeave);
@@ -1888,13 +1891,23 @@ function initSubmenuWrap(wrap) {
   const trigger = wrap.querySelector(':scope > .ch-dd-submenu-trigger');
   const lblEl   = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label');
   const delBtn  = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-delete');
+
+  // Enable wrap-level draggable only when the user grabs the trigger row
+  // (not when they grab an item inside the submenu panel).
+  if (trigger) {
+    trigger.addEventListener('mousedown', () => { wrap.draggable = true; });
+  }
+  // Reset after any drag ends
+  wrap.addEventListener('dragend', () => { wrap.draggable = false; });
+  document.addEventListener('mouseup', () => { wrap.draggable = false; });
+
   if (lblEl) {
     lblEl.contentEditable = 'true';
     lblEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lblEl.blur(); } });
-    // Stop label drag from triggering wrap drag
-    lblEl.addEventListener('mousedown', e => e.stopPropagation());
+    lblEl.addEventListener('mousedown', e => { e.stopPropagation(); wrap.draggable = false; });
   }
   if (delBtn) {
+    delBtn.addEventListener('mousedown', e => { e.stopPropagation(); wrap.draggable = false; });
     delBtn.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation();
       // Spill items back to the parent column, then remove the wrap
@@ -1905,11 +1918,24 @@ function initSubmenuWrap(wrap) {
       wrap.remove();
     });
   }
+
+  // Register the submenu panel as a container drop target so items can be dropped
+  // into an empty group or below the last item.
+  const subPanel = wrap.querySelector(':scope > .ch-dd-submenu-panel');
+  if (subPanel && !subPanel._navEditContainer) {
+    subPanel.addEventListener('dragover',  onContainerDragOver);
+    subPanel.addEventListener('dragleave', onContainerDragLeave);
+    subPanel.addEventListener('drop',      onContainerDrop);
+    subPanel._navEditContainer = true;
+  }
 }
 
 let dragSubmenu = null;
 function onSubmenuDragStart(e) {
-  // Only fire if the drag originated on the wrap itself, not on the editable label
+  // If the drag originated on a child item, this is an item drag — don't hijack it.
+  if (e.target.closest('.ch-dd-item[data-nav-key]')) return;
+  // Likewise, don't fire when the user is editing the label
+  if (e.target.closest('.submenu-label[contenteditable="true"]')) return;
   dragSubmenu = this;
   this.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
