@@ -240,11 +240,11 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `documents.html`                   | `/documents`                    | Document management (`central_documents` collection) |
 | `academics.html`                   | `/academics`                    | Academics module hub                              |
 | `academic-calendar.html`           | `/academic-calendar`            | Academic calendar (Sheets + Firestore events). Admin: **⚙ Year Settings** modal writes `calendar_settings/current` (academicYearStart, totalTeachingWeeks, terms). This is the single source of truth for all date/term data across the platform. |
-| `igcse-syllabus.html`              | `/igcse-syllabus`               | IGCSE syllabus guide — view/edit syllabus entries, GLH, chapter hours. Redirects to Teacher Progress (math only). Old URL `/igcse-pacing` redirects here. |
-| `igcse-math-pacing.html`          | `/igcse-math-pacing`            | IGCSE Math pacing admin — chapter/topic structure, inline edit (codes autocomplete from `cambridge_syllabus`, hours, week), Teacher Progress, Coverage Heatmap, Hours Report. Old URL `/igcse-math-admin` redirects here. |
-| `as-alevel-pacing.html`            | `/as-alevel-pacing`             | A-Level pacing guide                              |
+| `igcse-syllabus.html`              | `/igcse-syllabus`               | IGCSE syllabus guide — view/edit syllabus entries, GLH, chapter hours. Redirects to Teacher Progress (math only). |
+| `igcse-math-pacing.html`           | `/igcse-math-pacing`            | IGCSE Math pacing admin — chapter/topic structure, inline edit (codes autocomplete from `cambridge_syllabus`, hours, week), Teacher Progress, Coverage Heatmap, Hours Report. |
+| `as-alevel-syllabus.html`          | `/as-alevel-syllabus`           | AS/A Level syllabus guide — view/edit syllabus entries for Math, Biology, Chemistry, Physics (Year 11–12). |
 | `primary-checkpoint-syllabus.html` | `/primary-checkpoint-syllabus`  | Primary Checkpoint syllabus admin — chapter/topic/objective structure (Year 4–6). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
-| `secondary-checkpoint-pacing.html` | `/secondary-checkpoint-pacing`  | Secondary checkpoint pacing (Year 7–8)            |
+| `secondary-checkpoint-syllabus.html` | `/secondary-checkpoint-syllabus` | Secondary Checkpoint syllabus admin — chapter/topic/objective structure (Year 7–8). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
 | `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
 | `school-appraisals.html`           | `/school-appraisals`            | School-level appraisals                           |
