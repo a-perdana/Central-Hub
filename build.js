@@ -134,7 +134,7 @@ const CHECKPOINT_SUBJECTS = {
     heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
     heroGlow:     'rgba(185,28,28,.4)',
     heroIcon:     '∫',
-    heroEyebrow:  'Cambridge Checkpoint Mathematics 1112',
+    heroEyebrow:  'Cambridge Checkpoint Mathematics 0862',
     heroTitle:    'Checkpoint Mathematics Pacing',
     heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
