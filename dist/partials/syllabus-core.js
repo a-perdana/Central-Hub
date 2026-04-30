@@ -1590,7 +1590,7 @@ export function initSyllabusPage(config) {
   }
 
   function editTopic(ci, ti) {
-    if (!isAdmin) return;
+    if (!isAdmin && !isCoordinator) return;
     modalMode  = 'edit-topic';
     editChIdx  = ci;
     editTopIdx = ti;
