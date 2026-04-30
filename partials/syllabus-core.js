@@ -1391,7 +1391,7 @@ export function initSyllabusPage(config) {
       topicRows = `<div class="no-topics">No topics yet.${isAdmin ? ' Add one below.' : ''}</div>`;
     }
 
-    const reorderBtns = features.topicReorder && (isAdmin || isCoordinator) ? `
+    const reorderBtns = (isAdmin || isCoordinator) ? `
       <button class="btn-reorder" onclick="moveChapter(event,${ci},-1)" title="Move up" ${ci===0?'disabled':''}>↑</button>
       <button class="btn-reorder" onclick="moveChapter(event,${ci},1)"  title="Move down" ${ci===chapters.length-1?'disabled':''}>↓</button>` : '';
 
@@ -1612,6 +1612,8 @@ export function initSyllabusPage(config) {
     if (ni < 0 || ni >= chapters.length) return;
     [chapters[ci], chapters[ni]] = [chapters[ni], chapters[ci]];
     await saveChapters();
+    showToast('Chapter order updated.');
+    render();
   }
 
   async function moveTopic(ci, ti, dir) {
