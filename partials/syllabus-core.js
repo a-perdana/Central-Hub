@@ -1041,8 +1041,12 @@ export function initSyllabusPage(config) {
                 <option value="checkpoint">Secondary Checkpoint (G7–8)</option>
                 <option value="igcse" selected>IGCSE (G9–10)</option>
                 <option value="as">AS Level (G11)</option>
-                <option value="alevel">A Level (G12)</option>
+                <option value="alevel">A Level (G11-12)</option>
               </select>
+            </div>
+            <div class="ts-sim-field" id="tsGradeField" style="display:none">
+              <label class="ts-sim-label">Grades included</label>
+              <div id="tsGradeOptions" style="display:flex;flex-wrap:wrap;gap:8px"></div>
             </div>
             <div class="ts-sim-field">
               <label class="ts-sim-label" for="tsLessonsPerWeek">Lessons per week</label>
@@ -1103,12 +1107,40 @@ export function initSyllabusPage(config) {
   }
 
   // ── Teaching Schedule Simulation Calculator ────────────────────────────────
+  function getTsProgrammeConfig() {
+    const prog = document.getElementById('tsProgramme')?.value;
+    const PROGRAMMES = {
+      checkpoint: { label: 'Secondary Checkpoint', grades: 'Grade 7-8', years: 2, glh: 360,
+                    note: 'Stages 7, 8 & 9 (3 x 120 hrs) compressed into 2 years',
+                    gradeOptions: ['Grade 7', 'Grade 8'] },
+      igcse:      { label: 'IGCSE',                grades: 'Grade 9-10', years: 2, glh: 130,
+                    note: '130 hrs per subject over 2 years',
+                    gradeOptions: ['Grade 9', 'Grade 10'] },
+      as:         { label: 'AS Level',             grades: 'Grade 11',   years: 1, glh: 180,
+                    note: '180 hrs per subject in 1 year',
+                    gradeOptions: ['Grade 11'] },
+      alevel:     { label: 'A Level',              grades: 'Grade 11-12', years: 2, glh: 360,
+                    note: '360 hrs per subject over 2 years',
+                    gradeOptions: ['Grade 11', 'Grade 12'] },
+    };
+    return PROGRAMMES[prog] || null;
+  }
+
+  function getTsSelectedGradeCount(cfg) {
+    if (!cfg?.gradeOptions?.length) return 1;
+    const checked = document.querySelectorAll('#tsGradeOptions input[type="checkbox"]:checked').length;
+    return Math.max(0, checked);
+  }
+
   window.tsRecalc = function(numTeachingWeeks) {
     const lpw     = Math.max(0, parseFloat(document.getElementById('tsLessonsPerWeek')?.value) || 0);
     const dur     = Math.max(0, parseFloat(document.getElementById('tsLessonDuration')?.value)  || 0);
     const targetH = Math.max(0, parseFloat(document.getElementById('tsTargetHours')?.value)     || 0);
+    const cfg     = getTsProgrammeConfig();
+    const selectedYears = cfg ? getTsSelectedGradeCount(cfg) : 1;
+    const effectiveWeeks = numTeachingWeeks * selectedYears;
 
-    const totalLessons = numTeachingWeeks * lpw;
+    const totalLessons = effectiveWeeks * lpw;
     const totalMins    = totalLessons * dur;
     const targetMins   = targetH * 60;
     const gapMins      = totalMins - targetMins;
@@ -1126,7 +1158,7 @@ export function initSyllabusPage(config) {
     };
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
-    set('tsOutWeeks',    numTeachingWeeks);
+    set('tsOutWeeks',    effectiveWeeks);
     set('tsOutLessons',  totalLessons);
     set('tsOutTime',     fmtTime(totalMins));
     set('tsOutTarget',   targetH > 0 ? fmtTime(targetMins) : '—');
@@ -1153,22 +1185,9 @@ export function initSyllabusPage(config) {
     }
   };
 
-  // ── Teaching Schedule Programme Selector ───────────────────────────────────
+  // ── Teaching Schedule Grade Selector ───────────────────────────────────────
   window.tsProgrammeChange = function(numTeachingWeeks) {
-    const prog = document.getElementById('tsProgramme')?.value;
-
-    const PROGRAMMES = {
-      checkpoint: { label: 'Secondary Checkpoint', grades: 'Grade 7–8', years: 2, glh: 360,
-                    note: 'Stages 7, 8 & 9 (3 × 120 hrs) compressed into 2 years' },
-      igcse:      { label: 'IGCSE',                grades: 'Grade 9–10', years: 2, glh: 130,
-                    note: '130 hrs per subject over 2 years' },
-      as:         { label: 'AS Level',             grades: 'Grade 11',   years: 1, glh: 180,
-                    note: '180 hrs per subject in 1 year' },
-      alevel:     { label: 'A Level',              grades: 'Grade 12',   years: 1, glh: 180,
-                    note: '180 hrs per subject in 1 year (continuation)' },
-    };
-
-    const cfg = PROGRAMMES[prog];
+    const cfg = getTsProgrammeConfig();
 
     const info = document.getElementById('tsProgrammeInfo');
     if (info) {
@@ -1177,15 +1196,42 @@ export function initSyllabusPage(config) {
       } else {
         info.style.display = '';
         info.innerHTML = `
-          <div style="font-weight:700;margin-bottom:4px">${cfg.label} — ${cfg.grades}</div>
+          <div style="font-weight:700;margin-bottom:4px">${cfg.label} - ${cfg.grades}</div>
           <div style="color:#334155">${cfg.note}</div>
           <div style="margin-top:6px;font-weight:600">Cambridge GLH: ${cfg.glh} hrs</div>
         `;
       }
     }
 
+    const gradeField = document.getElementById('tsGradeField');
+    const gradeOptions = document.getElementById('tsGradeOptions');
+    if (gradeField && gradeOptions) {
+      if (!cfg?.gradeOptions?.length) {
+        gradeField.style.display = 'none';
+        gradeOptions.innerHTML = '';
+      } else {
+        gradeField.style.display = '';
+        gradeOptions.innerHTML = cfg.gradeOptions.map(grade => `
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #E2E8F0;border-radius:7px;background:#fff;font-size:0.78rem;color:#334155;cursor:pointer">
+            <input type="checkbox" class="ts-grade-check" value="${grade}" checked onchange="tsGradeChange(${numTeachingWeeks})" ${cfg.gradeOptions.length === 1 ? 'disabled' : ''}>
+            <span>${grade}</span>
+          </label>
+        `).join('');
+      }
+    }
+
+    window.tsGradeChange(numTeachingWeeks);
+  };
+
+  window.tsGradeChange = function(numTeachingWeeks) {
+    const cfg = getTsProgrammeConfig();
     const targetEl = document.getElementById('tsTargetHours');
-    if (targetEl && cfg) targetEl.value = cfg.glh;
+    if (targetEl && cfg) {
+      const selectedYears = getTsSelectedGradeCount(cfg);
+      const totalYears = Math.max(1, cfg.gradeOptions?.length || cfg.years || 1);
+      const scopedGlh = selectedYears > 0 ? cfg.glh * selectedYears / totalYears : 0;
+      targetEl.value = Number.isInteger(scopedGlh) ? scopedGlh : scopedGlh.toFixed(1);
+    }
 
     window.tsRecalc(numTeachingWeeks);
   };
