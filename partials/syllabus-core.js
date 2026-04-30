@@ -1395,10 +1395,12 @@ export function initSyllabusPage(config) {
       <button class="btn-reorder" onclick="moveChapter(event,${ci},-1)" title="Move up" ${ci===0?'disabled':''}>↑</button>
       <button class="btn-reorder" onclick="moveChapter(event,${ci},1)"  title="Move down" ${ci===chapters.length-1?'disabled':''}>↓</button>` : '';
 
-    const chActions = isAdmin ? `<div class="ch-actions">
+    const canEditCh = isAdmin || isCoordinator;
+    const chDeleteBtn = isAdmin ? `<button class="btn btn-danger" onclick="deleteChapter(event,${ci})">Delete</button>` : '';
+    const chActions = canEditCh ? `<div class="ch-actions">
       ${reorderBtns}
       <button class="btn btn-edit" onclick="editChapter(${ci})">Edit</button>
-      <button class="btn btn-danger" onclick="deleteChapter(event,${ci})">Delete</button>
+      ${chDeleteBtn}
     </div>` : '';
 
     const footer = isAdmin ? (features.bufferTopics ? `
@@ -1673,7 +1675,7 @@ export function initSyllabusPage(config) {
   }
 
   function editChapter(ci) {
-    if (!isAdmin) return;
+    if (!isAdmin && !isCoordinator) return;
     modalMode = 'edit-chapter';
     editChIdx = ci;
     _modalDirty = false;
