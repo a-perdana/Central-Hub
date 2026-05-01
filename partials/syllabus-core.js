@@ -406,15 +406,20 @@ export function initSyllabusPage(config) {
       const editBtn = document.getElementById('editSyllabusBtn');
       const pagingBtn = document.createElement('button');
       pagingBtn.id = 'pagingToggleBtn';
-      pagingBtn.className = 'btn btn-secondary';
-      pagingBtn.title = 'Toggle chapter pagination';
-      pagingBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+      pagingBtn.className = 'btn btn-secondary btn-icon-only';
+      pagingBtn.setAttribute('aria-label', 'All Chapters');
+      const gridSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
+      pagingBtn.title = 'All Chapters — toggle chapter pagination';
+      pagingBtn.innerHTML = `${gridSvg}<span class="btn-label">All Chapters</span>`;
       pagingBtn.addEventListener('click', () => {
         noPaging = !noPaging;
         currentPage = 0;
-        pagingBtn.innerHTML = noPaging
-          ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Paginate`
-          : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+        const label = noPaging ? 'Paginate' : 'All Chapters';
+        pagingBtn.title = noPaging
+          ? 'Paginate — show one page of chapters at a time'
+          : 'All Chapters — toggle chapter pagination';
+        pagingBtn.setAttribute('aria-label', label);
+        pagingBtn.innerHTML = `${gridSvg}<span class="btn-label">${label}</span>`;
         pagingBtn.classList.toggle('btn-active-state', noPaging);
         render();
       });
