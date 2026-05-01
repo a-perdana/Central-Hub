@@ -655,8 +655,19 @@ export function initSyllabusPage(config) {
       lastYear = ch.year;
     });
 
+    // Save the original markup so the loading state can be reverted exactly.
+    const originalBtnHtml = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = 'Pushing…';
+    btn.classList.add('btn-loading');
+    btn.setAttribute('aria-busy', 'true');
+
+    const subjectLabel = subjects[subj].label || subj;
+    _showPushToast({
+      kind:    'progress',
+      title:   `Pushing schedule for ${subjectLabel}…`,
+      message: `Updating ${writtenCount} topic${writtenCount === 1 ? '' : 's'} in ${subjects[subj].collection}. Please don't close this tab.`,
+    });
+
     try {
       const teachingScheduleSnap = await getDoc(doc(window.db, 'teaching_schedule', scheduleDocId));
       const scheduleSyncedAt = teachingScheduleSnap.exists() ? teachingScheduleSnap.data().syncedAt : null;
@@ -675,17 +686,77 @@ export function initSyllabusPage(config) {
         },
         { merge: true }
       );
-      const skipped = beyondCount ? ` (${beyondCount} skipped — schedule overflow)` : '';
-      showToast(`Schedule pushed — ${writtenCount} topic${writtenCount === 1 ? '' : 's'} updated${skipped}.`);
+      const skippedSuffix = beyondCount
+        ? ` ${beyondCount} topic${beyondCount === 1 ? ' was' : 's were'} skipped (schedule overflow).`
+        : '';
+      _showPushToast({
+        kind:      'success',
+        title:     `Schedule pushed — ${subjectLabel}`,
+        message:   `${writtenCount} topic${writtenCount === 1 ? '' : 's'} updated.${skippedSuffix} Teachers will see the new dates in Teachers Hub now.`,
+        autoClose: 7000,
+      });
     } catch (err) {
       console.error('pushScheduleToPacing error:', err);
-      showToast('Push failed — see console.', true);
+      _showPushToast({
+        kind:    'error',
+        title:   'Push failed',
+        message: err && err.message ? err.message : 'Could not write to the pacing collection. See console for details.',
+      });
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '📥 Push to Pacing';
+      btn.classList.remove('btn-loading');
+      btn.removeAttribute('aria-busy');
+      btn.innerHTML = originalBtnHtml;
       _refreshPushStaleBanner();
     }
   };
+
+  // ── Push toast UI ─────────────────────────────────────────────────────────
+  // A single fixed-position toast that handles all three states of the push:
+  // a spinning "in-flight" indicator while the write is in progress, a green
+  // success card (auto-dismisses), and a red error card (manual dismiss).
+  // Lives on window so the push handler can call it without import gymnastics.
+  function _showPushToast({ kind, title, message, autoClose = 0 }) {
+    let el = document.getElementById('pushToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'pushToast';
+      el.className = 'push-toast';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    if (el._autoCloseTimer) { clearTimeout(el._autoCloseTimer); el._autoCloseTimer = null; }
+
+    const icons = {
+      progress: { cls: 'spin',  svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3.5-7.1"/></svg>' },
+      success:  { cls: 'ok',    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 7"/></svg>' },
+      error:    { cls: 'error', svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' },
+    };
+    const ic = icons[kind] || icons.progress;
+    const closeable = kind !== 'progress';
+
+    el.innerHTML = `
+      <div class="push-toast-icon ${ic.cls}">${ic.svg}</div>
+      <div class="push-toast-body">
+        <div class="push-toast-title">${title}</div>
+        <div class="push-toast-msg">${message}</div>
+      </div>
+      ${closeable ? '<button class="push-toast-close" aria-label="Dismiss">×</button>' : ''}
+    `;
+    if (closeable) {
+      el.querySelector('.push-toast-close').addEventListener('click', () => _hidePushToast());
+    }
+    requestAnimationFrame(() => el.classList.add('show'));
+    if (autoClose > 0) {
+      el._autoCloseTimer = setTimeout(() => _hidePushToast(), autoClose);
+    }
+  }
+  function _hidePushToast() {
+    const el = document.getElementById('pushToast');
+    if (!el) return;
+    el.classList.remove('show');
+  }
 
   // ── Stale banner ──────────────────────────────────────────────────────────
   // Shows a warning when the pacing collection's `_lastSchedulePush` snapshot
