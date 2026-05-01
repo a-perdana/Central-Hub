@@ -384,8 +384,14 @@ export function initSyllabusPage(config) {
     if (isAdmin) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
+      // Push-to-pacing button is only meaningful when the page computes
+      // schedule labels — i.e. features.calendarDates is on.
+      if (features.calendarDates) {
+        const pushBtn = document.getElementById('pushSchedBtn');
+        if (pushBtn) pushBtn.style.display = '';
+      }
     } else {
-      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
+      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn', 'pushSchedBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
@@ -510,34 +516,201 @@ export function initSyllabusPage(config) {
         semLabel: w.semLabel || '',
         reason:   w.reason   || 'Holiday',
       })) : [];
+      window._scheduleSyncedAt = d.syncedAt || null;
       const box = document.getElementById('syncStatusBox');
       if (box) box.textContent = `${teachingWeeks.length} teaching weeks loaded.`;
     } else {
       teachingWeeks = [];
       skippedWeeks  = [];
+      window._scheduleSyncedAt = null;
       const box = document.getElementById('syncStatusBox');
       if (box) box.textContent = 'No schedule synced yet — go to Academic Calendar → ⚙ Year Settings → Sync Teaching Weeks.';
     }
   }
 
-  // ── Topic date label ───────────────────────────────────────────────────────
-  function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
+  // ── Topic schedule info ────────────────────────────────────────────────────
+  // Returns the structured schedule data for a topic given its cumulative
+  // position within its year. Used both for the date-label chip and for the
+  // "Push to Pacing" feature which writes these fields into the pacing doc.
+  // Returns: null (no schedule), '__beyond__' (overflows schedule), or
+  //   { startWeek, endWeek, semester, semWeekStart, semWeekEnd, dateRange }
+  // semester is parsed from semLabel (e.g. "Semester 1" -> 1, "Sem II" -> 2).
+  function getTopicScheduleInfo(cumulativeBefore, duration, weeklyHours) {
     if (!teachingWeeks.length || !weeklyHours || weeklyHours <= 0) return null;
     const startWeekIdx = Math.floor(cumulativeBefore / weeklyHours);
     const endWeekIdx   = Math.floor((cumulativeBefore + duration - 1) / weeklyHours);
     const startW = teachingWeeks[startWeekIdx];
     const endW   = teachingWeeks[endWeekIdx];
     if (!startW) return '__beyond__';
+    const parseSem = (label) => {
+      if (!label) return null;
+      const m = String(label).match(/(\d+|I{1,3}|IV)/i);
+      if (!m) return null;
+      const t = m[1].toUpperCase();
+      if (t === 'I')   return 1;
+      if (t === 'II')  return 2;
+      if (t === 'III') return 3;
+      if (t === 'IV')  return 4;
+      const n = parseInt(t, 10);
+      return isNaN(n) ? null : n;
+    };
     const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    const semPrefix = startW.semLabel ? `${startW.semLabel} · ` : '';
-    if (!endW || startWeekIdx === endWeekIdx) {
-      return `${semPrefix}Week ${startW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(startW.fri)}`;
-    }
-    if (startW.semLabel && endW.semLabel && startW.semLabel === endW.semLabel) {
-      return `${semPrefix}Week ${startW.semWeekNo}–${endW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
-    }
-    return `${semPrefix}Week ${startW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
+    const dateRange = (!endW || startWeekIdx === endWeekIdx)
+      ? `${fmt(startW.mon)} – ${fmt(startW.fri)}`
+      : `${fmt(startW.mon)} – ${fmt(endW.fri)}`;
+    return {
+      startWeek:    startW,
+      endWeek:      endW || startW,
+      semester:     parseSem(startW.semLabel),
+      semWeekStart: startW.semWeekNo,
+      semWeekEnd:   (endW || startW).semWeekNo,
+      dateRange,
+    };
   }
+
+  // ── Topic date label ───────────────────────────────────────────────────────
+  function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
+    const info = getTopicScheduleInfo(cumulativeBefore, duration, weeklyHours);
+    if (!info) return null;
+    if (info === '__beyond__') return '__beyond__';
+    const { startWeek, endWeek, semWeekStart, semWeekEnd, dateRange } = info;
+    const semPrefix = startWeek.semLabel ? `${startWeek.semLabel} · ` : '';
+    if (semWeekStart === semWeekEnd) {
+      return `${semPrefix}Week ${semWeekStart}: ${dateRange}`;
+    }
+    if (startWeek.semLabel && endWeek.semLabel && startWeek.semLabel === endWeek.semLabel) {
+      return `${semPrefix}Week ${semWeekStart}–${semWeekEnd}: ${dateRange}`;
+    }
+    return `${semPrefix}Week ${semWeekStart}: ${dateRange}`;
+  }
+
+  // ── Push schedule to pacing ────────────────────────────────────────────────
+  // Writes the current syllabus's computed schedule (semester, week, dateRange)
+  // back into the pacing collection for the active subject. Each year's
+  // cumulative resets — Y7 W1, Y8 W1 etc. — so teachers see year-relative
+  // semWeekNo. Re-runnable; later pushes overwrite earlier ones.
+  // Uses a click-twice-to-confirm pattern (no blocking confirm dialogs).
+  window.pushScheduleToPacing = async function() {
+    if (!isAdmin) return;
+    const subj = currentSubject;
+    if (!subjects[subj]) return;
+    const wh = settingsData[subj]?.weeklyHours || 0;
+    if (!wh) {
+      showToast('Set Lesson Hours per Week in Settings before pushing.', true);
+      return;
+    }
+    if (!teachingWeeks.length) {
+      showToast('No teaching schedule synced. Open Academic Calendar → ⚙ Year Settings → Sync.', true);
+      return;
+    }
+
+    const btn = document.getElementById('pushSchedBtn');
+    if (!btn) return;
+
+    // First click: arm the button. Second click within 4s: actually push.
+    if (btn.dataset.confirming !== 'true') {
+      btn.dataset.confirming = 'true';
+      const original = btn.innerHTML;
+      btn.innerHTML = '⚠ Click again to overwrite week/semester/date in pacing';
+      btn.classList.add('btn-confirm-armed');
+      const reset = () => {
+        btn.dataset.confirming = 'false';
+        btn.innerHTML = original;
+        btn.classList.remove('btn-confirm-armed');
+      };
+      btn._resetConfirm = reset;
+      setTimeout(() => { if (btn.dataset.confirming === 'true') reset(); }, 4000);
+      return;
+    }
+    if (btn._resetConfirm) btn._resetConfirm();
+
+    // Cumulative reset per year (matches render() logic).
+    const updated = chapters.map(ch => ({ ...ch, topics: (ch.topics || []).map(t => ({ ...t })) }));
+    let running = 0;
+    let lastYear = null;
+    let beyondCount = 0;
+    let writtenCount = 0;
+    updated.forEach(ch => {
+      if (lastYear !== null && ch.year !== lastYear) running = 0;
+      ch.topics.forEach(t => {
+        if (t.excluded) return;
+        const dur = +(t.duration ?? t.hour) || 0;
+        if (!dur) return;
+        const info = getTopicScheduleInfo(running, dur, wh);
+        if (info && info !== '__beyond__') {
+          t.semester  = info.semester;
+          t.week      = info.semWeekStart;
+          t.dateRange = info.dateRange;
+          writtenCount++;
+        } else if (info === '__beyond__') {
+          beyondCount++;
+        }
+        running += dur;
+      });
+      lastYear = ch.year;
+    });
+
+    btn.disabled = true;
+    btn.innerHTML = 'Pushing…';
+    try {
+      const teachingScheduleSnap = await getDoc(doc(window.db, 'teaching_schedule', scheduleDocId));
+      const scheduleSyncedAt = teachingScheduleSnap.exists() ? teachingScheduleSnap.data().syncedAt : null;
+      await setDoc(
+        doc(window.db, subjects[subj].collection, docId),
+        {
+          chapters: updated,
+          _lastSchedulePush: {
+            at: serverTimestamp(),
+            by: window.currentUser?.email || null,
+            weeklyHoursAtPush: wh,
+            scheduleSyncedAtPush: scheduleSyncedAt || null,
+            topicCount: writtenCount,
+          },
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      const skipped = beyondCount ? ` (${beyondCount} skipped — schedule overflow)` : '';
+      showToast(`Schedule pushed — ${writtenCount} topic${writtenCount === 1 ? '' : 's'} updated${skipped}.`);
+    } catch (err) {
+      console.error('pushScheduleToPacing error:', err);
+      showToast('Push failed — see console.', true);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '📥 Push to Pacing';
+      _refreshPushStaleBanner();
+    }
+  };
+
+  // ── Stale banner ──────────────────────────────────────────────────────────
+  // Shows a warning when the pacing collection's `_lastSchedulePush` snapshot
+  // no longer matches the current weekly hours or the latest teaching schedule
+  // sync. The banner appears at the top of the topic list.
+  function _refreshPushStaleBanner() {
+    const banner = document.getElementById('pushStaleBanner');
+    if (!banner) return;
+    const subj = currentSubject;
+    const last = window._lastSchedulePushBySubj?.[subj];
+    const wh   = settingsData[subj]?.weeklyHours || 0;
+    const schedSyncedAt = window._scheduleSyncedAt;
+
+    if (!isAdmin || !last) { banner.style.display = 'none'; return; }
+
+    const reasons = [];
+    if (wh && last.weeklyHoursAtPush && last.weeklyHoursAtPush !== wh) {
+      reasons.push(`Lesson hours changed (${last.weeklyHoursAtPush}h → ${wh}h)`);
+    }
+    if (schedSyncedAt && last.scheduleSyncedAtPush
+        && schedSyncedAt.seconds && last.scheduleSyncedAtPush.seconds
+        && schedSyncedAt.seconds !== last.scheduleSyncedAtPush.seconds) {
+      reasons.push('Teaching schedule re-synced');
+    }
+    if (!reasons.length) { banner.style.display = 'none'; return; }
+
+    banner.style.display = '';
+    banner.innerHTML = `<span>⚠ Schedule has changed since last push (${reasons.join(' · ')}). Re-push to update Teachers Hub.</span>`;
+  }
+  window._refreshPushStaleBanner = _refreshPushStaleBanner;
 
   // ── Syllabus lookup helper ─────────────────────────────────────────────────
   function lookupSyllabus(subjCode, code) {
@@ -1549,7 +1722,10 @@ export function initSyllabusPage(config) {
       chapters = Array.isArray(data.chapters) ? data.chapters : [];
       window.chapters = chapters;
       if (typeof data.weeklyHours === 'number') settingsData[subj].weeklyHours = data.weeklyHours;
+      window._lastSchedulePushBySubj = window._lastSchedulePushBySubj || {};
+      window._lastSchedulePushBySubj[subj] = data._lastSchedulePush || null;
       render();
+      _refreshPushStaleBanner();
     }, err => {
       document.getElementById('loadingState').style.display = 'none';
       console.error('Pacing snapshot error:', err);
