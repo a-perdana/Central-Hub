@@ -21,6 +21,13 @@ const YEAR_A        = window.PACING_CONFIG.yearA || 'Year 9';
 const YEAR_B        = window.PACING_CONFIG.yearB || 'Year 10';
 const YEAR_A_KEY    = window.PACING_CONFIG.yearAKey || 'year9';
 const YEAR_B_KEY    = window.PACING_CONFIG.yearBKey || 'year10';
+// Per-subject Firestore field names written by Teachers Hub. Each subject's
+// pacing template uses its own keys: IGCSE shares `statuses` + `igcse_*_classes`,
+// Checkpoint and AS/A-Level use prefixed variants like `checkpoint_math_statuses`
+// and `asmath_classes`. Defaults fall back to the IGCSE math layout.
+const PROGRESS_KEY  = window.PACING_CONFIG.progressKey  || 'statuses';
+const CLASSES_FIELD = window.PACING_CONFIG.classesField || 'igcse_classes';
+const PROGRESS_KEY_RE = new RegExp(`^${PROGRESS_KEY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(.+)$`);
 
 let db, isAdmin = false;
 let chapters = [];
@@ -773,7 +780,7 @@ async function fetchTeachers() {
   });
 
   const profileClassSet = new Set();
-  allTeachers.forEach(t => { (t.igcse_classes || []).forEach(c => profileClassSet.add(c)); });
+  allTeachers.forEach(t => { (t[CLASSES_FIELD] || []).forEach(c => profileClassSet.add(c)); });
   if (profileClassSet.size > 0) {
     classList = [...new Set([...profileClassSet, ...classList])].sort();
   }
@@ -793,11 +800,11 @@ async function loadProgressTab() {
       const d = progSnap.data();
       const classSections = {};
       Object.keys(d).forEach(key => {
-        const m = key.match(/^statuses_(.+)$/);
+        const m = key.match(PROGRESS_KEY_RE);
         if (m) classSections[m[1].replace(/_/g, ' ')] = d[key];
       });
-      if (d.statuses && !Object.keys(classSections).length) {
-        classSections['—'] = d.statuses;
+      if (d[PROGRESS_KEY] && !Object.keys(classSections).length) {
+        classSections['—'] = d[PROGRESS_KEY];
       }
       progressByTeacher[t.uid] = { classSections, updatedAt: d.updatedAt };
     } else {
@@ -881,7 +888,7 @@ function renderProgressView() {
     const updatedAt = progressByTeacher[t.uid]?.updatedAt;
     const updLabel  = updatedAt?.toDate ? updatedAt.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '';
 
-    const hasClasses   = t.igcse_classes && t.igcse_classes.length > 0;
+    const hasClasses   = t[CLASSES_FIELD] && t[CLASSES_FIELD].length > 0;
     const hasAnyData   = Object.keys(progressByTeacher[t.uid]?.classSections || {}).length > 0;
     const firstRow     = classRows[0];
     const isNoDataCard = firstRow?.noData;
@@ -891,7 +898,7 @@ function renderProgressView() {
            ${!hasClasses
              ? `<span class="no-data-icon">📋</span> No classes assigned — teacher has not selected a class in Teachers Hub`
              : !hasAnyData
-               ? `<span class="no-data-icon">📝</span> Classes assigned (${t.igcse_classes.join(', ')}) but no progress saved yet`
+               ? `<span class="no-data-icon">📝</span> Classes assigned (${t[CLASSES_FIELD].join(', ')}) but no progress saved yet`
                : `<span class="no-data-icon">🔍</span> No data for selected year filter`
            }
          </div>`
@@ -1050,7 +1057,7 @@ async function loadHeatmapTab() {
   const teacherByClass  = {};
 
   allTeachers.forEach(t => {
-    (t.igcse_classes || []).forEach(cls => {
+    (t[CLASSES_FIELD] || []).forEach(cls => {
       const key = cls.replace(/\s/g, '_');
       teacherByClass[key] = t;
     });
@@ -1060,7 +1067,7 @@ async function loadHeatmapTab() {
     if (!allowedUids.has(d.id)) return; // skip teachers not in this subject
     const data = d.data();
     Object.keys(data).forEach(key => {
-      const m = key.match(/^statuses_(.+)$/);
+      const m = key.match(PROGRESS_KEY_RE);
       if (!m) return;
       const cls = m[1];
       if (!progressByClass[cls] ||
@@ -2007,7 +2014,7 @@ async function _progLoadCoverage() {
     const progressByCls = {};
     const teacherByCls  = {};
     allTeachers.forEach(t => {
-      (t.igcse_classes || []).forEach(cls => {
+      (t[CLASSES_FIELD] || []).forEach(cls => {
         teacherByCls[cls.replace(/\s/g, '_')] = t;
       });
     });
@@ -2016,7 +2023,7 @@ async function _progLoadCoverage() {
       if (!allowedUids.has(d.id)) return;
       const data = d.data();
       Object.keys(data).forEach(key => {
-        const m = key.match(/^statuses_(.+)$/);
+        const m = key.match(PROGRESS_KEY_RE);
         if (!m) return;
         const cls = m[1];
         // Take the largest snapshot if a class appears under multiple teachers.
