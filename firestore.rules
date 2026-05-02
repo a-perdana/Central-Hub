@@ -276,15 +276,15 @@ service cloud.firestore {
     // per-uid get loop client-side.
     match /weekly_progress/{docId} {
       allow get:    if isSignedIn() && (
-                      resource.data.uid == request.auth.uid
+                      resource.data.userId == request.auth.uid
                       || isAdmin()
                       || isCHCoordinator()
-                      || (isAHUserAtSameSchool(resource.data.uid)
+                      || (isAHUserAtSameSchool(resource.data.userId)
                           && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator']))
                     );
       allow list:   if isAdmin() || isCHCoordinator();
       allow create, update: if request.auth != null
-                            && request.resource.data.uid == request.auth.uid;
+                            && request.resource.data.userId == request.auth.uid;
       allow delete: if isAdmin();
     }
 
@@ -356,11 +356,10 @@ service cloud.firestore {
     }
 
     // -- teacher_self_appraisals (Teacher Self-Appraisal) -----
-    // Doc ID format: {uid}_{academicYear}  (e.g. abc123_2025-26)
+    // Doc ID format: {userId}_{academicYear}  (e.g. abc123_2025-26)
     //
-    // Read access (per Step 1.4 hardening — was previously open to any AH
-    // user with an evaluator sub-role across the whole network):
-    //   - the owner (resource.data.uid == auth.uid)
+    // Read access:
+    //   - the owner (resource.data.userId == auth.uid)
     //   - central_admin, AH admin, TH admin (full access for tooling)
     //   - same-school AH evaluator with school_principal /
     //     academic_coordinator / cambridge_coordinator sub-role
@@ -368,22 +367,23 @@ service cloud.firestore {
     // No code path issues a collection query, so list is admin-only and
     // sub-role evaluators must look up by deterministic doc ID.
     //
-    // Create/update: the teacher themselves (uid match). Status != submitted
-    // for updates (locks the doc once submitted). Delete: central_admin.
+    // Create/update: the teacher themselves (userId match). Status !=
+    // submitted for updates (locks the doc once submitted). Delete:
+    // central_admin.
     match /teacher_self_appraisals/{docId} {
       allow get:    if isAdmin()
                     || isAHAdmin()
                     || isTeachersAdmin()
-                    || (isSignedIn() && resource.data.uid == request.auth.uid)
+                    || (isSignedIn() && resource.data.userId == request.auth.uid)
                     || (isAcademicUser()
-                        && isAHUserAtSameSchool(resource.data.uid)
+                        && isAHUserAtSameSchool(resource.data.userId)
                         && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
       allow list:   if isAdmin() || isAHAdmin() || isTeachersAdmin();
       allow create: if isSignedIn()
-                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
                     && (isTeachersUser() || isTeachersAdmin());
       allow update: if isSignedIn()
-                    && resource.data.uid == request.auth.uid
+                    && resource.data.userId == request.auth.uid
                     && resource.data.status != 'submitted'
                     && (isTeachersUser() || isTeachersAdmin());
       allow delete: if isAdmin();
@@ -717,15 +717,13 @@ service cloud.firestore {
     }
 
     // -- teacher_kpi_submissions (Teacher self-assessment submissions) --
-    // Doc ID format: {uid}_{periodId}
+    // Doc ID format: {userId}_{periodId}
     // Submissions carry a `schoolId` field (set by Teachers Hub on save) so
     // AH sub-role evaluators can be school-scoped at both rule and query
     // level.
     //
-    // Read access (per Step 1.3 hardening — was previously open to any
-    // teachers_user, leaking every teacher's KPI submissions across the
-    // network):
-    //   - the owner (resource.data.uid == auth.uid)
+    // Read access:
+    //   - the owner (resource.data.userId == auth.uid)
     //   - central_admin and TH admin (full access for tooling)
     //   - AH admin (academic_admin — full network access)
     //   - same-school AH evaluators with school_principal or
@@ -738,19 +736,19 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || isTeachersAdmin()
                   || isAHAdmin()
-                  || (isTeachersUser() && resource.data.uid == request.auth.uid)
+                  || (isTeachersUser() && resource.data.userId == request.auth.uid)
                   || (isAcademicUser()
                       && resource.data.schoolId != null
                       && resource.data.schoolId == userProfile().schoolId
                       && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator']));
       allow create: if isTeachersUser()
-                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
                     && request.resource.data.schoolId == userProfile().schoolId;
       allow update: if (
                       // Owner editing own submission. schoolId stays pinned
                       // to their profile to prevent forgery.
                       isTeachersUser()
-                      && resource.data.uid == request.auth.uid
+                      && resource.data.userId == request.auth.uid
                       && request.resource.data.schoolId == userProfile().schoolId
                     )
                     || (
@@ -830,7 +828,7 @@ service cloud.firestore {
     // -- platform_usage (login analytics, written by all auth-guards) --
     match /platform_usage/{docId} {
       // Any authenticated user can write their own login event
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       // Only central_admin can read (for analytics dashboard)
       allow read: if isAdmin();
       allow update, delete: if false;
@@ -943,9 +941,9 @@ service cloud.firestore {
     // Delete:  central_admin only
     match /competency_evidence/{evId} {
       allow create: if isAuthorized()
-                    && request.resource.data.uid == request.auth.uid;
+                    && request.resource.data.userId == request.auth.uid;
       allow read:   if isAdmin()
-                    || (isAuthorized() && resource.data.uid == request.auth.uid);
+                    || (isAuthorized() && resource.data.userId == request.auth.uid);
       allow list:   if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
@@ -953,7 +951,7 @@ service cloud.firestore {
       // comments sub-collection: reviewer thread visible to owner and admins
       match /comments/{commentId} {
         allow read:   if isAdmin()
-                      || (isAuthorized() && get(/databases/$(database)/documents/competency_evidence/$(evId)).data.uid == request.auth.uid);
+                      || (isAuthorized() && get(/databases/$(database)/documents/competency_evidence/$(evId)).data.userId == request.auth.uid);
         allow create: if isAdmin()
                       && request.resource.data.authorUid == request.auth.uid;
         allow delete: if isAdmin();
@@ -992,7 +990,7 @@ service cloud.firestore {
     match /competency_certificates/{certId} {
       allow create: if isAdmin();
       allow read:   if isAdmin()
-                    || (isAuthorized() && resource.data.uid == request.auth.uid);
+                    || (isAuthorized() && resource.data.userId == request.auth.uid);
       allow list:   if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
@@ -1007,15 +1005,15 @@ service cloud.firestore {
     }
 
     // -- calibration_sessions (Appraiser IRR calibration — Academic Hub) --
-    // Doc ID: {uid}_{year}  e.g. "abc123_2025"
+    // Doc ID: {userId}_{year}  e.g. "abc123_2025"
     // Read:   owner reads their own; academic_admin reads all (leaderboard)
     // Write:  owner only (setDoc with merge)
     match /calibration_sessions/{docId} {
       allow read:  if isAHAdmin()
-                   || (isSignedIn() && isAcademicUser() && resource.data.uid == request.auth.uid);
+                   || (isSignedIn() && isAcademicUser() && resource.data.userId == request.auth.uid);
       allow list:  if isAHAdmin();
       allow write: if isSignedIn() && isAcademicUser()
-                   && request.resource.data.uid == request.auth.uid;
+                   && request.resource.data.userId == request.auth.uid;
     }
 
     // -- calibration_group_sessions (Real-time group calibration sessions) --
