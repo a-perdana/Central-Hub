@@ -169,17 +169,16 @@ service cloud.firestore {
       allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
-    // -- schools ---------------------------------------------
+    // -- schools (DEPRECATED 2026-05-02) ---------------------
+    // Legacy collection — fully migrated into `partner_schools` (see
+    // scripts/page-access/migrate-schools-to-partner.js). Locked down
+    // to admin-only reads/writes; no code path should hit this anymore.
+    // Kept around briefly so admins can clean up via Firestore Console
+    // if anything was missed. Will be removed in a future commit.
     match /schools/{schoolId} {
-      allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
-
-      // classes subcollection — any authorised user can read/create/update
-      // (teachers add new classes for their school); only admins can delete
+      allow read, write: if isAdmin();
       match /classes/{classId} {
-        allow read:   if isAuthorized();
-        allow create, update: if isSignedIn();
-        allow delete: if isAdmin();
+        allow read, write: if isAdmin();
       }
     }
 
@@ -658,13 +657,29 @@ service cloud.firestore {
       }
     }
 
-    // -- partner_schools (School Performance KPI) ------------
-    // Read: any Academic Hub user (for school selector in KPI form)
-    //       also Central Hub users (console schoolId dropdown)
-    // Write: isAHAdmin() already covers central_admin + academic_admin
+    // -- partner_schools (canonical school directory) --------
+    // Read: any authorised user — Teachers Hub (auth-guard school picker
+    //       + pacing pages reading classes subcollection), Academic Hub
+    //       (KPI school selector), Central Hub (console).
+    // Write: isAHAdmin() covers central_admin + academic_admin.
+    //
+    // The legacy `schools` collection was migrated into this one on
+    // 2026-05-02 (see scripts/page-access/migrate-schools-to-partner.js
+    // and the monorepo CLAUDE.md). Each doc now also carries a `domain`
+    // field used by AH/TH auth-guard to auto-default the school selector
+    // from the user's email domain.
     match /partner_schools/{schoolId} {
-      allow read:  if isAcademicUser() || isCentralUser();
+      allow read:  if isAuthorized();
       allow write: if isAHAdmin();
+
+      // classes subcollection — teachers add new classes for their school;
+      // only admins can delete. Mirrors the previous `schools/.../classes`
+      // rule, kept identical so the migration is invisible to users.
+      match /classes/{classId} {
+        allow read:           if isAuthorized();
+        allow create, update: if isSignedIn();
+        allow delete:         if isAdmin();
+      }
     }
 
     // -- kpi_config (School Performance KPI - criteria definitions) --
