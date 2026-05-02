@@ -1511,6 +1511,7 @@ const STRAND_TO_COMPONENT = {
 
 let _progFilter = 'all';
 let _progSearch = '';
+let _progStateFilter = null; // null = no state filter; otherwise 'done'|'ontrack'|'behind'|'notstarted'|'missing'
 let _progOverrideRows = null; // null = not yet loaded / not present; [] = loaded but empty
 let _progCoverageByCode = null; // { '7Ni.02': { totalClasses, doneClasses, classes: [{cls, status, teacher}] } }
 let _progCoverageLoading = false;
@@ -1736,8 +1737,24 @@ function _progBuildRows() {
   return rows;
 }
 
+// Collect the set of coverage states present in a progression row,
+// including 'missing' (objective exists in the framework but isn't
+// linked to any pacing topic). Used by the legend state filter to
+// fade rows that don't contain the requested state.
+function _progRowStates(row) {
+  const out = new Set();
+  [row.stage7, row.stage8, row.stage9].forEach(item => {
+    if (!item) return;
+    const b = _progCoverageByCode && _progCoverageByCode[item.code];
+    if (!b || !b.totalClasses) { out.add('missing'); return; }
+    const s = _progCoverageState(b);
+    if (s) out.add(s);
+  });
+  return out;
+}
+
 function _progRenderCell(item) {
-  if (!item) return '<div class="prog-cell-empty">—</div>';
+  if (!item) return '<div class="prog-cell-empty" title="Not introduced at this stage">not introduced</div>';
   const tierBadge = item.tier
     ? ` <span class="syl-tier-badge ${escHtml(item.tier.toLowerCase())}" style="font-size:.55rem;padding:0 4px;border-radius:3px">${escHtml(item.tier)}</span>`
     : '';
@@ -1794,6 +1811,23 @@ function renderProgressionGrid() {
         renderProgressionGrid();
       };
     }
+
+    // Legend doubles as a state filter — clicking "behind schedule"
+    // fades rows that don't contain a behind-schedule pill, etc.
+    // Clicking the same item again clears the filter.
+    const legend = document.getElementById('progStateLegend');
+    if (legend) {
+      legend.querySelectorAll('button[data-state]').forEach(btn => {
+        btn.onclick = () => {
+          const state = btn.dataset.state;
+          _progStateFilter = (_progStateFilter === state) ? null : state;
+          legend.querySelectorAll('button[data-state]').forEach(b => {
+            b.classList.toggle('on', b.dataset.state === _progStateFilter);
+          });
+          renderProgressionGrid();
+        };
+      });
+    }
   }
 
   const filtered = rows.filter(r => {
@@ -1839,20 +1873,36 @@ function renderProgressionGrid() {
 
   // Aggregate coverage across the codes in this component (skip "not in
   // pacing" — only count codes that actually appear in topic.syllabusRefs).
+  // Returns the overall pct + per-stage pct breakdown so the header can
+  // show where in the Stage 7→8→9 arc the gap is.
   function componentCoverage(rows) {
     if (!_progCoverageByCode) return null;
-    let done = 0, total = 0;
+    const totals = {
+      all: { done: 0, total: 0 },
+      stage7: { done: 0, total: 0 },
+      stage8: { done: 0, total: 0 },
+      stage9: { done: 0, total: 0 },
+    };
     rows.forEach(r => {
-      [r.stage7, r.stage8, r.stage9].forEach(item => {
+      ['stage7', 'stage8', 'stage9'].forEach(key => {
+        const item = r[key];
         if (!item) return;
         const b = _progCoverageByCode[item.code];
         if (!b || !b.totalClasses) return;
-        done  += b.doneClasses;
-        total += b.totalClasses;
+        totals[key].done  += b.doneClasses;
+        totals[key].total += b.totalClasses;
+        totals.all.done   += b.doneClasses;
+        totals.all.total  += b.totalClasses;
       });
     });
-    if (!total) return null;
-    return { pct: Math.round(done / total * 100), done, total };
+    if (!totals.all.total) return null;
+    const pctOf = t => t.total ? Math.round(t.done / t.total * 100) : null;
+    return {
+      pct: pctOf(totals.all),
+      done: totals.all.done,
+      total: totals.all.total,
+      stages: { 7: pctOf(totals.stage7), 8: pctOf(totals.stage8), 9: pctOf(totals.stage9) },
+    };
   }
 
   let html = '';
@@ -1866,21 +1916,44 @@ function renderProgressionGrid() {
       if (cov.pct >= 90)      covCls = 'prog-acc-cov-full';
       else if (cov.pct >= 50) covCls = 'prog-acc-cov-mid';
       else if (cov.pct > 0)   covCls = 'prog-acc-cov-low';
-      covHtml = `<span class="prog-acc-cov ${covCls}" title="${cov.done} of ${cov.total} class-objective slots completed across this strand.">${cov.pct}% avg coverage</span>`;
+
+      // Per-stage mini-bars surface where the gap is — e.g. Stage 7
+      // 100% but Stage 9 5% means the strand is on track in earlier
+      // stages and falls off later. A single average hides that.
+      const stageBars = [7, 8, 9].map(s => {
+        const p = cov.stages[s];
+        if (p === null) return `<span class="prog-acc-stage prog-acc-stage-na" title="Stage ${s}: nothing in pacing yet">S${s}</span>`;
+        let cls = 'prog-acc-stage-zero';
+        if (p >= 90)      cls = 'prog-acc-stage-full';
+        else if (p >= 50) cls = 'prog-acc-stage-mid';
+        else if (p > 0)   cls = 'prog-acc-stage-low';
+        return `<span class="prog-acc-stage ${cls}" title="Stage ${s}: ${p}% of class-objective slots completed">
+          <span class="prog-acc-stage-label">S${s}</span>
+          <span class="prog-acc-stage-track"><span class="prog-acc-stage-fill" style="width:${p}%"></span></span>
+        </span>`;
+      }).join('');
+
+      covHtml = `
+        <span class="prog-acc-stages" aria-hidden="true">${stageBars}</span>
+        <span class="prog-acc-cov ${covCls}" title="${cov.done} of ${cov.total} class-objective slots completed across this strand.">${cov.pct}% avg</span>`;
     }
 
     let body = `<table class="prog-table">
       <thead><tr>
         <th class="col-topic">Topic Area</th>
-        <th class="col-stage">Stage 7</th>
-        <th class="col-stage">Stage 8</th>
-        <th class="col-stage">Stage 9</th>
+        <th class="col-stage">Stage 7 <span class="prog-stage-sub">Year 7</span></th>
+        <th class="col-stage">Stage 8 <span class="prog-stage-sub">Year 8</span></th>
+        <th class="col-stage">Stage 9 <span class="prog-stage-sub">Year 9</span></th>
       </tr></thead><tbody>`;
     let lastArea = '';
     groupRows.forEach(r => {
       const topicLabel = r.topicArea && r.topicArea !== lastArea ? r.topicArea : '';
+      const isAreaBoundary = topicLabel && lastArea !== ''; // true on every row that opens a new topic-area (after the first)
       if (topicLabel) lastArea = r.topicArea;
-      body += `<tr class="prog-row">
+      const rowStates = _progRowStates(r);
+      const fadeCls = (_progStateFilter && !rowStates.has(_progStateFilter)) ? ' prog-row-fade' : '';
+      const boundaryCls = isAreaBoundary ? ' prog-row-area-start' : '';
+      body += `<tr class="prog-row${fadeCls}${boundaryCls}">
         <td class="topic-cell">${escHtml(topicLabel)}</td>
         <td>${_progRenderCell(r.stage7)}</td>
         <td>${_progRenderCell(r.stage8)}</td>
@@ -2107,30 +2180,50 @@ async function _progLoadCoverage() {
   }
 }
 
+// Map a code's coverage record to a semantic state.
+// Four states (plus loading/missing) — chosen so the colour reads as an
+// action signal, not just a percentage:
+//   done     — every class has finished it
+//   ontrack  — at least half of the classes have, but not all
+//   behind   — at least one class started, but fewer than half
+//   notstarted — zero classes done
+function _progCoverageState(b) {
+  if (!b || !b.totalClasses) return null;
+  const pct = b.doneClasses / b.totalClasses * 100;
+  if (pct >= 100) return 'done';
+  if (pct >= 50)  return 'ontrack';
+  if (pct > 0)    return 'behind';
+  return 'notstarted';
+}
+
 function _progCoverageBadge(code) {
-  // Three states:
+  // Three top-level cases:
   //  • Coverage data not yet loaded → small placeholder dot
   //  • Code never appears in pacing structure → "Not in pacing" hint
-  //  • Code is in pacing → progress badge with done/total classes
+  //  • Code is in pacing → segmented progress pill + done/total
   if (!_progCoverageByCode) {
     return `<span class="prog-cov prog-cov-loading" title="Loading coverage…">⋯</span>`;
   }
   const b = _progCoverageByCode[code];
   if (!b || !b.totalClasses) {
-    return `<span class="prog-cov prog-cov-missing" title="This objective is not yet linked to any topic in the pacing structure.">○ not in pacing</span>`;
+    return `<span class="prog-cov prog-cov-missing" title="This objective is not yet linked to any topic in the pacing structure.">not in pacing</span>`;
   }
-  const pct = Math.round(b.doneClasses / b.totalClasses * 100);
-  let cls = 'prog-cov-low';
-  if (pct >= 90)      cls = 'prog-cov-full';
-  else if (pct >= 50) cls = 'prog-cov-mid';
-  else if (pct > 0)   cls = 'prog-cov-low';
-  else                cls = 'prog-cov-zero';
+  const state = _progCoverageState(b);
+  // Cap the segment count so wide cohorts (8+ classes) don't blow out
+  // the pill width — the numeric "done/total" stays authoritative.
+  const segCount = Math.min(b.totalClasses, 5);
+  const onCount = Math.round(b.doneClasses / b.totalClasses * segCount);
+  let dots = '';
+  for (let i = 0; i < segCount; i++) {
+    dots += `<span class="${i < onCount ? 'on' : ''}"></span>`;
+  }
 
   const lines = b.classes.map(c => {
     const icon = c.status === 'done' ? '✓' : (c.status === 'pending' ? '·' : c.status[0].toUpperCase());
     const t = c.teacher?.displayName || c.teacher?.name || '';
     return `${icon} ${c.cls.replace(/_/g, ' ')}${t ? ' — ' + t : ''}`;
   }).join('\n');
-  const tooltip = `${b.doneClasses}/${b.totalClasses} classes done\n\n${lines}`;
-  return `<span class="prog-cov ${cls}" title="${escHtml(tooltip)}">${b.doneClasses}/${b.totalClasses}</span>`;
+  const stateLabel = { done: 'all classes done', ontrack: 'on track', behind: 'behind schedule', notstarted: 'not started' }[state] || '';
+  const tooltip = `${b.doneClasses}/${b.totalClasses} classes done — ${stateLabel}\n\n${lines}`;
+  return `<span class="prog-cov prog-cov-${state}" data-state="${state}" title="${escHtml(tooltip)}"><span class="prog-cov-dots" aria-hidden="true">${dots}</span>${b.doneClasses}/${b.totalClasses}</span>`;
 }

@@ -474,13 +474,38 @@
     }
     .prog-table thead th.col-stage { width: 27%; }
     .prog-table thead th.col-topic { width: 19%; }
+    .prog-stage-sub {
+      display: inline-block; margin-left: 4px;
+      font-size: .58rem; font-weight: 500; letter-spacing: .04em;
+      color: var(--ink-3); text-transform: none;
+    }
+    .prog-stage-sub::before { content: '\00b7\00a0'; opacity: .55; }
 
     .prog-table tbody tr.prog-row td {
       padding: 10px 12px; vertical-align: top; border-bottom: 1px solid var(--border);
     }
     .prog-table tbody tr.prog-row:last-child td { border-bottom: none; }
     .prog-table tbody tr.prog-row:hover { background: #fafbfc; }
-    .prog-table .topic-cell { font-size: .72rem; color: var(--ink-3); line-height: 1.4; }
+    .prog-table .topic-cell {
+      font-size: .72rem; color: var(--ink-3); line-height: 1.4;
+      /* Pin the topic-area column so the curriculum context stays visible
+         when the table is wider than its container and the user scrolls
+         horizontally on smaller viewports. */
+      position: sticky; left: 0; z-index: 1; background: white;
+    }
+    .prog-table tbody tr.prog-row:hover .topic-cell { background: #fafbfc; }
+    /* A sticky column that floats over the next column needs an explicit
+       right edge — otherwise the cell content underneath shows through. */
+    .prog-table .topic-cell::after {
+      content: ''; position: absolute; top: 0; right: -1px; bottom: 0;
+      width: 1px; background: var(--border); pointer-events: none;
+    }
+    /* Visual break between topic-area groups: a slightly heavier rule
+       at the start of every new area makes the grouping legible without
+       forcing a full subheader row. */
+    .prog-table tbody tr.prog-row-area-start td {
+      border-top: 2px solid #e2e8f0;
+    }
 
     /* ── Info banner (introduces the tab to first-time users) ── */
     .prog-info {
@@ -508,12 +533,27 @@
     }
     .prog-info p { margin: 6px 0 0; }
     .prog-info-legend {
-      display: flex; flex-wrap: wrap; gap: 10px 18px;
+      display: flex; flex-wrap: wrap; gap: 6px 12px;
       margin-top: 10px; padding-top: 10px;
       border-top: 1px dashed #bae6fd;
       font-size: .72rem;
     }
-    .prog-info-legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); }
+    /* Legend items are <button>s so they double as state filters.
+       Inactive: no chrome — looks like a plain label.
+       Hover/active: subtle pill highlight, like a chip. */
+    button.prog-info-legend-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--ink-3);
+      font: inherit; font-family: 'DM Sans', sans-serif; font-size: .72rem;
+      padding: 4px 8px; border-radius: 6px;
+      background: transparent; border: 1px solid transparent;
+      cursor: pointer; transition: background .12s, border-color .12s;
+    }
+    button.prog-info-legend-item:hover { background: rgba(8,145,178,.08); border-color: #bae6fd; }
+    button.prog-info-legend-item.on    { background: white; border-color: #0891b2; color: var(--ink); font-weight: 500; }
+    button.prog-info-legend-item.on::after {
+      content: '\00d7'; margin-left: 4px; font-weight: 600; opacity: .6;
+    }
     .prog-info-dismiss {
       position: absolute; top: 8px; right: 8px;
       width: 22px; height: 22px; padding: 0; border: none; background: transparent;
@@ -587,7 +627,6 @@
       background: var(--white); border: 1px solid var(--border);
     }
     .prog-acc-cov {
-      margin-left: auto;
       font-family: 'DM Mono', monospace; font-size: .65rem; font-weight: 600;
       padding: 3px 9px; border-radius: 10px;
       letter-spacing: .02em; cursor: help;
@@ -597,6 +636,37 @@
     .prog-acc-cov-low  { color: #7f1d1d; background: #fee2e2; border-color: #fca5a5; }
     .prog-acc-cov-mid  { color: #1e3a8a; background: #dbeafe; border-color: #93c5fd; }
     .prog-acc-cov-full { color: #064e3b; background: #d1fae5; border-color: #6ee7b7; }
+
+    /* Per-stage mini-bars in the component header — three small
+       progress segments labelled S7/S8/S9 that show where in the
+       Stage 7→8→9 arc the coverage gap is. */
+    .prog-acc-stages {
+      margin-left: auto; display: inline-flex; gap: 6px; align-items: center;
+    }
+    .prog-acc-stage {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: 'DM Mono', monospace; font-size: .58rem; font-weight: 600;
+      color: var(--ink-3); cursor: help;
+    }
+    .prog-acc-stage-label { letter-spacing: .04em; opacity: .8; }
+    .prog-acc-stage-track {
+      position: relative; display: inline-block;
+      width: 32px; height: 5px; border-radius: 3px;
+      background: #e2e8f0; overflow: hidden;
+    }
+    .prog-acc-stage-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: currentColor; border-radius: 3px;
+    }
+    .prog-acc-stage-na .prog-acc-stage-track { display: none; }
+    .prog-acc-stage-na  { opacity: .35; }
+    .prog-acc-stage-zero { color: #94a3b8; }
+    .prog-acc-stage-low  { color: #dc2626; }
+    .prog-acc-stage-mid  { color: #2563eb; }
+    .prog-acc-stage-full { color: #059669; }
+    /* Component header layout: pull "Xn% avg" pill back from the right
+       since the stage strip now occupies the auto-margin slot. */
+    .prog-acc-summary > .prog-acc-cov { margin-left: 0; }
 
     .prog-acc-body { padding: 0; }
     .prog-acc-body .prog-table thead th {
@@ -618,7 +688,8 @@
 
     .prog-cell { display: flex; flex-direction: column; gap: 4px; }
     .prog-cell-empty {
-      color: var(--ink-3); font-size: .9rem; text-align: center; opacity: .35;
+      color: var(--ink-3); font-size: .65rem; opacity: .45;
+      font-style: italic; letter-spacing: .02em;
     }
     .prog-code-row {
       display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
@@ -635,14 +706,26 @@
     }
     .prog-title:hover { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; }
 
-    /* Pacing-aware coverage badge */
+    /* Pacing-aware coverage badge.
+       4 semantic states — not started / behind / on-track / done.
+       The pill carries a mini segmented progress strip so the share is
+       readable at a glance, and the colour adds a redundant signal so
+       it survives print and colour-blind viewing. */
     .prog-cov {
-      display: inline-flex; align-items: center; justify-content: center;
+      display: inline-flex; align-items: center; gap: 5px;
       font-family: 'DM Mono', monospace; font-size: .62rem; font-weight: 600;
-      padding: 1px 6px; border-radius: 10px; line-height: 1.3;
+      padding: 2px 7px 2px 6px; border-radius: 10px; line-height: 1.3;
       letter-spacing: .02em; cursor: help; white-space: nowrap;
       border: 1px solid transparent;
     }
+    .prog-cov-dots {
+      display: inline-flex; gap: 2px; align-items: center;
+    }
+    .prog-cov-dots span {
+      display: inline-block; width: 4px; height: 8px; border-radius: 1px;
+      background: currentColor; opacity: .25;
+    }
+    .prog-cov-dots span.on { opacity: .95; }
     .prog-cov-loading {
       color: var(--ink-3); background: var(--paper); border-color: var(--border);
       animation: prog-cov-pulse 1.4s ease-in-out infinite;
@@ -653,22 +736,63 @@
     .prog-cov-missing {
       color: var(--ink-3); background: transparent; border-color: var(--border);
       font-weight: 400; font-size: .58rem; padding: 1px 5px;
+      font-style: italic;
     }
-    .prog-cov-zero {
+    /* Not started — neutral grey, no urgency */
+    .prog-cov-notstarted {
       color: #475569; background: #f1f5f9; border-color: #cbd5e1;
     }
-    .prog-cov-low {
+    /* Behind — red, requires attention */
+    .prog-cov-behind {
       color: #7f1d1d; background: #fee2e2; border-color: #fca5a5;
     }
-    .prog-cov-mid {
+    /* On track — blue, in progress as expected */
+    .prog-cov-ontrack {
       color: #1e3a8a; background: #dbeafe; border-color: #93c5fd;
     }
-    .prog-cov-full {
+    /* Done — green, all classes complete */
+    .prog-cov-done {
       color: #064e3b; background: #d1fae5; border-color: #6ee7b7;
+    }
+    /* When a state filter is active, fade rows that don't contain that
+       state. The matching pills get a slight ring to make them pop. */
+    .prog-row.prog-row-fade { opacity: .25; transition: opacity .15s; }
+    .prog-cov.prog-cov-match {
+      box-shadow: 0 0 0 2px rgba(59,130,246,.35);
     }
 
     .prog-empty {
       text-align: center; padding: 50px 24px; color: var(--ink-3); font-size: .82rem;
+    }
+
+    /* Print: this page is taken into HOD/teacher meetings — make sure
+       the grid still tells the story when colour is washed out by a
+       cheap printer. State colour is removed but border style + label
+       carry the meaning, and accordions are forced open. */
+    @media print {
+      .prog-info-dismiss,
+      .prog-toolbar,
+      #progSearchInput,
+      .prog-toolbar-btn { display: none !important; }
+      .prog-info { background: white !important; border: 1px solid #999 !important; }
+      details.prog-acc { break-inside: avoid; box-shadow: none !important; }
+      details.prog-acc[open],
+      details.prog-acc { display: block !important; }
+      details.prog-acc > .prog-acc-body { display: block !important; }
+      details.prog-acc:not([open]) > .prog-acc-body { display: block !important; }
+      .prog-acc-summary { background: #f8fafc !important; }
+      .prog-cov, .prog-acc-cov {
+        background: white !important; color: #000 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .prog-cov-done       { border: 1.5px solid #000 !important; }
+      .prog-cov-ontrack    { border: 1.5px dashed #000 !important; }
+      .prog-cov-behind     { border: 1.5px dotted #000 !important; }
+      .prog-cov-notstarted { border: 1px solid #999 !important; }
+      .prog-cov-missing    { border: 1px dashed #999 !important; }
+      .prog-cov-dots, .prog-acc-stages { display: none !important; }
+      .prog-row.prog-row-fade { opacity: 1 !important; }
+      .topic-cell { position: static !important; }
     }
 
     /* Progression detail modal */
@@ -774,12 +898,27 @@
               done before Year 8 starts <code style="font-family:'DM Mono',monospace;font-size:.7rem;background:#e0f2fe;padding:1px 5px;border-radius:3px">8Ni.01</code>?),
               or to find inconsistencies across classes covering the
               same objective. Click any code or title for full details.</p>
-            <div class="prog-info-legend">
-              <span class="prog-info-legend-item"><span class="prog-cov prog-cov-full" style="cursor:default">3/3</span> all classes done</span>
-              <span class="prog-info-legend-item"><span class="prog-cov prog-cov-mid" style="cursor:default">2/3</span> in progress</span>
-              <span class="prog-info-legend-item"><span class="prog-cov prog-cov-low" style="cursor:default">1/3</span> behind schedule</span>
-              <span class="prog-info-legend-item"><span class="prog-cov prog-cov-zero" style="cursor:default">0/3</span> not started</span>
-              <span class="prog-info-legend-item"><span class="prog-cov prog-cov-missing" style="cursor:default">○ not in pacing</span> objective isn't linked to any topic yet</span>
+            <div class="prog-info-legend" id="progStateLegend" role="toolbar" aria-label="Filter by coverage state">
+              <button class="prog-info-legend-item" data-state="done" title="Show only rows where every class has finished an objective">
+                <span class="prog-cov prog-cov-done"><span class="prog-cov-dots" aria-hidden="true"><span class="on"></span><span class="on"></span><span class="on"></span></span>3/3</span>
+                all classes done
+              </button>
+              <button class="prog-info-legend-item" data-state="ontrack" title="Show only rows where most classes are on track">
+                <span class="prog-cov prog-cov-ontrack"><span class="prog-cov-dots" aria-hidden="true"><span class="on"></span><span class="on"></span><span></span></span>2/3</span>
+                on track
+              </button>
+              <button class="prog-info-legend-item" data-state="behind" title="Show only rows where some classes are behind">
+                <span class="prog-cov prog-cov-behind"><span class="prog-cov-dots" aria-hidden="true"><span class="on"></span><span></span><span></span></span>1/3</span>
+                behind schedule
+              </button>
+              <button class="prog-info-legend-item" data-state="notstarted" title="Show only rows where no class has started">
+                <span class="prog-cov prog-cov-notstarted"><span class="prog-cov-dots" aria-hidden="true"><span></span><span></span><span></span></span>0/3</span>
+                not started
+              </button>
+              <button class="prog-info-legend-item" data-state="missing" title="Show only objectives that aren't linked to any pacing topic">
+                <span class="prog-cov prog-cov-missing">not in pacing</span>
+                objective isn't linked to any topic yet
+              </button>
             </div>
           </div>
 
