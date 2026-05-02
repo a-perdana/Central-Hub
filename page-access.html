@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Access Manager — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-header { padding: 28px 32px 0; }
+    .page-header h1 { font-family: 'Lora', serif; font-size: 1.6rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+    .page-header p { font-size: 0.875rem; color: var(--ink-3); margin-bottom: 20px; }
+    .page-content { padding: 16px 32px 48px; }
+
+    /* Platform tabs */
+    .pa-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+    .pa-tab {
+      padding: 10px 18px; font-size: 0.85rem; font-weight: 600; color: var(--ink-3);
+      border: none; background: none; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s;
+    }
+    .pa-tab:hover { color: var(--ink-2); }
+    .pa-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .pa-tab[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+    /* Toolbar */
+    .pa-toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    .pa-search { flex: 1; min-width: 240px; position: relative; }
+    .pa-search input {
+      width: 100%; padding: 9px 12px 9px 36px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--white); font-size: 0.9rem; color: var(--ink); outline: none;
+      box-shadow: var(--shadow-sm);
+    }
+    .pa-search input:focus { border-color: var(--accent); }
+    .pa-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); }
+    .pa-count { font-size: 0.85rem; color: var(--ink-3); }
+    .pa-actions { display: flex; gap: 8px; }
+    .pa-actions button {
+      padding: 8px 14px; font-size: 0.82rem; font-weight: 600; border-radius: 7px;
+      border: 1px solid var(--border); background: var(--white); color: var(--ink-2); cursor: pointer;
+    }
+    .pa-actions button:hover { background: var(--paper); }
+    .pa-save {
+      background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important;
+    }
+    .pa-save:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Grid table */
+    .pa-grid {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      background: var(--white); border-radius: 10px; overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .pa-grid th, .pa-grid td { padding: 11px 12px; font-size: 0.85rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .pa-grid thead th {
+      background: var(--paper); font-weight: 600; font-size: 0.78rem; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--ink-3); position: sticky; top: 0; z-index: 1;
+    }
+    .pa-grid tbody tr:last-child td { border-bottom: none; }
+    .pa-grid tbody tr:hover td { background: var(--paper); }
+    .pa-grid .col-role { text-align: center; width: 110px; }
+    .pa-grid .col-page-label { font-weight: 500; }
+    .pa-grid .col-page-key { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--ink-3); }
+    .pa-grid .col-page-desc { color: var(--ink-3); font-size: 0.78rem; max-width: 320px; }
+
+    /* Checkbox cell */
+    .pa-cb {
+      width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);
+    }
+    .pa-cb-cell { text-align: center; }
+    tr.dirty td { background: #fffbeb !important; }
+    tr.dirty td.col-page-label { font-weight: 700; color: #92400e; }
+
+    /* "All open" indicator (visible_to empty) */
+    .pa-all-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      background: #d1fae5; color: #065f46; font-size: 0.7rem; font-weight: 600;
+      margin-left: 6px;
+    }
+
+    /* Status / loading / empty */
+    .pa-status { padding: 16px; text-align: center; color: var(--ink-3); font-size: 0.9rem; }
+
+    /* Bulk action row above grid */
+    .pa-bulk-row {
+      background: var(--paper); padding: 8px 12px; border-radius: 8px; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: var(--ink-3);
+      flex-wrap: wrap;
+    }
+    .pa-bulk-row strong { color: var(--ink); }
+
+    /* Toast */
+    #pageAccessToast {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(16px);
+      background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 9px;
+      font-size: 0.875rem; font-weight: 500; box-shadow: var(--shadow-lg);
+      opacity: 0; transition: all .25s ease; pointer-events: none; z-index: 9999;
+    }
+    #pageAccessToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #pageAccessToast.error { background: #b91c1c; }
+
+    /* Tooltip on description */
+    .desc-cell { cursor: help; }
+
+    @media (max-width: 720px) {
+      .pa-grid .col-page-desc { display: none; }
+      .pa-grid .col-page-key  { display: none; }
+    }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
+</head>
+<body>
+
+<!-- SHARED_NAVBAR -->
+
+<div class="page-header">
+  <h1>Page Access Manager</h1>
+  <p>Control which sub-roles can access each page on Academic Hub, Teachers Hub, and Central Hub. Empty selection = visible to every user on that platform.</p>
+</div>
+
+<div class="page-content">
+
+  <!-- Platform tabs -->
+  <div class="pa-tabs" role="tablist">
+    <button class="pa-tab active" data-platform="academichub" role="tab">Academic Hub</button>
+    <button class="pa-tab" data-platform="teachershub" role="tab" disabled title="Teachers Hub seed not yet generated">Teachers Hub</button>
+    <button class="pa-tab" data-platform="centralhub"  role="tab" disabled title="Central Hub seed not yet generated">Central Hub</button>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="pa-toolbar">
+    <div class="pa-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" id="paSearch" placeholder="Search pages by name, slug, or description…" aria-label="Search pages">
+    </div>
+    <span class="pa-count" id="paCount"></span>
+    <div class="pa-actions">
+      <button id="paResetBtn" type="button">Discard changes</button>
+      <button id="paSaveBtn" class="pa-save" type="button" disabled>Save changes</button>
+    </div>
+  </div>
+
+  <!-- Bulk action info -->
+  <div class="pa-bulk-row" id="paBulkRow" style="display:none">
+    <strong id="paDirtyCount">0 unsaved</strong>
+    <span>· Click any checkbox to grant or revoke a sub-role's access. Save to apply across the platform.</span>
+  </div>
+
+  <!-- Grid -->
+  <div id="paGridContainer">
+    <div class="pa-status" id="paStatus">Loading page access configuration…</div>
+  </div>
+</div>
+
+<div id="pageAccessToast"></div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+  import {
+    collection, doc, getDocs, writeBatch, serverTimestamp,
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  // ── Sub-role definitions per platform ───────────────────────────
+  const SUB_ROLES = {
+    academichub: [
+      { value: 'foundation_representative', label: 'Foundation Rep' },
+      { value: 'school_principal',          label: 'Principal' },
+      { value: 'academic_coordinator',      label: 'Academic Coord' },
+      { value: 'cambridge_coordinator',     label: 'Cambridge Coord' },
+    ],
+    teachershub: [
+      { value: 'subject_teacher',  label: 'Subject Teacher' },
+      { value: 'subject_leader',   label: 'Subject Leader' },
+    ],
+    centralhub: [
+      { value: 'director',     label: 'Director' },
+      { value: 'coordinator',  label: 'Coordinator' },
+    ],
+  };
+
+  // ── State ────────────────────────────────────────────────────────
+  let db = null;
+  let currentPlatform = 'academichub';
+  let pages = [];        // {pageKey, label, description, visible_to, _original}
+  let isAdmin = false;
+
+  // ── DOM refs ─────────────────────────────────────────────────────
+  const $tabs       = document.querySelectorAll('.pa-tab');
+  const $search     = document.getElementById('paSearch');
+  const $count      = document.getElementById('paCount');
+  const $saveBtn    = document.getElementById('paSaveBtn');
+  const $resetBtn   = document.getElementById('paResetBtn');
+  const $grid       = document.getElementById('paGridContainer');
+  const $status     = document.getElementById('paStatus');
+  const $bulkRow    = document.getElementById('paBulkRow');
+  const $dirtyCount = document.getElementById('paDirtyCount');
+  const $toast      = document.getElementById('pageAccessToast');
+
+  // ── Toast helper ────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg, isError = false) {
+    $toast.textContent = msg;
+    $toast.classList.toggle('error', isError);
+    $toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => $toast.classList.remove('show'), 2400);
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────────
+  document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
+    db = window.db;
+    isAdmin = profile?.role_centralhub === 'central_admin';
+    if (!isAdmin) {
+      $status.textContent = 'Only central_admin can edit page access.';
+      $saveBtn.style.display = $resetBtn.style.display = 'none';
+      $search.disabled = true;
+      return;
+    }
+    await loadPlatform(currentPlatform);
+  });
+
+  // ── Tab switching ────────────────────────────────────────────────
+  $tabs.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
+      const p = btn.dataset.platform;
+      if (p === currentPlatform) return;
+      if (hasUnsavedChanges() && !confirm('Discard unsaved changes?')) return;
+      $tabs.forEach(t => t.classList.toggle('active', t === btn));
+      currentPlatform = p;
+      await loadPlatform(p);
+    });
+  });
+
+  // ── Load + render ────────────────────────────────────────────────
+  async function loadPlatform(platform) {
+    $status.textContent = 'Loading…';
+    $grid.innerHTML = '';
+    $grid.appendChild($status);
+    try {
+      const snap = await getDocs(collection(db, 'page_access_config'));
+      pages = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (data.platform !== platform) return;
+        const visible_to = Array.isArray(data.visible_to) ? [...data.visible_to] : [];
+        pages.push({
+          pageKey:     data.pageKey || d.id,
+          label:       data.label   || d.id,
+          description: data.description || '',
+          visible_to,
+          _original:   [...visible_to],
+        });
+      });
+      pages.sort((a, b) => a.label.localeCompare(b.label));
+      render();
+    } catch (err) {
+      console.error(err);
+      $status.textContent = 'Failed to load page access config: ' + err.message;
+    }
+  }
+
+  function render() {
+    const filter = ($search.value || '').toLowerCase().trim();
+    const subRoles = SUB_ROLES[currentPlatform];
+    const filtered = filter
+      ? pages.filter(p =>
+          p.pageKey.toLowerCase().includes(filter) ||
+          p.label.toLowerCase().includes(filter) ||
+          (p.description || '').toLowerCase().includes(filter))
+      : pages;
+
+    $count.textContent = `${filtered.length} of ${pages.length} pages`;
+
+    if (!pages.length) {
+      $grid.innerHTML = '<div class="pa-status">No pages configured for this platform yet. Run the seed script to populate.</div>';
+      return;
+    }
+
+    let html = '<table class="pa-grid"><thead><tr>';
+    html += '<th>Page</th>';
+    subRoles.forEach(r => { html += `<th class="col-role" title="${r.value}">${r.label}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    filtered.forEach(p => {
+      const dirty = isDirty(p);
+      const allOpen = p.visible_to.length === 0;
+      html += `<tr data-key="${escapeAttr(p.pageKey)}" class="${dirty ? 'dirty' : ''}">`;
+      html += `<td>
+        <div class="col-page-label">${escapeHtml(p.label)}${allOpen ? '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>' : ''}</div>
+        <div class="col-page-key">${escapeHtml(p.pageKey)}</div>
+        ${p.description ? `<div class="col-page-desc">${escapeHtml(p.description)}</div>` : ''}
+      </td>`;
+      subRoles.forEach(r => {
+        const checked = p.visible_to.includes(r.value) ? 'checked' : '';
+        html += `<td class="pa-cb-cell"><input type="checkbox" class="pa-cb" data-key="${escapeAttr(p.pageKey)}" data-role="${r.value}" ${checked} aria-label="${escapeAttr(r.label)} can access ${escapeAttr(p.label)}"></td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    $grid.innerHTML = html;
+    updateDirtyState();
+  }
+
+  // ── Checkbox handler (delegated) ─────────────────────────────────
+  $grid.addEventListener('change', e => {
+    if (!e.target.classList.contains('pa-cb')) return;
+    const key  = e.target.dataset.key;
+    const role = e.target.dataset.role;
+    const page = pages.find(p => p.pageKey === key);
+    if (!page) return;
+    if (e.target.checked) {
+      if (!page.visible_to.includes(role)) page.visible_to.push(role);
+    } else {
+      page.visible_to = page.visible_to.filter(r => r !== role);
+    }
+    // Re-render the affected row so the "open to all" badge + dirty class update.
+    const row = e.target.closest('tr');
+    const dirty = isDirty(page);
+    row.classList.toggle('dirty', dirty);
+    const allOpen = page.visible_to.length === 0;
+    const badge = row.querySelector('.pa-all-badge');
+    if (allOpen && !badge) {
+      row.querySelector('.col-page-label').insertAdjacentHTML('beforeend',
+        '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>');
+    } else if (!allOpen && badge) {
+      badge.remove();
+    }
+    updateDirtyState();
+  });
+
+  // ── Search ──────────────────────────────────────────────────────
+  let searchTimer = null;
+  $search.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(render, 120);
+  });
+
+  // ── Save / reset ────────────────────────────────────────────────
+  $saveBtn.addEventListener('click', async () => {
+    const dirtyPages = pages.filter(isDirty);
+    if (!dirtyPages.length) return;
+    $saveBtn.disabled = true;
+    $saveBtn.textContent = 'Saving…';
+    try {
+      const batch = writeBatch(db);
+      dirtyPages.forEach(p => {
+        const ref = doc(db, 'page_access_config', p.pageKey);
+        batch.set(ref, {
+          visible_to: p.visible_to,
+          updatedAt:  serverTimestamp(),
+        }, { merge: true });
+      });
+      await batch.commit();
+      // Mark current values as the new baseline.
+      dirtyPages.forEach(p => { p._original = [...p.visible_to]; });
+      render();
+      toast(`Saved ${dirtyPages.length} page${dirtyPages.length === 1 ? '' : 's'}.`);
+    } catch (err) {
+      console.error(err);
+      toast('Save failed: ' + err.message, true);
+    } finally {
+      $saveBtn.textContent = 'Save changes';
+      updateDirtyState();
+    }
+  });
+
+  $resetBtn.addEventListener('click', () => {
+    const dirty = pages.filter(isDirty);
+    if (!dirty.length) return;
+    if (!confirm(`Discard changes to ${dirty.length} page${dirty.length === 1 ? '' : 's'}?`)) return;
+    pages.forEach(p => { p.visible_to = [...p._original]; });
+    render();
+  });
+
+  // ── Helpers ─────────────────────────────────────────────────────
+  function isDirty(p) {
+    if (p.visible_to.length !== p._original.length) return true;
+    const a = [...p.visible_to].sort();
+    const b = [...p._original].sort();
+    return a.some((v, i) => v !== b[i]);
+  }
+  function hasUnsavedChanges() {
+    return pages.some(isDirty);
+  }
+  function updateDirtyState() {
+    const dirty = pages.filter(isDirty);
+    $saveBtn.disabled = dirty.length === 0;
+    $resetBtn.disabled = dirty.length === 0;
+    if (dirty.length) {
+      $bulkRow.style.display = 'flex';
+      $dirtyCount.textContent = `${dirty.length} unsaved change${dirty.length === 1 ? '' : 's'}`;
+    } else {
+      $bulkRow.style.display = 'none';
+    }
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  // ── Warn on unsaved-changes navigation ──────────────────────────
+  window.addEventListener('beforeunload', e => {
+    if (hasUnsavedChanges()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+</script>
+
+</body>
+</html>
