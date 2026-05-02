@@ -45,6 +45,23 @@ service cloud.firestore {
              userProfile().ch_sub_roles.hasAny(['coordinator']);
     }
 
+    // CentralHub Subject Specialist: a central_user whose ch_subjects[]
+    // intersects the given list. Used by *_pacing rules so a Math
+    // Specialist can write math_pacing but not biology_pacing.
+    // Subject keys: 'math', 'biology', 'chemistry', 'physics', 'english',
+    // 'bahasa', 'religion'. Empty array on the user = no specialty
+    // (cannot write any subject's pacing — must be admin or coordinator
+    // instead). Pass an array (e.g. ['biology','chemistry','physics']
+    // for combined-science pacing) to allow any matching specialist.
+    function isCHSubjectSpecialist(subjects) {
+      return isAuthorized()
+             && (userProfile().role_centralhub == 'central_user'
+                 || userProfile().role_centralhub == 'central_admin')
+             && ('ch_subjects' in userProfile())
+             && userProfile().ch_subjects is list
+             && userProfile().ch_subjects.hasAny(subjects);
+    }
+
     // Academic Hub admin: central_admin or academic_admin can create/edit/delete AH content
     function isAHAdmin() {
       return isAuthorized() && (
@@ -523,75 +540,79 @@ service cloud.firestore {
     }
 
     // -- IGCSE / A-Level / Checkpoint pacing structures ------
-    // Writers: central_admin or CH coordinator sub-role (lesson hours edit)
+    // Read: any authorised user (pacing structure isn't sensitive).
+    // Write: central_admin (full), CH coordinator (cross-subject),
+    //        or a CH Subject Specialist whose ch_subjects[] matches
+    //        this collection's subject. Combined-science pacing
+    //        (checkpoint_science / primary_science) accepts any of
+    //        biology / chemistry / physics specialists.
+    //        TH admin retains write access on Checkpoint / AS-A /
+    //        Primary collections (existing pattern).
+
+    // ── IGCSE single-subject pacing ─────────────────────────────────
     match /math_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin() || isCHCoordinator();
+      allow write: if isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['math']);
     }
-
     match /biology_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin() || isCHCoordinator();
+      allow write: if isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['biology']);
     }
-
     match /chemistry_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin() || isCHCoordinator();
+      allow write: if isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['chemistry']);
     }
-
     match /physics_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin() || isCHCoordinator();
+      allow write: if isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['physics']);
     }
 
+    // ── AS / A-Level single-subject pacing ──────────────────────────
     match /asalevel_math_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['math']);
     }
-
     match /asalevel_biology_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['biology']);
     }
-
     match /asalevel_chemistry_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['chemistry']);
     }
-
     match /asalevel_physics_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['physics']);
     }
 
+    // ── Checkpoint pacing ───────────────────────────────────────────
     match /checkpoint_math_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['math']);
     }
-
     match /checkpoint_english_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['english']);
     }
-
+    // Checkpoint Science is combined biology + chemistry + physics
     match /checkpoint_science_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['biology', 'chemistry', 'physics']);
     }
 
+    // ── Primary pacing ──────────────────────────────────────────────
     match /primary_math_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['math']);
     }
-
     match /primary_english_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['english']);
     }
-
+    // Primary Science is combined biology + chemistry + physics
     match /primary_science_pacing/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator();
+      allow write: if isTeachersAdmin() || isAdmin() || isCHCoordinator() || isCHSubjectSpecialist(['biology', 'chemistry', 'physics']);
     }
 
     // -- userProgress (per-user pacing progress) -------------
