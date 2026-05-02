@@ -136,6 +136,8 @@ Each platform has its **own** Firestore role field — there is no single shared
 
 Sub-roles control tab visibility in weekly-checklist pages and `visible_to[]` filtering on dashboard category documents. A user can hold multiple sub-roles simultaneously.
 
+**Subject specialty (Central Hub only):** `ch_subjects[]` is an array of `'math' | 'biology' | 'chemistry' | 'physics' | 'english' | 'bahasa' | 'religion'`. Set in `console.html` for HQ Subject Specialists; drives subject-scoped filtering on pacing dashboards (Step 10/11 hardening). Empty array = "all subjects" (Directors / cross-subject coordinators).
+
 **Approval status fields** (managed in `console.html`; shown as inline Approve/Reject buttons for pending users):
 
 | Platform     | Firestore field                  | Values                                     |

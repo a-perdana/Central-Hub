@@ -383,6 +383,40 @@
             </label>
           </div>
         </div>
+        <div class="form-group" id="chSubjectsGroup" style="display:none">
+          <span class="form-label">CentralHub Subject Specialties</span>
+          <p class="form-hint" style="margin-top:0;margin-bottom:8px;font-size:0.75rem;color:var(--ink-3)">Used to filter pacing dashboards + scope subject-specific tools. Leave empty for directors / cross-subject coordinators.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:6px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="math" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Mathematics</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="biology" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Biology</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="chemistry" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Chemistry</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="physics" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Physics</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="english" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">English</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="bahasa" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Bahasa</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-subject="religion" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Religion</span>
+            </label>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="fieldRoleAH">Academic Hub Role</label>
           <select class="form-select" id="fieldRoleAH">
@@ -945,15 +979,24 @@
     document.getElementById('fieldRoleCH').value     = u.role_centralhub              || '';
     // CH sub-roles — visible only when user has a CentralHub role
     const chSubRolesGroup = document.getElementById('chSubRolesGroup');
+    const chSubjectsGroup = document.getElementById('chSubjectsGroup');
     chSubRolesGroup.style.display = u.role_centralhub ? '' : 'none';
+    chSubjectsGroup.style.display = u.role_centralhub ? '' : 'none';
     const chSubs = Array.isArray(u.ch_sub_roles) ? u.ch_sub_roles : [];
     document.getElementById('fieldChDirector').checked   = chSubs.includes('director');
     document.getElementById('fieldChCoordinator').checked = chSubs.includes('coordinator');
+    // CH subject specialties (math, biology, chemistry, physics, english, bahasa, religion)
+    const chSubjects = Array.isArray(u.ch_subjects) ? u.ch_subjects : [];
+    document.querySelectorAll('[data-ch-subject]').forEach(cb => {
+      cb.checked = chSubjects.includes(cb.dataset.chSubject);
+    });
     document.getElementById('fieldRoleCH').addEventListener('change', function() {
       chSubRolesGroup.style.display = this.value ? '' : 'none';
+      chSubjectsGroup.style.display = this.value ? '' : 'none';
       if (!this.value) {
         document.getElementById('fieldChDirector').checked   = false;
         document.getElementById('fieldChCoordinator').checked = false;
+        document.querySelectorAll('[data-ch-subject]').forEach(cb => cb.checked = false);
       }
     });
     document.getElementById('fieldRoleAH').value     = u.role_academichub             || '';
@@ -1023,6 +1066,9 @@
       document.getElementById('fieldChDirector').checked    ? 'director'    : null,
       document.getElementById('fieldChCoordinator').checked ? 'coordinator' : null,
     ].filter(Boolean) : [];
+    const chSubjects   = roleCH
+      ? [...document.querySelectorAll('[data-ch-subject]:checked')].map(cb => cb.dataset.chSubject)
+      : [];
     const roleAH       = document.getElementById('fieldRoleAH').value;
     const approvalAH   = document.getElementById('fieldApprovalAH').value;
     const ahSubRoles   = roleAH ? [
@@ -1050,6 +1096,7 @@
         schoolId,
         role_centralhub:              roleCH,
         ch_sub_roles:                 chSubRoles,
+        ch_subjects:                  chSubjects,
         role_academichub:             roleAH,
         approval_status_academichub:  approvalAH,
         ah_sub_roles:                 ahSubRoles,
@@ -1062,7 +1109,8 @@
       if (u) {
         u.displayName = displayName; u.email = email;
         u.school = school; u.position = position; u.schoolId = schoolId;
-        u.role_centralhub = roleCH; u.ch_sub_roles = chSubRoles; u.role_academichub = roleAH;
+        u.role_centralhub = roleCH; u.ch_sub_roles = chSubRoles; u.ch_subjects = chSubjects;
+        u.role_academichub = roleAH;
         u.approval_status_academichub = approvalAH; u.ah_sub_roles = ahSubRoles;
         u.role_teachershub = roleTH; u.approval_status_teachershub = approvalTH;
         u.th_sub_roles = thSubRoles; u.role_researchhub = roleRH;
