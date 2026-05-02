@@ -300,6 +300,12 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
           <label for="profileEmail">Email</label>
           <input id="profileEmail" type="email" readonly />
         </div>
+        <div class="profile-field">
+          <label>CentralHub Access <span style="font-size:0.7rem;font-weight:400;color:#8888a8;margin-left:6px">(set by central_admin)</span></label>
+          <div id="profileAccessSummary" style="font-size:0.85rem;color:#1c1c2e;background:#f7f6f3;border:1px solid #e0ddd6;border-radius:8px;padding:10px 12px;line-height:1.6">
+            <em style="color:#8888a8">— loading —</em>
+          </div>
+        </div>
       </div>
       <p class="profile-modal-msg" id="profileMsg"></p>
       <div class="profile-modal-foot">
@@ -328,6 +334,7 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
     phone: overlay.querySelector('#profilePhone'),
     title: overlay.querySelector('#profileTitle'),
     email: overlay.querySelector('#profileEmail'),
+    accessSummary: overlay.querySelector('#profileAccessSummary'),
   };
 
   const localState = {
@@ -359,6 +366,28 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
     refreshProfileAvatarPreview();
     el.msg.textContent = '';
     el.msg.classList.remove('ok');
+    if (el.accessSummary) renderAccessSummary();
+  };
+
+  // Read-only summary of the user's CentralHub role + sub-roles + subject
+  // specialties. To change any of these, a central_admin must edit the
+  // user's record in console.html.
+  const SUBJECT_LABELS = {
+    math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
+    physics: 'Physics', english: 'English', bahasa: 'Bahasa', religion: 'Religion',
+  };
+  const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
+  const renderAccessSummary = () => {
+    const role     = profile.role_centralhub || '—';
+    const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+    const subjects = Array.isArray(profile.ch_subjects) ? profile.ch_subjects : [];
+    const chip = (text) => `<span style="display:inline-block;padding:2px 9px;border-radius:100px;background:#ede9fe;color:#5b21b6;font-size:0.72rem;font-weight:600;margin:2px 4px 2px 0">${text}</span>`;
+    const muted = (text) => `<span style="color:#8888a8;font-style:italic">${text}</span>`;
+    const lines = [];
+    lines.push(`<div><strong style="color:#44445a">Role:</strong> ${role === '—' ? muted('— not set —') : role}</div>`);
+    lines.push(`<div style="margin-top:4px"><strong style="color:#44445a">Sub-roles:</strong> ${subRoles.length ? subRoles.map(r => chip(SUB_ROLE_LABELS[r] || r)).join('') : muted('none')}</div>`);
+    lines.push(`<div style="margin-top:4px"><strong style="color:#44445a">Subject specialties:</strong> ${subjects.length ? subjects.map(s => chip(SUBJECT_LABELS[s] || s)).join('') : muted('none — assign in console to access subject-specific pacing pages')}</div>`);
+    el.accessSummary.innerHTML = lines.join('');
   };
 
   const open = () => {
