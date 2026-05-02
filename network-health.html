@@ -476,9 +476,13 @@ document.addEventListener('authReady', async () => {
     }
     const schools = schoolsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+    // Network-wide reads — admin-only page so full data is intentional, but
+    // hard-cap at 5000 to prevent runaway reads if the network grows past
+    // expectations (800 teachers × 40 weeks = 32k weekly_progress docs is
+    // already in the hot path otherwise).
     const [progressSnap, checklistSnap, surveyResponsesSnap, surveysSnap] = await Promise.allSettled([
-      getDocs(collection(db, 'userProgress')),
-      getDocs(query(collection(db, 'weekly_progress'))),
+      getDocs(query(collection(db, 'userProgress'),    limit(2000))),
+      getDocs(query(collection(db, 'weekly_progress'), limit(5000))),
       getDocs(query(collection(db, 'survey_responses'), limit(500))),
       getDocs(query(collection(db, 'surveys'), where('status', '==', 'published'), limit(50))),
     ]);

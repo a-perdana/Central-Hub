@@ -7162,10 +7162,22 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           }
           const schools = schoolsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-          // 2. Fetch pacing + checklist data in parallel
+          // 2. Fetch pacing + checklist data in parallel.
+          // Bounded reads to keep dashboard fast at network scale (800 teachers
+          // × ~40 weeks of weekly_progress would otherwise be ~32k docs):
+          //   - userProgress is one cumulative doc per teacher (~800 max),
+          //     limit(2000) is a safety net for future growth.
+          //   - weekly_progress is per-week per-teacher; restrict to entries
+          //     updated in the last 30 days so dashboard reflects current
+          //     activity rather than historical data.
+          const sinceCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
           const [progressSnap, checklistSnap] = await Promise.allSettled([
-            getDocs(collection(db, 'userProgress')),
-            getDocs(query(collection(db, 'weekly_progress'))),
+            getDocs(query(collection(db, 'userProgress'), limit(2000))),
+            getDocs(query(
+              collection(db, 'weekly_progress'),
+              where('updatedAt', '>', sinceCutoff),
+              limit(2000)
+            )),
           ]);
 
           // Build per-school pacing average
