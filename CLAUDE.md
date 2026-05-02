@@ -161,7 +161,7 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 | Collection                          | Purpose                                                          | Write access        |
 |-------------------------------------|------------------------------------------------------------------|---------------------|
 | `users/{uid}`                       | User profiles (uid, email, displayName, photoURL, role_centralhub, role_academichub, role_teachershub, role_researchhub, createdAt, lastLoginAt) | owner or central_admin |
-| `schools/{schoolId}`                | Partner school records                                           | central_admin       |
+| `partner_schools/{schoolId}`        | School directory (15 partner schools + `eduversal_hq`). Each doc carries `name`, `domain` (e.g. `fatih.sch.id`, drives AH/TH email-based auto-default), and a `classes/{classId}` subcollection (`name`, `grade`, `section`). | AH admin / central_admin (write); any authorised user (read) |
 | `staff/{staffId}`                   | Staff records                                                    | central_admin       |
 | `announcements/{annId}`             | Platform-wide announcements                                      | central_admin       |
 | `central_documents/{docId}`         | CentralHub-managed documents (was `documents` before migration)  | central_admin       |
@@ -244,7 +244,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `login.html`                       | `/login`                        | Login page (no auth guard)                        |
 | `announcements.html`               | `/announcements`                | Create/manage announcements                       |
 | `messageboard.html`                | `/messageboard`                 | Platform message board                            |
-| `schools.html`                     | `/schools`                      | School management                                 |
+| `schools.html`                     | `/schools`                      | School management — reads/writes the `partner_schools` collection (UI label kept as "Schools" for clarity). |
 | `staff.html`                       | `/staff`                        | Staff management                                  |
 | `documents.html`                   | `/documents`                    | Document management (`central_documents` collection) |
 | `academics.html`                   | `/academics`                    | Academics module hub                              |
