@@ -370,19 +370,33 @@ service cloud.firestore {
     }
 
     // -- teacher_self_appraisals (Teacher Self-Appraisal) -----
-    // Create/update: the teacher themselves (uid match), draft or submitted
-    // Read:          the teacher, any AH admin/appraiser sub-role, TH admin, central_admin
-    // Delete:        central_admin only
+    // Doc ID format: {uid}_{academicYear}  (e.g. abc123_2025-26)
+    //
+    // Read access (per Step 1.4 hardening — was previously open to any AH
+    // user with an evaluator sub-role across the whole network):
+    //   - the owner (resource.data.uid == auth.uid)
+    //   - central_admin, AH admin, TH admin (full access for tooling)
+    //   - same-school AH evaluator with school_principal /
+    //     academic_coordinator / cambridge_coordinator sub-role
+    //
+    // No code path issues a collection query, so list is admin-only and
+    // sub-role evaluators must look up by deterministic doc ID.
+    //
+    // Create/update: the teacher themselves (uid match). Status != submitted
+    // for updates (locks the doc once submitted). Delete: central_admin.
     match /teacher_self_appraisals/{docId} {
-      allow read: if isAdmin()
-                  || isAHAdmin()
-                  || isTeachersAdmin()
-                  || (isAcademicUser() && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
-                  || (request.auth != null && resource.data.uid == request.auth.uid);
-      allow create: if request.auth != null
+      allow get:    if isAdmin()
+                    || isAHAdmin()
+                    || isTeachersAdmin()
+                    || (isSignedIn() && resource.data.uid == request.auth.uid)
+                    || (isAcademicUser()
+                        && isAHUserAtSameSchool(resource.data.uid)
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+      allow list:   if isAdmin() || isAHAdmin() || isTeachersAdmin();
+      allow create: if isSignedIn()
                     && request.resource.data.uid == request.auth.uid
                     && (isTeachersUser() || isTeachersAdmin());
-      allow update: if request.auth != null
+      allow update: if isSignedIn()
                     && resource.data.uid == request.auth.uid
                     && resource.data.status != 'submitted'
                     && (isTeachersUser() || isTeachersAdmin());
