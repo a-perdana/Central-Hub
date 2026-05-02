@@ -187,6 +187,8 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 | `school_events/{eventId}`           | Partner Schools Event Calendar events. Fields: `schoolId`, `schoolName`, `title`, `category`, `date_start` (YYYY-MM-DD), `date_end`, `description`, `createdBy`, `createdAt`. | any central hub user |
 | `user_competencies/{uid}`           | Competency progress for Teachers Hub (`earned`, `matDone`) and Academic Hub (`earned_academic`, `matDone_academic`). Written by each platform, read by `competency-admin.html` for context. | owner (per platform) |
 | `competency_evidence/{docId}`       | Evidence submissions from Teachers Hub and Academic Hub for competency certification. Fields: `uid`, `platform` (`'teachers'`\|`'academic'`), `compId`, `compName`, `domain`, `level`, `description`, `fileUrl`, `fileName`, `status` (`'pending'`\|`'approved'`\|`'rejected'`), `reviewerNote`, `createdAt`, `updatedAt`. Reviewed via `competency-admin.html`. | owner (create), central_admin (update status/reviewerNote) |
+| `page_access_config/{pageKey}`      | Per-page sub-role visibility for Academic Hub (and eventually TH/CH). Doc ID = clean URL slug. Fields: `pageKey`, `platform` (`'academichub'`), `label`, `visible_to[]` (sub-role values; empty = open to all), `description`, `updatedAt`. Read open to any signed-in user; managed via `/page-access` admin tool. Seeded by `scripts/page-access/seed-ah-page-access.js`. | central_admin |
+| `teacher_kpi_submissions/{uid}_{periodId}` | Teacher KPI self-assessments. Now require a `schoolId` field on write so AH evaluators can be school-scoped at both query and rule level (Step 1.3 hardening). Composite index `(periodId, schoolId)` registered. | owner teacher (create/update) |
 
 **Timestamp field:** always `createdAt` (serverTimestamp). Do not use `timestamp` — that was the legacy name.
 
@@ -255,6 +257,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `primary-checkpoint-syllabus.html` | `/primary-checkpoint-syllabus`  | Primary Checkpoint syllabus admin — chapter/topic/objective structure (Year 4–6). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
 | `secondary-checkpoint-syllabus.html` | `/secondary-checkpoint-syllabus` | Secondary Checkpoint syllabus admin — chapter/topic/objective structure (Year 7–8). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
 | `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users |
+| `page-access.html`                 | `/page-access`                  | **Page Access Manager** — central_admin tool to edit `page_access_config/{slug}` for each platform. Tabs per platform (only Academic Hub wired up); search, dirty-state tracking, batched Firestore writes; “open to all” badge when `visible_to: []`. Linked from navbar under User Console. |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
 | `school-appraisals.html`           | `/school-appraisals`            | School-level appraisals                           |
 | `teacher-appraisals.html`          | `/teacher-appraisals`           | Teacher appraisals                                |
