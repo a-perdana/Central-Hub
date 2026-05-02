@@ -316,6 +316,7 @@ const htmlFiles = [
   "competency-admin.html",
   "orientation-admin.html",
   "page-access.html",
+  "rules-viewer.html",
 ];
 
 htmlFiles.forEach((file) => {
@@ -355,6 +356,15 @@ htmlFiles.forEach((file) => {
 if (fs.existsSync("auth-guard.js")) {
   fs.copyFileSync("auth-guard.js", path.join("dist", "auth-guard.js"));
   console.log("Copied: auth-guard.js");
+}
+
+// -- Copy firestore.rules so /rules-viewer can fetch it at runtime.
+//    Read-only display; the live enforcement comes from the deployed
+//    rules at console.firebase.google.com, this is just the
+//    human-readable mirror.
+if (fs.existsSync("firestore.rules")) {
+  fs.copyFileSync("firestore.rules", path.join("dist", "firestore.rules"));
+  console.log("Copied: firestore.rules");
 }
 
 // -- Copy static assets

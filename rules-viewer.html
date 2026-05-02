@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firestore Rules Viewer — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-header { padding: 28px 32px 0; }
+    .page-header h1 { font-family: 'Lora', serif; font-size: 1.6rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+    .page-header p { font-size: 0.875rem; color: var(--ink-3); margin-bottom: 20px; }
+    .page-content { padding: 16px 32px 48px; }
+
+    /* Toolbar */
+    .rv-toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    .rv-search { flex: 1; min-width: 240px; max-width: 480px; position: relative; }
+    .rv-search input {
+      width: 100%; padding: 9px 12px 9px 36px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--white); font-size: 0.9rem; color: var(--ink); outline: none;
+      box-shadow: var(--shadow-sm); font-family: inherit;
+    }
+    .rv-search input:focus { border-color: var(--accent); }
+    .rv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); }
+    .rv-count { font-size: 0.85rem; color: var(--ink-3); }
+    .rv-deploy-info {
+      font-size: 0.78rem; color: var(--ink-3);
+      padding: 4px 10px; background: var(--paper); border-radius: 100px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* Read-only banner */
+    .rv-banner {
+      background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+      padding: 10px 14px; border-radius: 9px; margin-bottom: 16px;
+      font-size: 0.82rem; line-height: 1.5;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .rv-banner svg { flex-shrink: 0; margin-top: 1px; }
+    .rv-banner strong { color: #1e3a8a; }
+    .rv-banner code { background: rgba(255,255,255,.6); padding: 1px 6px; border-radius: 4px; font-size: 0.78rem; }
+
+    /* Collection table */
+    .rv-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      background: var(--white); border-radius: 10px; overflow: hidden;
+      box-shadow: var(--shadow-sm); margin-bottom: 28px;
+    }
+    .rv-table th, .rv-table td { padding: 12px 14px; font-size: 0.85rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .rv-table thead th {
+      background: var(--paper); font-weight: 600; font-size: 0.75rem; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--ink-3); position: sticky; top: 0; z-index: 1;
+    }
+    .rv-table tbody tr:last-child td { border-bottom: none; }
+    .rv-table tbody tr:hover td { background: #fafafa; }
+
+    .rv-coll-name {
+      font-family: 'DM Mono', monospace; font-size: 0.82rem; font-weight: 600;
+      color: var(--ink); white-space: nowrap;
+    }
+    .rv-coll-id {
+      font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--ink-3);
+      margin-top: 2px;
+    }
+
+    .rv-perm {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 100px;
+      font-size: 0.72rem; font-weight: 600; margin: 1px 3px 1px 0;
+    }
+    .rv-perm-admin    { background: #fee2e2; color: #991b1b; }
+    .rv-perm-coord    { background: #fef3c7; color: #92400e; }
+    .rv-perm-author   { background: #dbeafe; color: #1e40af; }
+    .rv-perm-owner    { background: #d1fae5; color: #065f46; }
+    .rv-perm-everyone { background: #ede9fe; color: #5b21b6; }
+    .rv-perm-public   { background: #fce7f3; color: #9d174d; }
+    .rv-perm-noone    { background: #f3f4f6; color: #6b7280; font-style: italic; }
+    .rv-perm-school   { background: #ccfbf1; color: #0f766e; }
+
+    .rv-rule-snippet {
+      font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--ink-3);
+      background: var(--paper); padding: 6px 8px; border-radius: 6px;
+      max-width: 460px; overflow-x: auto; white-space: pre; margin-top: 4px;
+      display: none;
+    }
+    .rv-table tr.expanded .rv-rule-snippet { display: block; }
+    .rv-toggle {
+      cursor: pointer; color: var(--accent); font-size: 0.72rem;
+      user-select: none; margin-top: 4px; display: inline-block;
+    }
+
+    /* Group sections */
+    .rv-group { margin-top: 32px; }
+    .rv-group:first-of-type { margin-top: 0; }
+    .rv-group h2 {
+      font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; color: var(--ink);
+      margin-bottom: 4px;
+    }
+    .rv-group-desc { font-size: 0.82rem; color: var(--ink-3); margin-bottom: 12px; }
+
+    .rv-empty { padding: 36px; text-align: center; color: var(--ink-3); font-size: 0.9rem; }
+
+    @media (max-width: 720px) {
+      .rv-rule-snippet { max-width: 280px; }
+    }
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
+</head>
+<body>
+
+<!-- SHARED_NAVBAR -->
+
+<div class="page-header">
+  <h1>Firestore Rules Viewer</h1>
+  <p>Read-only view of every Firestore collection's access policy. Source: <code style="font-size:0.78rem;background:var(--paper);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace">Central Hub/firestore.rules</code></p>
+</div>
+
+<div class="page-content">
+
+  <div class="rv-banner">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div>
+      <strong>This page is read-only.</strong> Firestore rules cannot be edited from the browser — they live in <code>Central Hub/firestore.rules</code> and deploy via <code>firebase deploy --only firestore:rules</code>. To request a rule change: edit the file, push to GitHub, deploy. To change a user's access without touching rules: use <a href="console" style="color:#1e40af;text-decoration:underline">User Console</a> (role assignments) or <a href="page-access" style="color:#1e40af;text-decoration:underline">Page Access Manager</a> (per-page sub-role gating).
+    </div>
+  </div>
+
+  <div class="rv-toolbar">
+    <div class="rv-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" id="rvSearch" placeholder="Search by collection name…" aria-label="Search collections">
+    </div>
+    <span class="rv-count" id="rvCount"></span>
+    <span class="rv-deploy-info" id="rvDeployInfo">loading…</span>
+  </div>
+
+  <div id="rvContent">
+    <div class="rv-empty">Loading firestore.rules…</div>
+  </div>
+</div>
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+<script type="module">
+  // Domain grouping mirrors docs/FIRESTORE_SCHEMA.md
+  const DOMAINS = [
+    { key: 'identity',     title: '1. Identity & Org',        match: ['users', 'partner_schools', 'classes', 'staff'] },
+    { key: 'comms',        title: '2. Communication & Content', match: ['announcements', 'comments', 'announcement_reads', 'topics', 'replies', 'feedback', 'feedbacks', 'library', 'documents', 'central_documents', 'doc_likes', 'doc_ratings', 'prompts'] },
+    { key: 'surveys',      title: '3. Surveys',               match: ['surveys', 'survey_responses'] },
+    { key: 'calendar',     title: '4. Calendar & Scheduling', match: ['calendar_events', 'calendar_settings', 'teaching_schedule', 'cambridge_calendar', 'school_events', 'timeline_activities', 'timeline_completions'] },
+    { key: 'cambridge',    title: '5. Cambridge Curriculum',  match: ['cambridge_syllabus', 'cambridge_scheme_of_work', 'cambridge_syllabus_progression', 'km_curriculum', 'curriculum_master_topics'] },
+    { key: 'pacing',       title: '6. Pacing',                match: ['_pacing', 'userProgress'] },
+    { key: 'checklists',   title: '7. Weekly Checklists',     match: ['weekly_essentials', 'weekly_templates', 'weekly_progress'] },
+    { key: 'appraisals',   title: '8. Appraisals & Walkthroughs', match: ['school_appraisals', 'school_appraisals_v2', 'appraisal_cycles', 'teacher_appraisals', 'teacher_self_appraisals', 'teacher_walkthroughs', 'calibration_'] },
+    { key: 'kpi',          title: '9. KPI System',            match: ['kpi_', 'school_performance_kpi', 'teacher_kpi_'] },
+    { key: 'activities',   title: '10. Activities Board',     match: ['activity_'] },
+    { key: 'competency',   title: '11. Competency Framework', match: ['user_competencies', 'competency_', 'central_certificates', 'framework_config', 'content_overrides_'] },
+    { key: 'config',       title: '12. Configuration & Feature Flags', match: ['page_access_config', 'nav_config', 'sidebar_config', 'ah_categories', 'th_resource_sections'] },
+    { key: 'orientation',  title: '13. Orientation & Recruitment', match: ['orientation_', 'pathwaySubmissions'] },
+    { key: 'audit',        title: '14. Audit / Analytics',    match: ['platform_usage', 'networkAudits', 'teacher_contacts', 'mail_campaigns'] },
+    { key: 'misc',         title: '15. Misc',                 match: ['school_visits', 'section_overrides', 'subsections', 'ease_system'] },
+  ];
+
+  function classifyDomain(collName) {
+    for (const d of DOMAINS) {
+      for (const m of d.match) {
+        if (m === collName) return d.key;
+        if (m.endsWith('_') && collName.startsWith(m)) return d.key;
+        if (m.startsWith('_') && collName.endsWith(m)) return d.key;
+      }
+    }
+    return 'misc';
+  }
+
+  // Parse `match /COLLECTION/{docId} { ... }` blocks from firestore.rules.
+  // Returns Map<collName, { lineNo, raw, allows: [{op, body, lineNo}] }>.
+  function parseRules(rulesText) {
+    const lines = rulesText.split(/\r?\n/);
+    const out = new Map();
+    let i = 0;
+    while (i < lines.length) {
+      const m = lines[i].match(/^(\s*)match\s+\/([a-zA-Z0-9_]+)\/\{[^}]+\}\s*\{?/);
+      if (!m) { i++; continue; }
+      // Only top-level matches (4-space indent in our rules file)
+      if (m[1].length !== 4) { i++; continue; }
+      const collName = m[2];
+      const startLine = i;
+      let depth = 1; // we're now inside the block
+      const allows = [];
+      let buf = '';
+      let bufStartLine = -1;
+      i++;
+      while (i < lines.length && depth > 0) {
+        const ln = lines[i];
+        depth += (ln.match(/\{/g) || []).length;
+        depth -= (ln.match(/\}/g) || []).length;
+
+        // Capture allow lines (potentially multi-line until ;)
+        const allowM = ln.match(/^\s*allow\s+([a-z, ]+):/);
+        if (allowM) {
+          buf = ln;
+          bufStartLine = i;
+          while (i < lines.length && !buf.includes(';')) {
+            i++;
+            if (i < lines.length) buf += '\n' + lines[i];
+          }
+          // Decode the operation list (read, list, get, write, create, update, delete)
+          const ops = allowM[1].split(',').map(s => s.trim()).filter(Boolean);
+          // Body = everything after the colon up to (but not including) the trailing ;
+          const bodyMatch = buf.match(/allow\s+[a-z, ]+:\s*if\s+([\s\S]+);/);
+          const body = bodyMatch ? bodyMatch[1].trim() : '(no body)';
+          ops.forEach(op => allows.push({ op, body, lineNo: bufStartLine + 1 }));
+          buf = '';
+        }
+        i++;
+      }
+      out.set(collName, { lineNo: startLine + 1, allows, raw: lines.slice(startLine, i).join('\n') });
+    }
+    return out;
+  }
+
+  // Turn a raw rule body into a human-readable chip list. Heuristic — flags
+  // common patterns. Anything unrecognised is shown as "custom" with the
+  // raw body in the expandable snippet below.
+  function summarisePerm(body) {
+    if (!body) return [{ cls: 'rv-perm-noone', label: 'no-one' }];
+    const chips = [];
+    const has = (re) => re.test(body);
+    // Public — allow if true outside auth check
+    if (/^\s*true\s*$/.test(body)) chips.push({ cls: 'rv-perm-public', label: 'public' });
+    // Owner pattern
+    if (has(/resource\.data\.userId\s*==\s*request\.auth\.uid/) || has(/request\.resource\.data\.userId\s*==\s*request\.auth\.uid/) || has(/request\.auth\.uid\s*==\s*uid/)) {
+      chips.push({ cls: 'rv-perm-owner', label: 'owner' });
+    }
+    // Same-school helper
+    if (has(/isAHUserAtSameSchool/)) chips.push({ cls: 'rv-perm-school', label: 'same-school' });
+    // Schoolid match
+    if (has(/resource\.data\.schoolId\s*==\s*userProfile\(\)\.schoolId/)) {
+      if (!chips.find(c => c.cls === 'rv-perm-school')) chips.push({ cls: 'rv-perm-school', label: 'same-school' });
+    }
+    // Author
+    if (has(/authorUid\s*==\s*request\.auth\.uid/) || has(/resource\.data\.author\s*==\s*request\.auth\.token\.email/)) {
+      chips.push({ cls: 'rv-perm-author', label: 'author' });
+    }
+    // Admin
+    if (has(/\bisAdmin\(\)/) || has(/role_centralhub\s*==\s*'central_admin'/)) {
+      chips.push({ cls: 'rv-perm-admin', label: 'central_admin' });
+    }
+    if (has(/\bisAHAdmin\(\)/) || has(/role_academichub\s*==\s*'academic_admin'/)) {
+      chips.push({ cls: 'rv-perm-admin', label: 'AH admin' });
+    }
+    if (has(/\bisTeachersAdmin\(\)/) || has(/role_teachershub\s*==\s*'teachers_admin'/)) {
+      chips.push({ cls: 'rv-perm-admin', label: 'TH admin' });
+    }
+    if (has(/\bisTHAdmin\(\)/)) chips.push({ cls: 'rv-perm-admin', label: 'TH admin' });
+    // Coordinators
+    if (has(/\bisCHCoordinator\(\)/)) chips.push({ cls: 'rv-perm-coord', label: 'CH coordinator' });
+    // Sub-role specialists
+    const specMatch = body.match(/isCHSubjectSpecialist\(\[([^\]]+)\]\)/);
+    if (specMatch) chips.push({ cls: 'rv-perm-coord', label: `CH ${specMatch[1].replace(/['"\s]/g, '').replace(/,/g, '+')} specialist` });
+    // Sub-role hasAny patterns
+    const subRoleM = body.match(/ah_sub_roles\.hasAny\(\[([^\]]+)\]\)/);
+    if (subRoleM) {
+      const roles = subRoleM[1].replace(/['"]/g, '').split(',').map(s => s.trim()).join(' / ');
+      chips.push({ cls: 'rv-perm-coord', label: `AH ${roles}` });
+    }
+    // Generic role checks
+    if (has(/\bisCentralUser\(\)/)) chips.push({ cls: 'rv-perm-everyone', label: 'CH user' });
+    if (has(/\bisAcademicUser\(\)/) && !chips.find(c => c.label.startsWith('AH'))) chips.push({ cls: 'rv-perm-everyone', label: 'AH user' });
+    if (has(/\bisTeachersUser\(\)/) && !chips.find(c => c.label.startsWith('TH'))) chips.push({ cls: 'rv-perm-everyone', label: 'TH user' });
+    // Authorised (any signed-in within domain allow-list)
+    if (has(/\bisAuthorized\(\)/) && chips.length === 0) chips.push({ cls: 'rv-perm-everyone', label: 'any user' });
+    if (has(/\bisSignedIn\(\)/) && chips.length === 0) chips.push({ cls: 'rv-perm-everyone', label: 'signed-in' });
+    // Always-deny
+    if (/^\s*false\s*$/.test(body)) chips.push({ cls: 'rv-perm-noone', label: 'no-one' });
+
+    if (chips.length === 0) chips.push({ cls: 'rv-perm-noone', label: 'custom — see snippet' });
+    return chips;
+  }
+
+  function renderPerms(allows, ops) {
+    // Combine all matching operations into a single chip set (deduped)
+    const all = allows.filter(a => ops.includes(a.op));
+    if (!all.length) {
+      return '<span class="rv-perm rv-perm-noone">no-one</span>';
+    }
+    const seen = new Set();
+    const chips = [];
+    all.forEach(a => {
+      summarisePerm(a.body).forEach(c => {
+        const key = c.cls + '|' + c.label;
+        if (seen.has(key)) return;
+        seen.add(key);
+        chips.push(c);
+      });
+    });
+    return chips.map(c => `<span class="rv-perm ${c.cls}">${escapeHtml(c.label)}</span>`).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+  }
+
+  // Read access = combine `read`, `get`, `list`
+  function readOps(allows) {
+    return allows.filter(a => ['read', 'get', 'list'].includes(a.op));
+  }
+  function writeOps(allows) {
+    return allows.filter(a => ['write', 'create', 'update', 'delete'].includes(a.op));
+  }
+  function readSnippet(allows) {
+    return readOps(allows).map(a => `[L${a.lineNo}] allow ${a.op}: if ${a.body}`).join('\n\n');
+  }
+  function writeSnippet(allows) {
+    return writeOps(allows).map(a => `[L${a.lineNo}] allow ${a.op}: if ${a.body}`).join('\n\n');
+  }
+
+  // ── Main render ──────────────────────────────────────────────
+  let allRules = null; // Map<collName, parsed>
+  document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
+    const isAdmin = profile?.role_centralhub === 'central_admin';
+    if (!isAdmin) {
+      document.getElementById('rvContent').innerHTML =
+        '<div class="rv-empty">This viewer is restricted to central_admin.</div>';
+      return;
+    }
+    try {
+      const resp = await fetch('firestore.rules', { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const text = await resp.text();
+      allRules = parseRules(text);
+      document.getElementById('rvDeployInfo').textContent =
+        `${allRules.size} collections · ${text.split(/\r?\n/).length} lines`;
+      render();
+    } catch (err) {
+      document.getElementById('rvContent').innerHTML =
+        `<div class="rv-empty">Failed to load firestore.rules: ${escapeHtml(err.message)}<br><br>If this persists, the build may have stripped the file from <code>dist/</code>. Update Central Hub/build.js to copy it.</div>`;
+    }
+  });
+
+  document.getElementById('rvSearch').addEventListener('input', render);
+
+  function render() {
+    if (!allRules) return;
+    const filter = document.getElementById('rvSearch').value.toLowerCase().trim();
+
+    // Group by domain
+    const byDomain = {};
+    DOMAINS.forEach(d => byDomain[d.key] = []);
+    allRules.forEach((parsed, name) => {
+      if (filter && !name.toLowerCase().includes(filter)) return;
+      const dk = classifyDomain(name);
+      byDomain[dk].push({ name, parsed });
+    });
+
+    let visibleCount = 0;
+    let html = '';
+    DOMAINS.forEach(d => {
+      const rows = byDomain[d.key];
+      if (!rows.length) return;
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+      visibleCount += rows.length;
+      html += `<div class="rv-group"><h2>${escapeHtml(d.title)}</h2>`;
+      html += `<table class="rv-table"><thead><tr><th>Collection</th><th>Read</th><th>Write</th></tr></thead><tbody>`;
+      rows.forEach(({ name, parsed }, idx) => {
+        const rid = `r-${d.key}-${idx}`;
+        html += `<tr id="${rid}">`;
+        html += `<td><div class="rv-coll-name">${escapeHtml(name)}</div><div class="rv-coll-id">L${parsed.lineNo} in firestore.rules</div></td>`;
+        html += `<td>${renderPerms(parsed.allows, ['read', 'get', 'list'])}<br><span class="rv-toggle" data-row="${rid}" data-side="read">show rule</span><div class="rv-rule-snippet" data-side="read">${escapeHtml(readSnippet(parsed.allows) || '(inherits from parent / no read rule)')}</div></td>`;
+        html += `<td>${renderPerms(parsed.allows, ['write', 'create', 'update', 'delete'])}<br><span class="rv-toggle" data-row="${rid}" data-side="write">show rule</span><div class="rv-rule-snippet" data-side="write">${escapeHtml(writeSnippet(parsed.allows) || '(no write rule — read-only)')}</div></td>`;
+        html += `</tr>`;
+      });
+      html += `</tbody></table></div>`;
+    });
+
+    document.getElementById('rvCount').textContent = `${visibleCount} of ${allRules.size} collections`;
+    document.getElementById('rvContent').innerHTML = html || '<div class="rv-empty">No collections match the filter.</div>';
+
+    // Toggle handlers
+    document.querySelectorAll('.rv-toggle').forEach(el => {
+      el.addEventListener('click', () => {
+        const row = document.getElementById(el.dataset.row);
+        if (!row) return;
+        const side = el.dataset.side;
+        const snip = row.querySelector(`.rv-rule-snippet[data-side="${side}"]`);
+        const isShown = snip.style.display === 'block';
+        snip.style.display = isShown ? 'none' : 'block';
+        el.textContent = isShown ? 'show rule' : 'hide rule';
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
