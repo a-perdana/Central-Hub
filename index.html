@@ -3834,6 +3834,43 @@
           day: "numeric",
         });
 
+      // ── Subject-gate denied banner (set by auth-guard.js redirect) ──
+      // When a user opens a pacing page outside their ch_subjects[],
+      // auth-guard.js redirects to /?denied=<slug> and stashes the
+      // detail in sessionStorage. Surface a one-shot toast so they know
+      // why they bounced.
+      (function showSubjectDeniedBanner() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const denied = params.get('denied');
+          if (!denied) return;
+          let label = denied;
+          let required = '';
+          try {
+            const raw = sessionStorage.getItem('ch_subject_denied');
+            if (raw) {
+              const info = JSON.parse(raw);
+              if (info?.pageKey === denied) {
+                if (Array.isArray(info.requiredSubjects) && info.requiredSubjects.length) {
+                  required = info.requiredSubjects.join(' / ');
+                }
+              }
+              sessionStorage.removeItem('ch_subject_denied');
+            }
+          } catch (_) {}
+          const el = document.createElement('div');
+          el.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:12px 18px;border-radius:10px;font-family:"DM Sans",sans-serif;font-size:0.9rem;box-shadow:0 6px 20px rgba(0,0,0,0.12);max-width:90vw';
+          el.textContent = required
+            ? `Access denied: "${label}" requires the ${required} specialty (set via console).`
+            : `Access denied: "${label}" is not available for your role.`;
+          document.body.appendChild(el);
+          setTimeout(() => el.remove(), 6500);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('denied');
+          window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+        } catch (_) {}
+      })();
+
       // Wait for auth-guard to confirm session
       document.addEventListener(
         "authReady",

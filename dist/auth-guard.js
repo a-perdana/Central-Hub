@@ -46,6 +46,92 @@ function isDomainAllowed(user) {
 // Hide page content until auth is confirmed (prevents flash of content)
 document.body.style.visibility = 'hidden';
 
+// ── Subject-specialty gating ─────────────────────────────────────
+// Maps each subject-specific page slug to the ch_subjects[] values
+// that grant access. central_admin and CH coordinators (cross-subject)
+// bypass this entirely. Empty ch_subjects[] on a central_user means
+// no specialty (treated as "no specialist access" — same as missing).
+//
+// Combined-science pacing pages accept ANY of biology/chemistry/physics.
+const SUBJECT_PAGE_MAP = {
+  // IGCSE single-subject
+  'igcse-math-pacing':           ['math'],
+  'igcse-biology-pacing':        ['biology'],
+  'igcse-chemistry-pacing':      ['chemistry'],
+  'igcse-physics-pacing':        ['physics'],
+  // AS/A-Level single-subject
+  'as-alevel-math-pacing':       ['math'],
+  'as-alevel-biology-pacing':    ['biology'],
+  'as-alevel-chemistry-pacing':  ['chemistry'],
+  'as-alevel-physics-pacing':    ['physics'],
+  // Checkpoint
+  'checkpoint-math-pacing':      ['math'],
+  'checkpoint-english-pacing':   ['english'],
+  'checkpoint-science-pacing':   ['biology', 'chemistry', 'physics'],
+};
+
+// Pages that NEVER get gated regardless of role (auth flow + dashboard).
+const SUBJECT_GATE_BYPASS = new Set(['', 'index', 'login']);
+
+function currentPageKey() {
+  const path = (window.location.pathname || '/').toLowerCase();
+  let slug = path.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.html$/, '');
+  if (slug.includes('/')) slug = slug.split('/')[0];
+  return slug;
+}
+
+function isSubjectAllowed(profile, pageKey) {
+  // Admins and coordinators (cross-subject sub-role) always pass.
+  if (profile?.role_centralhub === 'central_admin') return true;
+  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  if (chSubRoles.includes('coordinator') || chSubRoles.includes('director')) return true;
+
+  const requiredSubjects = SUBJECT_PAGE_MAP[pageKey];
+  if (!requiredSubjects) return true; // not a subject-gated page
+
+  const userSubjects = Array.isArray(profile?.ch_subjects) ? profile.ch_subjects : [];
+  return userSubjects.some(s => requiredSubjects.includes(s));
+}
+
+// Inject CSS once so [data-ch-hidden="1"] elements collapse without flicker.
+function ensureSubjectGateStyles() {
+  if (document.getElementById('chSubjectGateStyle')) return;
+  const style = document.createElement('style');
+  style.id = 'chSubjectGateStyle';
+  style.textContent = '[data-ch-hidden="1"] { display: none !important; }';
+  document.head.appendChild(style);
+}
+
+// Walk navbar links + dashboard cards and hide subject-specific entries
+// the user cannot access. Mirrors the AH page-access pattern but driven
+// by ch_subjects[] instead of page_access_config.
+function applySubjectGating(profile) {
+  ensureSubjectGateStyles();
+
+  // 1. Navbar links by data-nav-key (CH navbar uses these)
+  document.querySelectorAll('[data-nav-key], [data-nav-page]').forEach(el => {
+    const key = (el.getAttribute('data-nav-key') || el.getAttribute('data-nav-page') || '').toLowerCase();
+    if (!key || SUBJECT_GATE_BYPASS.has(key)) return;
+    if (!(key in SUBJECT_PAGE_MAP)) return;
+    if (!isSubjectAllowed(profile, key)) {
+      el.setAttribute('data-ch-hidden', '1');
+    }
+  });
+
+  // 2. Dashboard cards <a class="card" href="...">
+  document.querySelectorAll('a.card[href]').forEach(el => {
+    const href = el.getAttribute('href') || '';
+    let slug = href.toLowerCase().replace(/^\/+/, '').replace(/\.html$/, '');
+    if (slug.includes('/')) slug = slug.split('/')[0];
+    if (slug.includes('?')) slug = slug.split('?')[0];
+    if (!slug || SUBJECT_GATE_BYPASS.has(slug)) return;
+    if (!(slug in SUBJECT_PAGE_MAP)) return;
+    if (!isSubjectAllowed(profile, slug)) {
+      el.setAttribute('data-ch-hidden', '1');
+    }
+  });
+}
+
 // ── Initialise Firebase (guard against double-init) ──────────────
 const firebaseConfig = {
   apiKey:            window.ENV.FIREBASE_API_KEY,
@@ -453,6 +539,23 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
+  // 4b. Subject-specialty gate — block direct URL access to a pacing
+  //     page outside the user's ch_subjects[]. Admins, directors and
+  //     coordinators bypass via isSubjectAllowed(). Sends to dashboard
+  //     with a banner via sessionStorage so we don't loop on the page.
+  const pageKey = currentPageKey();
+  if (!isSubjectAllowed(profile, pageKey)) {
+    try {
+      sessionStorage.setItem('ch_subject_denied', JSON.stringify({
+        pageKey,
+        requiredSubjects: SUBJECT_PAGE_MAP[pageKey] || [],
+        at: Date.now(),
+      }));
+    } catch (_) {}
+    window.location.replace('/?denied=' + encodeURIComponent(pageKey));
+    return;
+  }
+
   // 5. Name prompt if missing
   if (!profile.displayName) {
     const name = await promptForName();
@@ -513,7 +616,26 @@ onAuthStateChanged(auth, async (user) => {
     });
   }
 
-  // 6. Show page and notify
+  // 6b. UI gating — hide subject-specific navbar links + dashboard cards
+  //     the user cannot access. Same approach as Academic Hub's
+  //     applyPageAccessGating(): initial pass + MutationObserver for
+  //     async navbar mounts and dynamically inserted cards.
+  applySubjectGating(profile);
+  const subjectMo = new MutationObserver(muts => {
+    const interesting = muts.some(m =>
+      [...m.addedNodes].some(n =>
+        n.nodeType === 1 && (
+          n.matches?.('[data-nav-key], [data-nav-page], a.card[href]') ||
+          n.querySelector?.('[data-nav-key], [data-nav-page], a.card[href]')
+        )
+      )
+    );
+    if (interesting) applySubjectGating(profile);
+  });
+  subjectMo.observe(document.body, { childList: true, subtree: true });
+  window.__chSubjectGate = () => applySubjectGating(profile);
+
+  // 7. Show page and notify
   document.body.style.visibility = 'visible';
   document.dispatchEvent(new CustomEvent('authReady', {
     detail: { user, profile },
