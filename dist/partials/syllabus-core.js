@@ -384,8 +384,14 @@ export function initSyllabusPage(config) {
     if (isAdmin) {
       const stab = document.getElementById('settingsTab');
       if (stab) stab.style.display = '';
+      // Push-to-pacing button is only meaningful when the page computes
+      // schedule labels — i.e. features.calendarDates is on.
+      if (features.calendarDates) {
+        const pushBtn = document.getElementById('pushSchedBtn');
+        if (pushBtn) pushBtn.style.display = '';
+      }
     } else {
-      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn'].forEach(id => {
+      ['editSyllabusBtn', 'addChapterBtn', 'addFirstChapterBtn', 'settingsToggleBtn', 'pushSchedBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
@@ -400,15 +406,20 @@ export function initSyllabusPage(config) {
       const editBtn = document.getElementById('editSyllabusBtn');
       const pagingBtn = document.createElement('button');
       pagingBtn.id = 'pagingToggleBtn';
-      pagingBtn.className = 'btn btn-secondary';
-      pagingBtn.title = 'Toggle chapter pagination';
-      pagingBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+      pagingBtn.className = 'btn btn-secondary btn-icon-only';
+      pagingBtn.setAttribute('aria-label', 'All Chapters');
+      const gridSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
+      pagingBtn.title = 'All Chapters — toggle chapter pagination';
+      pagingBtn.innerHTML = `${gridSvg}<span class="btn-label">All Chapters</span>`;
       pagingBtn.addEventListener('click', () => {
         noPaging = !noPaging;
         currentPage = 0;
-        pagingBtn.innerHTML = noPaging
-          ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Paginate`
-          : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> All Chapters`;
+        const label = noPaging ? 'Paginate' : 'All Chapters';
+        pagingBtn.title = noPaging
+          ? 'Paginate — show one page of chapters at a time'
+          : 'All Chapters — toggle chapter pagination';
+        pagingBtn.setAttribute('aria-label', label);
+        pagingBtn.innerHTML = `${gridSvg}<span class="btn-label">${label}</span>`;
         pagingBtn.classList.toggle('btn-active-state', noPaging);
         render();
       });
@@ -510,34 +521,272 @@ export function initSyllabusPage(config) {
         semLabel: w.semLabel || '',
         reason:   w.reason   || 'Holiday',
       })) : [];
+      window._scheduleSyncedAt = d.syncedAt || null;
       const box = document.getElementById('syncStatusBox');
       if (box) box.textContent = `${teachingWeeks.length} teaching weeks loaded.`;
     } else {
       teachingWeeks = [];
       skippedWeeks  = [];
+      window._scheduleSyncedAt = null;
       const box = document.getElementById('syncStatusBox');
       if (box) box.textContent = 'No schedule synced yet — go to Academic Calendar → ⚙ Year Settings → Sync Teaching Weeks.';
     }
   }
 
-  // ── Topic date label ───────────────────────────────────────────────────────
-  function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
+  // ── Topic schedule info ────────────────────────────────────────────────────
+  // Returns the structured schedule data for a topic given its cumulative
+  // position within its year. Used both for the date-label chip and for the
+  // "Push to Pacing" feature which writes these fields into the pacing doc.
+  // Returns: null (no schedule), '__beyond__' (overflows schedule), or
+  //   { startWeek, endWeek, semester, semWeekStart, semWeekEnd, dateRange }
+  // semester is parsed from semLabel (e.g. "Semester 1" -> 1, "Sem II" -> 2).
+  function getTopicScheduleInfo(cumulativeBefore, duration, weeklyHours) {
     if (!teachingWeeks.length || !weeklyHours || weeklyHours <= 0) return null;
     const startWeekIdx = Math.floor(cumulativeBefore / weeklyHours);
     const endWeekIdx   = Math.floor((cumulativeBefore + duration - 1) / weeklyHours);
     const startW = teachingWeeks[startWeekIdx];
     const endW   = teachingWeeks[endWeekIdx];
     if (!startW) return '__beyond__';
+    const parseSem = (label) => {
+      if (!label) return null;
+      const m = String(label).match(/(\d+|I{1,3}|IV)/i);
+      if (!m) return null;
+      const t = m[1].toUpperCase();
+      if (t === 'I')   return 1;
+      if (t === 'II')  return 2;
+      if (t === 'III') return 3;
+      if (t === 'IV')  return 4;
+      const n = parseInt(t, 10);
+      return isNaN(n) ? null : n;
+    };
     const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    const semPrefix = startW.semLabel ? `${startW.semLabel} · ` : '';
-    if (!endW || startWeekIdx === endWeekIdx) {
-      return `${semPrefix}Week ${startW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(startW.fri)}`;
-    }
-    if (startW.semLabel && endW.semLabel && startW.semLabel === endW.semLabel) {
-      return `${semPrefix}Week ${startW.semWeekNo}–${endW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
-    }
-    return `${semPrefix}Week ${startW.semWeekNo}: ${fmt(startW.mon)} – ${fmt(endW.fri)}`;
+    const dateRange = (!endW || startWeekIdx === endWeekIdx)
+      ? `${fmt(startW.mon)} – ${fmt(startW.fri)}`
+      : `${fmt(startW.mon)} – ${fmt(endW.fri)}`;
+    return {
+      startWeek:    startW,
+      endWeek:      endW || startW,
+      semester:     parseSem(startW.semLabel),
+      semWeekStart: startW.semWeekNo,
+      semWeekEnd:   (endW || startW).semWeekNo,
+      dateRange,
+    };
   }
+
+  // ── Topic date label ───────────────────────────────────────────────────────
+  function getTopicDateLabel(cumulativeBefore, duration, weeklyHours) {
+    const info = getTopicScheduleInfo(cumulativeBefore, duration, weeklyHours);
+    if (!info) return null;
+    if (info === '__beyond__') return '__beyond__';
+    const { startWeek, endWeek, semWeekStart, semWeekEnd, dateRange } = info;
+    const semPrefix = startWeek.semLabel ? `${startWeek.semLabel} · ` : '';
+    if (semWeekStart === semWeekEnd) {
+      return `${semPrefix}Week ${semWeekStart}: ${dateRange}`;
+    }
+    if (startWeek.semLabel && endWeek.semLabel && startWeek.semLabel === endWeek.semLabel) {
+      return `${semPrefix}Week ${semWeekStart}–${semWeekEnd}: ${dateRange}`;
+    }
+    return `${semPrefix}Week ${semWeekStart}: ${dateRange}`;
+  }
+
+  // ── Push schedule to pacing ────────────────────────────────────────────────
+  // Writes the current syllabus's computed schedule (semester, week, dateRange)
+  // back into the pacing collection for the active subject. Each year's
+  // cumulative resets — Y7 W1, Y8 W1 etc. — so teachers see year-relative
+  // semWeekNo. Re-runnable; later pushes overwrite earlier ones.
+  // Uses a click-twice-to-confirm pattern (no blocking confirm dialogs).
+  window.pushScheduleToPacing = async function() {
+    if (!isAdmin) return;
+    const subj = currentSubject;
+    if (!subjects[subj]) return;
+    const wh = settingsData[subj]?.weeklyHours || 0;
+    if (!wh) {
+      showToast('Set Lesson Hours per Week in Settings before pushing.', true);
+      return;
+    }
+    if (!teachingWeeks.length) {
+      showToast('No teaching schedule synced. Open Academic Calendar → ⚙ Year Settings → Sync.', true);
+      return;
+    }
+
+    const btn = document.getElementById('pushSchedBtn');
+    if (!btn) return;
+
+    // First click: arm the button. Second click within 4s: actually push.
+    if (btn.dataset.confirming !== 'true') {
+      btn.dataset.confirming = 'true';
+      const original = btn.innerHTML;
+      btn.innerHTML = '⚠ Click again to overwrite week/semester/date in pacing';
+      btn.classList.add('btn-confirm-armed');
+      const reset = () => {
+        btn.dataset.confirming = 'false';
+        btn.innerHTML = original;
+        btn.classList.remove('btn-confirm-armed');
+      };
+      btn._resetConfirm = reset;
+      setTimeout(() => { if (btn.dataset.confirming === 'true') reset(); }, 4000);
+      return;
+    }
+    if (btn._resetConfirm) btn._resetConfirm();
+
+    // Cumulative reset per year (matches render() logic).
+    const updated = chapters.map(ch => ({ ...ch, topics: (ch.topics || []).map(t => ({ ...t })) }));
+    let running = 0;
+    let lastYear = null;
+    let beyondCount = 0;
+    let writtenCount = 0;
+    updated.forEach(ch => {
+      if (lastYear !== null && ch.year !== lastYear) running = 0;
+      ch.topics.forEach(t => {
+        if (t.excluded) return;
+        const dur = +(t.duration ?? t.hour) || 0;
+        if (!dur) return;
+        const info = getTopicScheduleInfo(running, dur, wh);
+        if (info && info !== '__beyond__') {
+          t.semester  = info.semester;
+          t.week      = info.semWeekStart;
+          t.dateRange = info.dateRange;
+          writtenCount++;
+        } else if (info === '__beyond__') {
+          beyondCount++;
+        }
+        running += dur;
+      });
+      lastYear = ch.year;
+    });
+
+    // Save the original markup so the loading state can be reverted exactly.
+    const originalBtnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add('btn-loading');
+    btn.setAttribute('aria-busy', 'true');
+
+    const subjectLabel = subjects[subj].label || subj;
+    _showPushToast({
+      kind:    'progress',
+      title:   `Pushing schedule for ${subjectLabel}…`,
+      message: `Updating ${writtenCount} topic${writtenCount === 1 ? '' : 's'} in ${subjects[subj].collection}. Please don't close this tab.`,
+    });
+
+    try {
+      const teachingScheduleSnap = await getDoc(doc(window.db, 'teaching_schedule', scheduleDocId));
+      const scheduleSyncedAt = teachingScheduleSnap.exists() ? teachingScheduleSnap.data().syncedAt : null;
+      await setDoc(
+        doc(window.db, subjects[subj].collection, docId),
+        {
+          chapters: updated,
+          _lastSchedulePush: {
+            at: serverTimestamp(),
+            by: window.currentUser?.email || null,
+            weeklyHoursAtPush: wh,
+            scheduleSyncedAtPush: scheduleSyncedAt || null,
+            topicCount: writtenCount,
+          },
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      const skippedSuffix = beyondCount
+        ? ` ${beyondCount} topic${beyondCount === 1 ? ' was' : 's were'} skipped (schedule overflow).`
+        : '';
+      _showPushToast({
+        kind:      'success',
+        title:     `Schedule pushed — ${subjectLabel}`,
+        message:   `${writtenCount} topic${writtenCount === 1 ? '' : 's'} updated.${skippedSuffix} Teachers will see the new dates in Teachers Hub now.`,
+        autoClose: 7000,
+      });
+    } catch (err) {
+      console.error('pushScheduleToPacing error:', err);
+      _showPushToast({
+        kind:    'error',
+        title:   'Push failed',
+        message: err && err.message ? err.message : 'Could not write to the pacing collection. See console for details.',
+      });
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('btn-loading');
+      btn.removeAttribute('aria-busy');
+      btn.innerHTML = originalBtnHtml;
+      _refreshPushStaleBanner();
+    }
+  };
+
+  // ── Push toast UI ─────────────────────────────────────────────────────────
+  // A single fixed-position toast that handles all three states of the push:
+  // a spinning "in-flight" indicator while the write is in progress, a green
+  // success card (auto-dismisses), and a red error card (manual dismiss).
+  // Lives on window so the push handler can call it without import gymnastics.
+  function _showPushToast({ kind, title, message, autoClose = 0 }) {
+    let el = document.getElementById('pushToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'pushToast';
+      el.className = 'push-toast';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    if (el._autoCloseTimer) { clearTimeout(el._autoCloseTimer); el._autoCloseTimer = null; }
+
+    const icons = {
+      progress: { cls: 'spin',  svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3.5-7.1"/></svg>' },
+      success:  { cls: 'ok',    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 7"/></svg>' },
+      error:    { cls: 'error', svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>' },
+    };
+    const ic = icons[kind] || icons.progress;
+    const closeable = kind !== 'progress';
+
+    el.innerHTML = `
+      <div class="push-toast-icon ${ic.cls}">${ic.svg}</div>
+      <div class="push-toast-body">
+        <div class="push-toast-title">${title}</div>
+        <div class="push-toast-msg">${message}</div>
+      </div>
+      ${closeable ? '<button class="push-toast-close" aria-label="Dismiss">×</button>' : ''}
+    `;
+    if (closeable) {
+      el.querySelector('.push-toast-close').addEventListener('click', () => _hidePushToast());
+    }
+    requestAnimationFrame(() => el.classList.add('show'));
+    if (autoClose > 0) {
+      el._autoCloseTimer = setTimeout(() => _hidePushToast(), autoClose);
+    }
+  }
+  function _hidePushToast() {
+    const el = document.getElementById('pushToast');
+    if (!el) return;
+    el.classList.remove('show');
+  }
+
+  // ── Stale banner ──────────────────────────────────────────────────────────
+  // Shows a warning when the pacing collection's `_lastSchedulePush` snapshot
+  // no longer matches the current weekly hours or the latest teaching schedule
+  // sync. The banner appears at the top of the topic list.
+  function _refreshPushStaleBanner() {
+    const banner = document.getElementById('pushStaleBanner');
+    if (!banner) return;
+    const subj = currentSubject;
+    const last = window._lastSchedulePushBySubj?.[subj];
+    const wh   = settingsData[subj]?.weeklyHours || 0;
+    const schedSyncedAt = window._scheduleSyncedAt;
+
+    if (!isAdmin || !last) { banner.style.display = 'none'; return; }
+
+    const reasons = [];
+    if (wh && last.weeklyHoursAtPush && last.weeklyHoursAtPush !== wh) {
+      reasons.push(`Lesson hours changed (${last.weeklyHoursAtPush}h → ${wh}h)`);
+    }
+    if (schedSyncedAt && last.scheduleSyncedAtPush
+        && schedSyncedAt.seconds && last.scheduleSyncedAtPush.seconds
+        && schedSyncedAt.seconds !== last.scheduleSyncedAtPush.seconds) {
+      reasons.push('Teaching schedule re-synced');
+    }
+    if (!reasons.length) { banner.style.display = 'none'; return; }
+
+    banner.style.display = '';
+    banner.innerHTML = `<span>⚠ Schedule has changed since last push (${reasons.join(' · ')}). Re-push to update Teachers Hub.</span>`;
+  }
+  window._refreshPushStaleBanner = _refreshPushStaleBanner;
 
   // ── Syllabus lookup helper ─────────────────────────────────────────────────
   function lookupSyllabus(subjCode, code) {
@@ -1549,7 +1798,10 @@ export function initSyllabusPage(config) {
       chapters = Array.isArray(data.chapters) ? data.chapters : [];
       window.chapters = chapters;
       if (typeof data.weeklyHours === 'number') settingsData[subj].weeklyHours = data.weeklyHours;
+      window._lastSchedulePushBySubj = window._lastSchedulePushBySubj || {};
+      window._lastSchedulePushBySubj[subj] = data._lastSchedulePush || null;
       render();
+      _refreshPushStaleBanner();
     }, err => {
       document.getElementById('loadingState').style.display = 'none';
       console.error('Pacing snapshot error:', err);
