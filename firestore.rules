@@ -277,8 +277,26 @@ service cloud.firestore {
     }
 
     // -- weekly_progress (Per-user checklist progress) -------
+    // Read access (per Step 1.2 hardening — was previously open to any
+    // authorised user, leaking checklist progress across the network):
+    //   - the owner (their own doc)
+    //   - central_admin and CH coordinators (checklist-admin, reports,
+    //     network-health, dashboard widgets)
+    //   - same-school AH leadership: school_principal or
+    //     academic_coordinator only
+    // Collection queries are restricted to admins/coordinators because
+    // we cannot enforce schoolId filtering at the `list` level without
+    // either denormalising schoolId onto the doc or forcing a
+    // per-uid get loop client-side.
     match /weekly_progress/{docId} {
-      allow read:   if isAuthorized();
+      allow get:    if isSignedIn() && (
+                      resource.data.uid == request.auth.uid
+                      || isAdmin()
+                      || isCHCoordinator()
+                      || (isAHUserAtSameSchool(resource.data.uid)
+                          && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator']))
+                    );
+      allow list:   if isAdmin() || isCHCoordinator();
       allow create, update: if request.auth != null
                             && request.resource.data.uid == request.auth.uid;
       allow delete: if isAdmin();
