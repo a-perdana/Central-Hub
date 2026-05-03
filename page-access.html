@@ -108,6 +108,90 @@
       .pa-grid .col-page-desc { display: none; }
       .pa-grid .col-page-key  { display: none; }
     }
+
+    /* Critical-page confirm modal */
+    #paCriticalOverlay { display: none; }
+    #paCriticalOverlay.open {
+      display: flex;
+      position: fixed; inset: 0;
+      background: rgba(28,28,46,0.55);
+      backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+      z-index: 9999; padding: 24px;
+      animation: paFadeIn 0.18s ease;
+    }
+    @keyframes paFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .pa-critical-modal {
+      background: var(--white);
+      border-radius: 14px;
+      width: 100%; max-width: 540px;
+      box-shadow: var(--shadow-lg);
+      animation: paModalIn 0.22s ease;
+    }
+    @keyframes paModalIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    .pa-critical-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pa-critical-head h3 {
+      font-family: 'Lora', serif;
+      font-size: 1.08rem; font-weight: 600; color: var(--ink);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .pa-critical-head h3 svg { color: #d97706; flex-shrink: 0; }
+    .pa-critical-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.4rem; color: var(--ink-3); padding: 0;
+      line-height: 1;
+    }
+    .pa-critical-close:hover { color: var(--ink); }
+    .pa-critical-body {
+      padding: 18px 22px 8px;
+      font-size: 0.875rem; color: var(--ink-2); line-height: 1.55;
+    }
+    .pa-critical-body p { margin-bottom: 12px; }
+    .pa-critical-list {
+      list-style: none; padding: 0;
+      margin: 12px 0 16px;
+      max-height: 260px; overflow-y: auto;
+      background: #fef8e7; border: 1px solid #fde68a;
+      border-radius: 8px;
+    }
+    .pa-critical-list li {
+      padding: 10px 14px;
+      border-bottom: 1px solid #fde68a;
+      font-size: 0.85rem; color: #78350f;
+    }
+    .pa-critical-list li:last-child { border-bottom: none; }
+    .pa-critical-list strong { color: #451a03; }
+    .pa-critical-meta { color: #92400e; font-size: 0.78rem; }
+    .pa-critical-note {
+      font-size: 0.78rem; color: var(--ink-3);
+      background: var(--paper); padding: 8px 12px; border-radius: 6px;
+      margin-top: 4px;
+    }
+    .pa-critical-foot {
+      display: flex; justify-content: flex-end; gap: 10px;
+      padding: 14px 22px 18px;
+      border-top: 1px solid var(--border);
+    }
+    .pa-critical-foot button {
+      padding: 8px 18px; border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600;
+      cursor: pointer;
+    }
+    #paCriticalCancel {
+      background: var(--white); border: 1px solid var(--border); color: var(--ink-2);
+    }
+    #paCriticalCancel:hover { border-color: var(--ink-3); color: var(--ink); }
+    #paCriticalOk {
+      background: #d97706; border: 1px solid #d97706; color: #fff;
+    }
+    #paCriticalOk:hover { background: #b45309; border-color: #b45309; }
   </style>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
 </head>
@@ -156,12 +240,51 @@
 
 <div id="pageAccessToast"></div>
 
+<!-- Critical-page restriction confirm modal -->
+<div id="paCriticalOverlay" role="dialog" aria-modal="true" aria-labelledby="paCriticalTitle">
+  <div class="pa-critical-modal">
+    <div class="pa-critical-head">
+      <h3 id="paCriticalTitle">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Restricting access to admin tools
+      </h3>
+      <button type="button" id="paCriticalClose" aria-label="Close">×</button>
+    </div>
+    <div class="pa-critical-body">
+      <p>You are about to restrict access for the following admin / power-user pages:</p>
+      <ul class="pa-critical-list" id="paCriticalList"></ul>
+      <p class="pa-critical-note">
+        <strong>central_admin always bypasses</strong> these restrictions, so you cannot lock yourself out.
+        However, users without the selected sub-roles will lose access — including any <em>director</em> or
+        <em>coordinator</em> who depends on these tools day-to-day. Make sure this is what you want.
+      </p>
+    </div>
+    <div class="pa-critical-foot">
+      <button type="button" id="paCriticalCancel">Cancel</button>
+      <button type="button" id="paCriticalOk">I understand — apply restriction</button>
+    </div>
+  </div>
+</div>
+
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
   import {
     collection, doc, getDocs, writeBatch, serverTimestamp,
   } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  // ── Critical admin pages — restricting these triggers a save-time confirm ─
+  // central_admin always bypasses page-access gating, so the user themself
+  // can never lock themself out. The risk is restricting access for OTHER
+  // admin-equivalent users (directors, coordinators) whose workflows depend
+  // on these tools. The modal prompts an explicit acknowledgement.
+  const CRITICAL_PAGES = new Set([
+    // Cross-platform admin tooling on Central Hub
+    'page-access', 'console', 'rules-viewer', 'design-system',
+    // High-impact admin pages
+    'kpi-admin', 'competency-admin', 'orientation-admin', 'checklist-admin',
+    'schedule-settings', 'mail-composer', 'feedback-management',
+  ]);
 
   // ── Sub-role definitions per platform ───────────────────────────
   const SUB_ROLES = {
@@ -345,6 +468,22 @@
   $saveBtn.addEventListener('click', async () => {
     const dirtyPages = pages.filter(isDirty);
     if (!dirtyPages.length) return;
+
+    // Critical-page guard: any dirty page whose key is in CRITICAL_PAGES
+    // AND has been narrowed to a non-empty visible_to[] (i.e. restricting
+    // access for non-admins) → confirm explicitly.
+    const criticalRestrictions = dirtyPages.filter(p =>
+      CRITICAL_PAGES.has(p.pageKey) && p.visible_to.length > 0
+    );
+    if (criticalRestrictions.length) {
+      const ok = await confirmCriticalRestrictions(criticalRestrictions);
+      if (!ok) return;
+    }
+
+    await commitSave(dirtyPages);
+  });
+
+  async function commitSave(dirtyPages) {
     $saveBtn.disabled = true;
     $saveBtn.textContent = 'Saving…';
     try {
@@ -368,7 +507,49 @@
       $saveBtn.textContent = 'Save changes';
       updateDirtyState();
     }
-  });
+  }
+
+  // Modal confirm for restricting access on critical admin pages.
+  // Returns Promise<boolean>: true if user confirmed, false if cancelled.
+  function confirmCriticalRestrictions(criticalRestrictions) {
+    return new Promise(resolve => {
+      const overlay = document.getElementById('paCriticalOverlay');
+      const list    = document.getElementById('paCriticalList');
+      const okBtn   = document.getElementById('paCriticalOk');
+      const cancel  = document.getElementById('paCriticalCancel');
+      const closeBtn= document.getElementById('paCriticalClose');
+
+      const subRoles = SUB_ROLES[currentPlatform];
+      list.innerHTML = criticalRestrictions.map(p => {
+        const allowedLabels = p.visible_to
+          .map(v => subRoles.find(r => r.value === v)?.label || v)
+          .join(', ') || '(none — locked)';
+        return `<li><strong>${escapeHtml(p.label)}</strong> <span class="pa-critical-meta">→ visible to: ${escapeHtml(allowedLabels)}</span></li>`;
+      }).join('');
+
+      function cleanup(answer) {
+        overlay.classList.remove('open');
+        okBtn.removeEventListener('click', onOk);
+        cancel.removeEventListener('click', onCancel);
+        closeBtn.removeEventListener('click', onCancel);
+        overlay.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+        resolve(answer);
+      }
+      function onOk()       { cleanup(true);  }
+      function onCancel()   { cleanup(false); }
+      function onBackdrop(e){ if (e.target === overlay) cleanup(false); }
+      function onKey(e)     { if (e.key === 'Escape') cleanup(false); }
+
+      okBtn.addEventListener('click', onOk);
+      cancel.addEventListener('click', onCancel);
+      closeBtn.addEventListener('click', onCancel);
+      overlay.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey);
+
+      overlay.classList.add('open');
+    });
+  }
 
   $resetBtn.addEventListener('click', () => {
     const dirty = pages.filter(isDirty);
