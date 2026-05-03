@@ -47,16 +47,73 @@
     }
     .pa-save:disabled { opacity: 0.45; cursor: not-allowed; }
 
+    /* Group accordion */
+    .pa-group {
+      margin-top: 12px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .pa-group:first-of-type { margin-top: 0; }
+    .pa-group-head {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%;
+      padding: 14px 18px;
+      background: var(--white);
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+    .pa-group-head:hover { background: var(--paper); }
+    .pa-group-head h2 {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink);
+      margin: 0; flex: 1;
+    }
+    .pa-group-count {
+      font-size: 0.72rem; font-weight: 600;
+      padding: 2px 9px; border-radius: 100px;
+      background: var(--paper); color: var(--ink-3);
+      font-family: 'DM Mono', monospace;
+    }
+    .pa-group-dirty {
+      font-size: 0.7rem; font-weight: 600;
+      padding: 2px 9px; border-radius: 100px;
+      background: #fef3c7; color: #92400e;
+    }
+    .pa-group-chevron {
+      color: var(--ink-3);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .pa-group.open .pa-group-chevron { transform: rotate(180deg); }
+    .pa-group-body { display: none; padding: 0; border-top: 1px solid var(--border); }
+    .pa-group.open .pa-group-body { display: block; }
+
+    /* Bulk expand/collapse buttons */
+    .pa-bulk-actions { display: inline-flex; gap: 4px; margin-left: auto; }
+    .pa-bulk-actions button {
+      font-family: inherit; font-size: 0.78rem; font-weight: 500;
+      padding: 5px 11px; border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--white); color: var(--ink-2);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pa-bulk-actions button:hover { background: var(--paper); border-color: #c8c5be; }
+
     /* Grid table */
     .pa-grid {
       width: 100%; border-collapse: separate; border-spacing: 0;
-      background: var(--white); border-radius: 10px; overflow: hidden;
-      box-shadow: var(--shadow-sm);
+      background: var(--white);
     }
     .pa-grid th, .pa-grid td { padding: 11px 12px; font-size: 0.85rem; text-align: left; border-bottom: 1px solid var(--border); }
     .pa-grid thead th {
       background: var(--paper); font-weight: 600; font-size: 0.78rem; text-transform: uppercase;
-      letter-spacing: 0.04em; color: var(--ink-3); position: sticky; top: 0; z-index: 1;
+      letter-spacing: 0.04em; color: var(--ink-3);
     }
     .pa-grid tbody tr:last-child td { border-bottom: none; }
     .pa-grid tbody tr:hover td { background: var(--paper); }
@@ -220,6 +277,10 @@
       <input type="search" id="paSearch" placeholder="Search pages by name, slug, or description…" aria-label="Search pages">
     </div>
     <span class="pa-count" id="paCount"></span>
+    <span class="pa-bulk-actions">
+      <button type="button" id="paExpandAll">Expand all</button>
+      <button type="button" id="paCollapseAll">Collapse all</button>
+    </span>
     <div class="pa-actions">
       <button id="paResetBtn" type="button">Discard changes</button>
       <button id="paSaveBtn" class="pa-save" type="button" disabled>Save changes</button>
@@ -286,6 +347,44 @@
     'schedule-settings', 'mail-composer', 'feedback-management',
   ]);
 
+  // ── Semantic groupings — mirror the structure used in the seed scripts
+  // (scripts/page-access/seed-{ah,th,ch}-page-access.js). Order is the
+  // display order in the accordion. Pages whose key is not in any group
+  // fall into the trailing 'misc' bucket. Add a new key here when you add
+  // it to the seed script — both files should evolve together.
+  const PAGE_GROUPS = {
+    academichub: [
+      { key: 'general',     title: 'General & Communication', keys: ['announcements','message-board','library','documents','academic-services','academic-calendar','cambridge-calendar','surveys'] },
+      { key: 'ease',        title: 'EASE Assessment Results', keys: ['ease-1','ease-2','ease-3','a-ease-1','ease-archive','ease-analytics'] },
+      { key: 'cambridge',   title: 'Cambridge',               keys: ['cambridge-exams','cambridge-pathway','cambridge-school-quality','syllabus-coverage','curriculum-map'] },
+      { key: 'school-perf', title: 'School Performance & Leadership', keys: ['school-performance-kpi','partner-schools','islamic-schools','accreditation-dashboard','rapor-pendidikan-2025'] },
+      { key: 'appraisal',   title: 'Appraisal & Walkthrough', keys: ['school-appraisals','school-self-appraisal','teacher-appraisal-entry','teacher-walkthrough-entry','my-observations','appraiser-calibration','teacher-kpi-evaluation'] },
+      { key: 'surveys',     title: 'Survey Results',          keys: ['staff-survey','student-survey','parent-survey'] },
+      { key: 'standards',   title: 'Academic Standards',      keys: ['academic-standards','academic-standards-public'] },
+      { key: 'personal',    title: 'Personal & Profile',      keys: ['weekly-checklist','competency-framework','learning-path','my-portfolio','my-certificates'] },
+      { key: 'other',       title: 'Other',                   keys: ['network-audit','ai-prompts'] },
+    ],
+    teachershub: [
+      { key: 'pacing',      title: 'Pacing Guides',           keys: ['igcse-math','igcse-biology','igcse-chemistry','igcse-physics','as-alevel-math','as-alevel-biology','as-alevel-chemistry','as-alevel-physics','checkpoint-math','checkpoint-english','checkpoint-science'] },
+      { key: 'trackers',    title: 'Subject Leader Trackers', keys: ['igcse-math-tracker','igcse-biology-tracker','igcse-chemistry-tracker','igcse-physics-tracker','as-alevel-math-tracker','as-alevel-biology-tracker','as-alevel-chemistry-tracker','as-alevel-physics-tracker','checkpoint-math-tracker','checkpoint-english-tracker','checkpoint-science-tracker'] },
+      { key: 'mywork',      title: 'My Work',                 keys: ['weekly-checklist','teacher-self-assessment','teacher-kpi-results','teacher-appraisal-results','teacher-self-appraisal','competency-framework','learning-path','my-portfolio','my-certificates'] },
+      { key: 'myhub',       title: 'My Hub (General & Communications)', keys: ['announcements','messageboard','library','cambridge-calendar','orientation','surveys'] },
+    ],
+    centralhub: [
+      { key: 'admin',       title: 'User & Access Management', keys: ['schools','staff','console','page-access','rules-viewer','design-system','academics','teaching-progress','network-health'] },
+      { key: 'operations',  title: 'Operations',               keys: ['announcements','messageboard','documents','activities','library','mail-composer','feedback-management','reports','survey-console','surveys','certificates','certificate-verify','weekly-checklist','notifications'] },
+      { key: 'calendars',   title: 'Calendars',                keys: ['academic-calendar','event-calendar','cambridge-calendar'] },
+      { key: 'syllabus',    title: 'Syllabus',                 keys: ['igcse-syllabus','as-alevel-syllabus','secondary-checkpoint-syllabus','primary-checkpoint-syllabus','curriculum-map','national-alignment'] },
+      { key: 'pacing',      title: 'Pacing',                   keys: ['igcse-math-pacing','igcse-biology-pacing','igcse-chemistry-pacing','igcse-physics-pacing','checkpoint-math-pacing','checkpoint-english-pacing','checkpoint-science-pacing','as-alevel-math-pacing','as-alevel-biology-pacing','as-alevel-chemistry-pacing','as-alevel-physics-pacing'] },
+      { key: 'assess',      title: 'Assessments & Appraisals', keys: ['ease-system','assessments','appraisals','school-appraisals','teacher-appraisals','school-visits','assessment-management','kpi-admin'] },
+      { key: 'misc-admin',  title: 'Misc Admin Tools',         keys: ['competency-admin','orientation-admin','checklist-admin','schedule-settings'] },
+    ],
+  };
+
+  // Pages not listed in any group above fall here so the UI never silently
+  // hides a page — better to surface in "Other" than lose track of it.
+  const FALLBACK_GROUP = { key: 'other', title: 'Other / Uncategorised' };
+
   // ── Sub-role definitions per platform ───────────────────────────
   const SUB_ROLES = {
     academichub: [
@@ -309,6 +408,12 @@
   let currentPlatform = 'academichub';
   let pages = [];        // {pageKey, label, description, visible_to, _original}
   let isAdmin = false;
+  // Tracks which group accordions are expanded — namespaced by platform so
+  // switching tabs doesn't carry over open state from a different platform.
+  const openGroups = new Set(); // entries like 'academichub:ease'
+  // Used to seed the default "first group open" only on initial paint per tab.
+  const platformsRendered = new Set();
+  function groupId(platform, gKey) { return `${platform}:${gKey}`; }
 
   // ── DOM refs ─────────────────────────────────────────────────────
   const $tabs       = document.querySelectorAll('.pa-tab');
@@ -358,6 +463,19 @@
     });
   });
 
+  // ── Expand / Collapse all groups (current platform only) ─────────
+  document.getElementById('paExpandAll').addEventListener('click', () => {
+    const groups = PAGE_GROUPS[currentPlatform] || [];
+    [...groups, FALLBACK_GROUP].forEach(g => openGroups.add(groupId(currentPlatform, g.key)));
+    render();
+  });
+  document.getElementById('paCollapseAll').addEventListener('click', () => {
+    [...openGroups].forEach(id => {
+      if (id.startsWith(currentPlatform + ':')) openGroups.delete(id);
+    });
+    render();
+  });
+
   // ── Load + render ────────────────────────────────────────────────
   async function loadPlatform(platform) {
     $status.textContent = 'Loading…';
@@ -390,13 +508,12 @@
   function render() {
     const filter = ($search.value || '').toLowerCase().trim();
     const subRoles = SUB_ROLES[currentPlatform];
-    const filtered = filter
-      ? pages.filter(p =>
-          p.pageKey.toLowerCase().includes(filter) ||
-          p.label.toLowerCase().includes(filter) ||
-          (p.description || '').toLowerCase().includes(filter))
-      : pages;
+    const matchesFilter = p => !filter
+      || p.pageKey.toLowerCase().includes(filter)
+      || p.label.toLowerCase().includes(filter)
+      || (p.description || '').toLowerCase().includes(filter);
 
+    const filtered = pages.filter(matchesFilter);
     $count.textContent = `${filtered.length} of ${pages.length} pages`;
 
     if (!pages.length) {
@@ -404,29 +521,84 @@
       return;
     }
 
-    let html = '<table class="pa-grid"><thead><tr>';
-    html += '<th>Page</th>';
-    subRoles.forEach(r => { html += `<th class="col-role" title="${r.value}">${r.label}</th>`; });
-    html += '</tr></thead><tbody>';
+    // Group filtered pages by semantic group, preserving group order.
+    const groupDefs = PAGE_GROUPS[currentPlatform] || [];
+    const groupOrder = [...groupDefs, FALLBACK_GROUP];
+    const buckets = new Map(groupOrder.map(g => [g.key, { def: g, rows: [] }]));
+    const keyToGroup = new Map();
+    groupDefs.forEach(g => g.keys.forEach(k => keyToGroup.set(k, g.key)));
 
     filtered.forEach(p => {
-      const dirty = isDirty(p);
-      const allOpen = p.visible_to.length === 0;
-      html += `<tr data-key="${escapeAttr(p.pageKey)}" class="${dirty ? 'dirty' : ''}">`;
-      html += `<td>
-        <div class="col-page-label">${escapeHtml(p.label)}${allOpen ? '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>' : ''}</div>
-        <div class="col-page-key">${escapeHtml(p.pageKey)}</div>
-        ${p.description ? `<div class="col-page-desc">${escapeHtml(p.description)}</div>` : ''}
-      </td>`;
-      subRoles.forEach(r => {
-        const checked = p.visible_to.includes(r.value) ? 'checked' : '';
-        html += `<td class="pa-cb-cell"><input type="checkbox" class="pa-cb" data-key="${escapeAttr(p.pageKey)}" data-role="${r.value}" ${checked} aria-label="${escapeAttr(r.label)} can access ${escapeAttr(p.label)}"></td>`;
-      });
-      html += '</tr>';
+      const gKey = keyToGroup.get(p.pageKey) || FALLBACK_GROUP.key;
+      buckets.get(gKey).rows.push(p);
     });
 
-    html += '</tbody></table>';
-    $grid.innerHTML = html;
+    // Default state: first non-empty group open per platform tab on initial paint.
+    if (!platformsRendered.has(currentPlatform)) {
+      const firstWithRows = groupOrder.find(g => buckets.get(g.key).rows.length);
+      if (firstWithRows) openGroups.add(groupId(currentPlatform, firstWithRows.key));
+      platformsRendered.add(currentPlatform);
+    }
+    // While searching, force-open every group with matches so results aren't hidden.
+    if (filter) {
+      groupOrder.forEach(g => {
+        if (buckets.get(g.key).rows.length) openGroups.add(groupId(currentPlatform, g.key));
+      });
+    }
+
+    let html = '';
+    groupOrder.forEach(g => {
+      const bucket = buckets.get(g.key);
+      if (!bucket.rows.length) return;
+      const dirtyInGroup = bucket.rows.filter(isDirty).length;
+      const isOpen = openGroups.has(groupId(currentPlatform, g.key));
+      html += `<div class="pa-group${isOpen ? ' open' : ''}" data-group="${g.key}">`;
+      html += `<button type="button" class="pa-group-head" aria-expanded="${isOpen}">`;
+      html += `<h2>${escapeHtml(g.def.title)}</h2>`;
+      html += `<span class="pa-group-count">${bucket.rows.length}</span>`;
+      if (dirtyInGroup) {
+        html += `<span class="pa-group-dirty">${dirtyInGroup} unsaved</span>`;
+      }
+      html += `<svg class="pa-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>`;
+      html += `</button>`;
+      html += `<div class="pa-group-body">`;
+      html += '<table class="pa-grid"><thead><tr><th>Page</th>';
+      subRoles.forEach(r => { html += `<th class="col-role" title="${r.value}">${r.label}</th>`; });
+      html += '</tr></thead><tbody>';
+      bucket.rows.forEach(p => {
+        const dirty = isDirty(p);
+        const allOpen = p.visible_to.length === 0;
+        html += `<tr data-key="${escapeAttr(p.pageKey)}" class="${dirty ? 'dirty' : ''}">`;
+        html += `<td>
+          <div class="col-page-label">${escapeHtml(p.label)}${allOpen ? '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>' : ''}</div>
+          <div class="col-page-key">${escapeHtml(p.pageKey)}</div>
+          ${p.description ? `<div class="col-page-desc">${escapeHtml(p.description)}</div>` : ''}
+        </td>`;
+        subRoles.forEach(r => {
+          const checked = p.visible_to.includes(r.value) ? 'checked' : '';
+          html += `<td class="pa-cb-cell"><input type="checkbox" class="pa-cb" data-key="${escapeAttr(p.pageKey)}" data-role="${r.value}" ${checked} aria-label="${escapeAttr(r.label)} can access ${escapeAttr(p.label)}"></td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+    });
+
+    $grid.innerHTML = html || '<div class="pa-status">No pages match the filter.</div>';
+
+    // Group accordion handlers
+    $grid.querySelectorAll('.pa-group-head').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const group = btn.closest('.pa-group');
+        const gKey = group?.dataset.group;
+        if (!gKey) return;
+        const id = groupId(currentPlatform, gKey);
+        if (openGroups.has(id)) openGroups.delete(id);
+        else                    openGroups.add(id);
+        group.classList.toggle('open');
+        btn.setAttribute('aria-expanded', openGroups.has(id) ? 'true' : 'false');
+      });
+    });
+
     updateDirtyState();
   }
 
@@ -442,7 +614,8 @@
     } else {
       page.visible_to = page.visible_to.filter(r => r !== role);
     }
-    // Re-render the affected row so the "open to all" badge + dirty class update.
+    // Re-render the row so badge + dirty class update; also bump the group
+    // header's "N unsaved" pill, which lives outside this row.
     const row = e.target.closest('tr');
     const dirty = isDirty(page);
     row.classList.toggle('dirty', dirty);
@@ -454,8 +627,38 @@
     } else if (!allOpen && badge) {
       badge.remove();
     }
+    updateGroupDirtyPills();
     updateDirtyState();
   });
+
+  function updateGroupDirtyPills() {
+    const groupDefs = PAGE_GROUPS[currentPlatform] || [];
+    const keyToGroup = new Map();
+    groupDefs.forEach(g => g.keys.forEach(k => keyToGroup.set(k, g.key)));
+    const counts = {};
+    pages.forEach(p => {
+      if (!isDirty(p)) return;
+      const gKey = keyToGroup.get(p.pageKey) || FALLBACK_GROUP.key;
+      counts[gKey] = (counts[gKey] || 0) + 1;
+    });
+    $grid.querySelectorAll('.pa-group').forEach(group => {
+      const gKey = group.dataset.group;
+      const head = group.querySelector('.pa-group-head');
+      let pill   = head.querySelector('.pa-group-dirty');
+      const n = counts[gKey] || 0;
+      if (n > 0) {
+        if (!pill) {
+          pill = document.createElement('span');
+          pill.className = 'pa-group-dirty';
+          // Insert before the chevron so layout matches the initial render order.
+          head.insertBefore(pill, head.querySelector('.pa-group-chevron'));
+        }
+        pill.textContent = `${n} unsaved`;
+      } else if (pill) {
+        pill.remove();
+      }
+    });
+  }
 
   // ── Search ──────────────────────────────────────────────────────
   let searchTimer = null;

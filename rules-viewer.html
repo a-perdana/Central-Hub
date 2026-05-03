@@ -91,14 +91,59 @@
       user-select: none; margin-top: 4px; display: inline-block;
     }
 
-    /* Group sections */
-    .rv-group { margin-top: 32px; }
-    .rv-group:first-of-type { margin-top: 0; }
-    .rv-group h2 {
-      font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; color: var(--ink);
-      margin-bottom: 4px;
+    /* Group sections — accordion */
+    .rv-group {
+      margin-top: 12px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
     }
-    .rv-group-desc { font-size: 0.82rem; color: var(--ink-3); margin-bottom: 12px; }
+    .rv-group:first-of-type { margin-top: 0; }
+    .rv-group-head {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%;
+      padding: 14px 18px;
+      background: var(--white);
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+    .rv-group-head:hover { background: var(--paper); }
+    .rv-group-head h2 {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink);
+      margin: 0; flex: 1;
+    }
+    .rv-group-count {
+      font-size: 0.72rem; font-weight: 600;
+      padding: 2px 9px; border-radius: 100px;
+      background: var(--paper); color: var(--ink-3);
+      font-family: 'DM Mono', monospace;
+    }
+    .rv-group-chevron {
+      color: var(--ink-3);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .rv-group.open .rv-group-chevron { transform: rotate(180deg); }
+    .rv-group-body { display: none; padding: 0 18px 18px; }
+    .rv-group.open .rv-group-body { display: block; }
+    .rv-group .rv-table { margin: 0; box-shadow: none; border: 1px solid var(--border); }
+
+    /* Expand / collapse all */
+    .rv-bulk { display: inline-flex; gap: 4px; margin-left: auto; }
+    .rv-bulk button {
+      font-family: inherit; font-size: 0.78rem; font-weight: 500;
+      padding: 5px 11px; border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--white); color: var(--ink-2);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .rv-bulk button:hover { background: var(--paper); border-color: #c8c5be; }
 
     .rv-empty { padding: 36px; text-align: center; color: var(--ink-3); font-size: 0.9rem; }
 
@@ -133,6 +178,10 @@
     </div>
     <span class="rv-count" id="rvCount"></span>
     <span class="rv-deploy-info" id="rvDeployInfo">loading…</span>
+    <span class="rv-bulk">
+      <button type="button" id="rvExpandAll">Expand all</button>
+      <button type="button" id="rvCollapseAll">Collapse all</button>
+    </span>
   </div>
 
   <div id="rvContent">
@@ -319,7 +368,9 @@
   }
 
   // ── Main render ──────────────────────────────────────────────
-  let allRules = null; // Map<collName, parsed>
+  let allRules = null;          // Map<collName, parsed>
+  const openGroups = new Set(); // domain keys currently expanded
+  let firstRenderDone = false;
   document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
     const isAdmin = profile?.role_centralhub === 'central_admin';
     if (!isAdmin) {
@@ -343,6 +394,15 @@
 
   document.getElementById('rvSearch').addEventListener('input', render);
 
+  document.getElementById('rvExpandAll').addEventListener('click', () => {
+    DOMAINS.forEach(d => openGroups.add(d.key));
+    render();
+  });
+  document.getElementById('rvCollapseAll').addEventListener('click', () => {
+    openGroups.clear();
+    render();
+  });
+
   function render() {
     if (!allRules) return;
     const filter = document.getElementById('rvSearch').value.toLowerCase().trim();
@@ -356,6 +416,17 @@
       byDomain[dk].push({ name, parsed });
     });
 
+    // Default state: only the first non-empty group is open on first paint.
+    // While searching, auto-expand every group that has matches so results aren't hidden.
+    if (!firstRenderDone) {
+      const firstWithRows = DOMAINS.find(d => byDomain[d.key].length);
+      if (firstWithRows) openGroups.add(firstWithRows.key);
+      firstRenderDone = true;
+    }
+    if (filter) {
+      DOMAINS.forEach(d => { if (byDomain[d.key].length) openGroups.add(d.key); });
+    }
+
     let visibleCount = 0;
     let html = '';
     DOMAINS.forEach(d => {
@@ -363,7 +434,14 @@
       if (!rows.length) return;
       rows.sort((a, b) => a.name.localeCompare(b.name));
       visibleCount += rows.length;
-      html += `<div class="rv-group"><h2>${escapeHtml(d.title)}</h2>`;
+      const isOpen = openGroups.has(d.key);
+      html += `<div class="rv-group${isOpen ? ' open' : ''}" data-group="${d.key}">`;
+      html += `<button type="button" class="rv-group-head" aria-expanded="${isOpen}">`;
+      html += `<h2>${escapeHtml(d.title)}</h2>`;
+      html += `<span class="rv-group-count">${rows.length}</span>`;
+      html += `<svg class="rv-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>`;
+      html += `</button>`;
+      html += `<div class="rv-group-body">`;
       html += `<table class="rv-table"><thead><tr><th>Collection</th><th>Read</th><th>Write</th></tr></thead><tbody>`;
       rows.forEach(({ name, parsed }, idx) => {
         const rid = `r-${d.key}-${idx}`;
@@ -373,15 +451,29 @@
         html += `<td>${renderPerms(parsed.allows, ['write', 'create', 'update', 'delete'])}<br><span class="rv-toggle" data-row="${rid}" data-side="write">show rule</span><div class="rv-rule-snippet" data-side="write">${escapeHtml(writeSnippet(parsed.allows) || '(no write rule — read-only)')}</div></td>`;
         html += `</tr>`;
       });
-      html += `</tbody></table></div>`;
+      html += `</tbody></table></div></div>`;
     });
 
     document.getElementById('rvCount').textContent = `${visibleCount} of ${allRules.size} collections`;
     document.getElementById('rvContent').innerHTML = html || '<div class="rv-empty">No collections match the filter.</div>';
 
-    // Toggle handlers
+    // Group accordion handlers
+    document.querySelectorAll('.rv-group-head').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const group = btn.closest('.rv-group');
+        const key = group?.dataset.group;
+        if (!key) return;
+        if (openGroups.has(key)) openGroups.delete(key);
+        else                     openGroups.add(key);
+        group.classList.toggle('open');
+        btn.setAttribute('aria-expanded', openGroups.has(key) ? 'true' : 'false');
+      });
+    });
+
+    // Per-rule snippet toggle handlers
     document.querySelectorAll('.rv-toggle').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't trigger group accordion
         const row = document.getElementById(el.dataset.row);
         if (!row) return;
         const side = el.dataset.side;
