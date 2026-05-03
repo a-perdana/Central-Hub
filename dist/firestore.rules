@@ -305,10 +305,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // -- school_appraisals (legacy handbook editor) ----------
-    match /school_appraisals/{docId} {
-      allow read:   if isAuthorized();
-      allow write:  if isAdmin();
+    // -- school_appraisals_archive_v1 (read-only history) ----
+    // The legacy `school_appraisals` collection was retired 2026-05-03;
+    // its single doc (`main_handbook` — a misplaced handbook record)
+    // was moved to this archive for historical reference. No client
+    // code reads or writes here; central_admin only for any future
+    // forensic look-up.
+    match /school_appraisals_archive_v1/{docId} {
+      allow read, write: if isAdmin();
     }
 
     // -- school_appraisals_v2 (interactive 5-domain appraisal tool) --
@@ -471,14 +475,9 @@ service cloud.firestore {
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses']));
     }
 
-    // -- feedbacks -------------------------------------------
+    // -- feedbacks (consolidated 2026-05-03 — was feedback + feedbacks) --
+    //    All hubs (CH/AH/TH) now write here with a `__src` discriminator.
     match /feedbacks/{fbId} {
-      allow create: if isAuthorized();
-      allow read, update, delete: if isAdmin();
-    }
-
-    // -- feedback (Central Hub index feedback modal) ---------
-    match /feedback/{fbId} {
       allow create: if isAuthorized();
       allow read, update, delete: if isAdmin();
     }
