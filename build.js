@@ -274,7 +274,7 @@ const htmlFiles = [
   "school-appraisals.html",
   "teacher-appraisals.html",
   "ease-system.html",
-  "academics.html",
+  "teaching-progress.html",
   "primary-checkpoint-syllabus.html",
   "secondary-checkpoint-syllabus.html",
   "igcse-syllabus.html",

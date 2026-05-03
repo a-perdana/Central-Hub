@@ -251,7 +251,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `schools.html`                     | `/schools`                      | School management — reads/writes the `partner_schools` collection (UI label kept as "Schools" for clarity). |
 | `staff.html`                       | `/staff`                        | Staff management                                  |
 | `documents.html`                   | `/documents`                    | Document management (`central_documents` collection) |
-| `academics.html`                   | `/academics`                    | Academics module hub                              |
+| `teaching-progress.html`           | `/teaching-progress`            | Teaching Progress dashboard — real-time teacher pacing across all 11 subjects, central_admin only. Linked from Curriculum dropdown and the home dashboard module card. |
 | `academic-calendar.html`           | `/academic-calendar`            | Academic calendar (Sheets + Firestore events). Admin: **⚙ Year Settings** modal writes `calendar_settings/current` (academicYearStart, totalTeachingWeeks, terms). This is the single source of truth for all date/term data across the platform. |
 | `igcse-syllabus.html`              | `/igcse-syllabus`               | IGCSE syllabus guide — view/edit syllabus entries, GLH, chapter hours. Redirects to Teacher Progress (math only). |
 | `igcse-math-pacing.html`           | `/igcse-math-pacing`            | IGCSE Math pacing admin — chapter/topic structure, inline edit (codes autocomplete from `cambridge_syllabus`, hours, week), Teacher Progress, Coverage Heatmap, Hours Report. Generated from `igcse-pacing-template.html` by `build.js`. Sister pages: `igcse-biology-pacing`, `igcse-chemistry-pacing`, `igcse-physics-pacing`. |
