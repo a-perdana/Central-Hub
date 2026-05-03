@@ -25,5 +25,23 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
       allow delete: if false;
     }
+
+    // Competency evidence uploads (Teachers Hub + Academic Hub portfolios).
+    // Path: competency_evidence/{platform}/{uid}/{timestamp}_{filename}
+    //   - {platform} = 'teachers' | 'academic'
+    //   - {uid}      = the submitting user's auth uid
+    // Owner uploads up to 25 MB per file. central_admin can read/delete for review.
+    match /competency_evidence/{platform}/{uid}/{filename} {
+      allow read: if request.auth != null
+        && (request.auth.uid == uid
+            || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                 .data.role_centralhub == 'central_admin');
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size <= 25 * 1024 * 1024;
+      allow delete: if request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin';
+    }
   }
 }
