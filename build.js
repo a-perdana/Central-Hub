@@ -353,6 +353,14 @@ htmlFiles.forEach((file) => {
   if (syllabusToolbarBtn) {
     output = output.replace("<!-- SYLLABUS_TEACH_SCHED_BTN -->", syllabusToolbarBtn);
   }
+  // Phase 4 — inject /cambridge-crossref.js once per page (defer; auto-
+  // bootstraps from DOM scan). Skip login + index since they don't render
+  // CTS chips.
+  if (file !== 'login.html' && file !== 'index.html' &&
+      !output.includes('cambridge-crossref.js')) {
+    output = output.replace('</body>',
+      '<script src="cambridge-crossref.js" defer></script>\n</body>');
+  }
   fs.writeFileSync(path.join("dist", file), output);
   console.log(`Copied: ${file}`);
 });
@@ -361,6 +369,12 @@ htmlFiles.forEach((file) => {
 if (fs.existsSync("auth-guard.js")) {
   fs.copyFileSync("auth-guard.js", path.join("dist", "auth-guard.js"));
   console.log("Copied: auth-guard.js");
+}
+
+// -- Copy cambridge-crossref.js (Phase 4)
+if (fs.existsSync("cambridge-crossref.js")) {
+  fs.copyFileSync("cambridge-crossref.js", path.join("dist", "cambridge-crossref.js"));
+  console.log("Copied: cambridge-crossref.js");
 }
 
 // -- Copy firestore.rules so /rules-viewer can fetch it at runtime.
