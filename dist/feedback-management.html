@@ -2860,50 +2860,35 @@ async function loadAll() {
   const db = window.db;
   const rows = [];
 
-  // Central Hub: collection 'feedback', has 'status' field
-  try {
-    const qCH = query(collection(db, 'feedback'), orderBy('createdAt', 'desc'));
-    const snapCH = await getDocs(qCH);
-    snapCH.forEach(d => {
-      const data = d.data();
-      rows.push({
-        id:        d.id,
-        src:       'ch',
-        subject:   data.subject || '',
-        message:   data.message || '',
-        user:      data.userEmail || data.userName || '–',
-        createdAt: data.createdAt,
-        status:    data.status || 'new',
-        page:      data.page || '',
-        extra:     data,
-      });
-    });
-  } catch(e) { console.warn('CH feedback fetch failed', e); }
-
-  // Teachers Hub: collection 'feedbacks', no status field
-  try {
-    const qTH = query(collection(db, 'feedbacks'), where('__src', '==', '__th'));
-    // 'feedbacks' doesn't have a src discriminator — we'll fetch all and tag later
-    // Actually, fetch entire feedbacks collection and deduplicate with AH below
-    // TH docs have: uid, displayName, email, subject, message, createdAt
-    // AH docs have: subject, message, userId, userEmail, timestamp
-    // We tag by field presence: if 'uid' + 'displayName' → TH; if 'userId' or 'userEmail' without displayName → AH
-    // Fetch all feedbacks docs once
-  } catch(_) {}
-
+  // Single canonical `feedbacks` collection (consolidated 2026-05-03).
+  // Discriminate by `__src` when present; fall back to field-presence
+  // heuristics for legacy docs that pre-date the __src convention.
   try {
     const qFB = query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc'));
     const snapFB = await getDocs(qFB);
     snapFB.forEach(d => {
       const data = d.data();
-      // Discriminate TH vs AH by field presence
-      // TH: has 'uid', 'displayName', 'email'
-      // AH: has 'userId', 'userEmail', uses 'timestamp' not 'createdAt'
-      const isTH = 'displayName' in data || 'uid' in data;
+      let src = data.__src;
+      if (!src) {
+        // Legacy docs — heuristic:
+        //   TH: has 'uid' + 'displayName'
+        //   AH: has 'userId' or 'userEmail', no displayName
+        //   CH: shouldn't reach here (CH legacy docs lived in `feedback` and
+        //        were migrated by merge-feedback-into-feedbacks.js with
+        //        __src='centralhub'); treat them as 'th' by default if
+        //        a stray doc shows up.
+        const isTH = 'displayName' in data || 'uid' in data;
+        src = isTH ? 'teachershub' : 'academichub';
+      }
+      // Map canonical platform names to the short codes the UI uses.
+      const shortSrc = src === 'centralhub' ? 'ch'
+                     : src === 'teachershub' ? 'th'
+                     : src === 'academichub' ? 'ah'
+                     : src;
       const ts = data.createdAt || data.timestamp || null;
       rows.push({
         id:        d.id,
-        src:       isTH ? 'th' : 'ah',
+        src:       shortSrc,
         subject:   data.subject || '',
         message:   data.message || '',
         user:      data.email || data.userEmail || data.displayName || '–',

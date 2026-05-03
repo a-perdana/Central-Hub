@@ -2627,10 +2627,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   async function loadSchools() {
     const snap = await getDocs(query(collection(db, 'partner_schools'), orderBy('name')));
     allSchools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Populate school filter + drawer select
-    const options = allSchools.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
-    document.getElementById('schoolFilter').insertAdjacentHTML('beforeend', options);
-    document.getElementById('fieldSchool').insertAdjacentHTML('beforeend', options);
+    // Filter options keep `name` as value (so existing free-text staff docs
+    // still match in applyFilters). Drawer options use `id` as value so we
+    // can write a real `schoolId` FK on save.
+    const filterOptions = allSchools.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+    const drawerOptions = allSchools.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    document.getElementById('schoolFilter').insertAdjacentHTML('beforeend', filterOptions);
+    document.getElementById('fieldSchool').insertAdjacentHTML('beforeend', drawerOptions);
   }
 
   async function loadStaff() {
@@ -2744,7 +2747,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     document.getElementById('drawerTitle').textContent  = 'Edit Staff Member';
     document.getElementById('fieldName').value   = s.name       || '';
     document.getElementById('fieldEmail').value  = s.email      || '';
-    document.getElementById('fieldSchool').value = s.school     || '';
+    // Prefer the FK schoolId; fall back to a name lookup for legacy docs
+    // that only have the free-text `school` field.
+    const editingSchoolId = s.schoolId
+      || (allSchools.find(x => x.name === s.school)?.id || '');
+    document.getElementById('fieldSchool').value = editingSchoolId;
     document.getElementById('fieldRole').value   = s.role       || 'teacher';
     document.getElementById('fieldDept').value   = s.department || '';
     document.getElementById('fieldStatus').value = s.status     || 'active';
@@ -2757,13 +2764,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   function hideErr()     { document.getElementById('drawerError').classList.remove('visible'); }
 
   async function saveStaff() {
-    const name   = document.getElementById('fieldName').value.trim();
-    const email  = document.getElementById('fieldEmail').value.trim();
-    const school = document.getElementById('fieldSchool').value;
-    if (!name || !email || !school) { showErr('Name, email, and school are required.'); return; }
+    const name     = document.getElementById('fieldName').value.trim();
+    const email    = document.getElementById('fieldEmail').value.trim();
+    const schoolId = document.getElementById('fieldSchool').value;
+    if (!name || !email || !schoolId) { showErr('Name, email, and school are required.'); return; }
+
+    // schoolId is the canonical FK; school is the denormalised display name
+    // so list/filter/search code that doesn't join can still render it.
+    const schoolDoc = allSchools.find(s => s.id === schoolId);
+    const schoolName = schoolDoc?.name || '';
 
     const data = {
-      name, email, school,
+      name, email,
+      schoolId,
+      school: schoolName,
       role:       document.getElementById('fieldRole').value,
       department: document.getElementById('fieldDept').value.trim(),
       status:     document.getElementById('fieldStatus').value,

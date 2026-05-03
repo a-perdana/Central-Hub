@@ -403,3 +403,12 @@ When a form is used for both Create and Edit modes, the Cancel button must retur
 - Editing → back to the thread/detail view
 - Creating → back to the list view
 Never unconditionally `showView('list')` in a shared Cancel handler.
+
+### 9. Every protected page needs `<script src="firebase-config.js">` BEFORE `auth-guard.js`
+`auth-guard.js` reads `window.ENV.FIREBASE_*` at module-load time (top-level, not inside a function). If the firebase-config script tag is missing — or placed after the auth-guard script — auth-guard throws `TypeError: Cannot read properties of undefined (reading 'FIREBASE_API_KEY')` and the entire page hangs on `<body style="display:none">`. Past bug: `design-system.html` was missing the tag. Pattern (must be in this order):
+```html
+<body style="display:none">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+```
+In production, `build.js` writes `dist/firebase-config.js` from Vercel env vars — so the tag works in both dev and prod. Never assume auth-guard "self-loads" the config.
