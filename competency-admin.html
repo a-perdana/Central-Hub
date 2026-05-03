@@ -386,6 +386,7 @@
       <button class="filter-chip active" onclick="setPlatFilter('all',this)">All</button>
       <button class="filter-chip" onclick="setPlatFilter('teachers',this)">Teachers</button>
       <button class="filter-chip" onclick="setPlatFilter('academic',this)">Academic</button>
+      <button class="filter-chip" onclick="setPlatFilter('central',this)">Specialists</button>
     </div>
     <div class="evidence-list" id="evidenceList">
       <div class="skel" style="height:100px;border-radius:14px;"></div>
@@ -399,6 +400,7 @@
       <select class="hm-select" id="hmPlatform" onchange="renderHeatmap()">
         <option value="teachers">Teachers Hub</option>
         <option value="academic">Academic Hub</option>
+        <option value="central">Central Hub (Specialists)</option>
       </select>
       <select class="hm-select" id="hmMetric" onchange="renderHeatmap()">
         <option value="approved">Approved submissions</option>
@@ -418,6 +420,7 @@
       <select class="hm-select" id="cohortPlatform" onchange="renderCohort()">
         <option value="teachers">Teachers Hub</option>
         <option value="academic">Academic Hub</option>
+        <option value="central">Central Hub (Specialists)</option>
       </select>
       <select class="hm-select" id="cohortA" onchange="renderCohort()">
         <option value="">School A — select</option>
@@ -445,6 +448,7 @@
           <select class="cert-select" id="certPlatform">
             <option value="teachers">Teachers Hub</option>
             <option value="academic">Academic Hub</option>
+            <option value="central">Central Hub (Specialists)</option>
           </select>
         </div>
         <div class="cert-field">
@@ -485,22 +489,50 @@ import {
   query, where, orderBy, serverTimestamp, limit, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
+// Domain catalogs aligned with the Cambridge-grounded competency_framework
+// Firestore docs (teachers/leaders/specialists). The legacy IDs that lived
+// here previously (curriculum/assessment/classroom/... + data-leadership/
+// curriculum-oversight/...) were no longer written by any app — fixed
+// alongside the same TH+AH legacy-ID Phase 1.1 / C.4.A bugs.
 const TEACHERS_DOMAINS = [
-  {id:'curriculum',name:'Curriculum Design & Delivery'},
-  {id:'assessment',name:'Assessment & Feedback'},
-  {id:'classroom',name:'Classroom Management'},
-  {id:'pedagogy',name:'Pedagogical Practice'},
-  {id:'digital',name:'Digital Literacy & EdTech'},
-  {id:'professional',name:'Professional Growth & Leadership'},
+  {id:'smc',name:'Subject Mastery & Curriculum Design'},
+  {id:'lcp',name:'Learner-Centred Pedagogy'},
+  {id:'afl',name:'Assessment for Learning'},
+  {id:'icp',name:'Innovative Classroom Practice'},
+  {id:'pie',name:'Professional Identity & Ethics'},
+  {id:'cce',name:'Collaboration & Community Engagement'},
 ];
 const ACADEMIC_DOMAINS = [
-  {id:'data-leadership',name:'Data-Driven Leadership'},
-  {id:'curriculum-oversight',name:'Curriculum Oversight & Quality'},
-  {id:'staff-development',name:'Staff Development & Appraisal'},
-  {id:'strategic-planning',name:'Strategic Planning & Improvement'},
-  {id:'accreditation',name:'Accreditation & Compliance'},
-  {id:'student-outcomes',name:'Student Outcomes & Wellbeing'},
+  {id:'evsi',name:'Educational Vision & School Improvement'},
+  {id:'cial',name:'Curriculum, Instruction & Assessment Leadership'},
+  {id:'pdpc',name:'People Development & Professional Capacity'},
+  {id:'ewsc',name:'Equity, Wellbeing & School Culture'},
+  {id:'eao',name:'Ethics, Accountability & Operations'},
+  {id:'fcep',name:'Family, Community & External Partnerships'},
 ];
+const SPECIALISTS_DOMAINS = [
+  {id:'csm',name:'Cambridge Subject Mastery'},
+  {id:'cof',name:'Classroom Observation & Feedback'},
+  {id:'tpd',name:'Teacher Professional Development'},
+  {id:'cqa',name:'Curriculum & Quality Assurance'},
+  {id:'nls',name:'Network Leadership & Strategy'},
+  {id:'xen',name:'External Expertise & Network'},
+];
+
+// Map a competency_evidence doc's platform field to its domain catalog.
+// 'teachers' → TH classroom track, 'academic' → AH leadership track,
+// 'central' → CH Subject Specialist hybrid track.
+function domainsForPlatform(platform) {
+  if (platform === 'academic') return ACADEMIC_DOMAINS;
+  if (platform === 'central')  return SPECIALISTS_DOMAINS;
+  return TEACHERS_DOMAINS;
+}
+
+function platformLabel(p) {
+  if (p === 'academic') return 'Academic Hub';
+  if (p === 'central')  return 'Central Hub';
+  return 'Teachers Hub';
+}
 const LEVEL_LABEL = {awareness:'Awareness',practitioner:'Practitioner',advanced:'Advanced',lead:'Lead / Mentor'};
 
 let isAdmin = false;
@@ -654,8 +686,13 @@ window.approveEvidence = async function(evId, userUid, compId, level, platform) 
     updatedAt: serverTimestamp(),
   });
 
-  // 2. Update user's earned competencies
-  const earnedField = platform === 'academic' ? 'earned_academic' : 'earned';
+  // 2. Update user's earned competencies — per-platform field on user_competencies/{uid}.
+  //    'teachers' → earned         (TH learning-path, TH MyCertificates)
+  //    'academic' → earned_academic (AH LearningPath, AH MyCertificates)
+  //    'central'  → earned_central  (CH specialist-* pages)
+  const earnedField = platform === 'academic' ? 'earned_academic'
+                    : platform === 'central'  ? 'earned_central'
+                    : 'earned';
   const ucRef = doc(window.db, 'user_competencies', userUid);
   const ucSnap = await getDoc(ucRef);
   const existing = ucSnap.exists() ? (ucSnap.data()[earnedField] || {}) : {};
@@ -691,7 +728,7 @@ window.rejectEvidence = async function(evId) {
 function populateDomainDropdown() {
   const platSel = document.getElementById('certPlatform');
   const updateDomains = () => {
-    const domains = platSel.value === 'academic' ? ACADEMIC_DOMAINS : TEACHERS_DOMAINS;
+    const domains = domainsForPlatform(platSel.value);
     document.getElementById('certDomain').innerHTML =
       '<option value="">— select domain —</option>' +
       domains.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
@@ -722,8 +759,7 @@ window.issueCertificate = async function() {
   const userData = userDoc.data();
   const uid = userDoc.id;
 
-  const domains = platform === 'academic' ? ACADEMIC_DOMAINS : TEACHERS_DOMAINS;
-  const domainObj = domains.find(d => d.id === domainId);
+  const domainObj = domainsForPlatform(platform).find(d => d.id === domainId);
 
   // Check for duplicate
   const dupQ = query(
@@ -870,31 +906,23 @@ window.addComment = async function(evId) {
 };
 
 // ─── NETWORK HEATMAP ──────────────────────────────────────────────────────────
-const TH_DOMAINS_ORDERED = [
-  { id: 'smc', name: 'Subject Matter & Curriculum' },
-  { id: 'lcp', name: 'Learning-Centred Pedagogy' },
-  { id: 'afl', name: 'Assessment for Learning' },
-  { id: 'icp', name: 'Inclusive Classroom Practice' },
-  { id: 'pie', name: 'Professional Identity & Ethics' },
-  { id: 'cce', name: 'Collaboration, Comms & Engagement' },
-];
-const AH_DOMAINS_ORDERED = [
-  { id: 'evsi', name: 'Educational Vision & Strategic Impact' },
-  { id: 'cial', name: 'Curriculum, Instruction & Academic Leadership' },
-  { id: 'pdpc', name: 'Professional Development & People-Centred Culture' },
-  { id: 'ewsc', name: 'Equitable & Wellbeing-Supportive Community' },
-  { id: 'eao', name: 'Evidence, Accountability & Organisational Mgmt' },
-  { id: 'fcep', name: 'Family, Community & External Partnerships' },
-];
+// Heatmap + cohort tabs reuse the same canonical domain catalogs as the
+// review/issue tabs — TEACHERS_DOMAINS / ACADEMIC_DOMAINS / SPECIALISTS_DOMAINS
+// defined at the top of this script. Keeping the heatmap in sync with the
+// rest of the page avoids the past name drift (e.g. "Inclusive Classroom
+// Practice" vs the actual ICP name "Innovative Classroom Practice").
 
 window.renderHeatmap = function() {
   const platform = document.getElementById('hmPlatform').value;
   const metric   = document.getElementById('hmMetric').value;
-  const domains  = platform === 'academic' ? AH_DOMAINS_ORDERED : TH_DOMAINS_ORDERED;
+  const domains  = domainsForPlatform(platform);
 
   const data = allEvidence.filter(e => e.platform === platform);
+  // Per-platform expected (compId, level) catalog mirrors the seed scripts.
   const compIds = platform === 'academic'
     ? ['evsi-1','evsi-2','evsi-3','evsi-4','cial-1','cial-2','cial-3','cial-4','pdpc-1','pdpc-2','pdpc-3','pdpc-4','ewsc-1','ewsc-2','ewsc-3','ewsc-4','eao-1','eao-2','eao-3','eao-4','fcep-1','fcep-2','fcep-3','fcep-4']
+    : platform === 'central'
+    ? ['csm-1','csm-2','csm-3','csm-4','cof-1','cof-2','cof-3','cof-4','tpd-1','tpd-2','tpd-3','tpd-4','cqa-1','cqa-2','cqa-3','cqa-4','nls-1','nls-2','nls-3','nls-4','xen-1','xen-2','xen-3','xen-4']
     : ['smc-1','smc-2','smc-3','smc-4','lcp-1','lcp-2','lcp-3','lcp-4','afl-1','afl-2','afl-3','afl-4','icp-1','icp-2','icp-3','icp-4','pie-1','pie-2','pie-3','pie-4','cce-1','cce-2','cce-3','cce-4'];
 
   // Build per-domain stats
@@ -962,7 +990,7 @@ window.renderCohort = function() {
   const platform = document.getElementById('cohortPlatform').value;
   const schoolA  = document.getElementById('cohortA').value;
   const schoolB  = document.getElementById('cohortB').value;
-  const domains  = platform === 'academic' ? AH_DOMAINS_ORDERED : TH_DOMAINS_ORDERED;
+  const domains  = domainsForPlatform(platform);
 
   document.getElementById('legendA').textContent = schoolA || 'School A';
   document.getElementById('legendB').textContent = schoolB || 'School B';
