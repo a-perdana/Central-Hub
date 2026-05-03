@@ -87,11 +87,60 @@
 .skel { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
+/* Level chips become clickable when content exists */
+.lvl-chip { cursor: default; transition: all .15s; }
+.lvl-chip.has-content { cursor: pointer; }
+.lvl-chip.has-content:hover { background: var(--accent-2); color: var(--accent-dk); border-color: var(--accent); transform: translateY(-1px); }
+
+/* ─── CONTENT MODAL ─────────────────────────── */
+.cmod-overlay {
+  position: fixed; inset: 0; background: rgba(10,10,26,.65); backdrop-filter: blur(4px);
+  display: none; align-items: flex-start; justify-content: center; z-index: 1000;
+  padding: 60px 20px 40px; overflow-y: auto;
+}
+.cmod-overlay.open { display: flex; }
+.cmod {
+  background: var(--white); border-radius: 16px; max-width: 720px; width: 100%;
+  box-shadow: 0 24px 60px rgba(0,0,0,.4); overflow: hidden;
+}
+.cmod-head {
+  padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.cmod-head-text { flex: 1; }
+.cmod-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+.cmod-title { font-size: 17px; font-weight: 700; color: var(--ink); line-height: 1.3; }
+.cmod-close { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 14px; color: var(--ink-2); }
+.cmod-close:hover { background: var(--paper); }
+.cmod-body { padding: 22px 24px 20px; max-height: calc(100vh - 220px); overflow-y: auto; }
+.cmod-section { margin-bottom: 22px; }
+.cmod-section-title { font-size: 11px; font-weight: 700; color: var(--accent-dk); letter-spacing: .07em; text-transform: uppercase; margin-bottom: 8px; }
+.cmod-reading { font-size: 13.5px; color: var(--ink-2); line-height: 1.7; }
+.cmod-reading strong { color: var(--ink); }
+.cmod-reading em { color: var(--accent-dk); font-style: normal; font-weight: 600; }
+.cmod-takeaway { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; padding: 7px 0; padding-left: 22px; position: relative; }
+.cmod-takeaway::before { content: '✓'; position: absolute; left: 0; top: 7px; color: var(--accent); font-weight: 800; }
+.cmod-sa-item { font-size: 12px; color: var(--ink-2); padding: 6px 0; padding-left: 22px; position: relative; line-height: 1.5; }
+.cmod-sa-item::before { content: '○'; position: absolute; left: 4px; top: 6px; color: var(--ink-3); }
+.cmod-activity { background: #fef3c7; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 16px; }
+.cmod-activity-row { display: flex; gap: 12px; padding: 6px 0; font-size: 12.5px; }
+.cmod-activity-row:not(:last-child) { border-bottom: 1px solid #fde68a; }
+.cmod-activity-label { font-weight: 700; color: var(--ink); min-width: 80px; }
+.cmod-activity-val { color: var(--ink-2); flex: 1; line-height: 1.55; }
+.cmod-foot { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.cmod-cta { padding: 9px 18px; border-radius: 9px; font-size: 12.5px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
+.cmod-cta-primary { background: var(--accent); color: #fff; border: none; cursor: pointer; }
+.cmod-cta-primary:hover { background: var(--accent-dk); }
+.cmod-cta-secondary { background: var(--paper); color: var(--ink-2); border: 1px solid var(--border); }
+.cmod-empty { padding: 40px 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
+
 @media (max-width: 720px) {
   .hero { padding: 28px 22px 26px; }
   .hero-title { font-size: 1.3rem; }
   .page-wrap { padding: 22px 18px 60px; }
   .comp-head { padding: 14px 16px; gap: 10px; }
+  .cmod-overlay { padding: 30px 12px; }
+  .cmod-body { max-height: calc(100vh - 180px); }
 }
 </style>
 <script type="module" src="auth-guard.js"></script>
@@ -104,15 +153,11 @@
   <div class="hero-inner">
     <p class="hero-eyebrow">Eduversal · HQ Subject Specialist · Learning Path</p>
     <h1 class="hero-title">My Learning Path</h1>
-    <p class="hero-sub">Browse the 6-domain hybrid framework. Click a competency to see its intent, the levels you can claim, and Cambridge anchors.</p>
+    <p class="hero-sub">Browse the 6-domain hybrid framework. Click a competency to see Cambridge anchors and intent. Click any level chip to open the reading + key takeaways + practice activity for that level.</p>
   </div>
 </div>
 
 <div class="page-wrap">
-
-  <div class="notice" id="noticeBox" style="display:none;">
-    <strong>Heads up:</strong> The rich learning material (reading paragraphs, key takeaways, practice activities) for the Specialist track has not been authored yet — only the framework structure is ready. Use the <strong>Submit Evidence</strong> shortcut on each competency to claim a level once you have demonstrated it.
-  </div>
 
   <div class="dom-strip" id="domStrip">
     <div class="skel" style="height:36px;width:140px;border-radius:10px;"></div>
@@ -126,6 +171,26 @@
     <div class="skel" style="height:80px;border-radius:14px;"></div>
   </div>
 
+</div>
+
+<!-- CONTENT MODAL -->
+<div class="cmod-overlay" id="cmodOverlay" onclick="if(event.target===this)window.closeCmod()">
+  <div class="cmod">
+    <div class="cmod-head">
+      <div class="cmod-head-text">
+        <div class="cmod-eyebrow" id="cmodEyebrow">Loading…</div>
+        <div class="cmod-title" id="cmodTitle">—</div>
+      </div>
+      <button class="cmod-close" onclick="window.closeCmod()" aria-label="Close">✕</button>
+    </div>
+    <div class="cmod-body" id="cmodBody">
+      <div class="cmod-empty">Loading…</div>
+    </div>
+    <div class="cmod-foot">
+      <button class="cmod-cta cmod-cta-secondary" onclick="window.closeCmod()">Close</button>
+      <a class="cmod-cta cmod-cta-primary" id="cmodSubmit" href="#">📤 Submit Evidence at this level</a>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -150,10 +215,86 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
   FW = fwSnap.data();
   if (ucSnap.exists()) earned = ucSnap.data().earned_central || {};
 
-  document.getElementById('noticeBox').style.display = 'block';
   renderDomainStrip();
   renderComps();
 });
+
+// ─── CONTENT FETCH (lazy, per level open) ─────
+const _contentCache = {};
+async function loadContent(compId, lvl) {
+  const key = compId + '_' + lvl;
+  if (key in _contentCache) return _contentCache[key];
+  try {
+    const snap = await getDoc(doc(window.db, 'competency_framework', 'specialists', 'levels', key));
+    _contentCache[key] = snap.exists() ? snap.data() : null;
+  } catch { _contentCache[key] = null; }
+  return _contentCache[key];
+}
+
+window.openLevelContent = async function(compId, lvl) {
+  const c = (FW.competencies || []).find(x => x.id === compId);
+  if (!c) return;
+  document.getElementById('cmodEyebrow').textContent = `${compId.toUpperCase()} · ${LEVEL_LABEL[lvl] || lvl}`;
+  document.getElementById('cmodTitle').textContent = c.name;
+  document.getElementById('cmodBody').innerHTML = '<div class="cmod-empty">Loading…</div>';
+  document.getElementById('cmodSubmit').href =
+    `/specialist-portfolio?comp=${encodeURIComponent(compId)}&level=${encodeURIComponent(lvl)}`;
+  document.getElementById('cmodOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  const content = await loadContent(compId, lvl);
+  const body = document.getElementById('cmodBody');
+  if (!content) {
+    body.innerHTML = '<div class="cmod-empty">Content not yet authored for this level. You can still submit evidence using the button below.</div>';
+    return;
+  }
+
+  // Render reading + key takeaways + self-assessment + activity.
+  const readingHtml = content.reading
+    ? `<div class="cmod-section">
+        <div class="cmod-section-title">Reading</div>
+        <div class="cmod-reading">${formatProse(content.reading)}</div>
+      </div>` : '';
+
+  const ktHtml = Array.isArray(content.keyTakeaways) && content.keyTakeaways.length
+    ? `<div class="cmod-section">
+        <div class="cmod-section-title">Key Takeaways</div>
+        ${content.keyTakeaways.map(t => `<div class="cmod-takeaway">${esc(t)}</div>`).join('')}
+      </div>` : '';
+
+  const saHtml = Array.isArray(content.selfAssessment) && content.selfAssessment.length
+    ? `<div class="cmod-section">
+        <div class="cmod-section-title">Self-Assessment (rate yourself 1–4 mentally before claiming)</div>
+        ${content.selfAssessment.map(s => `<div class="cmod-sa-item">${esc(s)}</div>`).join('')}
+      </div>` : '';
+
+  const actHtml = content.activity
+    ? `<div class="cmod-section">
+        <div class="cmod-section-title">Practice Activity</div>
+        <div class="cmod-activity">
+          <div class="cmod-activity-row"><span class="cmod-activity-label">Task</span><span class="cmod-activity-val">${esc(content.activity.task)}</span></div>
+          <div class="cmod-activity-row"><span class="cmod-activity-label">Output</span><span class="cmod-activity-val">${esc(content.activity.output)}</span></div>
+          <div class="cmod-activity-row"><span class="cmod-activity-label">Duration</span><span class="cmod-activity-val">${esc(content.activity.duration)}</span></div>
+          <div class="cmod-activity-row"><span class="cmod-activity-label">Evidence</span><span class="cmod-activity-val">${esc(content.activity.evidence)}</span></div>
+        </div>
+      </div>` : '';
+
+  body.innerHTML = readingHtml + ktHtml + saHtml + actHtml;
+};
+
+window.closeCmod = function() {
+  document.getElementById('cmodOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+};
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+// Minimal markdown-ish: **bold** and *italic*.
+function formatProse(s) {
+  let t = esc(s);
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  return t;
+}
 
 function renderDomainStrip() {
   const strip = document.getElementById('domStrip');
@@ -179,7 +320,11 @@ function renderComps() {
 
   list.innerHTML = comps.map(c => {
     const earnedLvl = earned[c.id]?.level;
-    const lvls = (c.levels || []).map(l => `<span class="lvl-chip ${earnedLvl === l ? 'earned' : ''}">${LEVEL_LABEL[l] || l}${earnedLvl === l ? ' ✓' : ''}</span>`).join('');
+    const lvls = (c.levels || []).map(l => {
+      const cls = `lvl-chip has-content${earnedLvl === l ? ' earned' : ''}`;
+      const safeId = c.id.replace(/'/g, "\\'");
+      return `<span class="${cls}" onclick="event.stopPropagation();window.openLevelContent('${safeId}','${l}')" title="Click to read at this level">${LEVEL_LABEL[l] || l}${earnedLvl === l ? ' ✓' : ''}</span>`;
+    }).join('');
     const refs = Array.isArray(c.cambridgeStandardRefs) ? c.cambridgeStandardRefs : [];
     const perms = Array.isArray(c.permendiknasRefs) ? c.permendiknasRefs : [];
     const claimableLvl = (c.levels || []).find(l => l !== earnedLvl) || (c.levels || [])[0];
