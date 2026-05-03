@@ -317,6 +317,7 @@ const htmlFiles = [
   "orientation-admin.html",
   "page-access.html",
   "rules-viewer.html",
+  "design-system.html",
 ];
 
 htmlFiles.forEach((file) => {
