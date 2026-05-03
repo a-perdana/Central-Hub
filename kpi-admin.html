@@ -823,6 +823,15 @@
           <label class="form-label">Rationale</label>
           <input class="form-input" id="tkRationale" type="text" placeholder="Why this KPI matters…" />
         </div>
+        <div class="form-group full-col">
+          <label class="form-label">Cambridge Teacher Standards Tags</label>
+          <input class="form-input" id="tkCambridgeRefs" type="text" placeholder="e.g. 3.6, 4.1" />
+          <span class="form-hint" id="tkCambridgeRefsHint">
+            Comma-separated standard IDs from <em>Cambridge Teacher Standards 2023</em>.
+            Domains: 1 Values, 2 Classroom culture, 3 Teaching skills (3.1–3.8),
+            4 Innovation (4.1–4.5), 5 Community (5.1–5.4).
+          </span>
+        </div>
         <div class="form-group">
           <label class="form-label">Status</label>
           <div class="check-list">
@@ -1426,13 +1435,18 @@ function renderTeacherKPIs() {
     updateTeacherWeightTotal();
     return;
   }
-  tbody.innerHTML = teacherKpis.map(k => `
+  tbody.innerHTML = teacherKpis.map(k => {
+    const refs = Array.isArray(k.cambridge_standard_refs) ? k.cambridge_standard_refs : [];
+    const refsHtml = refs.length
+      ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${refs.map(r => `<span style="font-family:'DM Mono',monospace;font-size:.68rem;padding:2px 6px;background:#ede9fe;color:#5b21b6;border-radius:4px;font-weight:600;" title="Cambridge Teacher Standards 2023 — ${r}">CTS ${r}</span>`).join('')}</div>`
+      : '';
+    return `
     <tr>
       <td><span class="row-num">${k.order ?? '—'}</span></td>
       <td>
         <div class="kpi-name-cell">${k.aspect}</div>
       </td>
-      <td style="font-size:.78rem;color:#64748b;max-width:240px;line-height:1.4;">${k.indicator}</td>
+      <td style="font-size:.78rem;color:#64748b;max-width:240px;line-height:1.4;">${k.indicator}${refsHtml}</td>
       <td><span class="wt-badge">${k.weight ?? 0}%</span></td>
       <td style="font-size:.82rem;font-weight:600;">${k.targetNumerical != null ? k.targetNumerical + ' ' + (k.unit || '') : '—'}</td>
       <td style="font-size:.78rem;color:#64748b;">${k.unit ?? '—'}</td>
@@ -1442,7 +1456,8 @@ function renderTeacherKPIs() {
         <button class="btn-icon" data-delete-tk="${k.id}" title="Delete" style="margin-left:4px;">🗑️</button>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
   updateTeacherWeightTotal();
 }
 
@@ -1468,25 +1483,64 @@ function openTeacherKpiModal(kpiId) {
   document.getElementById('tkHalfAY').value          = k?.halfAY          != null ? k.halfAY : '';
   document.getElementById('tkFullAY').value          = k?.fullAY          != null ? k.fullAY : '';
   document.getElementById('tkRationale').value       = k?.rationale       || '';
+  document.getElementById('tkCambridgeRefs').value   = Array.isArray(k?.cambridge_standard_refs) ? k.cambridge_standard_refs.join(', ') : '';
   document.getElementById('tkActive').checked        = k?.active !== false;
   clearErr('teacherKpi'); openModal('teacherKpiModal');
+}
+
+// Cache of valid Cambridge standard IDs from competency_framework/teachers.
+// Loaded lazily on first save attempt that has refs to validate.
+let _cambridgeTeacherStdIds = null;
+async function getCambridgeTeacherStdIds() {
+  if (_cambridgeTeacherStdIds) return _cambridgeTeacherStdIds;
+  try {
+    const snap = await getDoc(doc(db, 'competency_framework', 'teachers'));
+    if (snap.exists()) {
+      const refs = snap.data().cambridgeStandards || {};
+      _cambridgeTeacherStdIds = new Set(Object.keys(refs));
+    } else {
+      _cambridgeTeacherStdIds = new Set();
+    }
+  } catch { _cambridgeTeacherStdIds = new Set(); }
+  return _cambridgeTeacherStdIds;
+}
+
+function parseCambridgeRefs(raw) {
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 async function saveTeacherKPI() {
   const aspect = document.getElementById('tkAspect').value.trim();
   if (!aspect) { showErr('teacherKpi', 'KPI Aspect is required.'); return; }
+
+  // Cambridge tags — validate against the canonical TH framework's
+  // cambridgeStandards lookup. Unknown IDs block the save.
+  const refsRaw = document.getElementById('tkCambridgeRefs').value;
+  const refs = parseCambridgeRefs(refsRaw);
+  if (refs.length) {
+    const validIds = await getCambridgeTeacherStdIds();
+    if (validIds.size) {
+      const bad = refs.filter(r => !validIds.has(r));
+      if (bad.length) {
+        showErr('teacherKpi', `Unknown Cambridge standard IDs: ${bad.join(', ')}. Valid range: 1.1–1.5, 2.1–2.5, 3.1–3.8, 4.1–4.5, 5.1–5.4.`);
+        return;
+      }
+    }
+  }
+
   const data = {
     aspect,
-    indicator:       document.getElementById('tkIndicator').value.trim(),
-    weight:          parseInt(document.getElementById('tkWeight').value) || 0,
-    targetNumerical: parseFloat(document.getElementById('tkTargetNumerical').value) || 0,
-    unit:            document.getElementById('tkUnit').value.trim(),
-    order:           parseInt(document.getElementById('tkOrder').value) || 99,
-    target:          document.getElementById('tkTarget').value.trim(),
-    halfAY:          parseFloat(document.getElementById('tkHalfAY').value) || 0,
-    fullAY:          parseFloat(document.getElementById('tkFullAY').value) || 0,
-    rationale:       document.getElementById('tkRationale').value.trim(),
-    active:          document.getElementById('tkActive').checked,
+    indicator:              document.getElementById('tkIndicator').value.trim(),
+    weight:                 parseInt(document.getElementById('tkWeight').value) || 0,
+    targetNumerical:        parseFloat(document.getElementById('tkTargetNumerical').value) || 0,
+    unit:                   document.getElementById('tkUnit').value.trim(),
+    order:                  parseInt(document.getElementById('tkOrder').value) || 99,
+    target:                 document.getElementById('tkTarget').value.trim(),
+    halfAY:                 parseFloat(document.getElementById('tkHalfAY').value) || 0,
+    fullAY:                 parseFloat(document.getElementById('tkFullAY').value) || 0,
+    rationale:              document.getElementById('tkRationale').value.trim(),
+    cambridge_standard_refs: refs,
+    active:                 document.getElementById('tkActive').checked,
   };
   try {
     if (editingTeacherKpiId) {
