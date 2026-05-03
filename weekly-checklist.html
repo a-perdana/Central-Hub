@@ -195,6 +195,55 @@
     .journal-editor b, .journal-editor strong { font-weight: 700; }
     .journal-editor i, .journal-editor em { font-style: italic; }
     .journal-editor u { text-decoration: underline; }
+    /* ─── EVENTS BAND (This Week / Next Week) ────── */
+    .events-band {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+      margin-bottom: 20px;
+    }
+    .events-col {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .events-col-head {
+      padding: 10px 16px; display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border); background: var(--paper);
+    }
+    .events-col-head h4 {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--ink-3); margin: 0; flex: 1;
+    }
+    .events-col-head .ev-week-tag {
+      font-size: 10px; font-weight: 700; color: var(--ink-3);
+      background: var(--paper-2); padding: 2px 7px; border-radius: 8px;
+    }
+    .events-col-body { padding: 8px 0; }
+    .ev-group { padding: 0 14px 6px; }
+    .ev-group:not(:last-child) { border-bottom: 1px dashed var(--border); padding-bottom: 8px; margin-bottom: 6px; }
+    .ev-group-title {
+      font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--ink-3); margin: 6px 0 6px; display: flex; align-items: center; gap: 5px;
+    }
+    .ev-group-title .ev-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .ev-item {
+      display: flex; align-items: flex-start; gap: 9px; padding: 5px 0;
+      font-size: 0.78rem; color: var(--ink); line-height: 1.4;
+    }
+    .ev-item .ev-date {
+      flex-shrink: 0; min-width: 38px;
+      font-size: 0.72rem; font-weight: 700; color: var(--ink-2);
+      background: var(--paper); border-radius: 5px; padding: 3px 6px; text-align: center;
+    }
+    .ev-item .ev-text { flex: 1; min-width: 0; }
+    .ev-item .ev-tag {
+      display: inline-block; margin-left: 6px; font-size: 9.5px; font-weight: 700;
+      padding: 1px 6px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.04em;
+      vertical-align: 1px;
+    }
+    .ev-empty { padding: 6px 0 4px; font-size: 0.74rem; color: var(--ink-3); font-style: italic; }
+    .ev-loading { padding: 16px; text-align: center; font-size: 0.78rem; color: var(--ink-3); }
+    @media (max-width: 720px) { .events-band { grid-template-columns: 1fr; } }
+
     .ess-item {
       display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px;
       border: 1.5px solid var(--border); background: var(--paper);
@@ -432,6 +481,28 @@
   </div>
 
   <!-- Admin Bar (central_admin only) -->
+  <!-- Events band (This Week / Next Week) -->
+  <div class="events-band" id="eventsBand" style="display:none">
+    <div class="events-col">
+      <div class="events-col-head">
+        <h4 id="evThisWeekTitle">This Week</h4>
+        <span class="ev-week-tag" id="evThisWeekTag"></span>
+      </div>
+      <div class="events-col-body" id="evThisWeekBody">
+        <div class="ev-loading">Loading events…</div>
+      </div>
+    </div>
+    <div class="events-col">
+      <div class="events-col-head">
+        <h4 id="evNextWeekTitle">Next Week</h4>
+        <span class="ev-week-tag" id="evNextWeekTag"></span>
+      </div>
+      <div class="events-col-body" id="evNextWeekBody">
+        <div class="ev-loading">Loading events…</div>
+      </div>
+    </div>
+  </div>
+
   <div class="admin-bar" id="adminBar" style="display:none">
     <span class="admin-bar-label" id="adminBarLabel">Admin — manage tasks for this week</span>
     <div class="admin-bar-actions">
@@ -526,6 +597,17 @@ const WEEK1_START   = new Date(2025, 6, 21);
 // teaching_schedule cache: weekNo (1..40) → { semLabel, semWeekNo, mon, fri }
 let _weekScheduleByNo = null;
 let _teachingWeeks    = [];
+
+// Event caches — fetched once per session
+let _academicEventsPromise = null;  // resolves to [{title, date_start, date_end, category, department}]
+let _cambridgeEventsPromise = null; // resolves to [{title, date_start, date_end, kind}]
+
+const ACADEMIC_CALENDAR_URL =
+  'https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec';
+const CAMBRIDGE_SERIES = [
+  'igcse_june', 'alevel_june', 'checkpoint_may',
+  'igcse_november', 'alevel_november', 'checkpoint_oct',
+];
 
 const PLATFORM_CATS = {
   director: [
@@ -725,6 +807,189 @@ function updateHeroSub() {
     : 'Track your Director responsibilities and weekly tasks.';
 }
 
+// ── Events: Cambridge + Academic Calendar ─────────────────────────
+function _normalizeIsoDate(s) {
+  if (!s) return null;
+  const str = String(s);
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const M = { Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
+              Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12' };
+  const m = str.match(/(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+  if (m && M[m[1]]) return `${m[3]}-${M[m[1]]}-${String(m[2]).padStart(2,'0')}`;
+  return null;
+}
+
+function _tsToIso(val) {
+  if (!val) return null;
+  if (typeof val === 'string') return _normalizeIsoDate(val);
+  if (val instanceof Date) {
+    const y = val.getFullYear(), m = String(val.getMonth()+1).padStart(2,'0'), d = String(val.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof val.toDate === 'function') return _tsToIso(val.toDate());
+  if (val.seconds !== undefined) return _tsToIso(new Date(val.seconds * 1000));
+  return null;
+}
+
+function loadAcademicEvents() {
+  if (_academicEventsPromise) return _academicEventsPromise;
+  _academicEventsPromise = fetch(ACADEMIC_CALENDAR_URL)
+    .then(r => r.json())
+    .then(raw => (Array.isArray(raw) ? raw : []).filter(e => e?.date_start && e?.date_end).map(e => ({
+      title: e.title || '',
+      date_start: _normalizeIsoDate(e.date_start) || String(e.date_start).slice(0,10),
+      date_end:   _normalizeIsoDate(e.date_end)   || String(e.date_end).slice(0,10),
+      category: e.category || '',
+      department: e.department || '',
+    })))
+    .catch(() => []);
+  return _academicEventsPromise;
+}
+
+async function loadCambridgeEvents() {
+  if (_cambridgeEventsPromise) return _cambridgeEventsPromise;
+  const db = window.db;
+  const yearNow = new Date().getFullYear();
+  const years = [yearNow, yearNow + 1];
+  const docIds = [];
+  years.forEach(y => CAMBRIDGE_SERIES.forEach(s => docIds.push({ id: `${y}_${s}`, year: y })));
+  _cambridgeEventsPromise = Promise.all(docIds.map(({id, year}) =>
+    getDoc(doc(db, 'cambridge_calendar', id)).then(snap => snap.exists() ? { data: snap.data(), year } : null).catch(() => null)
+  )).then(docs => {
+    const out = [];
+    docs.forEach(entry => {
+      if (!entry) return;
+      const { data, year: docYear } = entry;
+      const dates = data.dates || {};
+      const months = data.meta?.months || {};
+      Object.values(months).forEach(def => {
+        const pushDeadline = (item, kind) => {
+          const d = dates[item.key];
+          if (!d) return;
+          const ds = _tsToIso(d.date);
+          if (!ds) return;
+          const de = _tsToIso(d.date_end) || ds;
+          out.push({ title: item.label, date_start: ds, date_end: de, kind });
+        };
+        (def.you_send || []).forEach(it => pushDeadline(it, 'You Send'));
+        (def.we_send  || []).forEach(it => pushDeadline(it, 'We Send'));
+        (def.exams || []).forEach(ex => {
+          if (!ex?.date) return;
+          const m = String(ex.date).match(/(\w{3,})\s+(\d{1,2})(?:\s*[–-]\s*(\d{1,2}))?/) ||
+                    String(ex.date).match(/(\d{1,2})\s+(\w{3,})/);
+          if (!m) return;
+          const monthName = isNaN(m[1]) ? m[1] : m[2];
+          const day = isNaN(m[1]) ? m[2] : m[1];
+          const endDay = m[3] || day;
+          const M = { Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12,
+                      January:1,February:2,March:3,April:4,June:6,July:7,August:8,September:9,October:10,November:11,December:12 };
+          const mon = M[monthName.slice(0,3).replace(/^./, c => c.toUpperCase())];
+          if (!mon) return;
+          const pad = n => String(n).padStart(2,'0');
+          out.push({
+            title: `${ex.code ? ex.code + ' — ' : ''}${ex.label || ''}`.trim() || ex.code || '',
+            date_start: `${docYear}-${pad(mon)}-${pad(day)}`,
+            date_end:   `${docYear}-${pad(mon)}-${pad(endDay)}`,
+            kind: 'Exam',
+          });
+        });
+      });
+    });
+    return out;
+  }).catch(() => []);
+  return _cambridgeEventsPromise;
+}
+
+function _getWeekRange(weekNum) {
+  const w = _weekScheduleByNo?.[weekNum];
+  let mon, sun;
+  if (w?.mon && w?.fri) {
+    mon = new Date(w.mon);
+    sun = new Date(w.mon); sun.setDate(sun.getDate() + 6);
+  } else {
+    mon = new Date(WEEK1_START);
+    mon.setDate(mon.getDate() + (weekNum - 1) * 7);
+    sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+  }
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return { startIso: iso(mon), endIso: iso(sun) };
+}
+
+function _eventsInRange(events, startIso, endIso) {
+  return events
+    .filter(e => e.date_end >= startIso && e.date_start <= endIso)
+    .sort((a, b) => a.date_start.localeCompare(b.date_start));
+}
+
+function _fmtEventDate(startIso, endIso) {
+  const MS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [, sm, sd] = startIso.split('-').map(Number);
+  if (startIso === endIso) return `${sd} ${MS[sm-1]}`;
+  const [, em, ed] = endIso.split('-').map(Number);
+  return sm === em ? `${sd}–${ed} ${MS[sm-1]}` : `${sd} ${MS[sm-1]}–${ed} ${MS[em-1]}`;
+}
+
+function _academicTagStyle(e) {
+  const CAT = { 'Public Holiday': {c:'#dc2626',bg:'#fef2f2'}, 'Assessment': {c:'#7c3aed',bg:'#f5f3ff'} };
+  const DEPT= { 'Academic': {c:'#2563eb',bg:'#eff6ff'},
+                'College Counseling': {c:'#d97706',bg:'#fffbeb'},
+                'Admin/Operations': {c:'#059669',bg:'#ecfdf5'} };
+  return CAT[e.category] || DEPT[e.department] || DEPT['Academic'];
+}
+
+function renderEventsBand() {
+  const band = document.getElementById('eventsBand');
+  if (!band) return;
+  band.style.display = '';
+
+  const thisRange = _getWeekRange(currentWeek);
+  const nextRange = currentWeek < TOTAL_WEEKS ? _getWeekRange(currentWeek + 1) : null;
+
+  document.getElementById('evThisWeekTag').textContent = getWeekLabelShort(currentWeek);
+  document.getElementById('evNextWeekTag').textContent = nextRange ? getWeekLabelShort(currentWeek + 1) : '—';
+
+  const mkSection = (title, dotColor, items, renderItem) => {
+    if (!items.length) return '';
+    return `
+      <div class="ev-group">
+        <div class="ev-group-title"><span class="ev-dot" style="background:${dotColor}"></span>${title}</div>
+        ${items.map(renderItem).join('')}
+      </div>`;
+  };
+
+  const fillCol = (bodyEl, range) => {
+    if (!range) { bodyEl.innerHTML = '<div class="ev-empty" style="padding:12px 14px">—</div>'; return; }
+    Promise.all([loadAcademicEvents(), loadCambridgeEvents()]).then(([acad, camb]) => {
+      const acadHits = _eventsInRange(acad, range.startIso, range.endIso);
+      const cambHits = _eventsInRange(camb, range.startIso, range.endIso);
+
+      const cambHtml = mkSection('Cambridge', '#7c3aed', cambHits, e => `
+        <div class="ev-item">
+          <span class="ev-date">${escHtml(_fmtEventDate(e.date_start, e.date_end))}</span>
+          <span class="ev-text">${escHtml(e.title)}<span class="ev-tag" style="background:#f5f3ff;color:#7c3aed">${escHtml(e.kind)}</span></span>
+        </div>`);
+
+      const acadHtml = mkSection('Academic Calendar', '#2563eb', acadHits, e => {
+        const s = _academicTagStyle(e);
+        const tag = e.category || e.department || '';
+        return `
+        <div class="ev-item">
+          <span class="ev-date">${escHtml(_fmtEventDate(e.date_start, e.date_end))}</span>
+          <span class="ev-text">${escHtml(e.title)}${tag ? `<span class="ev-tag" style="background:${s.bg};color:${s.c}">${escHtml(tag)}</span>` : ''}</span>
+        </div>`;
+      });
+
+      const combined = cambHtml + acadHtml;
+      bodyEl.innerHTML = combined || '<div class="ev-empty" style="padding:10px 14px">No scheduled events.</div>';
+    }).catch(() => {
+      bodyEl.innerHTML = '<div class="ev-empty" style="padding:10px 14px">Could not load events.</div>';
+    });
+  };
+
+  fillCol(document.getElementById('evThisWeekBody'), thisRange);
+  fillCol(document.getElementById('evNextWeekBody'), nextRange);
+}
+
 function updateWeekUI() {
   const label = getWeekLabel(currentWeek);
   document.getElementById('weekLabel').textContent   = label;
@@ -736,6 +1001,7 @@ function updateWeekUI() {
     (currentWeek === getCurrentWeekNumber()) ? '' : 'none';
   const jumpSel = document.getElementById('weekJumpSelect');
   if (jumpSel) jumpSel.value = currentWeek;
+  renderEventsBand();
 }
 
 function setupWeekNav() {
