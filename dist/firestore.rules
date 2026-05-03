@@ -826,15 +826,46 @@ service cloud.firestore {
     }
 
     // -- ah_categories (Academic Hub dashboard category config) --
+    // Read scope (Step 12 hardening — was previously open to any
+    // academic_user, leaking gated category names via getDocs):
+    //
+    //   Per-doc (get / list-as-get):
+    //     - AH admin / central_admin always
+    //     - Any AH user can read a doc whose visible_to is empty (open)
+    //     - Otherwise user's ah_sub_roles[] must intersect visible_to[]
+    //
+    // The client must filter at query level too (Firestore evaluates
+    // `get` per doc inside a list query):
+    //
+    //   1. where('visible_to', '==', [])
+    //        → fetches the open-to-all categories
+    //   2. where('visible_to', 'array-contains-any', mySubRoles)
+    //        → fetches the categories targeted at my sub-roles
+    //
+    // Combine both result sets client-side. Admins skip the dual query
+    // and use a single unfiltered listener.
     match /ah_categories/{catId} {
-      allow read:                   if isAcademicUser();
+      allow read:                   if isAHAdmin()
+                                    || (isAcademicUser() && (
+                                          !('visible_to' in resource.data)
+                                          || resource.data.visible_to.size() == 0
+                                          || (userProfile().ah_sub_roles is list
+                                              && resource.data.visible_to.hasAny(userProfile().ah_sub_roles))
+                                       ));
       allow create, update, delete: if isAHAdmin();
     }
 
     // -- th_resource_sections (Teachers Hub index resource sections) --
+    // Same model as ah_categories above (admin / open / sub-role intersect).
     match /th_resource_sections/{secId} {
-      allow read:                   if isTeachersUser();
-      allow create, update, delete: if isTeachersAdmin();
+      allow read:                   if isTHAdmin()
+                                    || (isTeachersUser() && (
+                                          !('visible_to' in resource.data)
+                                          || resource.data.visible_to.size() == 0
+                                          || (userProfile().th_sub_roles is list
+                                              && resource.data.visible_to.hasAny(userProfile().th_sub_roles))
+                                       ));
+      allow create, update, delete: if isTHAdmin();
     }
 
     // -- networkAudits (School Network Security Audit results) --
