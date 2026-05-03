@@ -242,6 +242,15 @@
     }
     .ev-empty { padding: 6px 0 4px; font-size: 0.74rem; color: var(--ink-3); font-style: italic; }
     .ev-loading { padding: 16px; text-align: center; font-size: 0.78rem; color: var(--ink-3); }
+    .ev-group-title .ev-pager { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+    .ev-pager-btn {
+      width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--white); cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; color: var(--ink-3); transition: all 0.15s; padding: 0;
+    }
+    .ev-pager-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .ev-pager-btn:disabled { opacity: 0.35; cursor: default; }
+    .ev-pager-info { font-size: 0.68rem; color: var(--ink-3); font-weight: 600; }
     @media (max-width: 720px) { .events-band { grid-template-columns: 1fr; } }
 
     .ess-item {
@@ -937,10 +946,16 @@ function _academicTagStyle(e) {
   return CAT[e.category] || DEPT[e.department] || DEPT['Academic'];
 }
 
+const CAMB_PAGE_SIZE = 5;
+const _cambPage = { this: 0, next: 0 };
+
 function renderEventsBand() {
   const band = document.getElementById('eventsBand');
   if (!band) return;
   band.style.display = '';
+
+  _cambPage.this = 0;
+  _cambPage.next = 0;
 
   const thisRange = _getWeekRange(currentWeek);
   const nextRange = currentWeek < TOTAL_WEEKS ? _getWeekRange(currentWeek + 1) : null;
@@ -948,46 +963,71 @@ function renderEventsBand() {
   document.getElementById('evThisWeekTag').textContent = getWeekLabelShort(currentWeek);
   document.getElementById('evNextWeekTag').textContent = nextRange ? getWeekLabelShort(currentWeek + 1) : '—';
 
-  const mkSection = (title, dotColor, items, renderItem) => {
+  const renderAcadSection = (items) => {
     if (!items.length) return '';
-    return `
-      <div class="ev-group">
-        <div class="ev-group-title"><span class="ev-dot" style="background:${dotColor}"></span>${title}</div>
-        ${items.map(renderItem).join('')}
-      </div>`;
-  };
-
-  const fillCol = (bodyEl, range) => {
-    if (!range) { bodyEl.innerHTML = '<div class="ev-empty" style="padding:12px 14px">—</div>'; return; }
-    Promise.all([loadAcademicEvents(), loadCambridgeEvents()]).then(([acad, camb]) => {
-      const acadHits = _eventsInRange(acad, range.startIso, range.endIso);
-      const cambHits = _eventsInRange(camb, range.startIso, range.endIso);
-
-      const cambHtml = mkSection('Cambridge', '#7c3aed', cambHits, e => `
-        <div class="ev-item">
-          <span class="ev-date">${escHtml(_fmtEventDate(e.date_start, e.date_end))}</span>
-          <span class="ev-text">${escHtml(e.title)}<span class="ev-tag" style="background:#f5f3ff;color:#7c3aed">${escHtml(e.kind)}</span></span>
-        </div>`);
-
-      const acadHtml = mkSection('Academic Calendar', '#2563eb', acadHits, e => {
-        const s = _academicTagStyle(e);
-        const tag = e.category || e.department || '';
-        return `
+    const rows = items.map(e => {
+      const s = _academicTagStyle(e);
+      const tag = e.category || e.department || '';
+      return `
         <div class="ev-item">
           <span class="ev-date">${escHtml(_fmtEventDate(e.date_start, e.date_end))}</span>
           <span class="ev-text">${escHtml(e.title)}${tag ? `<span class="ev-tag" style="background:${s.bg};color:${s.c}">${escHtml(tag)}</span>` : ''}</span>
         </div>`;
-      });
+    }).join('');
+    return `
+      <div class="ev-group">
+        <div class="ev-group-title"><span class="ev-dot" style="background:#2563eb"></span>Academic Calendar</div>
+        ${rows}
+      </div>`;
+  };
 
-      const combined = cambHtml + acadHtml;
-      bodyEl.innerHTML = combined || '<div class="ev-empty" style="padding:10px 14px">No scheduled events.</div>';
+  const renderCambSection = (items, slot) => {
+    if (!items.length) return '';
+    const totalPages = Math.max(1, Math.ceil(items.length / CAMB_PAGE_SIZE));
+    if (_cambPage[slot] >= totalPages) _cambPage[slot] = totalPages - 1;
+    const page = _cambPage[slot];
+    const pageItems = items.slice(page * CAMB_PAGE_SIZE, (page + 1) * CAMB_PAGE_SIZE);
+    const rows = pageItems.map(e => `
+      <div class="ev-item">
+        <span class="ev-date">${escHtml(_fmtEventDate(e.date_start, e.date_end))}</span>
+        <span class="ev-text">${escHtml(e.title)}<span class="ev-tag" style="background:#f5f3ff;color:#7c3aed">${escHtml(e.kind)}</span></span>
+      </div>`).join('');
+    const pager = totalPages > 1 ? `
+      <div class="ev-pager">
+        <button class="ev-pager-btn" data-camb-prev="${slot}" ${page === 0 ? 'disabled' : ''}>&#8592;</button>
+        <span class="ev-pager-info">${page + 1} / ${totalPages}</span>
+        <button class="ev-pager-btn" data-camb-next="${slot}" ${page >= totalPages - 1 ? 'disabled' : ''}>&#8594;</button>
+      </div>` : '';
+    return `
+      <div class="ev-group">
+        <div class="ev-group-title"><span class="ev-dot" style="background:#7c3aed"></span>Cambridge${pager}</div>
+        ${rows}
+      </div>`;
+  };
+
+  const fillCol = (bodyEl, range, slot) => {
+    if (!range) { bodyEl.innerHTML = '<div class="ev-empty" style="padding:12px 14px">—</div>'; return; }
+    Promise.all([loadAcademicEvents(), loadCambridgeEvents()]).then(([acad, camb]) => {
+      const acadHits = _eventsInRange(acad, range.startIso, range.endIso);
+      const cambHits = _eventsInRange(camb, range.startIso, range.endIso);
+      const paint = () => {
+        const html = renderCambSection(cambHits, slot) + renderAcadSection(acadHits);
+        bodyEl.innerHTML = html || '<div class="ev-empty" style="padding:10px 14px">No scheduled events.</div>';
+        bodyEl.querySelectorAll('[data-camb-prev]').forEach(btn => {
+          btn.addEventListener('click', () => { _cambPage[slot] = Math.max(0, _cambPage[slot] - 1); paint(); });
+        });
+        bodyEl.querySelectorAll('[data-camb-next]').forEach(btn => {
+          btn.addEventListener('click', () => { _cambPage[slot] = _cambPage[slot] + 1; paint(); });
+        });
+      };
+      paint();
     }).catch(() => {
       bodyEl.innerHTML = '<div class="ev-empty" style="padding:10px 14px">Could not load events.</div>';
     });
   };
 
-  fillCol(document.getElementById('evThisWeekBody'), thisRange);
-  fillCol(document.getElementById('evNextWeekBody'), nextRange);
+  fillCol(document.getElementById('evThisWeekBody'), thisRange, 'this');
+  fillCol(document.getElementById('evNextWeekBody'), nextRange, 'next');
 }
 
 function updateWeekUI() {
