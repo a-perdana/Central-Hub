@@ -275,6 +275,17 @@
         <label class="form-label" for="fieldAdminEmail">Admin Email</label>
         <input class="form-input" type="email" id="fieldAdminEmail" placeholder="admin@eduversal.org">
       </div>
+      <div class="form-group">
+        <label class="form-label">Enabled Pilots</label>
+        <div class="type-options" id="fieldEnabledSystems">
+          <label class="type-option"><input type="checkbox" name="enabledSystems" value="kpi"> KPI</label>
+          <label class="type-option"><input type="checkbox" name="enabledSystems" value="appraisal"> Appraisal</label>
+          <label class="type-option"><input type="checkbox" name="enabledSystems" value="competency"> Competency</label>
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:6px;line-height:1.5;">
+          Leave all 3 unchecked + the field absent (new school) = <strong>all systems enabled</strong> by default. Tick at least one to opt the school into pilot mode (only those systems will show in the school's TH/AH dashboards). Untick all 3 + save = explicitly disable every system for that school.
+        </div>
+      </div>
       <p class="form-subhead">Website & Social Links</p>
       <div class="social-grid">
         <div class="form-group">
@@ -772,6 +783,7 @@
     ['fieldName','fieldCity','fieldAdminEmail','fieldWebsite','fieldYouTube','fieldInstagram','fieldTikTok','fieldFacebook']
       .forEach(id => document.getElementById(id).value = '');
     document.querySelectorAll('input[name="fieldTypes"]').forEach(el => { el.checked = false; });
+    document.querySelectorAll('input[name="enabledSystems"]').forEach(el => { el.checked = false; });
     document.getElementById('fieldStatus').value = 'active';
     hideModalError();
     document.getElementById('modalOverlay').classList.add('open');
@@ -787,6 +799,13 @@
     const selectedTypes = new Set(getSchoolTypes(s));
     document.querySelectorAll('input[name="fieldTypes"]').forEach(el => {
       el.checked = selectedTypes.has(el.value);
+    });
+    // enabled_systems[] is optional; missing field = all enabled (back-compat).
+    // We render unchecked-by-default in the modal so admin doesn't accidentally
+    // narrow access — they have to deliberately tick + save to set the field.
+    const enabledSet = Array.isArray(s.enabled_systems) ? new Set(s.enabled_systems) : null;
+    document.querySelectorAll('input[name="enabledSystems"]').forEach(el => {
+      el.checked = enabledSet ? enabledSet.has(el.value) : false;
     });
     document.getElementById('fieldStatus').value        = s.status      || 'active';
     document.getElementById('fieldCity').value          = s.city        || '';
@@ -828,18 +847,39 @@
       }
     }
 
+    // Phase 3 ops — pilot enrolment. The field is only written when at
+    // least one box is ticked OR the school previously had the field.
+    // For a brand-new school with no boxes ticked, we omit the field
+    // entirely so the back-compat "missing = all enabled" path applies.
+    const enabledSystems = Array.from(document.querySelectorAll('input[name="enabledSystems"]:checked'))
+      .map(el => el.value)
+      .filter(v => ['kpi','appraisal','competency'].includes(v));
+    const existing = editingId ? allSchools.find(x => x.id === editingId) : null;
+    const hadField = !!existing && Array.isArray(existing.enabled_systems);
+
     const data = {
       name, types, type: types[0], city,
       status:     document.getElementById('fieldStatus').value,
       adminEmail: document.getElementById('fieldAdminEmail').value.trim(),
       socialLinks,
     };
+    // Write enabled_systems only if either (a) admin ticked at least one or
+    // (b) the school previously had the field (so we can update / clear it).
+    if (enabledSystems.length || hadField) {
+      data.enabled_systems = enabledSystems;
+    }
 
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
       if (editingId) {
-        await updateDoc(fsDoc(db, 'schools', editingId), data);
+        // 2026-05-02 refactor renamed `schools` → `partner_schools`; this
+        // update call was missed at the time and silently no-op'd every
+        // school edit. Re-pointing here so enabled_systems writes (Phase
+        // 3 ops) actually persist. The `notes` update (line ~542) and
+        // delete (line ~981) still target the legacy collection and need
+        // the same fix in a follow-up.
+        await updateDoc(fsDoc(db, 'partner_schools', editingId), data);
       } else {
         await addDoc(collection(db, 'partner_schools'), { ...data, createdAt: serverTimestamp() });
       }
