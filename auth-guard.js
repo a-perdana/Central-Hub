@@ -132,6 +132,133 @@ function applySubjectGating(profile) {
   });
 }
 
+// ── Page-access helpers (sub-role gating via page_access_config) ──
+// Companion to subject-specialty gating above (which keys off
+// ch_subjects[]). This one keys off ch_sub_roles[] (director / coordinator).
+// Both can run on the same DOM — they use different `data-*-hidden`
+// attributes and a shared "display: none !important" rule.
+const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login']);
+const PAGE_ACCESS_TTL_MS = 5 * 60 * 1000;
+
+async function getPageAccessConfig(database, pageKey) {
+  try {
+    const raw = sessionStorage.getItem('pac:' + pageKey);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (cached && (Date.now() - cached.at) < PAGE_ACCESS_TTL_MS) return cached.data;
+    }
+  } catch (_) {}
+  let data = null;
+  try {
+    const snap = await getDoc(doc(database, 'page_access_config', pageKey));
+    data = snap.exists() ? snap.data() : null;
+  } catch (err) {
+    console.warn('page_access_config read failed for', pageKey, err);
+    return null;
+  }
+  try {
+    sessionStorage.setItem('pac:' + pageKey, JSON.stringify({ at: Date.now(), data }));
+  } catch (_) {}
+  return data;
+}
+
+async function getAllPageAccessConfigs(database) {
+  try {
+    const raw = sessionStorage.getItem('pac:__all__:centralhub');
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (cached && (Date.now() - cached.at) < PAGE_ACCESS_TTL_MS) return new Map(cached.entries);
+    }
+  } catch (_) {}
+  const map = new Map();
+  try {
+    // @lint-allow-unbounded — full config doc set (~54 small docs); cached for 5 min
+    const snap = await getDocs(collection(database, 'page_access_config'));
+    snap.forEach(d => {
+      const data = d.data() || {};
+      if (data.platform && data.platform !== 'centralhub') return;
+      map.set(d.id, data);
+    });
+    sessionStorage.setItem('pac:__all__:centralhub', JSON.stringify({
+      at: Date.now(),
+      entries: [...map.entries()],
+    }));
+  } catch (err) {
+    console.warn('page_access_config bulk read failed', err);
+  }
+  return map;
+}
+
+function paSlugFromHref(href) {
+  if (!href) return '';
+  try {
+    const url = new URL(href, window.location.origin);
+    if (url.origin !== window.location.origin) return '';
+    let p = url.pathname.toLowerCase();
+    p = p.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.html$/, '');
+    if (p.includes('/')) p = p.split('/').pop();
+    return p;
+  } catch (_) {
+    return '';
+  }
+}
+
+function ensurePageAccessStyles() {
+  if (document.getElementById('paGatingStyle')) return;
+  const style = document.createElement('style');
+  style.id = 'paGatingStyle';
+  style.textContent = '[data-pa-hidden="1"] { display: none !important; }';
+  document.head.appendChild(style);
+}
+
+function applyPageAccessGating(configs, userSubRoles) {
+  const isAllowed = (cfg) => {
+    if (!cfg) return true;
+    const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
+    if (vt.length === 0) return true;
+    return userSubRoles.some(r => vt.includes(r));
+  };
+
+  document.querySelectorAll('[data-nav-key], [data-nav-page]').forEach(el => {
+    const key = (el.getAttribute('data-nav-key') || el.getAttribute('data-nav-page') || '').toLowerCase();
+    if (!key || PAGE_ACCESS_BYPASS.has(key)) return;
+    if (!configs.has(key)) return;
+    if (!isAllowed(configs.get(key))) el.setAttribute('data-pa-hidden', '1');
+    else                              el.removeAttribute('data-pa-hidden');
+  });
+
+  document.querySelectorAll('a.card[href]').forEach(el => {
+    const key = paSlugFromHref(el.getAttribute('href'));
+    if (!key || PAGE_ACCESS_BYPASS.has(key)) return;
+    if (!configs.has(key)) return;
+    if (!isAllowed(configs.get(key))) el.setAttribute('data-pa-hidden', '1');
+    else                              el.removeAttribute('data-pa-hidden');
+  });
+
+  // CH navbar uses .ch-dd-wrap for dropdowns; hide if every child is hidden.
+  ['.ch-dd-wrap', '.ch-dd-submenu-wrap'].forEach(selector => {
+    document.querySelectorAll(selector).forEach(group => {
+      const items = group.querySelectorAll('[data-nav-key], [data-nav-page]');
+      if (!items.length) return;
+      const allHidden = [...items].every(it =>
+        it.getAttribute('data-pa-hidden') === '1' || it.getAttribute('data-ch-hidden') === '1'
+      );
+      if (allHidden) group.setAttribute('data-pa-hidden', '1');
+      else            group.removeAttribute('data-pa-hidden');
+    });
+  });
+
+  document.querySelectorAll('.ch-dd-col').forEach(col => {
+    const items = col.querySelectorAll('[data-nav-key], [data-nav-page]');
+    if (!items.length) return;
+    const allHidden = [...items].every(it =>
+      it.getAttribute('data-pa-hidden') === '1' || it.getAttribute('data-ch-hidden') === '1'
+    );
+    if (allHidden) col.setAttribute('data-pa-hidden', '1');
+    else            col.removeAttribute('data-pa-hidden');
+  });
+}
+
 // ── Initialise Firebase (guard against double-init) ──────────────
 const firebaseConfig = {
   apiKey:            window.ENV.FIREBASE_API_KEY,
@@ -585,6 +712,29 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
+  // 4c. Page-access gate (sub-role gating via page_access_config).
+  //     Companion to the subject-specialty gate above, this one keys
+  //     off ch_sub_roles[] (director / coordinator). central_admin
+  //     bypasses; missing config / empty visible_to ⇒ allow.
+  if (platformRole !== 'central_admin' && pageKey && !PAGE_ACCESS_BYPASS.has(pageKey)) {
+    const cfg = await getPageAccessConfig(db, pageKey);
+    if (cfg && Array.isArray(cfg.visible_to) && cfg.visible_to.length > 0) {
+      const userSubRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+      const allowed = userSubRoles.some(r => cfg.visible_to.includes(r));
+      if (!allowed) {
+        try {
+          sessionStorage.setItem('ch_access_denied', JSON.stringify({
+            pageKey,
+            label: cfg.label || pageKey,
+            at: Date.now(),
+          }));
+        } catch (_) {}
+        window.location.replace('/?denied=' + encodeURIComponent(pageKey));
+        return;
+      }
+    }
+  }
+
   // 5. Name prompt if missing
   if (!profile.displayName) {
     const name = await promptForName();
@@ -663,6 +813,31 @@ onAuthStateChanged(auth, async (user) => {
   });
   subjectMo.observe(document.body, { childList: true, subtree: true });
   window.__chSubjectGate = () => applySubjectGating(profile);
+
+  // 6c. Page-access UI gating — hide navbar links + cards the user
+  //     can't access by sub-role (ch_sub_roles[]). central_admin
+  //     bypasses; same MutationObserver pattern as subject gating
+  //     so it picks up async navbar mounts and dynamically added cards.
+  if (platformRole !== 'central_admin') {
+    ensurePageAccessStyles();
+    const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+    const configs  = await getAllPageAccessConfigs(db);
+    const runPaGating = () => applyPageAccessGating(configs, subRoles);
+    runPaGating();
+    const paMo = new MutationObserver(muts => {
+      const interesting = muts.some(m =>
+        [...m.addedNodes].some(n =>
+          n.nodeType === 1 && (
+            n.matches?.('[data-nav-key], [data-nav-page], a.card[href]') ||
+            n.querySelector?.('[data-nav-key], [data-nav-page], a.card[href]')
+          )
+        )
+      );
+      if (interesting) runPaGating();
+    });
+    paMo.observe(document.body, { childList: true, subtree: true });
+    window.__paGate = runPaGating;
+  }
 
   // 7. Show page and notify
   document.body.style.visibility = 'visible';
