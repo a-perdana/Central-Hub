@@ -366,6 +366,13 @@
         <button class="btn-sm btn-edit" style="margin-top:8px" onclick="addOptionField()">+ Add Option</button>
       </div>
       <div class="modal-field" style="margin-top:14px">
+        <label class="modal-label">Cambridge anchor (optional)</label>
+        <input class="modal-input" id="q-cambridge-refs" type="text" placeholder="e.g. 1.4, 3.1" />
+        <div style="font-size:11px;color:var(--ink-3,#8888a8);margin-top:4px;line-height:1.45;">
+          Comma-separated Cambridge Teacher Standards IDs (2023). Anchors this question to the same framework used by KPI / Appraisal / Competency. Valid range: 1.1–1.5, 2.1–2.5, 3.1–3.8, 4.1–4.5, 5.1–5.4. Leave blank if none.
+        </div>
+      </div>
+      <div class="modal-field" style="margin-top:14px">
         <label class="modal-label">Order (display sequence)</label>
         <input class="modal-input" id="q-order" type="number" placeholder="e.g. 1" min="0" />
       </div>
@@ -399,7 +406,7 @@
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
   import {
-    getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc,
+    getFirestore, collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
     doc, orderBy, query, serverTimestamp
   } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
@@ -802,7 +809,12 @@
         '<div class="empty-state">No questions yet. Click "+ Add Question" to add one.</div>';
       return;
     }
-    const rows = allQuestions.map((q, i) => `
+    const rows = allQuestions.map((q, i) => {
+      const refs = Array.isArray(q.cambridge_standard_refs) ? q.cambridge_standard_refs : [];
+      const refChips = refs.length
+        ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">${refs.map(r => `<span data-cts-ref="${esc(r)}" style="font-family:'DM Mono',monospace;font-size:.68rem;padding:2px 6px;background:#ede9fe;color:#5b21b6;border-radius:4px;font-weight:600;cursor:pointer;" title="Cambridge Teacher Standards 2023 — CTS ${esc(r)}">CTS ${esc(r)}</span>`).join('')}</div>`
+        : '';
+      return `
       <tr>
         <td style="text-align:center;color:var(--ink-3);font-weight:700">${i+1}</td>
         <td>
@@ -810,6 +822,7 @@
           <ul style="margin-top:6px;padding-left:18px;color:var(--ink-3);font-size:13px">
             ${(q.options||[]).map(o => `<li>${esc(o)}</li>`).join('')}
           </ul>
+          ${refChips}
         </td>
         <td style="text-align:center">${q.order ?? '—'}</td>
         <td>
@@ -818,7 +831,8 @@
             <button class="btn-sm btn-delete" onclick="deleteQuestion('${q.id}')">Delete</button>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     document.getElementById('q-wrap').innerHTML = `
       <table class="data-table">
@@ -833,6 +847,7 @@
     document.getElementById('q-modal-title').textContent = 'Add Question';
     document.getElementById('q-text').value  = '';
     document.getElementById('q-order').value = '';
+    document.getElementById('q-cambridge-refs').value = '';
     document.getElementById('options-list').innerHTML = '';
     addOptionField(); addOptionField(); // start with 2 empty options
     showModal('q-modal');
@@ -846,6 +861,8 @@
     document.getElementById('q-modal-title').textContent = 'Edit Question';
     document.getElementById('q-text').value  = q.question || '';
     document.getElementById('q-order').value = q.order ?? '';
+    document.getElementById('q-cambridge-refs').value =
+      Array.isArray(q.cambridge_standard_refs) ? q.cambridge_standard_refs.join(', ') : '';
     const list = document.getElementById('options-list');
     list.innerHTML = '';
     (q.options || []).forEach(o => addOptionField(o));
@@ -863,6 +880,23 @@
     list.appendChild(wrap);
   };
 
+  // Cache of valid Cambridge Teacher Standards IDs from
+  // competency_framework/teachers. Loaded lazily.
+  let _cambridgeTeacherStdIds = null;
+  async function getCambridgeTeacherStdIds() {
+    if (_cambridgeTeacherStdIds) return _cambridgeTeacherStdIds;
+    try {
+      const snap = await getDoc(doc(db, 'competency_framework', 'teachers'));
+      if (snap.exists()) {
+        const refs = snap.data().cambridgeStandards || {};
+        _cambridgeTeacherStdIds = new Set(Object.keys(refs));
+      } else {
+        _cambridgeTeacherStdIds = new Set();
+      }
+    } catch { _cambridgeTeacherStdIds = new Set(); }
+    return _cambridgeTeacherStdIds;
+  }
+
   window.saveQuestion = async function() {
     const text  = document.getElementById('q-text').value.trim();
     const order = parseInt(document.getElementById('q-order').value) || 0;
@@ -872,7 +906,21 @@
     if (!text) return modalErr('q-err', 'Please enter the question text.');
     if (opts.length < 2) return modalErr('q-err', 'Please add at least 2 answer options.');
 
-    const data = { question: text, options: opts, order };
+    // Cambridge anchor — validate against canonical TH framework's
+    // cambridgeStandards lookup. Unknown IDs block the save.
+    const refsRaw = document.getElementById('q-cambridge-refs').value;
+    const refs = refsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (refs.length) {
+      const validIds = await getCambridgeTeacherStdIds();
+      if (validIds.size) {
+        const bad = refs.filter(r => !validIds.has(r));
+        if (bad.length) {
+          return modalErr('q-err', `Unknown Cambridge standard IDs: ${bad.join(', ')}. Valid range: 1.1–1.5, 2.1–2.5, 3.1–3.8, 4.1–4.5, 5.1–5.4.`);
+        }
+      }
+    }
+
+    const data = { question: text, options: opts, order, cambridge_standard_refs: refs };
 
     if (editingQId) {
       await updateDoc(doc(db, 'orientation_questions', editingQId), data);
