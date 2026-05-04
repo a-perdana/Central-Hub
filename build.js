@@ -356,11 +356,17 @@ htmlFiles.forEach((file) => {
   }
   // Phase 4 — inject /cambridge-crossref.js once per page (defer; auto-
   // bootstraps from DOM scan). Skip login + index since they don't render
-  // CTS chips.
+  // CTS chips. Use lastIndexOf so we target the actual document </body>
+  // and not a </body> sitting inside an inline JS template literal
+  // (e.g. orientation-admin's print-window builder).
   if (file !== 'login.html' && file !== 'index.html' &&
       !output.includes('cambridge-crossref.js')) {
-    output = output.replace('</body>',
-      '<script src="cambridge-crossref.js" defer></script>\n</body>');
+    const closeIdx = output.lastIndexOf('</body>');
+    if (closeIdx >= 0) {
+      output = output.slice(0, closeIdx)
+        + '<script src="cambridge-crossref.js" defer></script>\n'
+        + output.slice(closeIdx);
+    }
   }
   fs.writeFileSync(path.join("dist", file), output);
   console.log(`Copied: ${file}`);
