@@ -43,5 +43,34 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
              .data.role_centralhub == 'central_admin';
     }
+
+    // Induction evidence uploads (Phase 5, 2026-05-04).
+    // Path: induction_evidence/{uid}/{taskId}/{timestamp}_{filename}
+    //   - {uid}    = the mentee's auth uid (matches induction_assignments PK)
+    //   - {taskId} = the induction_progress task identifier
+    // Owner (mentee) uploads up to 25 MB per file. Mentor + school leader
+    // (read from induction_assignments) and central_admin can read/delete.
+    // Charter NN2 implications: this is task evidence, not journal — read
+    // access is intentionally broader (mentor + school leader) so the parties
+    // who sign off the task can verify the evidence.
+    match /induction_evidence/{uid}/{taskId}/{filename} {
+      allow read: if request.auth != null
+        && (request.auth.uid == uid
+            || request.auth.uid == firestore.get(
+                 /databases/(default)/documents/induction_assignments/$(uid)
+               ).data.mentorUid
+            || request.auth.uid == firestore.get(
+                 /databases/(default)/documents/induction_assignments/$(uid)
+               ).data.schoolLeaderUid
+            || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                 .data.role_centralhub == 'central_admin');
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size <= 25 * 1024 * 1024;
+      allow delete: if request.auth != null
+        && (request.auth.uid == uid
+            || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                 .data.role_centralhub == 'central_admin');
+    }
   }
 }

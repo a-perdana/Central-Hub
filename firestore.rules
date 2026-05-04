@@ -1341,6 +1341,29 @@ service cloud.firestore {
       allow create, update, delete: if false;  // server-only via Cloud Function
     }
 
+    // -- induction_alarms ------------------------------------
+    // Cloud-Function-maintained alarm docs. Created by onPulseWritten
+    // when a mentee records 2 consecutive low-pulse weeks. Read by the
+    // assigned mentor + school leader + central_admin so the in-school
+    // pair can intervene within 7 days per the Charter.
+    // PK: {uid}_{weekStartDate}.
+    match /induction_alarms/{alarmId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || request.auth.uid == resource.data.mentorUid
+                       || request.auth.uid == resource.data.schoolLeaderUid
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);  // client filters by mentorUid or schoolLeaderUid
+      allow update: if isSignedIn() && (
+                       request.auth.uid == resource.data.mentorUid
+                       || request.auth.uid == resource.data.schoolLeaderUid
+                       || isAdmin()
+                    );
+      allow create, delete: if false;  // server-only via Cloud Function
+    }
+
     // -- topics (message board) ------------------------------
     match /topics/{topicId} {
       allow read:   if isAuthorized();
