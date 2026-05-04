@@ -314,6 +314,8 @@ const htmlFiles = [
   "library.html",
   "network-health.html",
   "competency-admin.html",
+  "induction-admin.html",
+  "my-induction.html",
   "specialist-framework.html",
   "specialist-path.html",
   "specialist-portfolio.html",
