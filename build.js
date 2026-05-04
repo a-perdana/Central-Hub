@@ -316,6 +316,7 @@ const htmlFiles = [
   "competency-admin.html",
   "induction-admin.html",
   "my-induction.html",
+  "handbook.html",
   "specialist-framework.html",
   "specialist-path.html",
   "specialist-portfolio.html",
