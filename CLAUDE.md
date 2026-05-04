@@ -132,7 +132,7 @@ Each platform has its **own** Firestore role field — there is no single shared
 |--------------|------------------|-------------------------------------------------------------------------------|
 | Central Hub  | `ch_sub_roles[]` | `'director'`, `'coordinator'`                                                 |
 | Academic Hub | `ah_sub_roles[]` | `'foundation_representative'`, `'school_principal'`, `'academic_coordinator'`, `'cambridge_coordinator'` |
-| Teachers Hub | `th_sub_roles[]` | `'subject_teacher'`, `'subject_leader'`                                       |
+| Teachers Hub | `th_sub_roles[]` | `'subject_teacher'`, `'subject_leader'`, `'interviewer'`, `'hiring_manager'`  |
 
 Sub-roles control tab visibility in weekly-checklist pages and `visible_to[]` filtering on dashboard category documents. A user can hold multiple sub-roles simultaneously.
 
@@ -207,6 +207,12 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 | `nav_config/{docId}`                | **Admin-editable navbar item config.** PK is mixed for historical reasons: `nav_config/v1` for Central Hub (legacy, in-place editor in `partials/navbar.html` writes here, supports columns + nested submenu groups); `nav_config/academichub` and `nav_config/teachershub` for AH/TH (simpler flat shape: `{platform, items: [{key, label, hidden}], updatedAt}`). Each hub's navbar reads its own doc on `authReady` and applies label/order/hidden overrides to the static partial markup. AH/TH editor lives in shared `shared-design/nav-edit-simple.js`; CH editor is bespoke in its navbar partial. | each hub's admin |
 | `school_appraisals_archive_v1/{docId}` | **Tombstone (retired 2026-05-03).** Holds the single doc the legacy school-appraisals collection had — a misplaced handbook record. No client code reads or writes; central_admin only for forensics. The active appraisal collection is `school_appraisals_v2`. | central_admin only |
 | `teacher_kpi_submissions/{uid}_{periodId}` | Teacher KPI self-assessments. Now require a `schoolId` field on write so AH evaluators can be school-scoped at both query and rule level (Step 1.3 hardening). Composite index `(periodId, schoolId)` registered. | owner teacher (create/update) |
+| `job_positions/{positionId}` | **Careers Module (M1, 2026-05-04).** Open vacancies. Public read for `status:'open'`. Created from `Teachers Hub/careers-admin.html`'s "+ New position" modal — no CH-side write surface. CH only matters here as the Firestore rules host: rule helpers `hasTHSubRole`, `isInterviewer`, `isHiringManager`, `hasHiringPower`, `isHiringMgrSameSchool` live in `firestore.rules` "CAREERS + INTERVIEW MODULE" block. | central_admin / teachers_admin / hiring_manager (own school) |
+| `interview_question_sets/{setId}` | **Careers Module.** Question + rubric bundle (`primary-default-v1` is the seeded set — 18 questions × 4 categories, 1-5 scale). | central_admin / teachers_admin |
+| `job_applications/{applicationId}` | **Careers Module.** Candidate submissions. **Public create** (unauth) from `careers-apply.html`. Read by admin / hiring_manager (own school) / interviewer (assigned only) / applicant (Firebase Auth verified email match). | public (create); admin / hiring_manager (update) |
+| `interview_scorecards/{applicationId}_{interviewerUid}` | **Careers Module.** Per-interviewer scoring — submitted docs immutable (rule blocks all field changes once `status:'submitted'`). | scoring interviewer (own); admin / hiring_manager read |
+| `job_application_audit/{auditId}` | **Careers Module.** Append-only audit log — status changes / assignments / decisions. Read by admin / teachers_admin / hiring_manager. | hiring power (create); no update/delete |
+| `mail/{mailId}` | **Firebase Trigger Email extension queue (Careers Module M3).** `careers-admin.html` enqueues docs on schedule + decision; apply form enqueues "received" mail (M4). The extension reads + sends via SMTP. **Extension install pending** — until then mail enqueue is non-fatal (apps still save). | any (create); central_admin (read) |
 
 **Timestamp field:** always `createdAt` (serverTimestamp). Do not use `timestamp` — that was the legacy name.
 
@@ -274,7 +280,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `as-alevel-syllabus.html`          | `/as-alevel-syllabus`           | AS/A Level syllabus guide — view/edit syllabus entries for Math, Biology, Chemistry, Physics (Year 11–12). |
 | `primary-checkpoint-syllabus.html` | `/primary-checkpoint-syllabus`  | Primary Checkpoint syllabus admin — chapter/topic/objective structure (Year 4–6). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
 | `secondary-checkpoint-syllabus.html` | `/secondary-checkpoint-syllabus` | Secondary Checkpoint syllabus admin — chapter/topic/objective structure (Year 7–8). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
-| `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users |
+| `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users. **TH sub-roles section (2026-05-04)** carries 4 checkboxes: `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` (last two unlock the Careers dropdown in TH). |
 | `page-access.html`                 | `/page-access`                  | **Page Access Manager** — central_admin tool to edit `page_access_config/{slug}` for each platform. Tabs per platform (only Academic Hub wired up); search, dirty-state tracking, batched Firestore writes; “open to all” badge when `visible_to: []`. Linked from navbar under User Console. |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
 | `school-appraisals.html`           | `/school-appraisals`            | School-level appraisals                           |
