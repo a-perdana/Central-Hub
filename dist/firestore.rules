@@ -935,8 +935,14 @@ service cloud.firestore {
     // Read: any Central Hub user
     // Write (create/update/delete): central_admin only
     match /school_visits/{visitId} {
+      // Read: any signed-in Central Hub user (Director / Specialist / Coord).
+      // Write: any Central Hub user — Subject Specialists need to log their
+      // own visit notes after going on-site; auditing relies on the
+      // createdBy / visitedBy fields the page already writes. Phase 2 will
+      // tighten this to "owner-only update + admin override" once the
+      // schema gets a createdByUid field.
       allow read:                   if isCentralUser();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isCentralUser();
     }
 
     // -- kpi_school_submissions (School KPI submissions reviewed by HQ) --
@@ -1053,6 +1059,39 @@ service cloud.firestore {
     match /framework_config/{docId} {
       allow read:  if isAuthorized();
       allow write: if isAHAdmin();
+    }
+
+    // -- competency_framework (Eduversal competency tracks per audience) --
+    // Doc ID: trackId — currently 'teachers' (TH), upcoming 'leaders' (AH),
+    // 'specialists' (CH). Holds the 4-level × N-domain × M-competency
+    // structure plus the verbatim Cambridge / Permendiknas reference text.
+    // Read:  any authorized user (every TH/AH/CH page reads this)
+    // Write: central_admin only — seeded via Admin SDK by
+    //        scripts/competency/seed-{th,ah,ch}-competency-framework.js
+    // -- cambridge_crossref (Phase 4 read-only aggregator) --
+    // Single doc 'index' aggregates Cambridge Teacher Standards refs
+    // across KPI / Appraisal / Competency so consumer pages can render
+    // "this same Cambridge standard is also tracked in X, Y, Z" without
+    // running 5+ separate queries on every chip hover.
+    match /cambridge_crossref/{docId} {
+      allow read:  if isAuthorized();
+      allow write: if isAdmin();
+    }
+
+    match /competency_framework/{trackId} {
+      allow read:  if isAuthorized();
+      allow write: if isAdmin();
+
+      // Per-(competency, level) base learning content. Doc ID format:
+      // {compId}_{level}  e.g. 'smc-1_awareness'. Loaded lazily by
+      // learning-path pages (one read per modal open). Admin overrides
+      // for specific (comp, level) pairs continue to live in their
+      // own collections (content_overrides_teachers / _academic) and
+      // are read on top of this base content.
+      match /levels/{levelDocId} {
+        allow read:  if isAuthorized();
+        allow write: if isAdmin();
+      }
     }
 
     // -- calibration_sessions (Appraiser IRR calibration — Academic Hub) --
