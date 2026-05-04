@@ -280,7 +280,7 @@ firebase deploy --only firestore:rules --project centralhub-8727b
 | `as-alevel-syllabus.html`          | `/as-alevel-syllabus`           | AS/A Level syllabus guide — view/edit syllabus entries for Math, Biology, Chemistry, Physics (Year 11–12). |
 | `primary-checkpoint-syllabus.html` | `/primary-checkpoint-syllabus`  | Primary Checkpoint syllabus admin — chapter/topic/objective structure (Year 4–6). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
 | `secondary-checkpoint-syllabus.html` | `/secondary-checkpoint-syllabus` | Secondary Checkpoint syllabus admin — chapter/topic/objective structure (Year 7–8). Uses `initSyllabusPage` from `partials/syllabus-core.js`. |
-| `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users. **TH sub-roles section (2026-05-04)** carries 4 checkboxes: `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` (last two unlock the Careers dropdown in TH). |
+| `console.html`                     | `/console`                      | User management — sets all 4 platform role fields, approves AH + TH users; pending banner + stat card for unapproved users. **TH sub-roles section (2026-05-04)** carries 4 checkboxes: `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` (last two unlock the Careers dropdown in TH). roleFilter has 2 dedicated options to find these users quickly: "TH sub-role: interviewer" and "TH sub-role: hiring_manager". |
 | `page-access.html`                 | `/page-access`                  | **Page Access Manager** — central_admin tool to edit `page_access_config/{slug}` for each platform. Tabs per platform (only Academic Hub wired up); search, dirty-state tracking, batched Firestore writes; “open to all” badge when `visible_to: []`. Linked from navbar under User Console. |
 | `appraisals.html`                  | `/appraisals`                   | Staff appraisal hub                               |
 | `school-appraisals.html`           | `/school-appraisals`            | School-level appraisals                           |
@@ -379,6 +379,24 @@ CH owns two roles in the 3-track competency system:
   - `school_visits` write opened to `central_user` (was central_admin only) — Subject Specialists need it for visit notes
 - `storage.rules`:
   - `competency_evidence/{platform}/{uid}/{filename}` — owner write ≤25 MB, owner+central_admin read, central_admin delete
+
+---
+
+## Careers + Interview Module — CH entry points (M3, 2026-05-04)
+
+The careers module lives in **Teachers Hub**; CH only hosts the rules + a few UI entry points.
+
+**Navbar (`partials/navbar.html`):**
+- Admin dropdown → "Users & Access" column → `Hiring Funnel ↗` external link to `https://teachershub.eduversal.org/careers-admin` (`target="_blank"`). Same precedent as the existing "Academic Hub ↗" / "Teachers Hub ↗" cross-app links. The Admin dropdown is `data-admin-only="1"` (line 1666 of navbar.html), so this link is only visible to `central_admin` — no page-access config needed.
+- Mobile drawer's Admin section has the same link.
+
+**`console.html`:**
+- TH sub-roles checkbox panel carries 4 entries: `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager`. Each maps to a value in `users/{uid}.th_sub_roles[]`.
+- `roleFilter` `<select>` has 2 dedicated options ("TH sub-role: interviewer" / "TH sub-role: hiring_manager") that filter the user list by `Array.isArray(u.th_sub_roles) && u.th_sub_roles.includes(<role>)`. Useful for HQ to quickly audit who has hiring power per school.
+
+**HQ → TH cross-platform caveat:** A `central_admin` clicking the Hiring Funnel link is taken to TH; TH's `auth-guard.js` only treats `teachers_admin` as bypass, NOT `central_admin`. If the HQ user does not also hold `teachers_admin` on their TH profile, page-access gating applies — they need either `teachers_admin` OR the `hiring_manager` sub-role to see `/careers-admin`. Operational fix: ensure HQ users (Directors, hiring leads) hold `teachers_admin` on their TH profile from `/console`. Future improvement: TH `auth-guard.js` could read `role_centralhub` and bypass for `central_admin` too — not done yet.
+
+**No CH-side `careers-*` page exists.** All hiring UI (funnel, scorecard, compare) lives in TH. The CH navbar link is purely a launcher.
 
 ---
 
