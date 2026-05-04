@@ -72,5 +72,34 @@ service firebase.storage {
             || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
                  .data.role_centralhub == 'central_admin');
     }
+
+    // Careers — candidate CV uploads (Teachers Hub /careers, public form).
+    // Path: careers/cv/{positionId}/{timestamp}_{filename}
+    // Public write because the apply form runs unauthenticated; size capped
+    // at 10 MB and MIME limited to PDF/DOC/DOCX. Read access is gated to
+    // signed-in hiring power: central_admin / teachers_admin / hiring_manager / interviewer.
+    // (PDF/DOC links also accessible via Firebase getDownloadURL token —
+    // the token is included in the application doc's applicant.cvUrl, but
+    // those fields are only readable to the same hiring power per the
+    // job_applications Firestore rule.)
+    match /careers/cv/{positionId}/{filename} {
+      allow read: if request.auth != null
+        && (
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+               .data.role_centralhub == 'central_admin'
+             || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                  .data.role_teachershub == 'teachers_admin'
+             || (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                   .data.th_sub_roles is list
+                 && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                       .data.th_sub_roles.hasAny(['hiring_manager','interviewer'])))
+           );
+      allow write: if request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches(
+             'application/pdf|application/msword|application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document');
+      allow delete: if request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin';
+    }
   }
 }

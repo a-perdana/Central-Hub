@@ -1378,5 +1378,139 @@ service cloud.firestore {
         allow update, delete: if isAdmin();
       }
     }
+
+    // ========================================================
+    // CAREERS + INTERVIEW MODULE (Teachers Hub /careers)
+    // Public application form + auth'd interviewer scoring
+    // ========================================================
+
+    // Helpers — TH sub-role checks based on th_sub_roles[] array
+    function hasTHSubRole(roleName) {
+      return isAuthorized()
+             && ('th_sub_roles' in userProfile())
+             && userProfile().th_sub_roles is list
+             && userProfile().th_sub_roles.hasAny([roleName]);
+    }
+    function isInterviewer()      { return hasTHSubRole('interviewer'); }
+    function isHiringManager()    { return hasTHSubRole('hiring_manager'); }
+    // Hiring power: central_admin OR teachers_admin OR hiring_manager sub-role
+    function hasHiringPower() {
+      return isAdmin() || isTHAdmin() || isHiringManager();
+    }
+    // hiring_manager same-school: only own school's positions/applications
+    function isHiringMgrSameSchool(targetSchoolId) {
+      return isHiringManager()
+             && ('schoolId' in userProfile())
+             && userProfile().schoolId == targetSchoolId;
+    }
+
+    // -- job_positions (HQ-published vacancies) --------------
+    // Read: open positions are public (no auth); admin + hiring power can read all incl. drafts
+    match /job_positions/{posId} {
+      allow get:    if (resource.data.status == 'open')
+                    || isAdmin() || isTHAdmin() || isHiringManager();
+      allow list:   if (request.query.limit <= 100)
+                    && (
+                         // public list query — must filter by status==open (rule trusts client query)
+                         true
+                       );
+      allow create, update: if isAdmin() || isTHAdmin()
+                          || (isHiringManager()
+                              && request.resource.data.schoolId == userProfile().schoolId);
+      allow delete: if isAdmin();
+    }
+
+    // -- interview_question_sets (rubric + 18 questions) -----
+    // Read: any signed-in user (interviewers need access; applicants don't)
+    match /interview_question_sets/{setId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin() || isTHAdmin();
+    }
+
+    // -- job_applications (candidate submissions) ------------
+    match /job_applications/{appId} {
+      // PUBLIC create — anyone can submit. Validate required fields + email shape.
+      // Status forced to 'submitted' on create; applicantToken required.
+      allow create: if request.resource.data.keys().hasAll(
+                         ['positionId','applicantEmail','applicantToken','applicant','status','source'])
+                    && request.resource.data.applicantEmail is string
+                    && request.resource.data.applicantEmail.matches('.+@.+\\..+')
+                    && request.resource.data.applicantToken is string
+                    && request.resource.data.applicantToken.size() >= 32
+                    && request.resource.data.status == 'submitted'
+                    && request.resource.data.source == 'careers';
+
+      // Read: admin / hiring_manager (own school) / interviewer (only assigned)
+      // / applicant (own — matched by Firebase Auth verified email)
+      allow get:    if isAdmin() || isTHAdmin()
+                    || (isHiringManager() && resource.data.schoolId == userProfile().schoolId)
+                    || (isInterviewer()
+                        && resource.data.interviewSchedule.interviewerUids.hasAny([request.auth.uid]))
+                    || (isSignedIn()
+                        && request.auth.token.email_verified == true
+                        && request.auth.token.email == resource.data.applicantEmail);
+      allow list:   if isAdmin() || isTHAdmin() || isHiringManager()
+                    // applicant's own list (client filters by applicantEmail==own)
+                    || (isSignedIn()
+                        && request.auth.token.email_verified == true
+                        && request.query.limit <= 50);
+
+      // Update: admin / hiring_manager (own school) / applicant (withdraw only)
+      allow update: if isAdmin() || isTHAdmin()
+                    || (isHiringManager() && resource.data.schoolId == userProfile().schoolId)
+                    || (isSignedIn()
+                        && request.auth.token.email_verified == true
+                        && request.auth.token.email == resource.data.applicantEmail
+                        && request.resource.data.status == 'withdrew'
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['status','updatedAt']));
+      allow delete: if false;
+    }
+
+    // -- interview_scorecards ({appId}_{interviewerUid}) ------
+    match /interview_scorecards/{scId} {
+      // Create/update: only the scoring interviewer themselves (uid match);
+      // submitted docs are immutable (status can't go back from submitted).
+      allow create: if isSignedIn()
+                    && (isInterviewer() || hasHiringPower())
+                    && request.resource.data.interviewerUid == request.auth.uid;
+      allow update: if isSignedIn()
+                    && (isInterviewer() || hasHiringPower())
+                    && request.resource.data.interviewerUid == request.auth.uid
+                    && resource.data.interviewerUid == request.auth.uid
+                    && (resource.data.status != 'submitted'
+                        || (request.resource.data.status == 'submitted'
+                            && resource.data.status == 'submitted'
+                            // when already submitted, the only allowed write keeps status=submitted
+                            // (no-op style) — block content edits after submit
+                            && request.resource.data.diff(resource.data).affectedKeys().size() == 0));
+
+      allow get:    if isAdmin() || isTHAdmin()
+                    || (isHiringManager() && resource.data.schoolId == userProfile().schoolId)
+                    || (isSignedIn() && resource.data.interviewerUid == request.auth.uid);
+      allow list:   if isAdmin() || isTHAdmin() || isHiringManager()
+                    // interviewer can list own scorecards (client filters by interviewerUid)
+                    || (isInterviewer() && request.query.limit <= 50);
+      allow delete: if false;
+    }
+
+    // -- job_application_audit (status change log) -----------
+    match /job_application_audit/{auditId} {
+      allow create: if isSignedIn() && hasHiringPower();
+      allow read:   if isAdmin() || isTHAdmin() || isHiringManager();
+      allow update, delete: if false;
+    }
+
+    // -- mail (Firebase Trigger Email extension queue) -------
+    // The extension reads `to` + `message.{subject,html,text}` and sends.
+    // We allow public create so the apply form can enqueue an
+    // "application received" mail; reads/updates are server-only via the extension.
+    match /mail/{mailId} {
+      allow create: if request.resource.data.keys().hasAll(['to','message'])
+                    && request.resource.data.to is string
+                    && request.resource.data.message.subject is string;
+      allow get, list: if isAdmin();
+      allow update, delete: if false;
+    }
   }
 }
