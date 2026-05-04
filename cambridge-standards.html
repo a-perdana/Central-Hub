@@ -251,6 +251,7 @@
 .xref-group-label.kpi        { background: #fef3c7; color: #92400e; }
 .xref-group-label.appraisal  { background: #dbeafe; color: #1e40af; }
 .xref-group-label.competency { background: #ede9fe; color: #5b21b6; }
+.xref-group-label.induction  { background: #ddd6fe; color: #4c1d95; }
 
 .xref-item {
   display: block; padding: 8px 12px; margin-bottom: 5px;
@@ -304,7 +305,7 @@
   <div class="basis-card">
     <div class="basis-card-title">How this page is sourced</div>
     <div class="basis-card-text">
-      Standard text is read live from <code>competency_framework/teachers</code> and <code>competency_framework/leaders</code> — the same docs that power the Learning Path pages — so this reference is always in sync with what the platform tags. Cross-references come from <code>cambridge_crossref/index</code>, rebuilt by <code>scripts/competency/build-crossref-index.js</code> whenever KPI / Appraisal / Competency tags change.
+      Standard text is read live from <code>competency_framework/teachers</code> and <code>competency_framework/leaders</code> — the same docs that power the Learning Path pages — so this reference is always in sync with what the platform tags. Cross-references come from <code>cambridge_crossref/index</code>, rebuilt by <code>scripts/competency/build-crossref-index.js</code> whenever KPI / Appraisal / Competency / Induction tags change. Induction handbook tasks (Phase 5) are walked from <code>docs/induction/handbook-*.json</code> and contribute their own Cambridge anchors.
     </div>
   </div>
 
@@ -343,8 +344,9 @@
 <script type="module">
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-const SYSTEM_LABELS = { kpi: 'KPI', appraisal: 'Appraisal', competency: 'Competency' };
-const TRACK_LABELS  = { teachers: 'Teachers', leaders: 'Leaders (AH)', specialists: 'Specialists (CH)' };
+const SYSTEM_LABELS = { kpi: 'KPI', appraisal: 'Appraisal', competency: 'Competency', induction: 'Induction' };
+const TRACK_LABELS  = { teachers: 'Teachers', leaders: 'Leaders (AH)', specialists: 'Specialists (CH)',
+                        subject_teacher: 'Subject Teacher Y1', principal: 'Principal Y1', specialist: 'Specialist Y1' };
 
 // Cambridge domain names — verbatim from Cambridge International (2023).
 // Canonical source: docs/research/cambridge/{teacher,school-leader}-standards-2023.json
@@ -481,13 +483,13 @@ function renderList() {
     if (!entry || !Array.isArray(entry.items) || !entry.items.length) {
       return `<div class="std-detail-empty">No cross-references yet — this standard is not currently tagged on any KPI, Appraisal F-item or Competency.</div>`;
     }
-    const grouped = { kpi: [], appraisal: [], competency: [] };
+    const grouped = { kpi: [], appraisal: [], competency: [], induction: [] };
     for (const it of entry.items) (grouped[it.system] ||= []).push(it);
 
     const groupBlock = (sys, list) => {
       if (!list.length) return '';
       const items = list.map(it => {
-        const trackBit = it.system === 'competency' && it.track
+        const trackBit = (it.system === 'competency' || it.system === 'induction') && it.track
           ? ` · ${escHtml(TRACK_LABELS[it.track] || it.track)}`
           : (it.track ? ` · ${escHtml(it.track)}` : '');
         return `
@@ -504,7 +506,7 @@ function renderList() {
         </div>
       `;
     };
-    return groupBlock('kpi', grouped.kpi) + groupBlock('appraisal', grouped.appraisal) + groupBlock('competency', grouped.competency);
+    return groupBlock('kpi', grouped.kpi) + groupBlock('appraisal', grouped.appraisal) + groupBlock('competency', grouped.competency) + groupBlock('induction', grouped.induction);
   };
 
   const xrefCount = (id) => {
