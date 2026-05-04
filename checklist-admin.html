@@ -439,7 +439,7 @@
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap">
         <div>
-          <h2 style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:4px">Completion Overview — Week <span id="ovWeekLabel">—</span></h2>
+          <h2 style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:4px">Completion Overview — <span id="ovWeekLabel">—</span></h2>
           <p style="font-size:0.78rem;color:var(--ink-3)">Live progress for all 8 platforms this week.</p>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -641,6 +641,10 @@ const ACADEMIC_YEAR = '2025-26';
 const TOTAL_WEEKS   = 40;
 const WEEK1_START   = new Date(2025, 6, 21);
 
+// teaching_schedule cache: weekNo (1..40) → { semLabel, semWeekNo, mon, fri }
+let _weekScheduleByNo = null;
+let _teachingWeeks    = [];
+
 const PLATFORM_CATS = {
   teachers: [
     'Planning', 'Assessment', 'Communication',
@@ -745,19 +749,22 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
     if (currentWeek < TOTAL_WEEKS) loadWeek(currentWeek + 1);
   });
 
-  // Populate jump select
-  const jumpSel = document.getElementById('weekJumpSelect');
-  for (let w = 1; w <= TOTAL_WEEKS; w++) {
-    const opt = document.createElement('option');
-    opt.value = w;
-    opt.textContent = `Wk ${w}  (${getWeekDates(w)})`;
-    jumpSel.appendChild(opt);
-  }
-  jumpSel.addEventListener('change', () => loadWeek(Number(jumpSel.value)));
+  // Load teaching_schedule first so week labels can show "Semester II · Week 15"
+  loadWeekSchedule().then(() => {
+    // Populate jump select
+    const jumpSel = document.getElementById('weekJumpSelect');
+    for (let w = 1; w <= TOTAL_WEEKS; w++) {
+      const opt = document.createElement('option');
+      opt.value = w;
+      opt.textContent = `${getWeekLabelShort(w)}  (${getWeekDates(w)})`;
+      jumpSel.appendChild(opt);
+    }
+    jumpSel.addEventListener('change', () => loadWeek(Number(jumpSel.value)));
 
-  currentWeek = getWeekNumber(new Date());
-  loadWeek(currentWeek);
-  loadEssentials();
+    currentWeek = getCurrentWeekNumber();
+    loadWeek(currentWeek);
+    loadEssentials();
+  });
 
   // Essentials events
   document.getElementById('essentialAddBtn').addEventListener('click', addEssential);
@@ -767,18 +774,70 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
 });
 
 // ── Helpers ───────────────────────────────────────────────────────
+async function loadWeekSchedule() {
+  if (_weekScheduleByNo) return;
+  try {
+    const snap = await getDoc(doc(window.db, 'teaching_schedule', 'main'));
+    _weekScheduleByNo = {};
+    _teachingWeeks = [];
+    if (snap.exists()) {
+      _teachingWeeks = (snap.data().weeks || []).map(w => ({
+        weekNo:    w.weekNo,
+        semLabel:  w.semLabel  || '',
+        semWeekNo: w.semWeekNo || w.weekNo,
+        mon: new Date(w.mon + 'T00:00:00'),
+        fri: new Date(w.fri + 'T23:59:59'),
+      }));
+      _teachingWeeks.forEach(w => { if (w.weekNo) _weekScheduleByNo[w.weekNo] = w; });
+    }
+  } catch (e) {
+    console.warn('loadWeekSchedule failed; falling back to date math', e);
+    _weekScheduleByNo = {};
+  }
+}
+
 function getWeekNumber(date) {
   const diff = date - WEEK1_START;
   const w = Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
   return Math.max(1, Math.min(TOTAL_WEEKS, w));
 }
 
+// Prefer teaching_schedule when available (handles holiday gaps), fall back to date math
+function getCurrentWeekNumber() {
+  if (_teachingWeeks.length) {
+    const now = new Date();
+    const hit = _teachingWeeks.find(w => now >= w.mon && now <= w.fri);
+    if (hit?.weekNo) return hit.weekNo;
+    const nextW = _teachingWeeks.find(w => w.mon > now);
+    if (nextW?.weekNo) return nextW.weekNo;
+  }
+  return getWeekNumber(new Date());
+}
+
+// Semester-relative label: "Semester II · Week 15". Falls back to "Week N".
+function getWeekLabel(weekNum) {
+  const w = _weekScheduleByNo?.[weekNum];
+  if (w?.semLabel) return `${w.semLabel} · Week ${w.semWeekNo}`;
+  return `Week ${weekNum}`;
+}
+
+function getWeekLabelShort(weekNum) {
+  const w = _weekScheduleByNo?.[weekNum];
+  if (w?.semLabel) {
+    const semShort = w.semLabel.replace(/^Semester\s+/i, 'Sem ');
+    return `${semShort} W${w.semWeekNo}`;
+  }
+  return `Wk ${weekNum}`;
+}
+
 function getWeekDates(w) {
+  const sched = _weekScheduleByNo?.[w];
+  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  if (sched?.mon && sched?.fri) return `${fmt(sched.mon)} – ${fmt(sched.fri)}`;
   const start = new Date(WEEK1_START);
   start.setDate(start.getDate() + (w - 1) * 7);
   const end = new Date(start);
   end.setDate(end.getDate() + 4);
-  const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
@@ -791,13 +850,14 @@ function progressDocId(uid, week) {
 }
 
 function updateWeekUI() {
-  document.getElementById('weekLabel').textContent = `Week ${currentWeek}`;
+  const label = getWeekLabel(currentWeek);
+  document.getElementById('weekLabel').textContent = label;
   document.getElementById('weekDates').textContent  = getWeekDates(currentWeek);
   document.getElementById('prevWeekBtn').disabled   = currentWeek <= 1;
   document.getElementById('nextWeekBtn').disabled   = currentWeek >= TOTAL_WEEKS;
   const ind = document.getElementById('weekThisIndicator');
-  ind.style.display = (currentWeek === getWeekNumber(new Date())) ? '' : 'none';
-  document.getElementById('templatePanelTitle').textContent = `Week ${currentWeek} Tasks`;
+  ind.style.display = (currentWeek === getCurrentWeekNumber()) ? '' : 'none';
+  document.getElementById('templatePanelTitle').textContent = `${label} Tasks`;
   const jumpSel = document.getElementById('weekJumpSelect');
   if (jumpSel) jumpSel.value = currentWeek;
   document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${getPlatformLabel(currentPlatform)}`;
@@ -1228,21 +1288,24 @@ let ovWeek = 1;
 let laggingAll = [];
 
 async function loadOverview() {
+  // Make sure teaching_schedule is loaded so labels match the Template tab
+  await loadWeekSchedule();
+
   // Sync week select with overview
   const ovSel = document.getElementById('ovWeekSelect');
   if (!ovSel.options.length) {
     for (let w = 1; w <= TOTAL_WEEKS; w++) {
       const opt = document.createElement('option');
-      opt.value = w; opt.textContent = `Wk ${w}  (${getWeekDates(w)})`;
+      opt.value = w; opt.textContent = `${getWeekLabelShort(w)}  (${getWeekDates(w)})`;
       ovSel.appendChild(opt);
     }
-    ovSel.value = getWeekNumber(new Date());
+    ovSel.value = getCurrentWeekNumber();
     ovSel.addEventListener('change', () => { ovWeek = Number(ovSel.value); loadOverview(); });
     document.getElementById('ovRefreshBtn').addEventListener('click', loadOverview);
   }
 
   ovWeek = Number(ovSel.value);
-  document.getElementById('ovWeekLabel').textContent = ovWeek;
+  document.getElementById('ovWeekLabel').textContent = getWeekLabel(ovWeek);
   document.getElementById('ovLoading').style.display  = '';
   document.getElementById('ovContent').style.display  = 'none';
 
