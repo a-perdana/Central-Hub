@@ -3387,15 +3387,17 @@
           'activities','library'
         ],
         network: [
-          'schools','staff','network-health','event-calendar','academic-calendar'
+          'schools','staff','event-calendar','academic-calendar','network-health'
         ],
-        modules: [
-          'academics','appraisals','assessments','kpi-admin','school-visits',
-          'surveys','certificates','reports'
+        operations: [
+          'academics','appraisals','assessments','school-visits'
+        ],
+        insights: [
+          'kpi-admin','surveys','reports','certificates'
         ],
         admin: [
-          'console','page-access','checklist-admin','competency-admin',
-          'orientation-admin','feedback-management','mail-composer',
+          'console','page-access','competency-admin','orientation-admin',
+          'checklist-admin','feedback-management','mail-composer',
           'schedule-settings'
         ]
       };
@@ -3444,15 +3446,17 @@
         if (!item) return null;
         const label = customLabel || item.label;
         const handle = isAdmin ? `<span class="dsb-drag-handle" title="Drag to reorder">${HANDLE_SVG}</span>` : '';
+        // data-nav-key lets auth-guard.js applyPageAccessGating() hide items the
+        // current user's ch_sub_roles[] cannot access, driven by /page-access.
         if (item.type === 'module') {
-          return `<a href="${id}" class="dsb-module-link" data-id="${id}" draggable="${isAdmin}">
+          return `<a href="${id}" class="dsb-module-link" data-id="${id}" data-nav-key="${id}" draggable="${isAdmin}">
             <span class="dsb-module-dot" style="background:${item.color}"></span>
             <span class="dsb-label-text">${label}</span>
             ${handle}
           </a>`;
         }
         const count = item.countId ? `<span class="dsb-count" id="${item.countId}">—</span>` : '';
-        return `<a href="${id}" class="dsb-link" data-id="${id}" draggable="${isAdmin}">
+        return `<a href="${id}" class="dsb-link" data-id="${id}" data-nav-key="${id}" draggable="${isAdmin}">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${item.icon}</svg>
           <span class="dsb-label-text">${label}</span>
           ${count}
@@ -3465,15 +3469,16 @@
         if (!nav) return;
         let html = '';
 
-        // Admin section is admin-only — non-admins never see it. Empty modules
-        // (e.g. all module ids unknown) are still rendered with their header
-        // for now; if a future role gating wipes a section to zero items the
-        // header should also be hidden — handled by the `if (renderedItems)` check below.
+        // Admin section is admin-only — non-admins never see it. Empty sections
+        // are skipped via the `if (!renderedItems)` check below; CSS rule on
+        // [data-pa-empty="1"] also hides the matching .dsb-section-label when
+        // page-access gating wipes every item in a section.
         const allSections = [
-          { key: 'daily',   label: 'Daily',   adminOnly: false },
-          { key: 'network', label: 'Network', adminOnly: false },
-          { key: 'modules', label: 'Modules', adminOnly: false },
-          { key: 'admin',   label: 'Admin',   adminOnly: true  },
+          { key: 'daily',      label: 'Daily',      adminOnly: false },
+          { key: 'network',    label: 'Network',    adminOnly: false },
+          { key: 'operations', label: 'Operations', adminOnly: false },
+          { key: 'insights',   label: 'Insights',   adminOnly: false },
+          { key: 'admin',      label: 'Admin',      adminOnly: true  },
         ];
         const sections = allSections.filter(s => !s.adminOnly || isAdmin);
 
@@ -3534,7 +3539,7 @@
         document.getElementById('dsbReorderSave')?.addEventListener('click', async () => {
           const sections = {};
           const labels = {};
-          ['daily','network','modules','admin'].forEach(key => {
+          ['daily','network','operations','insights','admin'].forEach(key => {
             const section = document.getElementById(`sidebarSection_${key}`);
             if (!section) return;
             sections[key] = [...section.children]
@@ -3619,7 +3624,22 @@
           const snap = await getDoc(doc(db, 'sidebar_config', 'order'));
           const data = snap.exists() ? snap.data() : {};
           const order = data.sections || {};
-          ['daily','network','modules','admin'].forEach(k => { if (!order[k]) order[k] = SIDEBAR_DEFAULTS[k]; });
+          // Migrate legacy 'modules' section (split into operations + insights
+          // 2026-05-04). If the saved doc still has 'modules', re-bucket its
+          // ids into the new sections so the user keeps their custom order.
+          if (order.modules && !order.operations && !order.insights) {
+            const opsIds = new Set(SIDEBAR_DEFAULTS.operations);
+            const insIds = new Set(SIDEBAR_DEFAULTS.insights);
+            order.operations = order.modules.filter(id => opsIds.has(id));
+            order.insights   = order.modules.filter(id => insIds.has(id));
+            // any unknown ids fall back to operations to avoid silent loss
+            const known = new Set([...opsIds, ...insIds]);
+            order.modules.forEach(id => { if (!known.has(id)) order.operations.push(id); });
+            delete order.modules;
+          }
+          ['daily','network','operations','insights','admin'].forEach(k => {
+            if (!order[k]) order[k] = SIDEBAR_DEFAULTS[k];
+          });
           order.labels = data.labels || {};
           renderSidebar(order, isAdmin);
         } catch (e) {
