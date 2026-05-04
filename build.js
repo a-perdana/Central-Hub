@@ -322,6 +322,7 @@ const htmlFiles = [
   "page-access.html",
   "rules-viewer.html",
   "design-system.html",
+  "cambridge-standards.html",
 ];
 
 htmlFiles.forEach((file) => {
