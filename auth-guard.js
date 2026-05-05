@@ -237,31 +237,15 @@ function applyPageAccessGating(configs, userSubRoles) {
   });
 
   // CH navbar uses .ch-dd-wrap for dropdowns; hide if every child is hidden.
-  // index.html sidebar uses .dsb-section-wrap with the same data-section key
-  // on the matching .dsb-section-label header, so when the wrap empties out
-  // we hide the label too.
-  ['.ch-dd-wrap', '.ch-dd-submenu-wrap', '.dsb-section-wrap'].forEach(selector => {
+  ['.ch-dd-wrap', '.ch-dd-submenu-wrap'].forEach(selector => {
     document.querySelectorAll(selector).forEach(group => {
       const items = group.querySelectorAll('[data-nav-key], [data-nav-page]');
       if (!items.length) return;
       const allHidden = [...items].every(it =>
         it.getAttribute('data-pa-hidden') === '1' || it.getAttribute('data-ch-hidden') === '1'
       );
-      if (allHidden) {
-        group.setAttribute('data-pa-hidden', '1');
-        const sectionKey = group.getAttribute('data-section');
-        if (sectionKey) {
-          const lbl = document.querySelector(`.dsb-section-label[data-section="${sectionKey}"]`);
-          if (lbl) lbl.setAttribute('data-pa-hidden', '1');
-        }
-      } else {
-        group.removeAttribute('data-pa-hidden');
-        const sectionKey = group.getAttribute('data-section');
-        if (sectionKey) {
-          const lbl = document.querySelector(`.dsb-section-label[data-section="${sectionKey}"]`);
-          if (lbl) lbl.removeAttribute('data-pa-hidden');
-        }
-      }
+      if (allHidden) group.setAttribute('data-pa-hidden', '1');
+      else            group.removeAttribute('data-pa-hidden');
     });
   });
 

@@ -100,8 +100,7 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 1. **Per-navigation gate (Step 5b)** — direct URL access redirects to `/?denied=<slug>` if not allowed.
 2. **UI gating (`applyPageAccessGating`):**
    - desktop navbar: `[data-nav-key]` AND `[data-nav-page]`
-   - **sidebar in `index.html`** — `.dsb-section-wrap` empties out → matching `.dsb-section-label[data-section="<key>"]` hidden too
-   - empty `.ch-dd-wrap` / `.ch-dd-submenu-wrap` / `.dsb-section-wrap` (any selector with sub-children all `data-pa-hidden` OR `data-ch-hidden`)
+   - empty `.ch-dd-wrap` / `.ch-dd-submenu-wrap` (any wrap whose children are all `data-pa-hidden` OR `data-ch-hidden`)
    - empty `.ch-dd-col` columns inside multi-column dropdowns
 3. **Subject specialty gate** — pacing pages with `data-pacing-subject` filtered against `ch_subjects[]`. Uses `data-ch-hidden` (separate from `data-pa-hidden` so the two systems compose without interference).
 
@@ -113,23 +112,11 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 
 ---
 
-## Sidebar (`index.html`)
+## Navigation
 
-`<nav class="dash-sidebar">` rendered by `sidebarInit()`. 5 sections:
+`index.html` has **no sidebar** — the shared navbar (`partials/navbar.html`) is the sole navigation surface. Removed 2026-05-05 because navbar dropdowns (Network / Communications / Curriculum / Operations / Admin / My Specialist CPD) already cover every page; the sidebar duplicated them.
 
-| Section | Audience | Default items |
-|---|---|---|
-| **Daily** | all users | announcements, messageboard, documents, weekly-checklist, activities, library |
-| **Network** | all users | schools, staff, event-calendar, academic-calendar, network-health |
-| **Operations** | all users | academics (`href: 'curriculum-map'` — virtual module slot, no `/academics` page exists), appraisals, assessments, school-visits |
-| **Insights** | all users | kpi-admin, surveys, reports, certificates |
-| **Admin** | `central_admin` only (`adminOnly: true`) | console, page-access, competency-admin, orientation-admin, checklist-admin, feedback-management, mail-composer, schedule-settings |
-
-**Section visibility:** Admin section is rendered only when `isAdmin`. Other sections render unless empty after page-access gating; CSS rule on `[data-pa-empty="1"]` hides the matching `.dsb-section-label` when the wrap empties out.
-
-**Item types:** `link` (real page with icon + count badge) or `module` (virtual slot with colored dot + optional `href` override). Each item carries `data-nav-key=<id>` so `applyPageAccessGating` enforces visibility independent of `href`.
-
-**Admin reorder mode:** `data-id` + `draggable="true"` per item; admin drags to reorder, custom labels editable inline. Saved to `sidebar_config/order` doc.
+The legacy `sidebar_config/order` doc + the `dsb-*` CSS / `SIDEBAR_*` JS / `dash-sidebar` markup are gone. Page-access gating still happens through navbar `[data-nav-key]` / `[data-nav-page]` attributes; auth-guard's `.dsb-section-wrap` / `.dsb-section-label` handling was removed at the same time.
 
 ---
 
@@ -219,7 +206,7 @@ All pages share **`shared-styles.css`** (build-injected before the first `<style
 **Provided in shared-styles.css (do NOT duplicate in page `<style>`):**
 - `:root` tokens: `--ink`, `--paper`, `--accent`, `--accent-dk`, `--accent-2`, `--border`, `--shadow-{sm,,lg}`, `--radius`, `--white`
 - Reset + `body {}` base
-- `.page-layout`, `.sidebar` (and sub-components), `.dash-sidebar`, `.dsb-*`
+- `.page-layout`, `.sidebar` (and sub-components — page-internal filter/selector rails)
 - `.filter-bar`, `.filter-chip`, `.search-input-wrap`, `.search-input`, `.search-icon`, `.btn-reset`
 - `.badge` + variants (active/inactive/pending/warning/success/info/neutral/violet/danger/draft/read/unread/pinned/featured/role-*)
 - `.skel` + `@keyframes shimmer`
@@ -276,7 +263,7 @@ The Careers Module lives in **Teachers Hub**. CH only hosts the rules + a few UI
 
 | File | Purpose |
 |---|---|
-| `auth-guard.js` | Auth + role gate, profile modal mount, page-access UI gating, sidebar `.dsb-section-wrap` empty detection |
+| `auth-guard.js` | Auth + role gate, profile modal mount, page-access UI gating |
 | `build.js` | Vercel build — navbar injection, shared-styles injection, cambridge-crossref injection, asset copy |
 | `shared-styles.css` | Central design system — tokens, reset, components, sidebar, profile modal CSS |
 | `partials/navbar.html` | Shared navbar HTML+CSS+JS injected via `<!-- SHARED_NAVBAR -->`. Bespoke in-place navbar editor (admin only) supporting columns + nested submenu groups + Add-Group button. Toggled via `#btnNavEdit`; writes to `nav_config/v1`. |
@@ -313,7 +300,7 @@ The Careers Module lives in **Teachers Hub**. CH only hosts the rules + a few UI
 - **`/page-access` critical-page guard** opens confirm modal at save time before narrowing visibility on admin tooling pages. central_admin bypasses; other power users (director / coordinator) get explicit acknowledgement.
 - **In-place navbar editor lives in `partials/navbar.html`** (CH only — bespoke). Writes to `nav_config/v1`. Don't fork into AH/TH — their navbars are flat and use `shared-design/nav-edit-simple.js` writing to `nav_config/{platform}`.
 - **Profile modal edits ONLY personal fields** — displayName / phone / title / photoURL. Email + role + sub-role + subjects ASLA editable from here. Role mutations only via `/console`.
-- **Sidebar `academics` module is virtual** — `href: 'curriculum-map'` redirect. There is no `/academics` page; do not create one.
+- **No sidebar on `index.html`.** Navbar dropdowns are the sole navigation surface (removed 2026-05-05). The `academics` data-nav-key still exists in navbar config + `page_access_config/academics`, but its href routes to `curriculum-map` because there is no `/academics` page; do not create one.
 
 ---
 
@@ -354,8 +341,8 @@ Forms used for both Create + Edit modes: Cancel must return to the appropriate v
   <script type="module" src="auth-guard.js"></script>
 ```
 
-### 10. Sidebar virtual modules need explicit `href`
-`SIDEBAR_ITEMS.academics` ships with `href: 'curriculum-map'` because `academics.html` doesn't exist. New virtual module slots must do the same — `data-nav-key=<id>` stays as the canonical key for `page_access_config` matching, but `href` routes to a real page.
+### 10. Virtual nav slots need a real `href`
+The `academics` data-nav-key is virtual (no `academics.html`). Its navbar entry routes `href="curriculum-map"`. New virtual slots must do the same — `data-nav-key=<id>` stays as the canonical key for `page_access_config` matching, but `href` routes to a real page.
 
 ### 11. Reserved Firestore doc IDs
 `__name__`-style (double-underscore start AND end) is reserved by Firestore — `setDoc` rejects with "Resource id is invalid because it is reserved". Use single-underscore-each-side patterns instead.
