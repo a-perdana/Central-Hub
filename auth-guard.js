@@ -48,9 +48,17 @@ document.body.style.visibility = 'hidden';
 
 // ── Subject-specialty gating ─────────────────────────────────────
 // Maps each subject-specific page slug to the ch_subjects[] values
-// that grant access. central_admin and CH coordinators (cross-subject)
-// bypass this entirely. Empty ch_subjects[] on a central_user means
-// no specialty (treated as "no specialist access" — same as missing).
+// that grant access.
+//
+// Sub-role hierarchy (applies even before ch_subjects[]):
+//   - central_admin: bypass — full management surface.
+//   - director: bypass — directors sit *above* subject specialists,
+//     they are network-wide and need cross-subject visibility.
+//   - coordinator: ALWAYS filtered by ch_subjects[]. A coordinator IS
+//     a subject specialist. If a coordinator's ch_subjects[] is empty
+//     they see no subject pages — that's a misconfiguration; promote
+//     them to director (or assign subjects) on /console.
+//   - other central_users: filtered by ch_subjects[]; empty = no access.
 //
 // Combined-science pacing pages accept ANY of biology/chemistry/physics.
 const SUBJECT_PAGE_MAP = {
@@ -81,14 +89,18 @@ function currentPageKey() {
 }
 
 function isSubjectAllowed(profile, pageKey) {
-  // Admins and coordinators (cross-subject sub-role) always pass.
+  // central_admin bypasses unconditionally.
   if (profile?.role_centralhub === 'central_admin') return true;
-  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
-  if (chSubRoles.includes('coordinator') || chSubRoles.includes('director')) return true;
 
   const requiredSubjects = SUBJECT_PAGE_MAP[pageKey];
   if (!requiredSubjects) return true; // not a subject-gated page
 
+  // director sits above subject specialists — cross-subject visibility.
+  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  if (chSubRoles.includes('director')) return true;
+
+  // Everyone else (coordinator + plain central_user) is filtered by
+  // ch_subjects[]. Empty array = no subject access.
   const userSubjects = Array.isArray(profile?.ch_subjects) ? profile.ch_subjects : [];
   return userSubjects.some(s => requiredSubjects.includes(s));
 }
