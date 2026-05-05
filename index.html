@@ -3381,24 +3381,40 @@
       // SIDEBAR CONFIG — data-driven, Firestore-backed reorder
       // ============================================================
 
+      // Sidebar sections mirror the navbar dropdown groups (see partials/navbar.html
+      // groupKeys). Keep these in sync — every sidebar item should belong to the
+      // same navbar group its data-nav-key resolves to, so a click in either
+      // place lands the user in the same conceptual area.
+      //   daily       → navbar `comms`       (Communications)
+      //   network     → navbar `network`
+      //   curriculum  → navbar `curriculum`  (landing modules — leaves stay in dropdown)
+      //   operations  → navbar `ops`
+      //   cpd         → navbar `specialist`  (gated by ch_subjects[] / specialist sub-roles)
+      //   admin       → navbar `admin`       (central_admin only)
       const SIDEBAR_DEFAULTS = {
         daily: [
           'announcements','messageboard','documents','weekly-checklist',
           'activities','library'
         ],
         network: [
-          'schools','staff','event-calendar','academic-calendar','network-health'
+          'schools','staff','network-health'
+        ],
+        curriculum: [
+          'academic-calendar','event-calendar','academics','teaching-progress'
         ],
         operations: [
-          'academics','appraisals','assessments','school-visits'
+          'appraisals','school-appraisals','teacher-appraisals',
+          'assessments','ease-system','school-visits'
         ],
-        insights: [
-          'kpi-admin','surveys','reports','certificates'
+        cpd: [
+          'specialist-framework','specialist-path','specialist-portfolio',
+          'specialist-certificates','my-induction'
         ],
         admin: [
-          'console','page-access','competency-admin','orientation-admin',
-          'checklist-admin','feedback-management','mail-composer',
-          'schedule-settings'
+          'console','page-access','kpi-admin','competency-admin',
+          'orientation-admin','induction-admin','checklist-admin',
+          'feedback-management','mail-composer','schedule-settings',
+          'surveys','reports','certificates'
         ]
       };
 
@@ -3422,12 +3438,22 @@
         // its sidebar slot opens the curriculum-map landing instead. The
         // `id` (and therefore data-nav-key) stays `academics` so the
         // page_access_config/academics doc still gates visibility.
-        academics:         { label: 'Curriculum',        type: 'module', color: '#10b981', href: 'curriculum-map' },
+        academics:         { label: 'Curriculum Map',    type: 'module', color: '#10b981', href: 'curriculum-map' },
+        'teaching-progress':{ label: 'Teaching Progress',type: 'module', color: '#10b981' },
         appraisals:        { label: 'Appraisals',        type: 'module', color: '#d97706' },
+        'school-appraisals':{ label: 'School Appraisals',type: 'module', color: '#d97706' },
+        'teacher-appraisals':{ label: 'Teacher Appraisals',type:'module', color: '#d97706' },
         assessments:       { label: 'Assessments',       type: 'module', color: '#8b5cf6' },
+        'ease-system':     { label: 'EASE System',       type: 'module', color: '#8b5cf6' },
         'kpi-admin':       { label: 'KPI & Performance', type: 'module', color: '#0d9488' },
         reports:           { label: 'Reports & Export',  type: 'module', color: '#6366f1' },
         'school-visits':   { label: 'School Visits',     type: 'module', color: '#0891b2' },
+        // CPD (specialist track + induction mentee dashboard)
+        'specialist-framework':   { label: 'Framework',    type: 'module', color: '#6c5ce7' },
+        'specialist-path':        { label: 'Learning Path',type: 'module', color: '#6c5ce7' },
+        'specialist-portfolio':   { label: 'Portfolio',    type: 'module', color: '#6c5ce7' },
+        'specialist-certificates':{ label: 'Certificates', type: 'module', color: '#6c5ce7' },
+        'my-induction':           { label: 'My Induction', type: 'module', color: '#6c5ce7' },
         // admin
         console:           { label: 'User Console',          type: 'link', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07"/>' },
         'page-access':     { label: 'Page Access',           type: 'link', icon: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>' },
@@ -3435,6 +3461,7 @@
         'feedback-management':{ label: 'Feedback',           type: 'link', icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' },
         'competency-admin':{ label: 'Competency Admin',      type: 'link', icon: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>' },
         'orientation-admin':{ label: 'Orientation Admin',    type: 'link', icon: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>' },
+        'induction-admin': { label: 'Induction Admin',       type: 'link', icon: '<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>' },
         'mail-composer':   { label: 'Mail Composer',         type: 'link', icon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>' },
         'schedule-settings':{ label: 'Schedule Settings',    type: 'link', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><circle cx="12" cy="12" r="7"/>' },
       };
@@ -3477,15 +3504,18 @@
         if (!nav) return;
         let html = '';
 
-        // Admin section is admin-only — non-admins never see it. Empty sections
-        // are skipped via the `if (!renderedItems)` check below; CSS rule on
-        // [data-pa-empty="1"] also hides the matching .dsb-section-label when
-        // page-access gating wipes every item in a section.
+        // Section order mirrors the navbar dropdown order:
+        //   Daily → Network → Curriculum → Operations → My CPD → Admin.
+        // CPD renders structurally for everyone; page-access gating wipes its
+        // items for users without specialist sub-roles, and the empty-section
+        // CSS rule on [data-pa-empty="1"] hides the label too. Admin is
+        // hard-gated to central_admin (matches navbar's data-admin-only).
         const allSections = [
           { key: 'daily',      label: 'Daily',      adminOnly: false },
           { key: 'network',    label: 'Network',    adminOnly: false },
+          { key: 'curriculum', label: 'Curriculum', adminOnly: false },
           { key: 'operations', label: 'Operations', adminOnly: false },
-          { key: 'insights',   label: 'Insights',   adminOnly: false },
+          { key: 'cpd',        label: 'My CPD',     adminOnly: false },
           { key: 'admin',      label: 'Admin',      adminOnly: true  },
         ];
         const sections = allSections.filter(s => !s.adminOnly || isAdmin);
@@ -3547,7 +3577,7 @@
         document.getElementById('dsbReorderSave')?.addEventListener('click', async () => {
           const sections = {};
           const labels = {};
-          ['daily','network','operations','insights','admin'].forEach(key => {
+          ['daily','network','curriculum','operations','cpd','admin'].forEach(key => {
             const section = document.getElementById(`sidebarSection_${key}`);
             if (!section) return;
             sections[key] = [...section.children]
@@ -3631,22 +3661,61 @@
         try {
           const snap = await getDoc(doc(db, 'sidebar_config', 'order'));
           const data = snap.exists() ? snap.data() : {};
+          const hasSavedOrder = !!data.sections;
           const order = data.sections || {};
-          // Migrate legacy 'modules' section (split into operations + insights
-          // 2026-05-04). If the saved doc still has 'modules', re-bucket its
-          // ids into the new sections so the user keeps their custom order.
-          if (order.modules && !order.operations && !order.insights) {
-            const opsIds = new Set(SIDEBAR_DEFAULTS.operations);
-            const insIds = new Set(SIDEBAR_DEFAULTS.insights);
-            order.operations = order.modules.filter(id => opsIds.has(id));
-            order.insights   = order.modules.filter(id => insIds.has(id));
-            // any unknown ids fall back to operations to avoid silent loss
-            const known = new Set([...opsIds, ...insIds]);
-            order.modules.forEach(id => { if (!known.has(id)) order.operations.push(id); });
-            delete order.modules;
+          if (hasSavedOrder) {
+            // Legacy migration: pre-2026-05-04 doc had a single 'modules' section
+            // (split into operations + insights). Re-bucket so saved order isn't lost.
+            if (order.modules && !order.operations && !order.insights) {
+              const opsIds = new Set(['academics','appraisals','assessments','school-visits']);
+              const insIds = new Set(['kpi-admin','surveys','reports','certificates']);
+              order.operations = order.modules.filter(id => opsIds.has(id));
+              order.insights   = order.modules.filter(id => insIds.has(id));
+              const known = new Set([...opsIds, ...insIds]);
+              order.modules.forEach(id => { if (!known.has(id)) order.operations.push(id); });
+              delete order.modules;
+            }
+            // Legacy migration (2026-05-05): sections were re-cut to mirror
+            // the navbar groups (Daily / Network / Curriculum / Operations /
+            // CPD / Admin). Old buckets:
+            //   network (had calendars) → split network + curriculum
+            //   insights → folded into admin
+            //   operations (had `academics` module) → split curriculum + operations
+            // Map every known legacy id to its new home so the user's custom
+            // order survives; unknown / removed ids drop out.
+            const sectionFor = {};
+            Object.entries(SIDEBAR_DEFAULTS).forEach(([sec, ids]) => {
+              ids.forEach(id => { sectionFor[id] = sec; });
+            });
+            const looksLegacy = !!order.insights
+              || (!('curriculum' in order) && !('cpd' in order))
+              || ['daily','network','operations','admin'].some(sec =>
+                   (order[sec] || []).some(id => sectionFor[id] && sectionFor[id] !== sec));
+            if (looksLegacy) {
+              const previouslyKnown = new Set(Object.keys(order));
+              const rebuilt = { daily: [], network: [], curriculum: [], operations: [], cpd: [], admin: [] };
+              ['daily','network','curriculum','operations','cpd','insights','admin'].forEach(legacyKey => {
+                (order[legacyKey] || []).forEach(id => {
+                  const home = sectionFor[id];
+                  if (home && !rebuilt[home].includes(id)) rebuilt[home].push(id);
+                });
+              });
+              // For sections introduced *by this migration* (curriculum, cpd),
+              // a user's saved doc may have nothing to contribute. Seed those
+              // with defaults so the user discovers the new sections.
+              Object.keys(rebuilt).forEach(k => {
+                if (!rebuilt[k].length && !previouslyKnown.has(k)) {
+                  rebuilt[k] = [...SIDEBAR_DEFAULTS[k]];
+                }
+                order[k] = rebuilt[k];
+              });
+              delete order.insights;
+            }
           }
-          ['daily','network','operations','insights','admin'].forEach(k => {
-            if (!order[k]) order[k] = SIDEBAR_DEFAULTS[k];
+          // Sections never seen by the saved doc fall back to defaults.
+          // A user who explicitly saved an empty array keeps it empty.
+          ['daily','network','curriculum','operations','cpd','admin'].forEach(k => {
+            if (!Array.isArray(order[k])) order[k] = SIDEBAR_DEFAULTS[k];
           });
           order.labels = data.labels || {};
           renderSidebar(order, isAdmin);
