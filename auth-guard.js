@@ -20,7 +20,7 @@ import { initializeApp, getApps }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp }
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, collection, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
