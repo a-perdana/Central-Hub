@@ -188,7 +188,13 @@ function applySubjectGating(profile) {
 // Both can run on the same DOM — they use different `data-*-hidden`
 // attributes and a shared "display: none !important" rule.
 const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login']);
-const PAGE_ACCESS_TTL_MS = 5 * 60 * 1000;
+// Cache TTL — short enough that an admin's page-access save is felt
+// almost immediately by other tabs, long enough to absorb hot navigation.
+// Was 5 min before 2026-05-05; cut to 60s when we noticed admins were
+// surprised that hidden=true didn't block coordinators until their
+// session expired. Real-time listeners would be tighter but this is
+// "good enough" for a tool admin save uses several times a year.
+const PAGE_ACCESS_TTL_MS = 60 * 1000;
 
 async function getPageAccessConfig(database, pageKey) {
   try {
