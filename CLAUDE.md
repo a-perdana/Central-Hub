@@ -82,7 +82,7 @@ Each platform has its own role field — there is no shared `role` field (legacy
 | Academic Hub | `ah_sub_roles[]` | `foundation_representative`, `school_principal`, `academic_coordinator`, `cambridge_coordinator` |
 | Teachers Hub | `th_sub_roles[]` | `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` |
 
-**Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, science, english, bahasa, religion}` (science = combined-science for checkpoint pages — separate from individual biology/chemistry/physics specialists). Drives subject-scoped filtering on pacing dashboards. Sub-role hierarchy:
+**Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, science, english, bahasa, religion}`. `science` is the combined-science specialty (Lower Secondary / Primary Checkpoint). Checkpoint Science **also accepts** any of `biology` / `chemistry` / `physics` specialists — a Biology Coordinator can enter the Science syllabus + pacing pages to see how their subject builds up at lower-secondary level. The reverse is not true: a `science` specialist does NOT see IGCSE / AS-A-Level Biology, Chemistry, or Physics (those remain single-subject). Sub-role hierarchy:
 - `central_admin` → bypass (full management).
 - `director` → bypass (network-wide, sits above specialists).
 - `coordinator` → IS a subject specialist; always filtered by `ch_subjects[]`. Empty = no subject access (misconfig — promote to director or assign subjects).

@@ -86,8 +86,12 @@ const SUBJECT_PAGE_MAP = {
 const SYLLABUS_PAGE_SUBJECTS = {
   'igcse-syllabus':                 ['math', 'biology', 'chemistry', 'physics'],
   'as-alevel-syllabus':             ['math', 'biology', 'chemistry', 'physics'],
-  'secondary-checkpoint-syllabus':  ['math', 'english', 'science'],
-  'primary-checkpoint-syllabus':    ['math', 'english', 'science'],
+  // Checkpoint Science is the combined-science subject — biology /
+  // chemistry / physics specialists may also enter to read the lower-
+  // secondary build-up of their subject (matches checkpoint_science_pacing
+  // rule layer + SUBJECT_PAGE_MAP['checkpoint-science-pacing']).
+  'secondary-checkpoint-syllabus':  ['math', 'english', 'science', 'biology', 'chemistry', 'physics'],
+  'primary-checkpoint-syllabus':    ['math', 'english', 'science', 'biology', 'chemistry', 'physics'],
 };
 
 // Pages that NEVER get gated regardless of role (auth flow + dashboard).
