@@ -380,10 +380,21 @@ export function initSyllabusPage(config) {
     if (allowedKeys.length === 0) {
       // Coordinator with empty / non-matching ch_subjects[] — show a
       // no-access notice instead of an empty tab strip.
+      // List the subjects this page would have offered so admin sees
+      // exactly what scope to grant on /console.
       const denied = document.getElementById('accessDenied');
       if (denied) {
         denied.style.display = '';
-        denied.textContent = 'No subjects assigned to your profile. Ask an admin to set CentralHub Subject Specialties on /console.';
+        const offered = Object.values(subjects).map(s => s.label).join(', ');
+        denied.innerHTML = `
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+          </svg>
+          <h3>No matching subjects</h3>
+          <p>This page covers ${offered}. Your CentralHub Subject Specialties don't include any of these.</p>
+          <p style="margin-top:12px;color:var(--ink-3);font-size:0.85rem">Ask an admin to update your specialties on the User Console, or head back to the dashboard.</p>
+          <p style="margin-top:18px"><a href="/" style="color:var(--accent);font-weight:600;text-decoration:none">← Back to dashboard</a></p>
+        `;
       }
       return;
     }

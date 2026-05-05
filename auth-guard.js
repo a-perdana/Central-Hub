@@ -75,7 +75,19 @@ const SUBJECT_PAGE_MAP = {
   // Checkpoint
   'checkpoint-math-pacing':      ['math'],
   'checkpoint-english-pacing':   ['english'],
-  'checkpoint-science-pacing':   ['biology', 'chemistry', 'physics'],
+  'checkpoint-science-pacing':   ['biology', 'chemistry', 'physics', 'science'],
+};
+
+// Syllabus pages render multiple subject tabs in one page. Each entry
+// lists every ch_subjects[] value that *any* tab on that page accepts;
+// a user with no overlap gets the link hidden and the page itself shows
+// a "no matching subjects" notice. Keep in sync with each syllabus
+// HTML's initSyllabusPage({ subjects }) config.
+const SYLLABUS_PAGE_SUBJECTS = {
+  'igcse-syllabus':                 ['math', 'biology', 'chemistry', 'physics'],
+  'as-alevel-syllabus':             ['math', 'biology', 'chemistry', 'physics'],
+  'secondary-checkpoint-syllabus':  ['math', 'english', 'science'],
+  'primary-checkpoint-syllabus':    ['math', 'english', 'science'],
 };
 
 // Pages that NEVER get gated regardless of role (auth flow + dashboard).
@@ -140,14 +152,23 @@ function ensureSubjectGateStyles() {
 function applySubjectGating(profile) {
   ensureSubjectGateStyles();
 
+  // Resolve a slug to "should this be hidden from the current user?".
+  // Single-subject pacing pages use SUBJECT_PAGE_MAP. Multi-subject
+  // syllabus pages use SYLLABUS_PAGE_SUBJECTS — hidden only when none
+  // of the page's subjects intersect ch_subjects[].
+  const slugHidden = (key) => {
+    if (key in SUBJECT_PAGE_MAP) return !isSubjectAllowed(profile, key);
+    if (key in SYLLABUS_PAGE_SUBJECTS) {
+      return visibleSubjectsForUser(profile, SYLLABUS_PAGE_SUBJECTS[key]).length === 0;
+    }
+    return false; // not a subject-gated slug
+  };
+
   // 1. Navbar links by data-nav-key (CH navbar uses these)
   document.querySelectorAll('[data-nav-key], [data-nav-page]').forEach(el => {
     const key = (el.getAttribute('data-nav-key') || el.getAttribute('data-nav-page') || '').toLowerCase();
     if (!key || SUBJECT_GATE_BYPASS.has(key)) return;
-    if (!(key in SUBJECT_PAGE_MAP)) return;
-    if (!isSubjectAllowed(profile, key)) {
-      el.setAttribute('data-ch-hidden', '1');
-    }
+    if (slugHidden(key)) el.setAttribute('data-ch-hidden', '1');
   });
 
   // 2. Dashboard cards <a class="card" href="...">
@@ -157,10 +178,7 @@ function applySubjectGating(profile) {
     if (slug.includes('/')) slug = slug.split('/')[0];
     if (slug.includes('?')) slug = slug.split('?')[0];
     if (!slug || SUBJECT_GATE_BYPASS.has(slug)) return;
-    if (!(slug in SUBJECT_PAGE_MAP)) return;
-    if (!isSubjectAllowed(profile, slug)) {
-      el.setAttribute('data-ch-hidden', '1');
-    }
+    if (slugHidden(slug)) el.setAttribute('data-ch-hidden', '1');
   });
 }
 
