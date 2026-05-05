@@ -214,6 +214,7 @@ function ensurePageAccessStyles() {
 function applyPageAccessGating(configs, userSubRoles) {
   const isAllowed = (cfg) => {
     if (!cfg) return true;
+    if (cfg.hidden === true) return false;
     const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
     if (vt.length === 0) return true;
     return userSubRoles.some(r => vt.includes(r));
@@ -732,11 +733,15 @@ onAuthStateChanged(auth, async (user) => {
   //     Companion to the subject-specialty gate above, this one keys
   //     off ch_sub_roles[] (director / coordinator). central_admin
   //     bypasses; missing config / empty visible_to ⇒ allow.
+  //     cfg.hidden === true hides the page from every non-admin.
   if (platformRole !== 'central_admin' && pageKey && !PAGE_ACCESS_BYPASS.has(pageKey)) {
     const cfg = await getPageAccessConfig(db, pageKey);
-    if (cfg && Array.isArray(cfg.visible_to) && cfg.visible_to.length > 0) {
+    if (cfg) {
+      const isHidden = cfg.hidden === true;
       const userSubRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
-      const allowed = userSubRoles.some(r => cfg.visible_to.includes(r));
+      const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
+      const subRoleAllowed = vt.length === 0 || userSubRoles.some(r => vt.includes(r));
+      const allowed = !isHidden && subRoleAllowed;
       if (!allowed) {
         try {
           sessionStorage.setItem('ch_access_denied', JSON.stringify({

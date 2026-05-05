@@ -130,12 +130,42 @@
     tr.dirty td { background: #fffbeb !important; }
     tr.dirty td.col-page-label { font-weight: 700; color: #92400e; }
 
+    /* Hidden-page row state — overrides dirty highlight when both apply.
+       Uses a soft red wash so admins can spot platform-wide hides at a glance. */
+    tr.hidden-row td { background: #fef2f2 !important; }
+    tr.hidden-row.dirty td { background: #fee2e2 !important; }
+    tr.hidden-row td.col-page-label { color: #991b1b; }
+    tr.hidden-row .col-page-label .pa-all-badge { display: none; }
+    tr.hidden-row .pa-cb { opacity: 0.4; }
+
     /* "All open" indicator (visible_to empty) */
     .pa-all-badge {
       display: inline-block; padding: 2px 8px; border-radius: 100px;
       background: #d1fae5; color: #065f46; font-size: 0.7rem; font-weight: 600;
       margin-left: 6px;
     }
+    .pa-hidden-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      background: #fee2e2; color: #991b1b; font-size: 0.7rem; font-weight: 600;
+      margin-left: 6px;
+    }
+
+    /* Hide toggle — eye-style switch in its own column */
+    .pa-grid .col-hidden { text-align: center; width: 86px; }
+    .pa-hide-toggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--white); color: var(--ink-3);
+      cursor: pointer; padding: 0;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .pa-hide-toggle:hover { background: var(--paper); color: var(--ink); }
+    .pa-hide-toggle.on {
+      background: #fee2e2; color: #991b1b; border-color: #fca5a5;
+    }
+    .pa-hide-toggle.on:hover { background: #fecaca; }
+    .pa-hide-toggle svg { width: 16px; height: 16px; }
 
     /* Status / loading / empty */
     .pa-status { padding: 16px; text-align: center; color: var(--ink-3); font-size: 0.9rem; }
@@ -258,7 +288,7 @@
 
 <div class="page-header">
   <h1>Page Access Manager</h1>
-  <p>Control which sub-roles can access each page on Academic Hub, Teachers Hub, and Central Hub. Empty selection = visible to every user on that platform.</p>
+  <p>Control which sub-roles can access each page on Academic Hub, Teachers Hub, and Central Hub. Empty selection = visible to every user on that platform. Toggle the eye to hide a page from every non-admin user (e.g. for temporary platform-wide takedowns).</p>
 </div>
 
 <div class="page-content">
@@ -497,12 +527,15 @@
         const data = d.data();
         if (data.platform !== platform) return;
         const visible_to = Array.isArray(data.visible_to) ? [...data.visible_to] : [];
+        const hidden = data.hidden === true;
         pages.push({
           pageKey:     data.pageKey || d.id,
           label:       data.label   || d.id,
           description: data.description || '',
           visible_to,
+          hidden,
           _original:   [...visible_to],
+          _originalHidden: hidden,
         });
       });
       pages.sort((a, b) => a.label.localeCompare(b.label));
@@ -570,21 +603,37 @@
       html += `<svg class="pa-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>`;
       html += `</button>`;
       html += `<div class="pa-group-body">`;
-      html += '<table class="pa-grid"><thead><tr><th>Page</th>';
+      html += '<table class="pa-grid"><thead><tr><th>Page</th><th class="col-hidden" title="Hide from every non-admin user on this platform">Hide</th>';
       subRoles.forEach(r => { html += `<th class="col-role" title="${r.value}">${r.label}</th>`; });
       html += '</tr></thead><tbody>';
       bucket.rows.forEach(p => {
         const dirty = isDirty(p);
         const allOpen = p.visible_to.length === 0;
-        html += `<tr data-key="${escapeAttr(p.pageKey)}" class="${dirty ? 'dirty' : ''}">`;
+        const labelBadge = p.hidden
+          ? '<span class="pa-hidden-badge" title="Hidden from every non-admin user on this platform">hidden</span>'
+          : (allOpen ? '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>' : '');
+        const trClasses = [];
+        if (dirty) trClasses.push('dirty');
+        if (p.hidden) trClasses.push('hidden-row');
+        html += `<tr data-key="${escapeAttr(p.pageKey)}" class="${trClasses.join(' ')}">`;
         html += `<td>
-          <div class="col-page-label">${escapeHtml(p.label)}${allOpen ? '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>' : ''}</div>
+          <div class="col-page-label">${escapeHtml(p.label)}${labelBadge}</div>
           <div class="col-page-key">${escapeHtml(p.pageKey)}</div>
           ${p.description ? `<div class="col-page-desc">${escapeHtml(p.description)}</div>` : ''}
         </td>`;
+        const hideAria = p.hidden ? 'true' : 'false';
+        const hideTitle = p.hidden ? 'Currently hidden — click to show' : 'Hide from every non-admin user';
+        html += `<td class="col-hidden">
+          <button type="button" class="pa-hide-toggle${p.hidden ? ' on' : ''}" data-key="${escapeAttr(p.pageKey)}" aria-pressed="${hideAria}" title="${escapeAttr(hideTitle)}" aria-label="${escapeAttr(hideTitle)} for ${escapeAttr(p.label)}">
+            ${p.hidden
+              ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'}
+          </button>
+        </td>`;
         subRoles.forEach(r => {
           const checked = p.visible_to.includes(r.value) ? 'checked' : '';
-          html += `<td class="pa-cb-cell"><input type="checkbox" class="pa-cb" data-key="${escapeAttr(p.pageKey)}" data-role="${r.value}" ${checked} aria-label="${escapeAttr(r.label)} can access ${escapeAttr(p.label)}"></td>`;
+          const disabled = p.hidden ? 'disabled' : '';
+          html += `<td class="pa-cb-cell"><input type="checkbox" class="pa-cb" data-key="${escapeAttr(p.pageKey)}" data-role="${r.value}" ${checked} ${disabled} aria-label="${escapeAttr(r.label)} can access ${escapeAttr(p.label)}"></td>`;
         });
         html += '</tr>';
       });
@@ -617,6 +666,11 @@
     const role = e.target.dataset.role;
     const page = pages.find(p => p.pageKey === key);
     if (!page) return;
+    // Hide flag suppresses sub-role granularity — block the change and re-sync.
+    if (page.hidden) {
+      e.target.checked = page.visible_to.includes(role);
+      return;
+    }
     if (e.target.checked) {
       if (!page.visible_to.includes(role)) page.visible_to.push(role);
     } else {
@@ -625,19 +679,63 @@
     // Re-render the row so badge + dirty class update; also bump the group
     // header's "N unsaved" pill, which lives outside this row.
     const row = e.target.closest('tr');
-    const dirty = isDirty(page);
-    row.classList.toggle('dirty', dirty);
-    const allOpen = page.visible_to.length === 0;
-    const badge = row.querySelector('.pa-all-badge');
-    if (allOpen && !badge) {
-      row.querySelector('.col-page-label').insertAdjacentHTML('beforeend',
-        '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>');
-    } else if (!allOpen && badge) {
-      badge.remove();
-    }
+    refreshRowChrome(row, page);
     updateGroupDirtyPills();
     updateDirtyState();
   });
+
+  // ── Hide-toggle handler (delegated) ──────────────────────────────
+  $grid.addEventListener('click', e => {
+    const btn = e.target.closest('.pa-hide-toggle');
+    if (!btn) return;
+    const key = btn.dataset.key;
+    const page = pages.find(p => p.pageKey === key);
+    if (!page) return;
+    page.hidden = !page.hidden;
+    const row = btn.closest('tr');
+    // Toggling hidden re-renders the whole row to swap the icon, disable
+    // checkboxes, and refresh badges. Re-fetching the row keeps it simpler
+    // than mutating six pieces of DOM individually.
+    rerenderRow(row, page);
+    updateGroupDirtyPills();
+    updateDirtyState();
+  });
+
+  function refreshRowChrome(row, page) {
+    const dirty = isDirty(page);
+    row.classList.toggle('dirty', dirty);
+    row.classList.toggle('hidden-row', page.hidden === true);
+    const labelEl = row.querySelector('.col-page-label');
+    if (!labelEl) return;
+    labelEl.querySelectorAll('.pa-all-badge, .pa-hidden-badge').forEach(b => b.remove());
+    if (page.hidden) {
+      labelEl.insertAdjacentHTML('beforeend',
+        '<span class="pa-hidden-badge" title="Hidden from every non-admin user on this platform">hidden</span>');
+    } else if (page.visible_to.length === 0) {
+      labelEl.insertAdjacentHTML('beforeend',
+        '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>');
+    }
+  }
+
+  function rerenderRow(row, page) {
+    refreshRowChrome(row, page);
+    // Sub-role checkboxes — disabled when hidden, otherwise reflect visible_to.
+    row.querySelectorAll('input.pa-cb').forEach(cb => {
+      cb.checked = page.visible_to.includes(cb.dataset.role);
+      cb.disabled = page.hidden === true;
+    });
+    // Hide button — swap icon + state.
+    const btn = row.querySelector('.pa-hide-toggle');
+    if (btn) {
+      btn.classList.toggle('on', page.hidden === true);
+      btn.setAttribute('aria-pressed', page.hidden ? 'true' : 'false');
+      const title = page.hidden ? 'Currently hidden — click to show' : 'Hide from every non-admin user';
+      btn.setAttribute('title', title);
+      btn.innerHTML = page.hidden
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    }
+  }
 
   function updateGroupDirtyPills() {
     const groupDefs = PAGE_GROUPS[currentPlatform] || [];
@@ -681,10 +779,10 @@
     if (!dirtyPages.length) return;
 
     // Critical-page guard: any dirty page whose key is in CRITICAL_PAGES
-    // AND has been narrowed to a non-empty visible_to[] (i.e. restricting
-    // access for non-admins) → confirm explicitly.
+    // AND has been restricted (narrowed visible_to[] to a non-empty list,
+    // OR turned on the platform-wide hidden flag) → confirm explicitly.
     const criticalRestrictions = dirtyPages.filter(p =>
-      CRITICAL_PAGES.has(p.pageKey) && p.visible_to.length > 0
+      CRITICAL_PAGES.has(p.pageKey) && (p.hidden === true || p.visible_to.length > 0)
     );
     if (criticalRestrictions.length) {
       const ok = await confirmCriticalRestrictions(criticalRestrictions);
@@ -703,12 +801,16 @@
         const ref = doc(db, 'page_access_config', p.pageKey);
         batch.set(ref, {
           visible_to: p.visible_to,
+          hidden:     p.hidden === true,
           updatedAt:  serverTimestamp(),
         }, { merge: true });
       });
       await batch.commit();
       // Mark current values as the new baseline.
-      dirtyPages.forEach(p => { p._original = [...p.visible_to]; });
+      dirtyPages.forEach(p => {
+        p._original = [...p.visible_to];
+        p._originalHidden = p.hidden === true;
+      });
       render();
       toast(`Saved ${dirtyPages.length} page${dirtyPages.length === 1 ? '' : 's'}.`);
     } catch (err) {
@@ -732,6 +834,9 @@
 
       const subRoles = SUB_ROLES[currentPlatform];
       list.innerHTML = criticalRestrictions.map(p => {
+        if (p.hidden === true) {
+          return `<li><strong>${escapeHtml(p.label)}</strong> <span class="pa-critical-meta">→ hidden from every non-admin user</span></li>`;
+        }
         const allowedLabels = p.visible_to
           .map(v => subRoles.find(r => r.value === v)?.label || v)
           .join(', ') || '(none — locked)';
@@ -766,12 +871,16 @@
     const dirty = pages.filter(isDirty);
     if (!dirty.length) return;
     if (!confirm(`Discard changes to ${dirty.length} page${dirty.length === 1 ? '' : 's'}?`)) return;
-    pages.forEach(p => { p.visible_to = [...p._original]; });
+    pages.forEach(p => {
+      p.visible_to = [...p._original];
+      p.hidden = p._originalHidden === true;
+    });
     render();
   });
 
   // ── Helpers ─────────────────────────────────────────────────────
   function isDirty(p) {
+    if ((p.hidden === true) !== (p._originalHidden === true)) return true;
     if (p.visible_to.length !== p._original.length) return true;
     const a = [...p.visible_to].sort();
     const b = [...p._original].sort();
