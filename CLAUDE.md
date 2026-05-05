@@ -82,7 +82,7 @@ Each platform has its own role field — there is no shared `role` field (legacy
 | Academic Hub | `ah_sub_roles[]` | `foundation_representative`, `school_principal`, `academic_coordinator`, `cambridge_coordinator` |
 | Teachers Hub | `th_sub_roles[]` | `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` |
 
-**Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, english, bahasa, religion}`. Drives subject-scoped filtering on pacing dashboards. Sub-role hierarchy:
+**Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, science, english, bahasa, religion}` (science = combined-science for checkpoint pages — separate from individual biology/chemistry/physics specialists). Drives subject-scoped filtering on pacing dashboards. Sub-role hierarchy:
 - `central_admin` → bypass (full management).
 - `director` → bypass (network-wide, sits above specialists).
 - `coordinator` → IS a subject specialist; always filtered by `ch_subjects[]`. Empty = no subject access (misconfig — promote to director or assign subjects).

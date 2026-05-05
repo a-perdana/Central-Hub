@@ -354,6 +354,73 @@ export function initSyllabusPage(config) {
 
     isAdmin = profile.role_centralhub === 'central_admin';
     isCoordinator = profile.role_centralhub === 'central_user' && Array.isArray(profile.ch_sub_roles) && profile.ch_sub_roles.includes('coordinator');
+
+    // Subject-specialty filter — coordinators / plain users only see
+    // the subjects in their ch_subjects[]. Admin + director see all.
+    //
+    // Each subject config may declare `chSubjectKeys: string[]` to map
+    // a tab key onto one or more ch_subjects[] values (combined-science
+    // checkpoint uses key 'science' → ['biology','chemistry','physics']).
+    // Default falls back to the subject key itself.
+    const role     = profile.role_centralhub;
+    const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+    const userSubjects = Array.isArray(profile.ch_subjects) ? profile.ch_subjects : [];
+    const bypassSubjectGate = role === 'central_admin' || subRoles.includes('director');
+
+    const allSubjectKeys = Object.keys(subjects);
+    const allowedKeys = bypassSubjectGate
+      ? allSubjectKeys.slice()
+      : allSubjectKeys.filter(k => {
+          const required = Array.isArray(subjects[k].chSubjectKeys)
+            ? subjects[k].chSubjectKeys
+            : [k];
+          return required.some(s => userSubjects.includes(s));
+        });
+
+    if (allowedKeys.length === 0) {
+      // Coordinator with empty / non-matching ch_subjects[] — show a
+      // no-access notice instead of an empty tab strip.
+      const denied = document.getElementById('accessDenied');
+      if (denied) {
+        denied.style.display = '';
+        denied.textContent = 'No subjects assigned to your profile. Ask an admin to set CentralHub Subject Specialties on /console.';
+      }
+      return;
+    }
+    if (allowedKeys.length < allSubjectKeys.length) {
+      allSubjectKeys.forEach(k => { if (!allowedKeys.includes(k)) delete subjects[k]; });
+      currentSubject    = allowedKeys[0];
+      settingsClassSubj = currentSubject;
+      settingsObjSubj   = currentSubject;
+      // Hide pre-rendered static tabs that don't match the allow-list
+      // (secondary-checkpoint and primary-checkpoint syllabus markup
+      // ships its tabs in HTML, not JS).
+      document.querySelectorAll('.subject-tabs .subj-tab[data-subj]').forEach(btn => {
+        const k = btn.getAttribute('data-subj');
+        if (k === '__settings') return;
+        if (!allowedKeys.includes(k)) btn.style.display = 'none';
+      });
+      // Mirror to the inline-settings sub-tab strips (Class Groups + Objectives)
+      ['classSubjTabs','objSubjTabs'].forEach(id => {
+        const wrap = document.getElementById(id);
+        if (!wrap) return;
+        wrap.querySelectorAll('.s-stab[data-subj]').forEach(btn => {
+          const k = btn.getAttribute('data-subj');
+          if (!allowedKeys.includes(k)) btn.style.display = 'none';
+        });
+      });
+      // First static tab might be a hidden one — make sure the first
+      // VISIBLE tab carries the active state.
+      const tabs = document.querySelectorAll('.subject-tabs .subj-tab[data-subj]');
+      tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+      tabs.forEach(t => {
+        if (t.getAttribute('data-subj') === currentSubject) {
+          t.classList.add('active');
+          t.setAttribute('aria-selected','true');
+        }
+      });
+    }
+
     document.getElementById('mainContent').style.display = '';
 
     // Build subject tabs dynamically if the container is empty (IGCSE uses dynamic tabs)

@@ -105,6 +105,26 @@ function isSubjectAllowed(profile, pageKey) {
   return userSubjects.some(s => requiredSubjects.includes(s));
 }
 
+// Same hierarchy as isSubjectAllowed but answers "given a list of
+// candidate subject keys, which can this user see?". Used by pages
+// that render multiple subjects in tabs (syllabus pages, etc.).
+//   - Returns the input array unchanged for admin / director.
+//   - Returns the intersection with ch_subjects[] for coordinator /
+//     plain user. Empty ch_subjects[] → empty result.
+//
+// Subject keys are the canonical ones in ch_subjects[]:
+// 'math' | 'biology' | 'chemistry' | 'physics' | 'science' | 'english' | 'bahasa' | 'religion'.
+// 'science' is the combined-science specialty used by checkpoint pages
+// (separate from biology/chemistry/physics which are IGCSE/AS-A-Level only).
+function visibleSubjectsForUser(profile, candidateKeys) {
+  const keys = Array.isArray(candidateKeys) ? candidateKeys : [];
+  if (profile?.role_centralhub === 'central_admin') return keys.slice();
+  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  if (chSubRoles.includes('director')) return keys.slice();
+  const userSubjects = Array.isArray(profile?.ch_subjects) ? profile.ch_subjects : [];
+  return keys.filter(k => userSubjects.includes(k));
+}
+
 // Inject CSS once so [data-ch-hidden="1"] elements collapse without flicker.
 function ensureSubjectGateStyles() {
   if (document.getElementById('chSubjectGateStyle')) return;
@@ -514,7 +534,8 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
   // user's record in console.html.
   const SUBJECT_LABELS = {
     math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
-    physics: 'Physics', english: 'English', bahasa: 'Bahasa', religion: 'Religion',
+    physics: 'Physics', science: 'Science', english: 'English',
+    bahasa: 'Bahasa', religion: 'Religion',
   };
   const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
   const renderAccessSummary = () => {
@@ -830,6 +851,10 @@ onAuthStateChanged(auth, async (user) => {
   });
   subjectMo.observe(document.body, { childList: true, subtree: true });
   window.__chSubjectGate = () => applySubjectGating(profile);
+  // Pages that render their own subject tabs (e.g. syllabus-core.js)
+  // ask "which of these subject keys is this user allowed to see?".
+  window.__chVisibleSubjects = (candidateKeys) =>
+    visibleSubjectsForUser(profile, candidateKeys);
 
   // 6c. Page-access UI gating — hide navbar links + cards the user
   //     can't access by sub-role (ch_sub_roles[]). central_admin
