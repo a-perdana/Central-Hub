@@ -112,7 +112,9 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 
 **Cache key:** `pac:__all__:centralhub` (5 min TTL).
 
-**Critical-page guard (at `/page-access` save time):** restricting `visible_to[]` on admin tooling pages opens a confirm modal — `central_admin` bypasses but `director` / `coordinator` get locked out without explicit acknowledgement. CRITICAL_PAGES: `page-access`, `console`, `rules-viewer`, `design-system`, `kpi-admin`, `competency-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `mail-composer`, `feedback-management`, `induction-admin`, `careers-admin`, `careers-compare`.
+**Director hierarchy (page-access):** `director` bypasses page-access entirely (mirrors `central_admin`). The `/page-access` UI omits the Director column on the CH tab — toggling it would have no effect. Only `coordinator` is configurable. `applyPageAccessGating` and the URL-level guard both honour the bypass.
+
+**Critical-page guard (at `/page-access` save time):** restricting `visible_to[]` on admin tooling pages opens a confirm modal — `central_admin` and `director` bypass anyway, but `coordinator` users get locked out without explicit acknowledgement. CRITICAL_PAGES: `page-access`, `console`, `rules-viewer`, `design-system`, `kpi-admin`, `competency-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `mail-composer`, `feedback-management`, `induction-admin`, `careers-admin`, `careers-compare`.
 
 ---
 

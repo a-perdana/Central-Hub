@@ -262,8 +262,14 @@ function ensurePageAccessStyles() {
 }
 
 function applyPageAccessGating(configs, userSubRoles) {
+  // Director sits above coordinator in the CH sub-role hierarchy and
+  // bypasses page-access entirely (mirrors central_admin). Admins cannot
+  // accidentally lock directors out by setting visible_to=['coordinator'].
+  // Keep in sync with the URL-level guard at step 4c.
+  const isDirector = userSubRoles.includes('director');
   const isAllowed = (cfg) => {
     if (!cfg) return true;
+    if (isDirector) return true;
     if (cfg.hidden === true) return false;
     const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
     if (vt.length === 0) return true;
@@ -772,10 +778,13 @@ onAuthStateChanged(auth, async (user) => {
   if (platformRole !== 'central_admin' && pageKey && !PAGE_ACCESS_BYPASS.has(pageKey)) {
     const cfg = await getPageAccessConfig(db, pageKey);
     if (cfg) {
-      const isHidden = cfg.hidden === true;
       const userSubRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+      // Director bypasses page-access entirely (sits above coordinator,
+      // mirrors central_admin). Stays in sync with applyPageAccessGating.
+      const isDirector = userSubRoles.includes('director');
+      const isHidden = !isDirector && cfg.hidden === true;
       const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
-      const subRoleAllowed = vt.length === 0 || userSubRoles.some(r => vt.includes(r));
+      const subRoleAllowed = isDirector || vt.length === 0 || userSubRoles.some(r => vt.includes(r));
       const allowed = !isHidden && subRoleAllowed;
       if (!allowed) {
         try {
