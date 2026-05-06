@@ -485,6 +485,67 @@
       text-align: center; padding: 40px 20px;
       font-size: .875rem; color: var(--ink-3);
     }
+
+    /* TEMPLATES */
+    .btn-save-template {
+      width: 100%; height: 40px;
+      background: var(--white); color: var(--ink-2);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: .855rem; font-weight: 500;
+      cursor: pointer; transition: all .2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      margin-bottom: 10px;
+    }
+    .btn-save-template:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-save-template:disabled { opacity: .55; cursor: not-allowed; }
+
+    .tpl-list { display: flex; flex-direction: column; gap: 8px; }
+    .tpl-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--paper); transition: border-color .15s, background .15s;
+    }
+    .tpl-row:hover { border-color: var(--accent); background: #fff; }
+    .tpl-info { flex: 1; min-width: 0; }
+    .tpl-name {
+      font-size: .875rem; font-weight: 600; color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tpl-meta {
+      font-size: .74rem; color: var(--ink-3); margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tpl-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .tpl-btn {
+      height: 28px; padding: 0 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: #fff; color: var(--ink-2);
+      font-size: .76rem; font-weight: 500; cursor: pointer; transition: all .15s;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .tpl-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tpl-btn.tpl-delete:hover { border-color: #dc2626; color: #dc2626; }
+    .tpl-btn[data-confirming] { border-color: #dc2626; color: #dc2626; background: #fee2e2; }
+    .tpl-empty {
+      padding: 18px 12px; text-align: center;
+      font-size: .82rem; color: var(--ink-3);
+      border: 1px dashed var(--border); border-radius: 8px;
+    }
+
+    /* SAVE TEMPLATE MODAL */
+    .save-tpl-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 9999;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .save-tpl-overlay.open { display: flex; }
+    .save-tpl-modal {
+      background: #fff; border-radius: 12px; padding: 24px;
+      max-width: 420px; width: 100%;
+      box-shadow: 0 16px 48px rgba(0,0,0,.2);
+    }
+    .save-tpl-modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+    .save-tpl-modal .form-hint { font-size: .76rem; color: var(--ink-3); margin-top: 6px; }
+    .save-tpl-modal-footer { display: flex; gap: 10px; margin-top: 18px; }
   </style>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
 </head>
@@ -622,6 +683,17 @@
       </div>
     </div>
 
+    <!-- Templates -->
+    <div class="card">
+      <p class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        Saved Templates <span style="font-size:.75rem;font-weight:400;color:var(--ink-3)">(reuse subject &amp; body)</span>
+      </p>
+      <div id="tplList" class="tpl-list">
+        <div class="tpl-empty">Loading templates…</div>
+      </div>
+    </div>
+
     <!-- Campaign History -->
     <div id="historySection">
       <p style="font-size:.95rem;font-weight:700;color:var(--ink);margin-bottom:14px">
@@ -672,6 +744,11 @@
       Send Test Email
     </button>
 
+    <button class="btn-save-template" id="btnSaveTemplate" title="Save the current subject + body as a reusable template">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save as Template
+    </button>
+
     <button class="btn-preview" id="btnPreview">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       Preview Email
@@ -720,6 +797,22 @@
     <div class="test-modal-footer">
       <button class="btn-cancel-sm" id="testCancel">Cancel</button>
       <button class="btn-send-sm"   id="testSend">Send Test</button>
+    </div>
+  </div>
+</div>
+
+<!-- Save Template Modal -->
+<div class="save-tpl-overlay" id="saveTplModal">
+  <div class="save-tpl-modal">
+    <h3 id="saveTplHeading">Save as Template</h3>
+    <div class="form-group">
+      <label class="form-label" for="saveTplName">Template name</label>
+      <input class="form-input" type="text" id="saveTplName" placeholder="e.g. Monthly Newsletter Header" maxlength="80">
+      <div class="form-hint">Subject line and email body will be saved. Recipients and campaign name are not.</div>
+    </div>
+    <div class="save-tpl-modal-footer">
+      <button class="btn-cancel-sm" id="saveTplCancel">Cancel</button>
+      <button class="btn-send-sm"   id="saveTplConfirm">Save Template</button>
     </div>
   </div>
 </div>
@@ -791,6 +884,11 @@
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 
 <script type="module">
+import {
+  collection, doc, addDoc, getDocs, getDoc, deleteDoc,
+  query, orderBy, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
 /* ================================================================
    CONFIG — update MAIL_SERVICE_URL after Railway deploy
    ================================================================ */
@@ -861,9 +959,11 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   initQuill();
   setupQuickSearch();
   setupImportModal();
+  setupTemplates();
   await loadHistory();
   await loadAllCounts();
   await loadFilteredRecipients();
+  await loadTemplates();
 });
 
 /* ================================================================
@@ -1681,6 +1781,154 @@ function updateRecipientDisplay(recipients) {
   document.getElementById('btnViewRecip').style.display   = 'flex';
   document.getElementById('btnViewRecipSm').style.display = 'flex';
   validateForm();
+}
+
+/* ================================================================
+   MAIL TEMPLATES — save / load / delete reusable subject+body
+   ─────────────────────────────────────────────────────────────────
+   Firestore: mail_templates/{templateId}
+     { name, subject, bodyHtml, createdAt, createdBy, updatedAt }
+   ================================================================ */
+let templatesCache = [];
+
+function setupTemplates() {
+  const openBtn    = document.getElementById('btnSaveTemplate');
+  const overlay    = document.getElementById('saveTplModal');
+  const cancelBtn  = document.getElementById('saveTplCancel');
+  const confirmBtn = document.getElementById('saveTplConfirm');
+  const nameInput  = document.getElementById('saveTplName');
+  const heading    = document.getElementById('saveTplHeading');
+
+  openBtn.addEventListener('click', () => {
+    const subject = document.getElementById('fSubject').value.trim();
+    const bodyTxt = quill ? quill.getText().trim() : '';
+    if (!subject && !bodyTxt) {
+      return showBanner('error', 'Add a subject or body before saving a template.');
+    }
+    nameInput.value = subject || '';
+    heading.textContent = 'Save as Template';
+    delete confirmBtn.dataset.tplId; // fresh save (not overwrite)
+    overlay.classList.add('open');
+    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 50);
+  });
+
+  cancelBtn.addEventListener('click', () => overlay.classList.remove('open'));
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    const name    = nameInput.value.trim();
+    const subject = document.getElementById('fSubject').value.trim();
+    const bodyHtml = quill?.root.innerHTML || '';
+    if (!name) return showBanner('error', 'Template name is required.');
+
+    confirmBtn.disabled = true;
+    const originalText = confirmBtn.textContent;
+    confirmBtn.textContent = 'Saving…';
+    try {
+      await addDoc(collection(window.db, 'mail_templates'), {
+        name,
+        subject,
+        bodyHtml,
+        createdAt: serverTimestamp(),
+        createdBy: window.currentUser?.email || '',
+      });
+      overlay.classList.remove('open');
+      showBanner('success', `Template "${name}" saved.`);
+      await loadTemplates();
+    } catch (err) {
+      console.error('Save template error:', err);
+      showBanner('error', `Could not save template: ${err.message}`);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = originalText;
+    }
+  });
+}
+
+async function loadTemplates() {
+  const listEl = document.getElementById('tplList');
+  try {
+    const q = query(collection(window.db, 'mail_templates'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    templatesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderTemplates();
+  } catch (err) {
+    console.error('loadTemplates error:', err);
+    listEl.innerHTML = '<div class="tpl-empty">Could not load templates.</div>';
+  }
+}
+
+function renderTemplates() {
+  const listEl = document.getElementById('tplList');
+  if (!templatesCache.length) {
+    listEl.innerHTML = '<div class="tpl-empty">No saved templates yet. Compose an email and click <strong>Save as Template</strong> to reuse it later.</div>';
+    return;
+  }
+  listEl.innerHTML = templatesCache.map(t => {
+    const date = t.createdAt?.toDate
+      ? t.createdAt.toDate().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+      : '—';
+    const by = t.createdBy ? ` · ${escHtml(t.createdBy)}` : '';
+    const subjectHint = t.subject ? ` · ${escHtml(t.subject)}` : '';
+    return `<div class="tpl-row" data-tpl-id="${escHtml(t.id)}">
+      <div class="tpl-info">
+        <div class="tpl-name">${escHtml(t.name)}</div>
+        <div class="tpl-meta">${date}${by}${subjectHint}</div>
+      </div>
+      <div class="tpl-actions">
+        <button class="tpl-btn" data-action="load" title="Load this template into the editor">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Load
+        </button>
+        <button class="tpl-btn tpl-delete" data-action="delete" title="Delete this template">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.tpl-row').forEach(row => {
+    const id = row.dataset.tplId;
+    row.querySelector('[data-action="load"]').addEventListener('click', () => loadTemplateIntoEditor(id));
+    row.querySelector('[data-action="delete"]').addEventListener('click', e => deleteTemplate(id, e.currentTarget));
+  });
+}
+
+function loadTemplateIntoEditor(id) {
+  const tpl = templatesCache.find(t => t.id === id);
+  if (!tpl) return;
+  const subjectInput = document.getElementById('fSubject');
+  subjectInput.value = tpl.subject || '';
+  document.getElementById('subjectCount').textContent = `${subjectInput.value.length} / 150`;
+  if (quill) {
+    quill.clipboard.dangerouslyPasteHTML(tpl.bodyHtml || '');
+  }
+  validateForm();
+  showBanner('success', `Template "${tpl.name}" loaded into the editor.`);
+  // Scroll editor into view so the user can see what loaded
+  document.getElementById('quillEditor').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function deleteTemplate(id, btn) {
+  // Double-click confirm pattern (no native confirm())
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1';
+    btn.title = 'Click again to confirm delete';
+    setTimeout(() => { delete btn.dataset.confirming; btn.title = 'Delete this template'; }, 3000);
+    return;
+  }
+  delete btn.dataset.confirming;
+  const tpl = templatesCache.find(t => t.id === id);
+  try {
+    await deleteDoc(doc(window.db, 'mail_templates', id));
+    showBanner('success', `Template "${tpl?.name || ''}" deleted.`);
+    await loadTemplates();
+  } catch (err) {
+    console.error('Delete template error:', err);
+    showBanner('error', `Could not delete template: ${err.message}`);
+  }
 }
 </script>
 
