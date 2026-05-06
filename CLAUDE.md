@@ -230,6 +230,42 @@ All pages share **`shared-styles.css`** (build-injected before the first `<style
 
 ---
 
+## Mail Composer + Resend Mail-Service
+
+Network-wide newsletter sender. CH-only page (`mail-composer.html`, `central_admin` gated). Talks to a separate Resend-backed Express service hosted on Railway (NOT in this monorepo — repo at https://github.com/a-perdana/Mail-Service, cloned at `c:/Users/maliu/Desktop/Mail-Service/`).
+
+**Live infrastructure (2026-05-06):**
+- **Service URL:** `https://mail-service-production-e9e7.up.railway.app`
+- **Resend domain:** `eduversal.org` Verified — SPF + DKIM + MX live on Cloudflare DNS
+- **FROM:** `Eduversal Education <noreply@eduversal.org>` (DKIM-signed)
+- **Reply-To default:** `careers@eduversal.org` (Railway env `DEFAULT_REPLY_TO`; per-call `replyTo` overrides)
+- **Auth:** Bearer token (`MAIL_SERVICE_SECRET`), CORS allowlisted to `centralhub.eduversal.org` + `teachershub.eduversal.org` + Vercel preview origins
+- **Env vars** (set in Vercel for both CH and TH): `MAIL_SERVICE_URL`, `MAIL_SERVICE_SECRET`. Build-time substitution propagates to `window.ENV.*` via `firebase-config.js` substitution.
+
+**Endpoints:**
+| Endpoint | Used by |
+|---|---|
+| `GET /health` | Liveness probe |
+| `GET /recipients?platform=&role=&subRole=&schoolId=` | Mail-composer recipient panel — joins `users` + `teacher_contacts` |
+| `GET /campaigns` | Mail-composer history table |
+| `POST /send-test` | Mail-composer "Send Test Email" button |
+| `POST /send-campaign` | Mail-composer "Send Campaign" — async batched, writes `mail_campaigns/{id}` Firestore record |
+| `POST /send-transactional` | TH careers (apply confirmation, interview, offer, reject) — one-to-one with branded variant templates |
+
+**`mail-composer.html` UI features:**
+- Two-source recipient model: platform chips (filtered query) + manual search-add. Final list = `chipRecipients ∪ manualRecipients` minus `excludedEmails`.
+- **Import emails from list** (added 2026-05-06): paste OR upload `.txt` / `.csv` of external addresses. Parser handles bare emails, `Name <email>`, comma/semicolon Outlook-style, CSV with/without header. Imported addresses tagged `source:'manual'`, flow through the same `/send-campaign` pipeline. xlsx not supported — instruct user to "Save As CSV" first.
+- "View & Edit Recipients" modal lets admin uncheck individual recipients before send.
+- Quill rich-text editor for body. Build pipeline wraps via `buildEmailHtml()` (gradient header + footer with unsubscribe placeholder).
+
+**Two distinct email wrappers in the service:**
+- `buildEmailHtml()` — newsletter wrapper (cyan/navy gradient, unsubscribe footer)
+- `buildTransactionalHtml({ templateName })` — one-to-one wrapper with 4 variants: `application_received` (mor), `interview` (mor), `offer` (green), `reject` (neutral grey). Each carries an eyebrow label + colour-coded gradient header. Used by TH careers via `partials/mailer.js` helper.
+
+**Updating the service:** edit `c:/Users/maliu/Desktop/Mail-Service/index.js` → commit + push → Railway auto-deploys in ~30-60 seconds. Confirm deploy via `GET /health` + send a probe to your own Gmail.
+
+---
+
 ## Cambridge Competency Framework — CH dual role
 
 CH owns two roles in the 3-track system:
@@ -302,6 +338,7 @@ The Careers Module lives in **Teachers Hub**. CH only hosts the rules + a few UI
 - **Dates use `en-GB` locale** (`toLocaleDateString('en-GB', ...)`). Never `id-ID`.
 - **`weekly_progress` writes always include `schoolId`** — `schoolId: window.userProfile?.schoolId || null`. CH HQ → null; AH/TH → `partner_schools` doc id.
 - **`feedback` collection is gone.** Write to `feedbacks` with `__src` field.
+- **All outbound email goes through the Resend mail-service.** Don't write to `mail/{auto}` (legacy Firebase Trigger Email path — retired). For newsletters use `mail-composer.html` (UI). For programmatic sends from new CH pages, POST to `MAIL_SERVICE_URL/send-transactional` with bearer auth — see [Mail Composer + Resend Mail-Service](#mail-composer--resend-mail-service) section above.
 - **`staff.html` writes both `schoolId` (FK) and `school` (denormalised name).** `<select>` value = `partner_schools.id`. Don't revert to free-text.
 - **`/page-access` critical-page guard** opens confirm modal at save time before narrowing visibility on admin tooling pages. central_admin bypasses; other power users (director / coordinator) get explicit acknowledgement.
 - **In-place navbar editor lives in `partials/navbar.html`** (CH only — bespoke). Writes to `nav_config/v1`. Don't fork into AH/TH — their navbars are flat and use `shared-design/nav-edit-simple.js` writing to `nav_config/{platform}`.
