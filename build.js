@@ -387,6 +387,24 @@ if (fs.existsSync("cambridge-crossref.js")) {
   console.log("Copied: cambridge-crossref.js");
 }
 
+// -- Indonesian statutory references (PIGP + SKL) for the cross-ref
+//    runtime. Fetched on-demand when the user clicks an SKL / PIGP chip.
+//    Source JSONs live in monorepo-root docs/research/permendiknas/.
+const researchSrcDir  = path.join("..", "docs", "research", "permendiknas");
+const researchDestDir = path.join("dist", "research", "permendiknas");
+if (fs.existsSync(researchSrcDir)) {
+  fs.mkdirSync(researchDestDir, { recursive: true });
+  ["no-27-2010-pigp.json", "no-10-2025-skl.json"].forEach(name => {
+    const src = path.join(researchSrcDir, name);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(researchDestDir, name));
+      console.log(`Copied: dist/research/permendiknas/${name}`);
+    } else {
+      console.warn(`WARNING: ${name} not found in docs/research/permendiknas/`);
+    }
+  });
+}
+
 // -- Copy firestore.rules so /rules-viewer can fetch it at runtime.
 //    Read-only display; the live enforcement comes from the deployed
 //    rules at console.firebase.google.com, this is just the
