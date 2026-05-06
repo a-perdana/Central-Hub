@@ -473,6 +473,73 @@
     .import-modal-footer .btn-send-sm:disabled { opacity: .5; cursor: not-allowed; }
     .import-modal-footer .btn-cancel-sm:hover { color: var(--ink); }
 
+    /* Import modal — tabs + merge-field preview */
+    .import-tabs {
+      display: flex; gap: 4px; padding: 3px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--paper);
+    }
+    .import-tab {
+      flex: 1; padding: 7px 10px; border: none; border-radius: 6px;
+      background: transparent; font-size: .8rem; font-weight: 500; color: var(--ink-3);
+      cursor: pointer; transition: background .15s, color .15s;
+    }
+    .import-tab:hover { color: var(--ink-2); }
+    .import-tab.active { background: #fff; color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .merge-preview {
+      border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+      max-height: 200px; overflow-y: auto; background: #fff;
+    }
+    .merge-preview-head {
+      padding: 8px 12px; background: var(--paper); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: .76rem; color: var(--ink-3);
+    }
+    .merge-tag-chip {
+      display: inline-block; padding: 2px 7px; border-radius: 4px;
+      background: rgba(108,92,231,.1); color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: .72rem; font-weight: 600;
+    }
+    .merge-preview-table {
+      width: 100%; border-collapse: collapse; font-size: .76rem;
+    }
+    .merge-preview-table th, .merge-preview-table td {
+      padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+    }
+    .merge-preview-table th { background: var(--paper); font-weight: 600; color: var(--ink-2); font-size: .72rem; }
+    .merge-preview-table tr:last-child td { border-bottom: none; }
+    .merge-preview-foot {
+      padding: 6px 12px; background: var(--paper); border-top: 1px solid var(--border);
+      font-size: .72rem; color: var(--ink-3);
+    }
+
+    /* Available merge tags chip rail in the right sidebar */
+    .merge-tags-rail {
+      display: none;
+      margin-top: 14px; padding: 10px 12px;
+      background: rgba(108,92,231,.05); border: 1px dashed rgba(108,92,231,.3);
+      border-radius: 8px;
+    }
+    .merge-tags-rail.shown { display: block; }
+    .merge-tags-rail-label {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--accent); margin-bottom: 6px;
+    }
+    .merge-tags-rail-help {
+      font-size: .72rem; color: var(--ink-3); margin-bottom: 8px; line-height: 1.5;
+    }
+    .merge-tags-rail-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .merge-tag-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 8px; background: #fff; border: 1px solid var(--border);
+      border-radius: 5px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: .72rem; color: var(--accent); cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .merge-tag-pill:hover { border-color: var(--accent); background: rgba(108,92,231,.05); }
+    .merge-tag-pill.copied { background: var(--accent); color: #fff; border-color: var(--accent); }
+
     .btn-view-recip-sm {
       width: 100%; height: 32px;
       background: transparent; border: 1px solid var(--border); border-radius: 7px;
@@ -792,6 +859,13 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         View &amp; Edit List
       </button>
+
+      <!-- Merge tag chips — only shown when recipients have custom fields -->
+      <div class="merge-tags-rail" id="mergeTagsRail">
+        <div class="merge-tags-rail-label">Available merge tags</div>
+        <div class="merge-tags-rail-help">Click to copy. Use these in your subject or body — each recipient receives their own value.</div>
+        <div class="merge-tags-rail-chips" id="mergeTagsRailChips"></div>
+      </div>
     </div>
 
     <!-- Buttons -->
@@ -881,22 +955,53 @@
 <!-- Import Emails Modal -->
 <div class="import-modal-overlay" id="importModal">
   <div class="import-modal">
-    <h3>Import emails from list</h3>
-    <p class="import-modal-help">
-      Paste emails (one per line, or comma/semicolon separated) — or upload a <code>.txt</code> / <code>.csv</code> file.
-      Optional name format: <code>Name &lt;email@x.com&gt;</code> or <code>Name,email@x.com</code> (CSV).
-      For Excel: <em>Save As → CSV (Comma delimited)</em>, then upload the .csv.
-    </p>
-    <div class="import-file-row">
-      <label class="import-file-label" for="importFile">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Choose file
-      </label>
-      <input type="file" id="importFile" accept=".txt,.csv,text/plain,text/csv" style="display:none">
-      <span class="import-file-name" id="importFileName">No file selected</span>
+    <h3>Import recipients</h3>
+
+    <!-- Mode tabs -->
+    <div class="import-tabs" role="tablist">
+      <button type="button" class="import-tab active" data-import-mode="emails" role="tab" aria-selected="true">Emails only</button>
+      <button type="button" class="import-tab"        data-import-mode="merge"  role="tab" aria-selected="false">Emails + merge fields (CSV)</button>
     </div>
-    <textarea class="import-textarea" id="importTextarea" placeholder="alice@school.edu&#10;Bob Smith &lt;bob@school.edu&gt;&#10;carol@school.edu, dave@school.edu"></textarea>
-    <div class="import-status" id="importStatus"></div>
+
+    <!-- ── Tab 1: emails only (existing flow) ───────────────────── -->
+    <div class="import-pane" data-import-pane="emails">
+      <p class="import-modal-help">
+        Paste emails (one per line, or comma/semicolon separated) — or upload a <code>.txt</code> / <code>.csv</code> file.
+        Optional name format: <code>Name &lt;email@x.com&gt;</code> or <code>Name,email@x.com</code> (CSV).
+        For Excel: <em>Save As → CSV (Comma delimited)</em>, then upload the .csv.
+      </p>
+      <div class="import-file-row">
+        <label class="import-file-label" for="importFile">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Choose file
+        </label>
+        <input type="file" id="importFile" accept=".txt,.csv,text/plain,text/csv" style="display:none">
+        <span class="import-file-name" id="importFileName">No file selected</span>
+      </div>
+      <textarea class="import-textarea" id="importTextarea" placeholder="alice@school.edu&#10;Bob Smith &lt;bob@school.edu&gt;&#10;carol@school.edu, dave@school.edu"></textarea>
+      <div class="import-status" id="importStatus"></div>
+    </div>
+
+    <!-- ── Tab 2: emails + merge fields (CSV) ───────────────────── -->
+    <div class="import-pane" data-import-pane="merge" style="display:none">
+      <p class="import-modal-help">
+        Upload a CSV where the <strong>first column is the email address</strong> and the remaining columns are merge-tag fields.
+        Header row is required — column names become <code>{{tag}}</code> placeholders you can use in the subject and body.
+        Example: <code>email,password,examUrl</code> → use <code>{{password}}</code> and <code>{{examUrl}}</code> in your message.
+      </p>
+      <div class="import-file-row">
+        <label class="import-file-label" for="mergeFile">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Choose CSV file
+        </label>
+        <input type="file" id="mergeFile" accept=".csv,text/csv" style="display:none">
+        <span class="import-file-name" id="mergeFileName">No file selected</span>
+      </div>
+      <textarea class="import-textarea" id="mergeTextarea" placeholder="email,password,examUrl&#10;alice@school.edu,xY3tQ7,https://latihan.id/exam/abc&#10;bob@school.edu,P2mN5z,https://latihan.id/exam/def"></textarea>
+      <div id="mergePreview" class="merge-preview" style="display:none"></div>
+      <div class="import-status" id="mergeStatus"></div>
+    </div>
+
     <div class="import-modal-footer">
       <button type="button" class="btn-cancel-sm" id="importCancel">Cancel</button>
       <button type="button" class="btn-send-sm" id="importApply">Add to recipients</button>
@@ -955,8 +1060,14 @@
       <div class="cs-row"><span class="cs-k">Recipients</span><span class="cs-v cs-big" id="csRecipCount">—</span></div>
       <div class="cs-row"><span class="cs-k">Audience</span><span class="cs-v" id="csAudience">—</span></div>
       <div class="cs-row"><span class="cs-k">Subject</span><span class="cs-v" id="csSubject">—</span></div>
+      <div class="cs-row" id="csPersonalizedRow" style="display:none">
+        <span class="cs-k">Personalized</span>
+        <span class="cs-v" id="csPersonalizedFields" style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem">—</span>
+      </div>
       <div class="cs-row"><span class="cs-k">From</span><span class="cs-v" style="font-weight:500;color:var(--ink-3)">Eduversal Education &lt;noreply@eduversal.org&gt;</span></div>
     </div>
+
+    <div id="csWarning" style="display:none;font-size:.78rem;color:#b91c1c;background:#fff5f5;border:1px solid #f5cdd2;padding:8px 12px;border-radius:6px;line-height:1.5"></div>
 
     <div class="confirm-send-sample" id="csSample"></div>
 
@@ -1348,15 +1459,102 @@ function parseImportText(raw) {
   return { entries, invalidLines };
 }
 
+/* ─── CSV parser for the merge-fields tab ───────────────────────────
+   Strict CSV: required header row, first column MUST be email, remaining
+   columns become merge-tag fields. Returns:
+     { fields: ['password','examUrl'], entries: [{email, fields:{...}}], invalidLines: [...] }
+   We use a small RFC 4180-ish splitter (handles quoted values, embedded commas,
+   escaped quotes "" inside quotes). Good enough for password CSVs from Excel.
+*/
+function splitCsvLine(line) {
+  const cells = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { cur += c; }
+    } else {
+      if (c === '"') { inQuotes = true; }
+      else if (c === ',' || c === ';' || c === '\t') { cells.push(cur); cur = ''; }
+      else { cur += c; }
+    }
+  }
+  cells.push(cur);
+  return cells.map(s => s.trim());
+}
+
+function parseImportCsvWithFields(raw) {
+  const out = { fields: [], entries: [], invalidLines: [] };
+  if (!raw || !raw.trim()) return out;
+
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) {
+    out.invalidLines.push('CSV needs a header row + at least one data row.');
+    return out;
+  }
+
+  // Header — first column must be `email` (case-insensitive); rest become field names.
+  const header = splitCsvLine(lines[0]);
+  if (!header.length || !/^email$/i.test(header[0])) {
+    out.invalidLines.push('First column header must be "email".');
+    return out;
+  }
+  // Sanitize field names: only [a-zA-Z0-9_], skip empty.
+  const fields = [];
+  const fieldIndices = []; // parallel to fields — original column index
+  for (let c = 1; c < header.length; c++) {
+    const raw = header[c];
+    if (!raw) continue;
+    const clean = raw.replace(/[^a-zA-Z0-9_]/g, '');
+    if (!clean) continue;
+    fields.push(clean);
+    fieldIndices.push(c);
+  }
+  out.fields = fields;
+
+  const seen = new Set();
+  for (let r = 1; r < lines.length; r++) {
+    const cells = splitCsvLine(lines[r]);
+    const email = (cells[0] || '').trim();
+    if (!EMAIL_RE.test(email)) { out.invalidLines.push(lines[r]); continue; }
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entryFields = {};
+    for (let i = 0; i < fields.length; i++) {
+      entryFields[fields[i]] = cells[fieldIndices[i]] || '';
+    }
+    out.entries.push({ email: key, name: '', fields: entryFields });
+  }
+  return out;
+}
+
+// Tracks the import modal's current tab so the shared "Add to recipients" button
+// knows which parser/state to use.
+let importMode = 'emails';
+// Latest parsed CSV preview (so applyBtn doesn't re-parse needlessly).
+let mergeParsedCache = null;
+
 function setupImportModal() {
-  const openBtn   = document.getElementById('btnImportEmails');
-  const overlay   = document.getElementById('importModal');
-  const cancelBtn = document.getElementById('importCancel');
-  const applyBtn  = document.getElementById('importApply');
-  const fileInput = document.getElementById('importFile');
-  const fileName  = document.getElementById('importFileName');
-  const textarea  = document.getElementById('importTextarea');
-  const status    = document.getElementById('importStatus');
+  const openBtn      = document.getElementById('btnImportEmails');
+  const overlay      = document.getElementById('importModal');
+  const cancelBtn    = document.getElementById('importCancel');
+  const applyBtn     = document.getElementById('importApply');
+  const fileInput    = document.getElementById('importFile');
+  const fileName     = document.getElementById('importFileName');
+  const textarea     = document.getElementById('importTextarea');
+  const status       = document.getElementById('importStatus');
+  // Merge-tab elements
+  const mergeFile    = document.getElementById('mergeFile');
+  const mergeFileName= document.getElementById('mergeFileName');
+  const mergeTextarea= document.getElementById('mergeTextarea');
+  const mergePreview = document.getElementById('mergePreview');
+  const mergeStatus  = document.getElementById('mergeStatus');
+  const tabs         = document.querySelectorAll('.import-tab');
+  const panes        = document.querySelectorAll('.import-pane');
 
   function reset() {
     textarea.value = '';
@@ -1364,8 +1562,31 @@ function setupImportModal() {
     fileName.textContent = 'No file selected';
     status.textContent = '';
     status.className = 'import-status';
+    mergeTextarea.value = '';
+    mergeFile.value = '';
+    mergeFileName.textContent = 'No file selected';
+    mergeStatus.textContent = '';
+    mergeStatus.className = 'import-status';
+    mergePreview.style.display = 'none';
+    mergePreview.innerHTML = '';
+    mergeParsedCache = null;
+    setMode('emails');
   }
   function close() { overlay.classList.remove('open'); }
+
+  function setMode(mode) {
+    importMode = mode;
+    tabs.forEach(t => {
+      const active = t.dataset.importMode === mode;
+      t.classList.toggle('active', active);
+      t.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    panes.forEach(p => {
+      p.style.display = p.dataset.importPane === mode ? '' : 'none';
+    });
+  }
+
+  tabs.forEach(t => t.addEventListener('click', () => setMode(t.dataset.importMode)));
 
   openBtn.addEventListener('click', () => {
     reset();
@@ -1376,6 +1597,7 @@ function setupImportModal() {
   cancelBtn.addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
+  // ─── Tab 1: emails-only file picker (existing behaviour) ─────────
   fileInput.addEventListener('change', async () => {
     const f = fileInput.files?.[0];
     if (!f) { fileName.textContent = 'No file selected'; return; }
@@ -1399,30 +1621,122 @@ function setupImportModal() {
     }
   });
 
-  applyBtn.addEventListener('click', () => {
-    const { entries, invalidLines } = parseImportText(textarea.value);
-    if (!entries.length) {
-      status.className = 'import-status error';
-      status.textContent = 'No valid emails found.';
+  // ─── Tab 2: merge-fields CSV file picker + live preview ──────────
+  function refreshMergePreview() {
+    const parsed = parseImportCsvWithFields(mergeTextarea.value);
+    mergeParsedCache = parsed;
+    if (!parsed.entries.length && !parsed.invalidLines.length) {
+      mergePreview.style.display = 'none';
+      mergePreview.innerHTML = '';
+      mergeStatus.textContent = '';
       return;
     }
-    let added = 0, alreadyPresent = 0;
-    for (const { name, email } of entries) {
-      const key = email.toLowerCase();
-      if (manualRecipients.has(key) || chipRecipients.has(key)) {
-        alreadyPresent++;
-        excludedEmails.delete(key); // un-exclude if previously toggled off
-        continue;
+    if (!parsed.fields.length && parsed.invalidLines.length) {
+      mergePreview.style.display = 'none';
+      mergeStatus.className = 'import-status error';
+      mergeStatus.textContent = parsed.invalidLines[0] || 'Could not parse CSV.';
+      return;
+    }
+
+    const sample = parsed.entries.slice(0, 5);
+    const fieldChips = parsed.fields.map(f =>
+      `<span class="merge-tag-chip">{{${escHtml(f)}}}</span>`).join(' ');
+    const headCells  = ['<th>email</th>', ...parsed.fields.map(f => `<th>${escHtml(f)}</th>`)].join('');
+    const bodyRows   = sample.map(e => {
+      const cells = [`<td>${escHtml(e.email)}</td>`,
+        ...parsed.fields.map(f => `<td>${escHtml(e.fields[f] || '')}</td>`)].join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    mergePreview.innerHTML = `
+      <div class="merge-preview-head">
+        <span>Detected fields:</span> ${fieldChips}
+      </div>
+      <table class="merge-preview-table"><thead><tr>${headCells}</tr></thead><tbody>${bodyRows}</tbody></table>
+      <div class="merge-preview-foot">Showing ${sample.length} of ${parsed.entries.length} row${parsed.entries.length !== 1 ? 's' : ''}${parsed.invalidLines.length ? ` · ${parsed.invalidLines.length} invalid skipped` : ''}.</div>
+    `;
+    mergePreview.style.display = '';
+    mergeStatus.className = 'import-status';
+    mergeStatus.textContent = `Ready — ${parsed.entries.length} recipient${parsed.entries.length !== 1 ? 's' : ''}, ${parsed.fields.length} merge field${parsed.fields.length !== 1 ? 's' : ''}.`;
+  }
+
+  mergeFile.addEventListener('change', async () => {
+    const f = mergeFile.files?.[0];
+    if (!f) { mergeFileName.textContent = 'No file selected'; return; }
+    if (f.size > 2 * 1024 * 1024) {
+      mergeStatus.className = 'import-status error';
+      mergeStatus.textContent = 'File too large (max 2 MB).';
+      mergeFile.value = ''; mergeFileName.textContent = 'No file selected';
+      return;
+    }
+    mergeFileName.textContent = f.name;
+    try {
+      const text = await f.text();
+      mergeTextarea.value = text;
+      refreshMergePreview();
+    } catch (err) {
+      mergeStatus.className = 'import-status error';
+      mergeStatus.textContent = 'Could not read file: ' + err.message;
+    }
+  });
+  mergeTextarea.addEventListener('input', refreshMergePreview);
+
+  // ─── Apply (shared between tabs) ─────────────────────────────────
+  applyBtn.addEventListener('click', () => {
+    if (importMode === 'emails') {
+      const { entries, invalidLines } = parseImportText(textarea.value);
+      if (!entries.length) {
+        status.className = 'import-status error';
+        status.textContent = 'No valid emails found.';
+        return;
       }
-      manualRecipients.set(key, { name, email, source: 'manual', schoolName: '' });
-      excludedEmails.delete(key);
-      added++;
+      let added = 0, alreadyPresent = 0;
+      for (const { name, email } of entries) {
+        const key = email.toLowerCase();
+        if (manualRecipients.has(key) || chipRecipients.has(key)) {
+          alreadyPresent++;
+          excludedEmails.delete(key);
+          continue;
+        }
+        manualRecipients.set(key, { name, email, source: 'manual', schoolName: '', fields: {} });
+        excludedEmails.delete(key);
+        added++;
+      }
+      syncRecipientDisplay();
+      const parts = [`${added} added`];
+      if (alreadyPresent) parts.push(`${alreadyPresent} already in list`);
+      if (invalidLines.length) parts.push(`${invalidLines.length} skipped`);
+      showBanner('success', `Imported: ${parts.join(' · ')}`);
+      close();
+      return;
+    }
+
+    // Merge-fields mode
+    const parsed = mergeParsedCache || parseImportCsvWithFields(mergeTextarea.value);
+    if (!parsed.entries.length) {
+      mergeStatus.className = 'import-status error';
+      mergeStatus.textContent = parsed.invalidLines[0] || 'No valid rows found.';
+      return;
+    }
+    let added = 0, updated = 0;
+    for (const { email, fields } of parsed.entries) {
+      const key = email.toLowerCase();
+      if (manualRecipients.has(key)) {
+        // Merge: keep existing name, replace fields with new CSV values
+        const existing = manualRecipients.get(key);
+        manualRecipients.set(key, { ...existing, fields: { ...fields }, source: 'manual' });
+        excludedEmails.delete(key);
+        updated++;
+      } else {
+        manualRecipients.set(key, { name: '', email, source: 'manual', schoolName: '', fields: { ...fields } });
+        excludedEmails.delete(key);
+        added++;
+      }
     }
     syncRecipientDisplay();
     const parts = [`${added} added`];
-    if (alreadyPresent) parts.push(`${alreadyPresent} already in list`);
-    if (invalidLines.length) parts.push(`${invalidLines.length} skipped`);
-    showBanner('success', `Imported: ${parts.join(' · ')}`);
+    if (updated) parts.push(`${updated} updated with new fields`);
+    if (parsed.invalidLines.length) parts.push(`${parsed.invalidLines.length} skipped`);
+    showBanner('success', `Imported: ${parts.join(' · ')} · fields: ${parsed.fields.join(', ')}`);
     close();
   });
 }
@@ -1434,6 +1748,54 @@ function syncRecipientDisplay() {
   const list = finalList();
   updateRecipientDisplay(list);
   updateFilterSummary();
+  updateMergeTagsRail(list);
+}
+
+// Returns the union of merge-tag field names across the active recipient list.
+function collectActiveMergeFields(list) {
+  const set = new Set();
+  for (const r of (list || [])) {
+    const f = r.fields;
+    if (f && typeof f === 'object') {
+      for (const k of Object.keys(f)) set.add(k);
+    }
+  }
+  return [...set].sort();
+}
+
+function updateMergeTagsRail(list) {
+  const rail = document.getElementById('mergeTagsRail');
+  const chips = document.getElementById('mergeTagsRailChips');
+  if (!rail || !chips) return;
+  const fields = collectActiveMergeFields(list);
+  if (!fields.length) {
+    rail.classList.remove('shown');
+    chips.innerHTML = '';
+    return;
+  }
+  // Always include {{email}} since every recipient has one — it's a free merge tag.
+  const all = ['email', ...fields.filter(f => f !== 'email')];
+  chips.innerHTML = all.map(f =>
+    `<span class="merge-tag-pill" data-tag="${escAttr(f)}" title="Click to copy">{{${escHtml(f)}}}</span>`
+  ).join('');
+  rail.classList.add('shown');
+  // Bind copy handlers (idempotent — innerHTML reset clears prior listeners).
+  chips.querySelectorAll('.merge-tag-pill').forEach(pill => {
+    pill.addEventListener('click', async () => {
+      const text = `{{${pill.dataset.tag}}}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        pill.classList.add('copied');
+        setTimeout(() => pill.classList.remove('copied'), 900);
+      } catch (_) {
+        // Fallback: select text so user can copy manually
+        const range = document.createRange();
+        range.selectNode(pill);
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(range);
+      }
+    });
+  });
 }
 
 function updateFilterSummary() {
@@ -1568,10 +1930,20 @@ document.getElementById('testSend').addEventListener('click', async () => {
   if (!subject)  return showBanner('error', 'Enter a subject line first.');
   if (!bodyHtml) return showBanner('error', 'Write some content first.');
 
+  // If the recipient list has CSV-imported merge fields, pass the first
+  // recipient's values so the test reflects what real recipients receive.
+  // Otherwise the test renders unchanged and {{tags}} appear literally.
+  const list = finalList();
+  let previewVars = null;
+  for (const r of list) {
+    if (r.fields && Object.keys(r.fields).length) { previewVars = r.fields; break; }
+  }
+
   document.getElementById('testModal').classList.remove('open');
-  showBanner('sending', 'Sending test email…');
+  showBanner('sending', previewVars ? 'Sending test email (using first recipient\'s merge values)…' : 'Sending test email…');
   try {
-    await apiPost('/send-test', { subject, bodyHtml, toEmail });
+    await apiPost('/send-test', { subject, bodyHtml, toEmail,
+                                  ...(previewVars ? { previewVars } : {}) });
     showBanner('success', `Test email sent to ${toEmail}`);
   } catch (err) {
     showBanner('error', `Test failed: ${err.message}`);
@@ -1612,39 +1984,136 @@ document.getElementById('btnSend').addEventListener('click', () => {
   const manualCount = [...manualRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
   if (manualCount > 0 && activePlatform !== null) audience += ` (+${manualCount} manual)`;
 
-  // Stash for the actual send call
+  // Build personalizations map: { [emailLower]: { tag: value, ... } }.
+  // Only includes recipients that actually have non-empty fields, AND only if the
+  // body or subject references {{tag}} placeholders we want to substitute.
+  // We always send all recipients' fields if any have them — server skips entries
+  // for unknown emails. Lighter to just ship every map.
+  const personalizations = {};
+  let hasAnyFields = false;
+  for (const r of activeRecips) {
+    if (r.fields && Object.keys(r.fields).length > 0) {
+      personalizations[r.email.toLowerCase()] = { ...r.fields };
+      hasAnyFields = true;
+    }
+  }
+  // Detect which {{tags}} the admin actually used (so we can warn about unmatched tags)
+  const usedTags = extractMergeTagsFromTemplate(subject + ' ' + bodyHtml);
+
   pendingSendPayload = {
     subject, bodyHtml, campaignName,
     activeRecips, recipCount, filterParams,
+    personalizations: hasAnyFields ? personalizations : null,
+    usedTags,
   };
 
-  openConfirmSendModal({ subject, audience, recipCount, bodyHtml });
+  openConfirmSendModal({ subject, audience, recipCount, bodyHtml,
+                        personalizations: hasAnyFields ? personalizations : null,
+                        activeRecips, usedTags });
 });
 
-function openConfirmSendModal({ subject, audience, recipCount, bodyHtml }) {
-  const overlay   = document.getElementById('confirmSendModal');
-  const head      = document.getElementById('confirmSendHead');
-  const subtitle  = document.getElementById('confirmSendSubtitle');
-  const recipEl   = document.getElementById('csRecipCount');
-  const audEl     = document.getElementById('csAudience');
-  const subjEl    = document.getElementById('csSubject');
-  const sampleEl  = document.getElementById('csSample');
-  const typebox   = document.getElementById('csTypebox');
-  const typeNum   = document.getElementById('csTypeNumber');
-  const typeInput = document.getElementById('csTypeInput');
-  const confirmBtn= document.getElementById('csConfirm');
-  const confirmLbl= document.getElementById('csConfirmLabel');
+// Extract unique {{tag}} names referenced in subject + body. Used by the confirm
+// modal to render a more accurate sample (substituting first recipient's values)
+// and to warn the admin about tags that have no data in the personalizations map.
+function extractMergeTagsFromTemplate(template) {
+  const set = new Set();
+  if (!template) return [];
+  const re = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(template))) set.add(m[1]);
+  return [...set];
+}
+
+// Mirror of the server's applyMergeTags — used only for the confirm modal preview.
+// Plain-text rendering (no HTML escape needed for the body sample shown in the modal,
+// since we already textContent it).
+function renderMergeTagsPreview(template, vars) {
+  if (!template || !vars) return template || '';
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) =>
+    vars[k] != null ? String(vars[k]) : '');
+}
+
+function openConfirmSendModal({ subject, audience, recipCount, bodyHtml,
+                                personalizations, activeRecips, usedTags }) {
+  const overlay     = document.getElementById('confirmSendModal');
+  const head        = document.getElementById('confirmSendHead');
+  const subtitle    = document.getElementById('confirmSendSubtitle');
+  const recipEl     = document.getElementById('csRecipCount');
+  const audEl       = document.getElementById('csAudience');
+  const subjEl      = document.getElementById('csSubject');
+  const sampleEl    = document.getElementById('csSample');
+  const typebox     = document.getElementById('csTypebox');
+  const typeNum     = document.getElementById('csTypeNumber');
+  const typeInput   = document.getElementById('csTypeInput');
+  const confirmBtn  = document.getElementById('csConfirm');
+  const confirmLbl  = document.getElementById('csConfirmLabel');
+  const persRow     = document.getElementById('csPersonalizedRow');
+  const persFields  = document.getElementById('csPersonalizedFields');
+  const warningEl   = document.getElementById('csWarning');
 
   const isMass = recipCount >= MASS_SEND_THRESHOLD;
 
   recipEl.textContent = `${recipCount} recipient${recipCount !== 1 ? 's' : ''}`;
   recipEl.classList.toggle('cs-mass', isMass);
   audEl.textContent   = audience;
-  subjEl.textContent  = subject;
 
-  // First ~140 chars of plain-text body as sanity-check sample
+  // ── Personalized fields row + sample with first-recipient substitution ──
+  let firstVars = null;
+  if (personalizations && activeRecips && activeRecips.length) {
+    firstVars = personalizations[activeRecips[0].email.toLowerCase()] || null;
+  }
+
+  // Subject preview: substitute first recipient's vars so admin sees the actual rendered subject
+  const renderedSubject = firstVars ? renderMergeTagsPreview(subject, firstVars) : subject;
+  subjEl.textContent = renderedSubject;
+
+  if (personalizations && Object.keys(personalizations).length > 0) {
+    const fieldNames = Array.from(new Set(
+      Object.values(personalizations).flatMap(v => Object.keys(v || {}))
+    )).sort();
+    const recipientsWithFields = Object.keys(personalizations).length;
+    persFields.textContent =
+      `{{${fieldNames.join('}} {{')}}} · ${recipientsWithFields}/${recipCount} recipients`;
+    persRow.style.display = '';
+  } else {
+    persRow.style.display = 'none';
+  }
+
+  // ── Warning surface for tag/field mismatches ──
+  const warnings = [];
+  const tagsUsed = usedTags || [];
+  const allFieldNames = personalizations
+    ? new Set(Object.values(personalizations).flatMap(v => Object.keys(v || {})))
+    : new Set();
+  // Tags referenced in body that have no data anywhere — will render as empty string
+  const missingDataTags = tagsUsed.filter(t => t !== 'email' && !allFieldNames.has(t));
+  if (missingDataTags.length) {
+    warnings.push(`The body uses {{${missingDataTags.join('}}, {{')}}} but no recipient has data for ${missingDataTags.length === 1 ? 'this tag' : 'these tags'}. Recipients will see an empty value.`);
+  }
+  // Recipients have field data but body doesn't reference it — admin may have forgotten the merge tag
+  const unusedFields = [...allFieldNames].filter(f => !tagsUsed.includes(f));
+  if (unusedFields.length && tagsUsed.length === 0) {
+    warnings.push(`Recipients have personalized fields (${unusedFields.join(', ')}) but the body doesn't use any {{tag}}. Did you forget to add merge tags?`);
+  } else if (unusedFields.length) {
+    warnings.push(`Note: recipients have ${unusedFields.join(', ')} field${unusedFields.length === 1 ? '' : 's'} but your body doesn't reference ${unusedFields.length === 1 ? 'it' : 'them'}.`);
+  }
+  // Recipients without any field data — only matters if other recipients are personalized
+  if (personalizations && Object.keys(personalizations).length < recipCount) {
+    const unpersonalized = recipCount - Object.keys(personalizations).length;
+    warnings.push(`${unpersonalized} recipient${unpersonalized === 1 ? '' : 's'} ${unpersonalized === 1 ? 'has' : 'have'} no merge data — any {{tag}} in the body will render as empty for ${unpersonalized === 1 ? 'them' : 'those'}.`);
+  }
+
+  if (warnings.length) {
+    warningEl.innerHTML = warnings.map(w => `⚠ ${escHtml(w)}`).join('<br>');
+    warningEl.style.display = '';
+  } else {
+    warningEl.style.display = 'none';
+    warningEl.innerHTML = '';
+  }
+
+  // ── Body sample (first ~140 chars, with merge tags substituted for first recipient) ──
   const tmp = document.createElement('div');
-  tmp.innerHTML = bodyHtml;
+  tmp.innerHTML = firstVars ? renderMergeTagsPreview(bodyHtml, firstVars) : bodyHtml;
   const sampleText = (tmp.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 140);
   sampleEl.textContent = sampleText ? sampleText + (sampleText.length === 140 ? '…' : '') : '(empty body)';
 
@@ -1693,7 +2162,8 @@ document.getElementById('csTypeInput').addEventListener('input', e => {
 
 document.getElementById('csConfirm').addEventListener('click', async () => {
   if (!pendingSendPayload) return;
-  const { subject, bodyHtml, campaignName, activeRecips, recipCount, filterParams } = pendingSendPayload;
+  const { subject, bodyHtml, campaignName, activeRecips, recipCount, filterParams,
+          personalizations } = pendingSendPayload;
   pendingSendPayload = null;
   closeConfirmSendModal();
 
@@ -1713,6 +2183,9 @@ document.getElementById('csConfirm').addEventListener('click', async () => {
       platform:         filterParams.platform || null,
       role:             filterParams.role     || 'all',
       subRole:          filterParams.subRole  || null,
+      // Per-recipient merge tag values (sensitive — sent in request body, not stored).
+      // Only included when at least one recipient has fields; otherwise omitted entirely.
+      ...(personalizations ? { personalizations } : {}),
     });
     showBanner('success', `Campaign queued! ${result.recipientCount} recipients · Campaign ID: ${result.campaignId.slice(0,8)}…`);
     document.getElementById('fSubject').value = '';
