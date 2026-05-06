@@ -344,6 +344,7 @@ const storage = getStorage(app);
 window.firebaseApp = app;
 window.auth        = auth;
 window.db          = db;
+window.storage     = storage;
 
 // ── Name prompt (shown when displayName is missing) ───────────────
 function promptForName() {

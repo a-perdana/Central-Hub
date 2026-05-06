@@ -344,6 +344,7 @@ const storage = getStorage(app);
 window.firebaseApp = app;
 window.auth        = auth;
 window.db          = db;
+window.storage     = storage;
 
 // ── Name prompt (shown when displayName is missing) ───────────────
 function promptForName() {
@@ -713,6 +714,18 @@ onAuthStateChanged(auth, async (user) => {
   // 1. Not signed in → redirect to login
   if (!user) {
     window.location.replace('login');
+    return;
+  }
+
+  // 1b. Career applicant guard. TH `/careers-apply` uses
+  // sendSignInLinkToEmail to mail candidates a magic-link for application
+  // tracking. That sign-in must NEVER provision a Central Hub profile —
+  // applicants are not HQ staff. Detected via providerData carrying
+  // 'emailLink'. Redirect to TH careers-status host without creating a
+  // users/{uid} doc.
+  const isEmailLinkUser = user.providerData.some(p => p.providerId === 'emailLink');
+  if (isEmailLinkUser) {
+    window.location.replace('https://teachershub.eduversal.org/careers-status');
     return;
   }
 
