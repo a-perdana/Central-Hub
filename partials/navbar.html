@@ -860,6 +860,24 @@
     background: #fffbeb;
     border-color: #fbbf24;
   }
+  /* Section headers act as anchors in edit mode — they don't move, items
+     reorder around them. The lock icon hints they're not draggable. */
+  .nav-edit-mode .ch-dd-col-header {
+    background: #f7f6f3;
+    border-radius: 4px;
+    margin: 4px 2px 2px;
+    padding-left: 22px;
+    position: relative;
+    user-select: none;
+  }
+  .nav-edit-mode .ch-dd-col-header::before {
+    content: '🔒';
+    position: absolute;
+    left: 6px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    opacity: 0.5;
+  }
   /* Hint text inside an empty submenu panel */
   .nav-edit-mode .ch-dd-submenu-panel:empty::before {
     content: 'Drop items here';
@@ -1880,14 +1898,15 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 const NAV_CONFIG_DOC = 'nav_config/v1';
-// Curriculum panel intentionally excluded — its layout is dense (multi-column
-// with section headers like "PACING — IGCSE / CHECKPOINT / AS-A-LEVEL" that
-// are static .ch-dd-col-header divs, not real submenu groups). The editor's
-// flat-reorder model would scramble the section headers' implied grouping.
-// Treat the HTML source as the source of truth for Curriculum.
+// All six dropdowns are editable. Static `.ch-dd-col-header` divs (e.g.
+// "Pacing — IGCSE", "Messaging") act as anchors: they keep their position
+// in the HTML source while items reorder around them. getConfig captures
+// each item's nearest preceding header as its `section`; applyConfig
+// places items back into their section's slot.
 const PANELS = [
   'chDdPanel-network',
   'chDdPanel-comms',
+  'chDdPanel-curriculum',
   'chDdPanel-ops',
   'chDdPanel-admin',
   'chDdPanel-specialist',
@@ -1920,10 +1939,31 @@ document.addEventListener('authReady', async () => {
 
 // ── Config schema ────────────────────────────────────────────────────────
 // cfg[panelId] = {
-//   submenus: [{ key, label, col }, ...],   // user-defined submenu groups (Academics-only for now)
-//   items:    [{ key, label, col, submenu }, ...],
+//   submenus: [{ key, label, col }, ...],   // user-defined submenu groups (Admin-only for now)
+//   items:    [{ key, label, col, submenu, section }, ...],
 // }
+// `section` is the textContent of the nearest preceding .ch-dd-col-header
+// in the item's column at capture time, or null if the item lives above
+// any header. It anchors items to a section: applyConfig places each item
+// into the slot between its section header and the next header/divider.
 // Legacy: an array (just items) — treated as { submenus: [], items: [...] }.
+
+// Read the textContent of an element, normalising whitespace.
+function _hdrText(el) {
+  return (el?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+// Find the nearest preceding .ch-dd-col-header sibling for `node` within
+// its parent container. Returns the text label, or null if none above.
+function _sectionForNode(node) {
+  let p = node.previousElementSibling;
+  while (p) {
+    if (p.classList && p.classList.contains('ch-dd-col-header')) return _hdrText(p);
+    p = p.previousElementSibling;
+  }
+  return null;
+}
+
 function getConfig() {
   const cfg = {};
   PANELS.forEach(panelId => {
@@ -1951,17 +1991,51 @@ function getConfig() {
         colIdx = colAncestor ? cols.indexOf(colAncestor) : 0;
         if (colIdx < 0) colIdx = 0;
       }
+      // Section anchor: the nearest preceding .ch-dd-col-header within the
+      // item's direct parent. Items inside a submenu panel inherit the
+      // submenu's section context, not their own (submenus carry items
+      // independently of column-level section headers).
+      const section = subWrap ? null : _sectionForNode(a);
       return {
         key:     a.dataset.navKey,
         label:   a.querySelector('.nav-item-label')?.textContent.trim() || '',
         col:     colIdx,
         submenu: submenu,
+        section: section,
       };
     });
 
     cfg[panelId] = { submenus, items };
   });
   return cfg;
+}
+
+// Within `container`, return the slot AFTER the section header whose text
+// matches `sectionText`, OR null if the section isn't found. The slot is
+// expressed as { container, beforeNode } — beforeNode is the next header
+// or divider after the section's items (or null = append to end).
+function _findSectionSlot(container, sectionText) {
+  if (!container) return null;
+  if (sectionText == null) {
+    // Items without a section live above the first header. Slot = before
+    // the first header (or end of container if there are no headers).
+    const firstHdr = container.querySelector(':scope > .ch-dd-col-header');
+    return { container, beforeNode: firstHdr || null };
+  }
+  const headers = Array.from(container.querySelectorAll(':scope > .ch-dd-col-header'));
+  const hdr = headers.find(h => _hdrText(h) === sectionText);
+  if (!hdr) return null;
+  // Find the next header or divider after this one — that's the boundary
+  // where this section ends.
+  let cursor = hdr.nextElementSibling;
+  while (cursor) {
+    if (cursor.classList?.contains('ch-dd-col-header') ||
+        cursor.classList?.contains('ch-dd-divider')) {
+      return { container, beforeNode: cursor };
+    }
+    cursor = cursor.nextElementSibling;
+  }
+  return { container, beforeNode: null };
 }
 
 function applyConfig(cfg) {
@@ -2007,25 +2081,71 @@ function applyConfig(cfg) {
       targetCol.appendChild(wrap);
     });
 
-    // 2. Re-home every item into its target container (column or submenu panel)
+    // 2. Re-home every item into its target container (column or submenu panel),
+    //    honouring the saved `section` anchor when set. Section headers + dividers
+    //    stay where the HTML put them; items slot in between.
     const submenuPanels = {};
     panel.querySelectorAll('.ch-dd-submenu-wrap').forEach(w => {
       submenuPanels[w.dataset.submenu] = w.querySelector(':scope > .ch-dd-submenu-panel');
     });
-    itemsList.forEach(({ key, label, col, submenu }) => {
+
+    // Track per-section running insertion cursor so successive items in the
+    // same section land in the saved order (not all stacked at the section's
+    // first slot). Map: container+section -> Node|null (next sibling after
+    // the last placed item).
+    const sectionCursors = new Map();
+    const cursorKey = (container, section) => {
+      // Use a unique container marker — DOM identity via WeakRef-safe key
+      if (!container.__navSecCursorId) {
+        container.__navSecCursorId = Math.random().toString(36).slice(2);
+      }
+      return container.__navSecCursorId + '||' + (section ?? '__none__');
+    };
+
+    itemsList.forEach(({ key, label, col, submenu, section }) => {
       const item = panel.querySelector(`.ch-dd-item[data-nav-key="${key}"]`);
       if (!item) return;
       const labelEl = item.querySelector('.nav-item-label');
       if (labelEl && label) labelEl.textContent = label;
-      let target;
+
+      // Resolve target container.
+      let container;
       if (submenu && submenuPanels[submenu]) {
-        target = submenuPanels[submenu];
+        container = submenuPanels[submenu];
       } else if (cols.length > 0 && col != null) {
-        target = cols[col] || cols[0];
+        container = cols[col] || cols[0];
       } else {
-        target = panel;
+        container = panel;
       }
-      target.appendChild(item);
+
+      // Try section-anchored placement first (column-level only).
+      let placed = false;
+      if (!submenu) {
+        const slot = _findSectionSlot(container, section);
+        if (slot) {
+          const k = cursorKey(container, section);
+          let cursor = sectionCursors.get(k);
+          if (cursor === undefined) {
+            // First item in this section: insert at the slot's start
+            // (right after the header). Then update cursor to the slot
+            // boundary so the next item slides in BEFORE the boundary
+            // but AFTER this one.
+            cursor = slot.beforeNode;
+          }
+          if (cursor) container.insertBefore(item, cursor);
+          else container.appendChild(item);
+          // Don't move the cursor — successive items also insert before
+          // the boundary, so they naturally append in order before it.
+          sectionCursors.set(k, cursor);
+          placed = true;
+        }
+      }
+
+      if (!placed) {
+        // Fallback: append (legacy data without `section`, or submenu items,
+        // or an unresolved section text). DOM order from itemsList drives sequence.
+        container.appendChild(item);
+      }
     });
   });
 }
@@ -2356,7 +2476,9 @@ function onDrop(e) {
 }
 
 // Container-level drop: lets admins drop into an empty container (e.g. an empty
-// submenu panel that has no items yet) or the bottom of a column past the last item.
+// submenu panel that has no items yet) or between section headers in a column.
+// Picks the insertion point closest to the cursor's Y, respecting headers
+// and dividers as boundaries the dragged item won't jump over.
 function onContainerDragOver(e) {
   if (!dragSrc) return;
   if (!samePanel(dragSrc, this)) return;
@@ -2370,9 +2492,20 @@ function onContainerDrop(e) {
   this.classList.remove('drop-into');
   if (!dragSrc) return;
   if (!samePanel(dragSrc, this)) return;
-  // Append to the end of this container (skip if already last child)
-  if (dragSrc.parentNode === this && this.lastElementChild === dragSrc) return;
-  this.appendChild(dragSrc);
+
+  // Walk the container's direct children top-to-bottom and find the first
+  // element whose vertical midpoint sits below the cursor. Insert before it.
+  // Section headers and dividers count as anchors — items can land just
+  // before or just after a header but not be appended past the column's
+  // last header (which would dump everything into the final section).
+  const children = Array.from(this.children).filter(c => c !== dragSrc);
+  let insertBefore = null;
+  for (const child of children) {
+    const r = child.getBoundingClientRect();
+    if (e.clientY < r.top + r.height / 2) { insertBefore = child; break; }
+  }
+  if (insertBefore) this.insertBefore(dragSrc, insertBefore);
+  else              this.appendChild(dragSrc);
 }
 
 function onDragEnd() {
