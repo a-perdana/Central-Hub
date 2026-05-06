@@ -268,6 +268,8 @@
 }
 .xref-item-id { font-family: 'DM Mono', monospace; font-size: 10.5px; color: var(--ink-3); }
 .xref-item-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.xref-item-static { cursor: default; opacity: 0.78; }
+.xref-item-static:hover { transform: none; box-shadow: none; border-color: var(--border); border-left-color: transparent; }
 
 .skel { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
@@ -347,6 +349,27 @@ import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-
 const SYSTEM_LABELS = { kpi: 'KPI', appraisal: 'Appraisal', competency: 'Competency', induction: 'Induction' };
 const TRACK_LABELS  = { teachers: 'Teachers', leaders: 'Leaders (AH)', specialists: 'Specialists (CH)',
                         subject_teacher: 'Subject Teacher Y1', principal: 'Principal Y1', specialist: 'Specialist Y1' };
+
+// Crossref `link` fields are seeded for the TH route set. Each hub hosts a
+// different page set, so rewrite per-item links to whatever exists in *this*
+// hub. If a system has no equivalent page locally, return null and the chip
+// renders as non-clickable (avoids 404s — past incident: clicking an Appraisal
+// xref on CH /cambridge-standards routed to /teacher-self-appraisal which only
+// lives on TH).
+const HUB = 'ch';
+const HUB_ROUTES = {
+  // [system][track?] → route on this hub, or null if no equivalent page exists
+  ch: {
+    kpi:        () => '/kpi-admin',
+    appraisal:  () => '/teacher-appraisals',
+    competency: (track) => track === 'specialists' ? '/specialist-path' : null,
+    induction:  (track) => track === 'specialist'  ? '/my-induction'    : null,
+  },
+};
+function resolveHubLink(item) {
+  const sys = HUB_ROUTES[HUB]?.[item.system];
+  return typeof sys === 'function' ? sys(item.track) : null;
+}
 
 // Cambridge domain names — verbatim from Cambridge International (2023).
 // Canonical source: docs/research/cambridge/{teacher,school-leader}-standards-2023.json
@@ -492,12 +515,14 @@ function renderList() {
         const trackBit = (it.system === 'competency' || it.system === 'induction') && it.track
           ? ` · ${escHtml(TRACK_LABELS[it.track] || it.track)}`
           : (it.track ? ` · ${escHtml(it.track)}` : '');
-        return `
-          <a class="xref-item" href="${escHtml(it.link || '#')}">
+        const href = resolveHubLink(it);
+        const inner = `
             <span class="xref-item-id">${escHtml(it.id)}${trackBit}</span>
             <div class="xref-item-label">${escHtml(it.label)}</div>
-          </a>
         `;
+        return href
+          ? `<a class="xref-item" href="${escHtml(href)}">${inner}</a>`
+          : `<div class="xref-item xref-item-static" title="No matching page on this hub">${inner}</div>`;
       }).join('');
       return `
         <div class="xref-group">
