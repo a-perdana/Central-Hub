@@ -3952,6 +3952,8 @@ import {
   collection, doc, addDoc, getDocs, getDoc, deleteDoc,
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { ref as storageRef, uploadBytes, getDownloadURL }
+  from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
 /* ================================================================
    CONFIG — update MAIL_SERVICE_URL after Railway deploy
@@ -3991,16 +3993,25 @@ function initQuill() {
     theme: 'snow',
     placeholder: 'Write your newsletter here…',
     modules: {
-      toolbar: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ color: [] }, { background: [] }],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ align: [] }],
-        ['link', 'image'],
-        ['blockquote', 'code-block'],
-        ['clean'],
-      ],
+      toolbar: {
+        container: [
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ color: [] }, { background: [] }],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          [{ align: [] }],
+          ['link', 'image'],
+          ['blockquote', 'code-block'],
+          ['clean'],
+        ],
+        handlers: {
+          // Override the default image handler so files upload to Firebase
+          // Storage instead of being inlined as base64 data URIs. Gmail and
+          // some Outlook clients silently drop data:image URIs in newsletter
+          // bodies — external <img src="https://..."> renders normally.
+          image: uploadImageHandler,
+        },
+      },
     },
   });
 
@@ -4009,6 +4020,60 @@ function initQuill() {
     document.getElementById('wordCount').textContent = `${words} word${words !== 1 ? 's' : ''}`;
     validateForm();
   });
+}
+
+/**
+ * Quill image-toolbar handler. Picks a file, uploads it to Firebase
+ * Storage at `mail_images/{uid}/{ts}_{filename}`, then inserts a
+ * standard <img src="https://..."> at the cursor. Caps file at 5 MB.
+ */
+function uploadImageHandler() {
+  const input = document.createElement('input');
+  input.type   = 'file';
+  input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showBanner('error', 'Please choose an image file (PNG, JPG, GIF, WebP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showBanner('error', `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 5 MB — please compress first.`);
+      return;
+    }
+
+    const uid = window.currentUser?.uid;
+    if (!uid || !window.storage) {
+      showBanner('error', 'Storage not initialised — please reload the page.');
+      return;
+    }
+
+    showBanner('sending', `Uploading image (${(file.size / 1024).toFixed(0)} KB)…`);
+
+    // Sanitise filename — strip path traversal, keep extension.
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
+    const ts       = Date.now();
+    const path     = `mail_images/${uid}/${ts}_${safeName}`;
+
+    try {
+      const ref = storageRef(window.storage, path);
+      await uploadBytes(ref, file, { contentType: file.type });
+      const url = await getDownloadURL(ref);
+
+      // Insert image at the current cursor position.
+      const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+      quill.insertEmbed(range.index, 'image', url, 'user');
+      quill.setSelection(range.index + 1, 0, 'user');
+
+      showBanner('success', 'Image uploaded — embedded as a hosted URL (Gmail-friendly).');
+    } catch (err) {
+      console.error('[mail-composer] image upload failed', err);
+      showBanner('error', `Image upload failed: ${err.message}`);
+    }
+  };
+  input.click();
 }
 
 /* ================================================================

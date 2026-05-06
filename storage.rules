@@ -107,5 +107,25 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
              .data.role_centralhub == 'central_admin';
     }
+
+    // Mail-composer image embeds. Quill's "image" toolbar button uploads
+    // here instead of inlining base64 — Gmail silently drops data:image
+    // URIs in newsletters, but external <img src=https://...> renders
+    // inline like any normal email image.
+    // Path: mail_images/{adminUid}/{timestamp}_{filename}
+    //   - read = PUBLIC (every recipient must load the image without auth)
+    //   - write = central_admin only, ≤5 MB, image/* only
+    match /mail_images/{adminUid}/{filename} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == adminUid
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin'
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin';
+    }
   }
 }
