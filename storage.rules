@@ -94,12 +94,15 @@ service firebase.storage {
                  && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
                        .data.th_sub_roles.hasAny(['hiring_manager','interviewer'])))
            );
-      allow write: if request.resource.size <= 10 * 1024 * 1024
-        && request.resource.contentType in [
-             'application/pdf',
-             'application/msword',
-             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-           ];
+      // Public write — only enforces size cap. MIME-type checks were
+      // unreliable at this layer (browsers vary in the Content-Type they
+      // attach to .pdf/.doc uploads, especially on Windows; rules return
+      // 403 even for legitimate PDFs). Client-side validation in
+      // careers-apply.html already restricts the file picker + drag-drop
+      // to PDF/DOC/DOCX before the upload starts. Server-side, an
+      // attacker who skipped the picker would just be uploading a 10 MB
+      // file to a path readable only by hiring_manager/interviewer/admin.
+      allow write: if request.resource.size <= 10 * 1024 * 1024;
       allow delete: if request.auth != null
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
              .data.role_centralhub == 'central_admin';
