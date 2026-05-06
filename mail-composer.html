@@ -352,6 +352,67 @@
       transition: border-color .15s, color .15s;
     }
     .btn-view-recip:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-import-emails {
+      margin-top: 8px; width: 100%; height: 32px;
+      background: transparent; border: 1px dashed var(--border); border-radius: 8px;
+      font-size: .78rem; font-weight: 500; color: var(--ink-3); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .btn-import-emails:hover { border-color: var(--accent); color: var(--accent); background: rgba(108,92,231,.04); }
+
+    /* IMPORT MODAL */
+    .import-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 9999;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .import-modal-overlay.open { display: flex; }
+    .import-modal {
+      background: #fff; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18);
+      max-width: 560px; width: 100%; padding: 22px 22px 18px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .import-modal h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--ink); }
+    .import-modal-help { font-size: .8rem; color: var(--ink-3); line-height: 1.55; margin: 0; }
+    .import-modal-help code {
+      background: var(--paper); padding: 1px 5px; border-radius: 4px;
+      font-size: .76rem; color: var(--ink-2); border: 1px solid var(--border);
+    }
+    .import-file-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; background: var(--paper); border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .import-file-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px; background: #fff; border: 1px solid var(--border);
+      border-radius: 6px; cursor: pointer; font-size: .78rem; color: var(--ink-2);
+    }
+    .import-file-label:hover { border-color: var(--accent); color: var(--accent); }
+    .import-file-name { font-size: .78rem; color: var(--ink-3); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .import-textarea {
+      width: 100%; min-height: 160px; max-height: 280px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: .82rem; line-height: 1.5; color: var(--ink);
+      resize: vertical; box-sizing: border-box;
+    }
+    .import-textarea:focus { outline: none; border-color: var(--accent); }
+    .import-status { font-size: .78rem; color: var(--ink-3); min-height: 1.2em; }
+    .import-status.error { color: #dc2626; }
+    .import-status.success { color: #047857; }
+    .import-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
+    .import-modal-footer .btn-cancel-sm,
+    .import-modal-footer .btn-send-sm {
+      padding: 7px 14px; border-radius: 7px; font-size: .82rem; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); background: #fff; color: var(--ink-2);
+    }
+    .import-modal-footer .btn-send-sm { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .import-modal-footer .btn-send-sm:hover { background: var(--accent-dk); }
+    .import-modal-footer .btn-send-sm:disabled { opacity: .5; cursor: not-allowed; }
+    .import-modal-footer .btn-cancel-sm:hover { color: var(--ink); }
+
     .btn-view-recip-sm {
       width: 100%; height: 32px;
       background: transparent; border: 1px solid var(--border); border-radius: 7px;
@@ -475,6 +536,12 @@
       </div>
       <!-- Dropdown rendered in body to avoid stacking-context issues -->
       <div class="search-dropdown" id="searchDropdown"></div>
+
+      <!-- Import external emails -->
+      <button type="button" class="btn-import-emails" id="btnImportEmails" title="Add emails from a list (paste or upload .txt/.csv)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import emails from list
+      </button>
 
       <!-- Platform chips -->
       <div class="platform-chips" id="platformChips">
@@ -657,6 +724,32 @@
   </div>
 </div>
 
+<!-- Import Emails Modal -->
+<div class="import-modal-overlay" id="importModal">
+  <div class="import-modal">
+    <h3>Import emails from list</h3>
+    <p class="import-modal-help">
+      Paste emails (one per line, or comma/semicolon separated) — or upload a <code>.txt</code> / <code>.csv</code> file.
+      Optional name format: <code>Name &lt;email@x.com&gt;</code> or <code>Name,email@x.com</code> (CSV).
+      For Excel: <em>Save As → CSV (Comma delimited)</em>, then upload the .csv.
+    </p>
+    <div class="import-file-row">
+      <label class="import-file-label" for="importFile">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Choose file
+      </label>
+      <input type="file" id="importFile" accept=".txt,.csv,text/plain,text/csv" style="display:none">
+      <span class="import-file-name" id="importFileName">No file selected</span>
+    </div>
+    <textarea class="import-textarea" id="importTextarea" placeholder="alice@school.edu&#10;Bob Smith &lt;bob@school.edu&gt;&#10;carol@school.edu, dave@school.edu"></textarea>
+    <div class="import-status" id="importStatus"></div>
+    <div class="import-modal-footer">
+      <button type="button" class="btn-cancel-sm" id="importCancel">Cancel</button>
+      <button type="button" class="btn-send-sm" id="importApply">Add to recipients</button>
+    </div>
+  </div>
+</div>
+
 <!-- Recipients Modal -->
 <div class="recip-modal-overlay" id="recipModal">
   <div class="recip-modal">
@@ -767,6 +860,7 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   document.getElementById('mainContent').style.display = 'block';
   initQuill();
   setupQuickSearch();
+  setupImportModal();
   await loadHistory();
   await loadAllCounts();
   await loadFilteredRecipients();
@@ -983,6 +1077,157 @@ window.addFromSearch = function(emailKey) {
   document.getElementById('searchDropdown').classList.remove('open');
   syncRecipientDisplay();
 };
+
+/* ================================================================
+   IMPORT EMAILS FROM LIST (.txt / .csv / paste)
+   ─────────────────────────────────────────────────────────────────
+   Accepts: one-per-line, comma/semicolon separated, "Name <email>",
+   or CSV with name+email columns. Adds to manualRecipients with
+   source:'manual' so the existing send pipeline picks them up.
+   ================================================================ */
+const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+const EMAIL_RE_G = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+// Capture optional "Name " or "Name <" preceding an email.
+// Group 1 = preceding name fragment (may be empty), Group 2 = email.
+const NAMED_EMAIL_RE = /(?:"([^"]+)"|<\s*)?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})\s*>?/g;
+
+function parseImportText(raw) {
+  // Returns { entries: [{name, email}], invalidLines: [string] }.
+  // Approach: split on lines, then on each line extract every email occurrence
+  // along with any name token that immediately precedes it. Works for newline
+  // lists, comma/semicolon lists, "Name <email>" Outlook pastes, and CSV rows.
+  const entries = [];
+  const invalidLines = [];
+  const seen = new Set();
+  if (!raw) return { entries, invalidLines };
+
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n').map(s => s.trim()).filter(Boolean);
+
+  // Skip a CSV header row like "name,email" / "email" / "Email,Name" — but only
+  // if the line has no email in it (otherwise it's data we'd lose).
+  if (lines.length && !EMAIL_RE.test(lines[0]) &&
+      /\b(email|e-mail|mail)\b/i.test(lines[0]) && /,|;|\t/.test(lines[0])) {
+    lines.shift();
+  } else if (lines.length && /^email$/i.test(lines[0])) {
+    lines.shift();
+  }
+
+  for (const line of lines) {
+    const matches = [...line.matchAll(NAMED_EMAIL_RE)];
+    if (!matches.length) {
+      invalidLines.push(line);
+      continue;
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const email = m[2];
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Try to derive a name: quoted form first, then text immediately before
+      // this email occurrence on the same line (back to the prior email or
+      // start of line).
+      let name = (m[1] || '').trim();
+      if (!name) {
+        const startOfWindow = i === 0
+          ? 0
+          : matches[i - 1].index + matches[i - 1][0].length;
+        const beforeText = line.slice(startOfWindow, m.index);
+        // Strip CSV/Outlook delimiters + angle/quote noise.
+        name = beforeText
+          .replace(/[<>"']/g, '')
+          .replace(/[,;\t]+/g, ' ')
+          .trim();
+      }
+      if (!name) name = email.split('@')[0];
+
+      entries.push({ name, email: email.toLowerCase() });
+    }
+  }
+
+  return { entries, invalidLines };
+}
+
+function setupImportModal() {
+  const openBtn   = document.getElementById('btnImportEmails');
+  const overlay   = document.getElementById('importModal');
+  const cancelBtn = document.getElementById('importCancel');
+  const applyBtn  = document.getElementById('importApply');
+  const fileInput = document.getElementById('importFile');
+  const fileName  = document.getElementById('importFileName');
+  const textarea  = document.getElementById('importTextarea');
+  const status    = document.getElementById('importStatus');
+
+  function reset() {
+    textarea.value = '';
+    fileInput.value = '';
+    fileName.textContent = 'No file selected';
+    status.textContent = '';
+    status.className = 'import-status';
+  }
+  function close() { overlay.classList.remove('open'); }
+
+  openBtn.addEventListener('click', () => {
+    reset();
+    overlay.classList.add('open');
+    setTimeout(() => textarea.focus(), 50);
+  });
+
+  cancelBtn.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files?.[0];
+    if (!f) { fileName.textContent = 'No file selected'; return; }
+    if (f.size > 2 * 1024 * 1024) {
+      status.className = 'import-status error';
+      status.textContent = 'File too large (max 2 MB).';
+      fileInput.value = ''; fileName.textContent = 'No file selected';
+      return;
+    }
+    fileName.textContent = f.name;
+    try {
+      const text = await f.text();
+      // Append to existing textarea content (don't clobber a paste already in progress)
+      textarea.value = textarea.value ? (textarea.value.replace(/\s+$/, '') + '\n' + text) : text;
+      const preview = parseImportText(textarea.value);
+      status.className = 'import-status';
+      status.textContent = `Loaded — ${preview.entries.length} valid email${preview.entries.length === 1 ? '' : 's'} detected${preview.invalidLines.length ? `, ${preview.invalidLines.length} line${preview.invalidLines.length === 1 ? '' : 's'} will be skipped` : ''}.`;
+    } catch (err) {
+      status.className = 'import-status error';
+      status.textContent = 'Could not read file: ' + err.message;
+    }
+  });
+
+  applyBtn.addEventListener('click', () => {
+    const { entries, invalidLines } = parseImportText(textarea.value);
+    if (!entries.length) {
+      status.className = 'import-status error';
+      status.textContent = 'No valid emails found.';
+      return;
+    }
+    let added = 0, alreadyPresent = 0;
+    for (const { name, email } of entries) {
+      const key = email.toLowerCase();
+      if (manualRecipients.has(key) || chipRecipients.has(key)) {
+        alreadyPresent++;
+        excludedEmails.delete(key); // un-exclude if previously toggled off
+        continue;
+      }
+      manualRecipients.set(key, { name, email, source: 'manual', schoolName: '' });
+      excludedEmails.delete(key);
+      added++;
+    }
+    syncRecipientDisplay();
+    const parts = [`${added} added`];
+    if (alreadyPresent) parts.push(`${alreadyPresent} already in list`);
+    if (invalidLines.length) parts.push(`${invalidLines.length} skipped`);
+    showBanner('success', `Imported: ${parts.join(' · ')}`);
+    close();
+  });
+}
 
 /* ================================================================
    SYNC — merge chipRecipients + manualRecipients → display

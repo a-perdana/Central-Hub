@@ -1079,7 +1079,14 @@ service cloud.firestore {
     }
 
     match /competency_framework/{trackId} {
-      allow read:  if isAuthorized();
+      // Public read: the framework root doc holds Cambridge / Permendiknas
+      // verbatim reference text + the Eduversal domain/competency taxonomy.
+      // Both are reference material we want visible on pre-login pages
+      // (e.g. TH /orientation reads competency_framework/teachers to render
+      // CTS chips and the inline standard-text panel). The per-(comp, level)
+      // learning content sits in the /levels/{...} subcollection and stays
+      // authenticated below.
+      allow read:  if true;
       allow write: if isAdmin();
 
       // Per-(competency, level) base learning content. Doc ID format:
@@ -1134,6 +1141,229 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ===========================================================
+    // INDUCTION MODULE (2026-05-04)
+    // -----------------------------------------------------------
+    // 7 collections that implement the Eduversal Induction Charter.
+    // See docs/induction/INDUCTION_CHARTER.md and
+    //     docs/induction/firestore-schema.json
+    // for the full specification.
+    //
+    // Charter non-negotiables enforced here:
+    //   NN1: Year-1 induction data never feeds network appraisal scoring.
+    //        (induction_observations is its own collection — no propagation.)
+    //   NN2: Mentee journal entries are visible to mentor + school leader
+    //        only by mentee opt-in. HQ never reads named entries.
+    //   NN3: No user without active Mentor Certification can be assigned
+    //        as a mentor. Enforced in induction_assignments create rule.
+    //   NN4: Induction assignment requires three named parties at create.
+    //   NN5: Induction Completion Certificate is binary; written into
+    //        the existing competency_certificates collection by the
+    //        seeder/admin tool, not by these rules.
+    // ===========================================================
+
+    // Helper: read an induction assignment doc (composite uid PK).
+    function inductionAssignment(menteeUid) {
+      return get(/databases/$(database)/documents/induction_assignments/$(menteeUid)).data;
+    }
+
+    function inductionAssignmentExists(menteeUid) {
+      return exists(/databases/$(database)/documents/induction_assignments/$(menteeUid));
+    }
+
+    // Helper: is the caller the assigned mentor of menteeUid?
+    function isMentorOf(menteeUid) {
+      return isSignedIn() &&
+             inductionAssignmentExists(menteeUid) &&
+             inductionAssignment(menteeUid).mentorUid == request.auth.uid;
+    }
+
+    // Helper: is the caller the assigned school leader of menteeUid?
+    function isInductionSchoolLeaderOf(menteeUid) {
+      return isSignedIn() &&
+             inductionAssignmentExists(menteeUid) &&
+             inductionAssignment(menteeUid).schoolLeaderUid == request.auth.uid;
+    }
+
+    // Helper: does the caller hold an active mentor_base certification?
+    // Composite key: {uid}_mentor_base
+    function hasActiveMentorCertification(uid) {
+      return exists(/databases/$(database)/documents/mentor_certifications/$(uid + '_mentor_base')) &&
+             get(/databases/$(database)/documents/mentor_certifications/$(uid + '_mentor_base')).data.active == true;
+    }
+
+    // -- induction_programs ----------------------------------
+    // Handbook templates (subject_teacher, principal, specialist).
+    // Read open: every mentee + mentor must read their program template.
+    // Write central_admin only — populated by seed-induction-programs.js.
+    match /induction_programs/{programId} {
+      allow read:                   if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -- induction_assignments -------------------------------
+    // One doc per induction'd user. PK = mentee uid.
+    // NN3 + NN4 enforced at create: mentor must have active certification,
+    // and all three party uids (mentee, mentor, schoolLeader) must be set.
+    match /induction_assignments/{menteeUid} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == menteeUid          // owner (mentee)
+                       || isMentorOf(menteeUid)               // assigned mentor
+                       || isInductionSchoolLeaderOf(menteeUid)// assigned school leader
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.uid == menteeUid
+                    && request.resource.data.mentorUid is string
+                    && request.resource.data.mentorUid.size() > 0
+                    && request.resource.data.schoolLeaderUid is string
+                    && request.resource.data.schoolLeaderUid.size() > 0
+                    && request.resource.data.programId is string
+                    && hasActiveMentorCertification(request.resource.data.mentorUid);
+      allow update: if isAdmin();   // status transitions and re-assignments
+      allow delete: if isAdmin();   // rare; usually we transition to 'withdrew' instead
+    }
+
+    // -- induction_progress ----------------------------------
+    // PK pattern: {uid}_{taskId}. Each doc records one task's state.
+    // Owner can write self-owned tasks; mentor writes mentor-owned;
+    // school leader writes school-leader-owned. We do not enforce
+    // ownerRole-vs-actor mapping at the rule layer (that would require
+    // reading the program doc on every write); the client UI gates the
+    // action and the resource's completedBy / mentorSignedOffAt /
+    // schoolLeaderSignedOffAt fields preserve the actor record.
+    match /induction_progress/{progressId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || isMentorOf(resource.data.uid)
+                       || isInductionSchoolLeaderOf(resource.data.uid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin();
+      allow create: if isSignedIn() && (
+                       request.auth.uid == request.resource.data.uid
+                       || isMentorOf(request.resource.data.uid)
+                       || isInductionSchoolLeaderOf(request.resource.data.uid)
+                       || isAdmin()
+                    );
+      allow update: if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || isMentorOf(resource.data.uid)
+                       || isInductionSchoolLeaderOf(resource.data.uid)
+                       || isAdmin()
+                    );
+      allow delete: if isAdmin();
+    }
+
+    // -- induction_observations ------------------------------
+    // Stage 3 monthly observations + Q4 formal evaluation.
+    // NN1: this collection is induction-scope only; no propagation
+    // into teacher_appraisal_results.
+    // Auto-id docs; observerUid creates and updates until completedAt.
+    match /induction_observations/{obsId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.menteeUid
+                       || request.auth.uid == resource.data.observerUid
+                       || isMentorOf(resource.data.menteeUid)
+                       || isInductionSchoolLeaderOf(resource.data.menteeUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);  // client filters by menteeUid or observerUid
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.observerUid
+                    && (isMentorOf(request.resource.data.menteeUid)
+                        || isInductionSchoolLeaderOf(request.resource.data.menteeUid)
+                        || isAdmin());
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.observerUid;
+      allow delete: if isAdmin();
+    }
+
+    // -- induction_journal -----------------------------------
+    // NN2: mentee's most-protected collection.
+    // Owner always read+write own. Mentor reads if visibility allows.
+    // School leader reads only if visibility == mentee_mentor_school_leader.
+    // central_admin NEVER reads named entries (rule blocks; HQ uses
+    // induction_journal_aggregates for telemetry).
+    match /induction_journal/{entryId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || (isMentorOf(resource.data.uid)
+                           && (resource.data.visibility == 'mentee_and_mentor'
+                               || resource.data.visibility == 'mentee_mentor_school_leader'))
+                       || (isInductionSchoolLeaderOf(resource.data.uid)
+                           && resource.data.visibility == 'mentee_mentor_school_leader')
+                    );
+      allow list:   if false;  // no listing — owner reads own; mentor reads via specific gets
+      allow create, update: if isSignedIn() && request.auth.uid == request.resource.data.uid;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.uid;
+    }
+
+    // -- induction_pulses ------------------------------------
+    // Weekly 1-question pulses. Anonymised at HQ aggregate level.
+    // Owner write; mentor + school leader read; HQ only via aggregates.
+    match /induction_pulses/{pulseId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || isMentorOf(resource.data.uid)
+                       || isInductionSchoolLeaderOf(resource.data.uid)
+                    );
+      allow list:   if isSignedIn() && request.auth.uid != null;  // client filters by uid or schoolId
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.uid;
+      allow update: if isSignedIn() && request.auth.uid == resource.data.uid;
+      allow delete: if isAdmin();
+    }
+
+    // -- mentor_certifications -------------------------------
+    // Mentor Certification ledger. PK: {uid}_{certificationType}.
+    // NN3: assignment rule reads this collection.
+    // Read: owner + central_admin + AH school leaders (to verify
+    // candidates within their school).
+    match /mentor_certifications/{certId} {
+      allow get:    if isSignedIn() && (
+                       resource.data.uid == request.auth.uid
+                       || isAdmin()
+                       || isAcademicUser()  // AH school leaders need to verify mentor candidates
+                    );
+      allow list:   if isAdmin() || isAcademicUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -- induction_journal_aggregates ------------------------
+    // Cloud-Function-maintained anonymous aggregates for HQ telemetry.
+    // No client writes (all writes from a server-side Cloud Function
+    // with admin SDK, which bypasses these rules). Read open since
+    // there is no PII.
+    match /induction_journal_aggregates/{aggId} {
+      allow read:           if isSignedIn();
+      allow create, update, delete: if false;  // server-only via Cloud Function
+    }
+
+    // -- induction_alarms ------------------------------------
+    // Cloud-Function-maintained alarm docs. Created by onPulseWritten
+    // when a mentee records 2 consecutive low-pulse weeks. Read by the
+    // assigned mentor + school leader + central_admin so the in-school
+    // pair can intervene within 7 days per the Charter.
+    // PK: {uid}_{weekStartDate}.
+    match /induction_alarms/{alarmId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || request.auth.uid == resource.data.mentorUid
+                       || request.auth.uid == resource.data.schoolLeaderUid
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);  // client filters by mentorUid or schoolLeaderUid
+      allow update: if isSignedIn() && (
+                       request.auth.uid == resource.data.mentorUid
+                       || request.auth.uid == resource.data.schoolLeaderUid
+                       || isAdmin()
+                    );
+      allow create, delete: if false;  // server-only via Cloud Function
+    }
+
     // -- topics (message board) ------------------------------
     match /topics/{topicId} {
       allow read:   if isAuthorized();
@@ -1147,6 +1377,140 @@ service cloud.firestore {
         allow create: if isAuthorized();
         allow update, delete: if isAdmin();
       }
+    }
+
+    // ========================================================
+    // CAREERS + INTERVIEW MODULE (Teachers Hub /careers)
+    // Public application form + auth'd interviewer scoring
+    // ========================================================
+
+    // Helpers — TH sub-role checks based on th_sub_roles[] array
+    function hasTHSubRole(roleName) {
+      return isAuthorized()
+             && ('th_sub_roles' in userProfile())
+             && userProfile().th_sub_roles is list
+             && userProfile().th_sub_roles.hasAny([roleName]);
+    }
+    function isInterviewer()      { return hasTHSubRole('interviewer'); }
+    function isHiringManager()    { return hasTHSubRole('hiring_manager'); }
+    // Hiring power: central_admin OR teachers_admin OR hiring_manager sub-role
+    function hasHiringPower() {
+      return isAdmin() || isTHAdmin() || isHiringManager();
+    }
+    // hiring_manager same-school: only own school's positions/applications
+    function isHiringMgrSameSchool(targetSchoolId) {
+      return isHiringManager()
+             && ('schoolId' in userProfile())
+             && userProfile().schoolId == targetSchoolId;
+    }
+
+    // -- job_positions (HQ-published vacancies) --------------
+    // Read: open positions are public (no auth); admin + hiring power can read all incl. drafts
+    match /job_positions/{posId} {
+      allow get:    if (resource.data.status == 'open')
+                    || isAdmin() || isTHAdmin() || isHiringManager();
+      allow list:   if (request.query.limit <= 200)
+                    && (
+                         // public list query — must filter by status==open (rule trusts client query)
+                         true
+                       );
+      allow create, update: if isAdmin() || isTHAdmin()
+                          || (isHiringManager()
+                              && request.resource.data.schoolId == userProfile().schoolId);
+      allow delete: if isAdmin();
+    }
+
+    // -- interview_question_sets (rubric + 18 questions) -----
+    // Read: any signed-in user (interviewers need access; applicants don't)
+    match /interview_question_sets/{setId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin() || isTHAdmin();
+    }
+
+    // -- job_applications (candidate submissions) ------------
+    match /job_applications/{appId} {
+      // PUBLIC create — anyone can submit. Validate required fields + email shape.
+      // Status forced to 'submitted' on create; applicantToken required.
+      allow create: if request.resource.data.keys().hasAll(
+                         ['positionId','applicantEmail','applicantToken','applicant','status','source'])
+                    && request.resource.data.applicantEmail is string
+                    && request.resource.data.applicantEmail.matches('.+@.+\\..+')
+                    && request.resource.data.applicantToken is string
+                    && request.resource.data.applicantToken.size() >= 32
+                    && request.resource.data.status == 'submitted'
+                    && request.resource.data.source == 'careers';
+
+      // Read: admin / hiring_manager (own school) / interviewer (only assigned)
+      // / applicant (own — matched by Firebase Auth verified email)
+      allow get:    if isAdmin() || isTHAdmin()
+                    || (isHiringManager() && resource.data.schoolId == userProfile().schoolId)
+                    || (isInterviewer()
+                        && resource.data.interviewSchedule.interviewerUids.hasAny([request.auth.uid]))
+                    || (isSignedIn()
+                        && request.auth.token.email_verified == true
+                        && request.auth.token.email == resource.data.applicantEmail);
+      allow list:   if isAdmin() || isTHAdmin() || isHiringManager()
+                    // applicant's own list (client filters by applicantEmail==own)
+                    || (isSignedIn()
+                        && request.auth.token.email_verified == true
+                        && request.query.limit <= 50);
+
+      // Update: admin / hiring_manager (own school) / applicant (withdraw only)
+      allow update: if isAdmin() || isTHAdmin()
+                    || (isHiringManager() && resource.data.schoolId == userProfile().schoolId)
+                    || (isSignedIn()
+                        && request.auth.token.email_verified == true
+                        && request.auth.token.email == resource.data.applicantEmail
+                        && request.resource.data.status == 'withdrew'
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['status','updatedAt']));
+      allow delete: if false;
+    }
+
+    // -- interview_scorecards ({appId}_{interviewerUid}) ------
+    match /interview_scorecards/{scId} {
+      // Create/update: only the scoring interviewer themselves (uid match);
+      // submitted docs are immutable (status can't go back from submitted).
+      allow create: if isSignedIn()
+                    && (isInterviewer() || hasHiringPower())
+                    && request.resource.data.interviewerUid == request.auth.uid;
+      allow update: if isSignedIn()
+                    && (isInterviewer() || hasHiringPower())
+                    && request.resource.data.interviewerUid == request.auth.uid
+                    && resource.data.interviewerUid == request.auth.uid
+                    && (resource.data.status != 'submitted'
+                        || (request.resource.data.status == 'submitted'
+                            && resource.data.status == 'submitted'
+                            // when already submitted, the only allowed write keeps status=submitted
+                            // (no-op style) — block content edits after submit
+                            && request.resource.data.diff(resource.data).affectedKeys().size() == 0));
+
+      allow get:    if isAdmin() || isTHAdmin()
+                    || (isHiringManager() && resource.data.schoolId == userProfile().schoolId)
+                    || (isSignedIn() && resource.data.interviewerUid == request.auth.uid);
+      allow list:   if isAdmin() || isTHAdmin() || isHiringManager()
+                    // interviewer can list own scorecards (client filters by interviewerUid)
+                    || (isInterviewer() && request.query.limit <= 50);
+      allow delete: if false;
+    }
+
+    // -- job_application_audit (status change log) -----------
+    match /job_application_audit/{auditId} {
+      allow create: if isSignedIn() && hasHiringPower();
+      allow read:   if isAdmin() || isTHAdmin() || isHiringManager();
+      allow update, delete: if false;
+    }
+
+    // -- mail (Firebase Trigger Email extension queue) -------
+    // The extension reads `to` + `message.{subject,html,text}` and sends.
+    // We allow public create so the apply form can enqueue an
+    // "application received" mail; reads/updates are server-only via the extension.
+    match /mail/{mailId} {
+      allow create: if request.resource.data.keys().hasAll(['to','message'])
+                    && request.resource.data.to is string
+                    && request.resource.data.message.subject is string;
+      allow get, list: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }

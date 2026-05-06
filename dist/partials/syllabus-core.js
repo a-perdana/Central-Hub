@@ -354,6 +354,84 @@ export function initSyllabusPage(config) {
 
     isAdmin = profile.role_centralhub === 'central_admin';
     isCoordinator = profile.role_centralhub === 'central_user' && Array.isArray(profile.ch_sub_roles) && profile.ch_sub_roles.includes('coordinator');
+
+    // Subject-specialty filter — coordinators / plain users only see
+    // the subjects in their ch_subjects[]. Admin + director see all.
+    //
+    // Each subject config may declare `chSubjectKeys: string[]` to map
+    // a tab key onto one or more ch_subjects[] values (combined-science
+    // checkpoint uses key 'science' → ['biology','chemistry','physics']).
+    // Default falls back to the subject key itself.
+    const role     = profile.role_centralhub;
+    const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+    const userSubjects = Array.isArray(profile.ch_subjects) ? profile.ch_subjects : [];
+    const bypassSubjectGate = role === 'central_admin' || subRoles.includes('director');
+
+    const allSubjectKeys = Object.keys(subjects);
+    const allowedKeys = bypassSubjectGate
+      ? allSubjectKeys.slice()
+      : allSubjectKeys.filter(k => {
+          const required = Array.isArray(subjects[k].chSubjectKeys)
+            ? subjects[k].chSubjectKeys
+            : [k];
+          return required.some(s => userSubjects.includes(s));
+        });
+
+    if (allowedKeys.length === 0) {
+      // Coordinator with empty / non-matching ch_subjects[] — show a
+      // no-access notice instead of an empty tab strip.
+      // List the subjects this page would have offered so admin sees
+      // exactly what scope to grant on /console.
+      const denied = document.getElementById('accessDenied');
+      if (denied) {
+        denied.style.display = '';
+        const offered = Object.values(subjects).map(s => s.label).join(', ');
+        denied.innerHTML = `
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+          </svg>
+          <h3>No matching subjects</h3>
+          <p>This page covers ${offered}. Your CentralHub Subject Specialties don't include any of these.</p>
+          <p style="margin-top:12px;color:var(--ink-3);font-size:0.85rem">Ask an admin to update your specialties on the User Console, or head back to the dashboard.</p>
+          <p style="margin-top:18px"><a href="/" style="color:var(--accent);font-weight:600;text-decoration:none">← Back to dashboard</a></p>
+        `;
+      }
+      return;
+    }
+    if (allowedKeys.length < allSubjectKeys.length) {
+      allSubjectKeys.forEach(k => { if (!allowedKeys.includes(k)) delete subjects[k]; });
+      currentSubject    = allowedKeys[0];
+      settingsClassSubj = currentSubject;
+      settingsObjSubj   = currentSubject;
+      // Hide pre-rendered static tabs that don't match the allow-list
+      // (secondary-checkpoint and primary-checkpoint syllabus markup
+      // ships its tabs in HTML, not JS).
+      document.querySelectorAll('.subject-tabs .subj-tab[data-subj]').forEach(btn => {
+        const k = btn.getAttribute('data-subj');
+        if (k === '__settings') return;
+        if (!allowedKeys.includes(k)) btn.style.display = 'none';
+      });
+      // Mirror to the inline-settings sub-tab strips (Class Groups + Objectives)
+      ['classSubjTabs','objSubjTabs'].forEach(id => {
+        const wrap = document.getElementById(id);
+        if (!wrap) return;
+        wrap.querySelectorAll('.s-stab[data-subj]').forEach(btn => {
+          const k = btn.getAttribute('data-subj');
+          if (!allowedKeys.includes(k)) btn.style.display = 'none';
+        });
+      });
+      // First static tab might be a hidden one — make sure the first
+      // VISIBLE tab carries the active state.
+      const tabs = document.querySelectorAll('.subject-tabs .subj-tab[data-subj]');
+      tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+      tabs.forEach(t => {
+        if (t.getAttribute('data-subj') === currentSubject) {
+          t.classList.add('active');
+          t.setAttribute('aria-selected','true');
+        }
+      });
+    }
+
     document.getElementById('mainContent').style.display = '';
 
     // Build subject tabs dynamically if the container is empty (IGCSE uses dynamic tabs)
@@ -2276,7 +2354,7 @@ export function initSyllabusPage(config) {
       });
       topicRows = `<div class="topics-list">${parts.join('')}</div>`;
     } else {
-      topicRows = `<div class="no-topics">No topics yet.${isAdmin ? ' Add one below.' : ''}</div>`;
+      topicRows = `<div class="no-topics">No topics yet.${(isAdmin || isCoordinator) ? ' Add one below.' : ''}</div>`;
     }
 
     const reorderBtns = (isAdmin || isCoordinator) ? `
@@ -2291,7 +2369,8 @@ export function initSyllabusPage(config) {
       ${chDeleteBtn}
     </div>` : '';
 
-    const footer = isAdmin ? (features.bufferTopics ? `
+    const canAddTopic = isAdmin || isCoordinator;
+    const footer = canAddTopic ? (features.bufferTopics ? `
       <div class="ch-footer" id="ch-footer-${ci}">
         <div class="ch-footer-form" id="ch-buffer-form-${ci}">
           <input type="text" id="ch-buffer-label-${ci}" placeholder="Review Time" maxlength="60" style="max-width:200px">
@@ -2624,7 +2703,7 @@ export function initSyllabusPage(config) {
 
   // ── Topic CRUD ─────────────────────────────────────────────────────────────
   function openAddTopicModal(ci) {
-    if (!isAdmin) return;
+    if (!isAdmin && !isCoordinator) return;
     modalMode  = 'add-topic';
     editChIdx  = ci;
     editTopIdx = null;

@@ -29,7 +29,7 @@ const PROGRESS_KEY  = window.PACING_CONFIG.progressKey  || 'statuses';
 const CLASSES_FIELD = window.PACING_CONFIG.classesField || 'igcse_classes';
 const PROGRESS_KEY_RE = new RegExp(`^${PROGRESS_KEY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(.+)$`);
 
-let db, isAdmin = false;
+let db, isAdmin = false, isCoordinator = false;
 let chapters = [];
 let classList = [];
 let syllabusIndex = {};   // code → { title, tier, topicArea }
@@ -473,14 +473,17 @@ function renderChapters() {
     const yearCls = ch.year === YEAR_A ? 'yr9' : 'yr10';
     const topicsHtml = topics.length === 0
       ? '<div style="padding:10px 14px;font-size:.75rem;color:var(--ink-3)">No topics yet.</div>'
-      : `<table class="topic-tbl">
+      : (() => {
+        const showHoursWeek = isAdmin && !isCoordinator;
+        const notesWidth = isAdmin ? (showHoursWeek ? '10' : '22') : '22';
+        return `<table class="topic-tbl">
           <thead><tr>
             <th style="width:26%">Topic</th>
             <th style="width:18%;color:#1d4ed8">Codes</th>
-            ${isAdmin ? `<th style="width:6%;color:#92400e">Hours</th>` : ''}
-            ${isAdmin ? `<th style="width:6%;color:#166534">Week</th>` : ''}
+            ${showHoursWeek ? `<th style="width:6%;color:#92400e">Hours</th>` : ''}
+            ${showHoursWeek ? `<th style="width:6%;color:#166534">Week</th>` : ''}
             <th style="width:20%">Schedule</th>
-            <th style="width:${isAdmin ? '10' : '22'}%">Notes &amp; Tags</th>
+            <th style="width:${notesWidth}%">Notes &amp; Tags</th>
             ${isAdmin ? `<th style="width:14%">Actions</th>` : ''}
           </tr></thead>
           <tbody>
@@ -514,13 +517,13 @@ function renderChapters() {
                     ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">${isAdmin ? '+ codes' : '—'}</span>` : ''}
                   </div>
                 </td>
-                ${isAdmin ? `<td>
+                ${showHoursWeek ? `<td>
                   <input class="inline-input inline-input-num inline-input-hours" type="number" min="0" max="99"
                     value="${escHtml(String(dur))}" placeholder="—"
                     onchange="inlineSave(${ci},${ti},'duration',+this.value||1,this)"
                     title="Hours for this topic">
                 </td>` : ''}
-                ${isAdmin ? `<td>
+                ${showHoursWeek ? `<td>
                   <input class="inline-input inline-input-num inline-input-week" type="number" min="1" max="99"
                     value="${escHtml(String(wk))}" placeholder="—"
                     onchange="inlineSave(${ci},${ti},'week',+this.value||null,this)"
@@ -543,6 +546,7 @@ function renderChapters() {
             }).join('')}
           </tbody>
         </table>`;
+      })();
 
     return `
       <div class="ch-item" id="ch-${ci}">
@@ -1427,9 +1431,9 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
   // central_admin OR central_user with 'coordinator' sub-role can edit pacing
   // (matches Firestore rules: isAdmin() || isCHCoordinator())
   const isCentralAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
-  const isCoordinator  = profile?.role_centralhub === 'central_user'
-                         && Array.isArray(profile?.ch_sub_roles)
-                         && profile.ch_sub_roles.includes('coordinator');
+  isCoordinator  = profile?.role_centralhub === 'central_user'
+                   && Array.isArray(profile?.ch_sub_roles)
+                   && profile.ch_sub_roles.includes('coordinator');
   isAdmin = isCentralAdmin || isCoordinator;
 
   db = window.db;

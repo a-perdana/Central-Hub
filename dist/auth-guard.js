@@ -20,7 +20,7 @@ import { initializeApp, getApps }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp }
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, collection, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -48,9 +48,17 @@ document.body.style.visibility = 'hidden';
 
 // ── Subject-specialty gating ─────────────────────────────────────
 // Maps each subject-specific page slug to the ch_subjects[] values
-// that grant access. central_admin and CH coordinators (cross-subject)
-// bypass this entirely. Empty ch_subjects[] on a central_user means
-// no specialty (treated as "no specialist access" — same as missing).
+// that grant access.
+//
+// Sub-role hierarchy (applies even before ch_subjects[]):
+//   - central_admin: bypass — full management surface.
+//   - director: bypass — directors sit *above* subject specialists,
+//     they are network-wide and need cross-subject visibility.
+//   - coordinator: ALWAYS filtered by ch_subjects[]. A coordinator IS
+//     a subject specialist. If a coordinator's ch_subjects[] is empty
+//     they see no subject pages — that's a misconfiguration; promote
+//     them to director (or assign subjects) on /console.
+//   - other central_users: filtered by ch_subjects[]; empty = no access.
 //
 // Combined-science pacing pages accept ANY of biology/chemistry/physics.
 const SUBJECT_PAGE_MAP = {
@@ -67,7 +75,23 @@ const SUBJECT_PAGE_MAP = {
   // Checkpoint
   'checkpoint-math-pacing':      ['math'],
   'checkpoint-english-pacing':   ['english'],
-  'checkpoint-science-pacing':   ['biology', 'chemistry', 'physics'],
+  'checkpoint-science-pacing':   ['biology', 'chemistry', 'physics', 'science'],
+};
+
+// Syllabus pages render multiple subject tabs in one page. Each entry
+// lists every ch_subjects[] value that *any* tab on that page accepts;
+// a user with no overlap gets the link hidden and the page itself shows
+// a "no matching subjects" notice. Keep in sync with each syllabus
+// HTML's initSyllabusPage({ subjects }) config.
+const SYLLABUS_PAGE_SUBJECTS = {
+  'igcse-syllabus':                 ['math', 'biology', 'chemistry', 'physics'],
+  'as-alevel-syllabus':             ['math', 'biology', 'chemistry', 'physics'],
+  // Checkpoint Science is the combined-science subject — biology /
+  // chemistry / physics specialists may also enter to read the lower-
+  // secondary build-up of their subject (matches checkpoint_science_pacing
+  // rule layer + SUBJECT_PAGE_MAP['checkpoint-science-pacing']).
+  'secondary-checkpoint-syllabus':  ['math', 'english', 'science', 'biology', 'chemistry', 'physics'],
+  'primary-checkpoint-syllabus':    ['math', 'english', 'science', 'biology', 'chemistry', 'physics'],
 };
 
 // Pages that NEVER get gated regardless of role (auth flow + dashboard).
@@ -81,16 +105,40 @@ function currentPageKey() {
 }
 
 function isSubjectAllowed(profile, pageKey) {
-  // Admins and coordinators (cross-subject sub-role) always pass.
+  // central_admin bypasses unconditionally.
   if (profile?.role_centralhub === 'central_admin') return true;
-  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
-  if (chSubRoles.includes('coordinator') || chSubRoles.includes('director')) return true;
 
   const requiredSubjects = SUBJECT_PAGE_MAP[pageKey];
   if (!requiredSubjects) return true; // not a subject-gated page
 
+  // director sits above subject specialists — cross-subject visibility.
+  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  if (chSubRoles.includes('director')) return true;
+
+  // Everyone else (coordinator + plain central_user) is filtered by
+  // ch_subjects[]. Empty array = no subject access.
   const userSubjects = Array.isArray(profile?.ch_subjects) ? profile.ch_subjects : [];
   return userSubjects.some(s => requiredSubjects.includes(s));
+}
+
+// Same hierarchy as isSubjectAllowed but answers "given a list of
+// candidate subject keys, which can this user see?". Used by pages
+// that render multiple subjects in tabs (syllabus pages, etc.).
+//   - Returns the input array unchanged for admin / director.
+//   - Returns the intersection with ch_subjects[] for coordinator /
+//     plain user. Empty ch_subjects[] → empty result.
+//
+// Subject keys are the canonical ones in ch_subjects[]:
+// 'math' | 'biology' | 'chemistry' | 'physics' | 'science' | 'english' | 'bahasa' | 'religion'.
+// 'science' is the combined-science specialty used by checkpoint pages
+// (separate from biology/chemistry/physics which are IGCSE/AS-A-Level only).
+function visibleSubjectsForUser(profile, candidateKeys) {
+  const keys = Array.isArray(candidateKeys) ? candidateKeys : [];
+  if (profile?.role_centralhub === 'central_admin') return keys.slice();
+  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  if (chSubRoles.includes('director')) return keys.slice();
+  const userSubjects = Array.isArray(profile?.ch_subjects) ? profile.ch_subjects : [];
+  return keys.filter(k => userSubjects.includes(k));
 }
 
 // Inject CSS once so [data-ch-hidden="1"] elements collapse without flicker.
@@ -108,14 +156,23 @@ function ensureSubjectGateStyles() {
 function applySubjectGating(profile) {
   ensureSubjectGateStyles();
 
+  // Resolve a slug to "should this be hidden from the current user?".
+  // Single-subject pacing pages use SUBJECT_PAGE_MAP. Multi-subject
+  // syllabus pages use SYLLABUS_PAGE_SUBJECTS — hidden only when none
+  // of the page's subjects intersect ch_subjects[].
+  const slugHidden = (key) => {
+    if (key in SUBJECT_PAGE_MAP) return !isSubjectAllowed(profile, key);
+    if (key in SYLLABUS_PAGE_SUBJECTS) {
+      return visibleSubjectsForUser(profile, SYLLABUS_PAGE_SUBJECTS[key]).length === 0;
+    }
+    return false; // not a subject-gated slug
+  };
+
   // 1. Navbar links by data-nav-key (CH navbar uses these)
   document.querySelectorAll('[data-nav-key], [data-nav-page]').forEach(el => {
     const key = (el.getAttribute('data-nav-key') || el.getAttribute('data-nav-page') || '').toLowerCase();
     if (!key || SUBJECT_GATE_BYPASS.has(key)) return;
-    if (!(key in SUBJECT_PAGE_MAP)) return;
-    if (!isSubjectAllowed(profile, key)) {
-      el.setAttribute('data-ch-hidden', '1');
-    }
+    if (slugHidden(key)) el.setAttribute('data-ch-hidden', '1');
   });
 
   // 2. Dashboard cards <a class="card" href="...">
@@ -125,10 +182,7 @@ function applySubjectGating(profile) {
     if (slug.includes('/')) slug = slug.split('/')[0];
     if (slug.includes('?')) slug = slug.split('?')[0];
     if (!slug || SUBJECT_GATE_BYPASS.has(slug)) return;
-    if (!(slug in SUBJECT_PAGE_MAP)) return;
-    if (!isSubjectAllowed(profile, slug)) {
-      el.setAttribute('data-ch-hidden', '1');
-    }
+    if (slugHidden(slug)) el.setAttribute('data-ch-hidden', '1');
   });
 }
 
@@ -138,7 +192,13 @@ function applySubjectGating(profile) {
 // Both can run on the same DOM — they use different `data-*-hidden`
 // attributes and a shared "display: none !important" rule.
 const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login']);
-const PAGE_ACCESS_TTL_MS = 5 * 60 * 1000;
+// Cache TTL — short enough that an admin's page-access save is felt
+// almost immediately by other tabs, long enough to absorb hot navigation.
+// Was 5 min before 2026-05-05; cut to 60s when we noticed admins were
+// surprised that hidden=true didn't block coordinators until their
+// session expired. Real-time listeners would be tighter but this is
+// "good enough" for a tool admin save uses several times a year.
+const PAGE_ACCESS_TTL_MS = 60 * 1000;
 
 async function getPageAccessConfig(database, pageKey) {
   try {
@@ -212,8 +272,15 @@ function ensurePageAccessStyles() {
 }
 
 function applyPageAccessGating(configs, userSubRoles) {
+  // Director sits above coordinator in the CH sub-role hierarchy and
+  // bypasses page-access entirely (mirrors central_admin). Admins cannot
+  // accidentally lock directors out by setting visible_to=['coordinator'].
+  // Keep in sync with the URL-level guard at step 4c.
+  const isDirector = userSubRoles.includes('director');
   const isAllowed = (cfg) => {
     if (!cfg) return true;
+    if (isDirector) return true;
+    if (cfg.hidden === true) return false;
     const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
     if (vt.length === 0) return true;
     return userSubRoles.some(r => vt.includes(r));
@@ -501,7 +568,8 @@ function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
   // user's record in console.html.
   const SUBJECT_LABELS = {
     math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
-    physics: 'Physics', english: 'English', bahasa: 'Bahasa', religion: 'Religion',
+    physics: 'Physics', science: 'Science', english: 'English',
+    bahasa: 'Bahasa', religion: 'Religion',
   };
   const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
   const renderAccessSummary = () => {
@@ -716,11 +784,18 @@ onAuthStateChanged(auth, async (user) => {
   //     Companion to the subject-specialty gate above, this one keys
   //     off ch_sub_roles[] (director / coordinator). central_admin
   //     bypasses; missing config / empty visible_to ⇒ allow.
+  //     cfg.hidden === true hides the page from every non-admin.
   if (platformRole !== 'central_admin' && pageKey && !PAGE_ACCESS_BYPASS.has(pageKey)) {
     const cfg = await getPageAccessConfig(db, pageKey);
-    if (cfg && Array.isArray(cfg.visible_to) && cfg.visible_to.length > 0) {
+    if (cfg) {
       const userSubRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
-      const allowed = userSubRoles.some(r => cfg.visible_to.includes(r));
+      // Director bypasses page-access entirely (sits above coordinator,
+      // mirrors central_admin). Stays in sync with applyPageAccessGating.
+      const isDirector = userSubRoles.includes('director');
+      const isHidden = !isDirector && cfg.hidden === true;
+      const vt = Array.isArray(cfg.visible_to) ? cfg.visible_to : [];
+      const subRoleAllowed = isDirector || vt.length === 0 || userSubRoles.some(r => vt.includes(r));
+      const allowed = !isHidden && subRoleAllowed;
       if (!allowed) {
         try {
           sessionStorage.setItem('ch_access_denied', JSON.stringify({
@@ -813,6 +888,10 @@ onAuthStateChanged(auth, async (user) => {
   });
   subjectMo.observe(document.body, { childList: true, subtree: true });
   window.__chSubjectGate = () => applySubjectGating(profile);
+  // Pages that render their own subject tabs (e.g. syllabus-core.js)
+  // ask "which of these subject keys is this user allowed to see?".
+  window.__chVisibleSubjects = (candidateKeys) =>
+    visibleSubjectsForUser(profile, candidateKeys);
 
   // 6c. Page-access UI gating — hide navbar links + cards the user
   //     can't access by sub-role (ch_sub_roles[]). central_admin
