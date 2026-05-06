@@ -716,6 +716,18 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
+  // 1b. Career applicant guard. TH `/careers-apply` uses
+  // sendSignInLinkToEmail to mail candidates a magic-link for application
+  // tracking. That sign-in must NEVER provision a Central Hub profile —
+  // applicants are not HQ staff. Detected via providerData carrying
+  // 'emailLink'. Redirect to TH careers-status host without creating a
+  // users/{uid} doc.
+  const isEmailLinkUser = user.providerData.some(p => p.providerId === 'emailLink');
+  if (isEmailLinkUser) {
+    window.location.replace('https://teachershub.eduversal.org/careers-status');
+    return;
+  }
+
   // 2. Domain check — only @eduversal.org (or email/password) accounts allowed
   if (!isDomainAllowed(user)) {
     await signOut(auth);
