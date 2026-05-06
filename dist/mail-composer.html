@@ -3824,7 +3824,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         Upload a CSV where the <strong>first column is the email address</strong> and the remaining columns are merge-tag fields.
         Header row is required — column names become <code>{{tag}}</code> placeholders you can use in the subject and body.
         Example: <code>email,password,examUrl</code> → use <code>{{password}}</code> and <code>{{examUrl}}</code> in your message.
-        <br><strong>Always available:</strong> <code>{{email}}</code> and <code>{{name}}</code> work in every campaign — no need to add them as columns.
+        <br><strong>Always available:</strong> <code>{{email}}</code> works in every campaign — no need to add it as a column. Use <code>{{name}}</code> too if you add a <code>name</code> column.
       </p>
       <div class="import-file-row">
         <label class="import-file-label" for="mergeFile">
@@ -4494,11 +4494,12 @@ function setupImportModal() {
     }
 
     const sample = parsed.entries.slice(0, 5);
-    // Auto-available tags first ({{email}}, {{name}}), then CSV-supplied tags.
-    // Skip an auto chip if the CSV explicitly defines a same-named column.
+    // {{email}} is always present (it's the row identifier); CSV-supplied
+    // tags follow. {{name}} is NOT auto-listed because the CSV preview
+    // can't know whether the eventual recipients carry a displayName —
+    // showing it here would falsely promise data that may render empty.
     const csvFieldSet = new Set(parsed.fields);
-    const autoTags = ['email', 'name'].filter(f => !csvFieldSet.has(f));
-    const allTags  = [...autoTags, ...parsed.fields];
+    const allTags = csvFieldSet.has('email') ? parsed.fields : ['email', ...parsed.fields];
     const fieldChips = allTags.map(f =>
       `<span class="merge-tag-chip">{{${escHtml(f)}}}</span>`).join(' ');
     const headCells  = ['<th>email</th>', ...parsed.fields.map(f => `<th>${escHtml(f)}</th>`)].join('');
@@ -4516,7 +4517,7 @@ function setupImportModal() {
     `;
     mergePreview.style.display = '';
     mergeStatus.className = 'import-status';
-    mergeStatus.textContent = `Ready — ${parsed.entries.length} recipient${parsed.entries.length !== 1 ? 's' : ''}, ${parsed.fields.length} CSV field${parsed.fields.length !== 1 ? 's' : ''} (+ {{email}} and {{name}} always available).`;
+    mergeStatus.textContent = `Ready — ${parsed.entries.length} recipient${parsed.entries.length !== 1 ? 's' : ''}, ${parsed.fields.length} CSV field${parsed.fields.length !== 1 ? 's' : ''} (+ {{email}} always available).`;
   }
 
   mergeFile.addEventListener('change', async () => {
