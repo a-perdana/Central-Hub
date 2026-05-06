@@ -2354,7 +2354,7 @@ export function initSyllabusPage(config) {
       });
       topicRows = `<div class="topics-list">${parts.join('')}</div>`;
     } else {
-      topicRows = `<div class="no-topics">No topics yet.${isAdmin ? ' Add one below.' : ''}</div>`;
+      topicRows = `<div class="no-topics">No topics yet.${(isAdmin || isCoordinator) ? ' Add one below.' : ''}</div>`;
     }
 
     const reorderBtns = (isAdmin || isCoordinator) ? `
@@ -2369,7 +2369,8 @@ export function initSyllabusPage(config) {
       ${chDeleteBtn}
     </div>` : '';
 
-    const footer = isAdmin ? (features.bufferTopics ? `
+    const canAddTopic = isAdmin || isCoordinator;
+    const footer = canAddTopic ? (features.bufferTopics ? `
       <div class="ch-footer" id="ch-footer-${ci}">
         <div class="ch-footer-form" id="ch-buffer-form-${ci}">
           <input type="text" id="ch-buffer-label-${ci}" placeholder="Review Time" maxlength="60" style="max-width:200px">
@@ -2702,7 +2703,7 @@ export function initSyllabusPage(config) {
 
   // ── Topic CRUD ─────────────────────────────────────────────────────────────
   function openAddTopicModal(ci) {
-    if (!isAdmin) return;
+    if (!isAdmin && !isCoordinator) return;
     modalMode  = 'add-topic';
     editChIdx  = ci;
     editTopIdx = null;
