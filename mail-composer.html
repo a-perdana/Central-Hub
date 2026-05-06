@@ -339,6 +339,66 @@
     }
     .btn-send-sm:hover { background: var(--accent-dk); }
 
+    /* CONFIRM SEND MODAL — friction layer to prevent accidental mass sends */
+    .confirm-send-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.55); z-index: 10000;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .confirm-send-overlay.open { display: flex; }
+    .confirm-send-modal {
+      background: #fff; border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.22);
+      max-width: 520px; width: 100%; padding: 26px 26px 22px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .confirm-send-head { display: flex; align-items: center; gap: 12px; }
+    .confirm-send-head .cs-icon {
+      width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      background: var(--paper); color: var(--accent); flex-shrink: 0;
+    }
+    .confirm-send-head.is-mass .cs-icon { background: #fff5f5; color: #d83a52; }
+    .confirm-send-head h3 { font-size: 1.05rem; font-weight: 700; color: var(--ink); margin: 0; }
+    .confirm-send-head p  { font-size: .82rem; color: var(--ink-3); margin: 2px 0 0; }
+    .confirm-send-meta {
+      background: var(--paper); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .confirm-send-meta .cs-row { display: flex; justify-content: space-between; gap: 10px; font-size: .82rem; }
+    .confirm-send-meta .cs-row .cs-k { color: var(--ink-3); }
+    .confirm-send-meta .cs-row .cs-v { color: var(--ink); font-weight: 600; text-align: right; word-break: break-word; }
+    .confirm-send-meta .cs-row .cs-v.cs-big { font-size: 1.05rem; color: var(--accent); }
+    .confirm-send-meta .cs-row .cs-v.cs-mass { color: #d83a52; }
+    .confirm-send-sample {
+      font-size: .76rem; color: var(--ink-3); line-height: 1.5;
+      background: #fafafa; border: 1px dashed var(--border); border-radius: 6px;
+      padding: 8px 10px; max-height: 70px; overflow: hidden;
+    }
+    .confirm-send-typebox {
+      display: none; flex-direction: column; gap: 6px;
+    }
+    .confirm-send-typebox.shown { display: flex; }
+    .confirm-send-typebox label { font-size: .8rem; color: var(--ink-2); }
+    .confirm-send-typebox label code {
+      background: #fff5f5; padding: 1px 6px; border-radius: 4px; color: #d83a52;
+      font-weight: 700; border: 1px solid #f5cdd2;
+    }
+    .confirm-send-typebox input {
+      height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px;
+      font-size: .9rem; font-family: inherit; outline: none;
+    }
+    .confirm-send-typebox input:focus { border-color: var(--accent); }
+    .confirm-send-footer { display: flex; gap: 10px; margin-top: 4px; }
+    .confirm-send-footer .btn-cancel-sm { font-weight: 500; }
+    .confirm-send-footer .btn-confirm-send {
+      flex: 1; height: 40px; border: none; border-radius: 7px;
+      background: var(--accent); color: #fff; font-size: .9rem; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .confirm-send-footer .btn-confirm-send:hover:not(:disabled) { background: var(--accent-dk); }
+    .confirm-send-footer .btn-confirm-send:disabled { opacity: .5; cursor: not-allowed; }
+    .confirm-send-footer .btn-confirm-send.is-mass { background: #d83a52; }
+    .confirm-send-footer .btn-confirm-send.is-mass:hover:not(:disabled) { background: #b82c41; }
+
     /* SKEL */
     .skel { background: var(--paper-2); border-radius: 6px; animation: shimmer 1.4s ease-in-out infinite; }
     @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.5} }
@@ -605,8 +665,9 @@
       </button>
 
       <!-- Platform chips -->
+      <!-- No chip is active by default — admin must explicitly pick an audience -->
       <div class="platform-chips" id="platformChips">
-        <div class="platform-chip active" data-platform="" onclick="togglePlatformChip(this)">
+        <div class="platform-chip" data-platform="" onclick="togglePlatformChip(this)">
           <span>All</span><span class="chip-count" id="cnt-all">—</span>
         </div>
         <div class="platform-chip" data-platform="teachershub" onclick="togglePlatformChip(this)">
@@ -877,6 +938,43 @@
   </div>
 </div>
 
+<!-- Confirm Send modal — friction layer for mass campaigns -->
+<div class="confirm-send-overlay" id="confirmSendModal" role="dialog" aria-modal="true" aria-labelledby="confirmSendTitle">
+  <div class="confirm-send-modal">
+    <div class="confirm-send-head" id="confirmSendHead">
+      <div class="cs-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </div>
+      <div>
+        <h3 id="confirmSendTitle">Confirm campaign send</h3>
+        <p id="confirmSendSubtitle">This will email everyone in the recipient list. Review carefully.</p>
+      </div>
+    </div>
+
+    <div class="confirm-send-meta">
+      <div class="cs-row"><span class="cs-k">Recipients</span><span class="cs-v cs-big" id="csRecipCount">—</span></div>
+      <div class="cs-row"><span class="cs-k">Audience</span><span class="cs-v" id="csAudience">—</span></div>
+      <div class="cs-row"><span class="cs-k">Subject</span><span class="cs-v" id="csSubject">—</span></div>
+      <div class="cs-row"><span class="cs-k">From</span><span class="cs-v" style="font-weight:500;color:var(--ink-3)">Eduversal Education &lt;noreply@eduversal.org&gt;</span></div>
+    </div>
+
+    <div class="confirm-send-sample" id="csSample"></div>
+
+    <div class="confirm-send-typebox" id="csTypebox">
+      <label>To prevent accidental mass sends, type <code id="csTypeNumber">0</code> below to confirm:</label>
+      <input type="text" id="csTypeInput" inputmode="numeric" autocomplete="off" placeholder="Type recipient count" />
+    </div>
+
+    <div class="confirm-send-footer">
+      <button type="button" class="btn-cancel-sm" id="csCancel">Cancel</button>
+      <button type="button" class="btn-confirm-send" id="csConfirm" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span id="csConfirmLabel">Send Campaign</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 
@@ -974,7 +1072,7 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
    excludedEmails   : Set of emails manually unchecked in modal
    finalList()      : union of chip+manual minus excluded
    ================================================================ */
-let activePlatform   = '';
+let activePlatform   = null;  // null = no chip selected (search-only); '' = All; 'xyz' = specific
 let activeRole       = 'all';
 let activeSubRole    = '';
 let allApiRecipients = []; // full /recipients pool (no platform filter) for search
@@ -1376,7 +1474,7 @@ async function loadAllCounts() {
    INITIAL LOAD
    ================================================================ */
 async function loadFilteredRecipients() {
-  await fetchChipRecipients(); // loads with activePlatform='' = all
+  await fetchChipRecipients(); // activePlatform === null on first load → no chip recipients pre-selected
 }
 
 function getFilterParams() {
@@ -1481,9 +1579,12 @@ document.getElementById('testSend').addEventListener('click', async () => {
 });
 
 /* ================================================================
-   SEND CAMPAIGN
+   SEND CAMPAIGN — opens confirm modal first; modal triggers actual send
    ================================================================ */
-document.getElementById('btnSend').addEventListener('click', async () => {
+const MASS_SEND_THRESHOLD = 50; // recipients above this require typing the count to confirm
+let pendingSendPayload = null;  // captured when modal opens; consumed on confirm
+
+document.getElementById('btnSend').addEventListener('click', () => {
   const subject      = document.getElementById('fSubject').value.trim();
   const campaignName = document.getElementById('fCampaignName').value.trim() || subject;
   const bodyHtml     = quill?.root.innerHTML || '';
@@ -1496,19 +1597,107 @@ document.getElementById('btnSend').addEventListener('click', async () => {
                     return showBanner('error', 'Email body cannot be empty.');
   if (recipCount === 0) return showBanner('error', 'No recipients selected.');
 
-  // Double-click confirmation
-  const btn = document.getElementById('btnSend');
-  if (!btn.dataset.confirming) {
-    btn.dataset.confirming = '1';
-    btn.textContent = `Click again to send to ${recipCount} teachers`;
-    setTimeout(() => {
-      delete btn.dataset.confirming;
-      btn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Campaign`;
-    }, 4000);
-    return;
+  // Build human-readable audience description from current chip state
+  const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
+  let audience;
+  if (activePlatform === null)      audience = 'Manual list only';
+  else if (activePlatform === '')   audience = 'All Platforms';
+  else                              audience = platLabels[activePlatform] || activePlatform;
+  if (activeRole === 'admin')       audience += ' · Admins';
+  else if (activeRole === 'user')   audience += ' · Users';
+  if (activeSubRole) {
+    const found = (SUBROLES[activePlatform] || []).find(o => o.value === activeSubRole);
+    if (found) audience += ' · ' + found.label;
+  }
+  const manualCount = [...manualRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
+  if (manualCount > 0 && activePlatform !== null) audience += ` (+${manualCount} manual)`;
+
+  // Stash for the actual send call
+  pendingSendPayload = {
+    subject, bodyHtml, campaignName,
+    activeRecips, recipCount, filterParams,
+  };
+
+  openConfirmSendModal({ subject, audience, recipCount, bodyHtml });
+});
+
+function openConfirmSendModal({ subject, audience, recipCount, bodyHtml }) {
+  const overlay   = document.getElementById('confirmSendModal');
+  const head      = document.getElementById('confirmSendHead');
+  const subtitle  = document.getElementById('confirmSendSubtitle');
+  const recipEl   = document.getElementById('csRecipCount');
+  const audEl     = document.getElementById('csAudience');
+  const subjEl    = document.getElementById('csSubject');
+  const sampleEl  = document.getElementById('csSample');
+  const typebox   = document.getElementById('csTypebox');
+  const typeNum   = document.getElementById('csTypeNumber');
+  const typeInput = document.getElementById('csTypeInput');
+  const confirmBtn= document.getElementById('csConfirm');
+  const confirmLbl= document.getElementById('csConfirmLabel');
+
+  const isMass = recipCount >= MASS_SEND_THRESHOLD;
+
+  recipEl.textContent = `${recipCount} recipient${recipCount !== 1 ? 's' : ''}`;
+  recipEl.classList.toggle('cs-mass', isMass);
+  audEl.textContent   = audience;
+  subjEl.textContent  = subject;
+
+  // First ~140 chars of plain-text body as sanity-check sample
+  const tmp = document.createElement('div');
+  tmp.innerHTML = bodyHtml;
+  const sampleText = (tmp.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 140);
+  sampleEl.textContent = sampleText ? sampleText + (sampleText.length === 140 ? '…' : '') : '(empty body)';
+
+  head.classList.toggle('is-mass', isMass);
+  confirmBtn.classList.toggle('is-mass', isMass);
+
+  if (isMass) {
+    subtitle.textContent = `This will email ${recipCount} people. Type the count to confirm.`;
+    typebox.classList.add('shown');
+    typeNum.textContent = String(recipCount);
+    typeInput.value = '';
+    confirmBtn.disabled = true;
+    confirmLbl.textContent = `Send to ${recipCount}`;
+  } else {
+    subtitle.textContent = 'This will email everyone in the recipient list.';
+    typebox.classList.remove('shown');
+    typeInput.value = '';
+    confirmBtn.disabled = false;
+    confirmLbl.textContent = `Send to ${recipCount}`;
   }
 
-  delete btn.dataset.confirming;
+  overlay.classList.add('open');
+  // Focus the typebox for mass sends so admin commits intent; otherwise focus cancel for safety
+  setTimeout(() => (isMass ? typeInput : document.getElementById('csCancel')).focus(), 50);
+}
+
+function closeConfirmSendModal() {
+  document.getElementById('confirmSendModal').classList.remove('open');
+  pendingSendPayload = null;
+}
+
+document.getElementById('csCancel').addEventListener('click', closeConfirmSendModal);
+document.getElementById('confirmSendModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeConfirmSendModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('confirmSendModal').classList.contains('open')) {
+    closeConfirmSendModal();
+  }
+});
+
+document.getElementById('csTypeInput').addEventListener('input', e => {
+  const expected = document.getElementById('csTypeNumber').textContent.trim();
+  document.getElementById('csConfirm').disabled = e.target.value.trim() !== expected;
+});
+
+document.getElementById('csConfirm').addEventListener('click', async () => {
+  if (!pendingSendPayload) return;
+  const { subject, bodyHtml, campaignName, activeRecips, recipCount, filterParams } = pendingSendPayload;
+  pendingSendPayload = null;
+  closeConfirmSendModal();
+
+  const btn = document.getElementById('btnSend');
   btn.disabled = true;
   btn.innerHTML = '⏳ Sending…';
   showBanner('sending', `Sending to ${recipCount} recipients — this may take a moment…`);
@@ -1526,7 +1715,6 @@ document.getElementById('btnSend').addEventListener('click', async () => {
       subRole:          filterParams.subRole  || null,
     });
     showBanner('success', `Campaign queued! ${result.recipientCount} recipients · Campaign ID: ${result.campaignId.slice(0,8)}…`);
-    // Reset form
     document.getElementById('fSubject').value = '';
     document.getElementById('fCampaignName').value = '';
     quill?.setContents([]);
