@@ -2647,7 +2647,7 @@ async function pollCampaignUntilDone(campaignId) {
 // at the most recent 50 campaigns, so this is purely a client-side window.
 let historyPage     = 1;
 let historyAll      = [];
-const HISTORY_PAGE_SIZE = 10;
+const HISTORY_PAGE_SIZE = 5;
 
 function renderHistory(campaigns) {
   historyAll = Array.isArray(campaigns) ? campaigns : [];
@@ -2720,17 +2720,19 @@ function renderHistoryPage() {
 function renderHistoryPager() {
   const pager = document.getElementById('historyPager');
   if (!pager) return;
-  if (historyAll.length <= HISTORY_PAGE_SIZE) {
+  if (!historyAll.length) {
     pager.innerHTML = '';
     return;
   }
-  const totalPages = Math.ceil(historyAll.length / HISTORY_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(historyAll.length / HISTORY_PAGE_SIZE));
   const start = (historyPage - 1) * HISTORY_PAGE_SIZE + 1;
   const end   = Math.min(start + HISTORY_PAGE_SIZE - 1, historyAll.length);
+  // Render the pager even on a single page so admins always see the
+  // "X–Y of N" count and know paging exists once they cross the page-size threshold.
   pager.innerHTML = `
     <button type="button" class="hp-btn" id="hpPrev" ${historyPage === 1 ? 'disabled' : ''} aria-label="Previous page">‹</button>
     <span class="hp-status">${start}–${end} of ${historyAll.length}</span>
-    <button type="button" class="hp-btn" id="hpNext" ${historyPage === totalPages ? 'disabled' : ''} aria-label="Next page">›</button>
+    <button type="button" class="hp-btn" id="hpNext" ${historyPage >= totalPages ? 'disabled' : ''} aria-label="Next page">›</button>
   `;
   document.getElementById('hpPrev')?.addEventListener('click', () => {
     if (historyPage > 1) { historyPage--; renderHistoryPage(); }
