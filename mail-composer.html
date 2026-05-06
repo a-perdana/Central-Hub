@@ -277,6 +277,22 @@
     .history-table td { padding: 11px 14px; font-size: .84rem; color: var(--ink); vertical-align: top; }
     .history-campaign-name { font-weight: 600; }
     .history-subject { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
+    .history-pager {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      margin-top: 12px;
+    }
+    .history-pager:empty { display: none; }
+    .history-pager .hp-btn {
+      width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--white); color: var(--ink-2); cursor: pointer;
+      font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .history-pager .hp-btn:hover:not(:disabled) {
+      border-color: var(--accent); color: var(--accent); background: rgba(108,92,231,.04);
+    }
+    .history-pager .hp-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .history-pager .hp-status { font-size: .8rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
     .status-pill {
       display: inline-block; font-size: .7rem; font-weight: 700;
       padding: 2px 8px; border-radius: 4px;
@@ -951,6 +967,7 @@
           </tbody>
         </table>
       </div>
+      <div id="historyPager" class="history-pager"></div>
     </div>
   </div>
 
@@ -2094,8 +2111,13 @@ body{margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-ser
 .header{background:linear-gradient(135deg,#1e3a5f 0%,#0d9488 100%);padding:32px 40px}
 .header-logo{font-size:1.35rem;font-weight:700;color:#fff}
 .header-logo span{color:#5eead4}
-.body{padding:36px 40px 28px;color:#1c1c2e;font-size:15px;line-height:1.7}
-.body h1,.body h2,.body h3{color:#0f172a}
+.body{padding:36px 40px 28px;color:#1c1c2e;font-size:15px;line-height:1.6}
+.body p{margin:0 0 12px}
+.body p:last-child{margin-bottom:0}
+.body p > br:only-child{line-height:0.6}
+.body h1,.body h2,.body h3{color:#0f172a;margin:18px 0 8px}
+.body ul,.body ol{margin:0 0 12px;padding-left:22px}
+.body li{margin-bottom:4px}
 .body a{color:#0d9488}
 .body img{max-width:100%;border-radius:8px}
 .footer{background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 40px;font-size:12px;color:#94a3b8;text-align:center}
@@ -2621,13 +2643,34 @@ async function pollCampaignUntilDone(campaignId) {
   loadHistory();
 }
 
+// Campaign-history pagination state. Mail-service already caps the response
+// at the most recent 50 campaigns, so this is purely a client-side window.
+let historyPage     = 1;
+let historyAll      = [];
+const HISTORY_PAGE_SIZE = 10;
+
 function renderHistory(campaigns) {
+  historyAll = Array.isArray(campaigns) ? campaigns : [];
+  // Snap back to page 1 whenever the underlying list changes (e.g. after a
+  // new campaign is sent). Avoids landing on an empty page after a reload.
+  historyPage = 1;
+  renderHistoryPage();
+}
+
+function renderHistoryPage() {
   const tbody = document.getElementById('historyTbody');
-  if (!campaigns.length) {
+  if (!historyAll.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--ink-3);padding:24px">No campaigns sent yet.</td></tr>';
+    renderHistoryPager();
     return;
   }
-  tbody.innerHTML = campaigns.map(c => {
+
+  const totalPages = Math.max(1, Math.ceil(historyAll.length / HISTORY_PAGE_SIZE));
+  if (historyPage > totalPages) historyPage = totalPages;
+  const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+  const slice = historyAll.slice(start, start + HISTORY_PAGE_SIZE);
+
+  tbody.innerHTML = slice.map(c => {
     const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
     const statusCls = { sent:'sp-sent', sending:'sp-sending', partial:'sp-partial', failed:'sp-failed' }[c.status] || 'sp-sending';
     const statusLbl = { sent:'Sent', sending:'Sending…', partial:'Partial', failed:'Failed' }[c.status] || c.status;
@@ -2656,7 +2699,7 @@ function renderHistory(campaigns) {
   }).join('');
 
   // Bind row + button click handlers (event delegation would also work; explicit binding here
-  // since renderHistory rewrites innerHTML on every reload).
+  // since renderHistoryPage rewrites innerHTML on every reload/page change).
   tbody.querySelectorAll('.history-row').forEach(row => {
     row.addEventListener('click', e => {
       // Let the dedicated button handler fire instead of double-triggering
@@ -2669,6 +2712,31 @@ function renderHistory(campaigns) {
       e.stopPropagation();
       openCampaignDetail(btn.dataset.campaignId);
     });
+  });
+
+  renderHistoryPager();
+}
+
+function renderHistoryPager() {
+  const pager = document.getElementById('historyPager');
+  if (!pager) return;
+  if (historyAll.length <= HISTORY_PAGE_SIZE) {
+    pager.innerHTML = '';
+    return;
+  }
+  const totalPages = Math.ceil(historyAll.length / HISTORY_PAGE_SIZE);
+  const start = (historyPage - 1) * HISTORY_PAGE_SIZE + 1;
+  const end   = Math.min(start + HISTORY_PAGE_SIZE - 1, historyAll.length);
+  pager.innerHTML = `
+    <button type="button" class="hp-btn" id="hpPrev" ${historyPage === 1 ? 'disabled' : ''} aria-label="Previous page">‹</button>
+    <span class="hp-status">${start}–${end} of ${historyAll.length}</span>
+    <button type="button" class="hp-btn" id="hpNext" ${historyPage === totalPages ? 'disabled' : ''} aria-label="Next page">›</button>
+  `;
+  document.getElementById('hpPrev')?.addEventListener('click', () => {
+    if (historyPage > 1) { historyPage--; renderHistoryPage(); }
+  });
+  document.getElementById('hpNext')?.addEventListener('click', () => {
+    if (historyPage < totalPages) { historyPage++; renderHistoryPage(); }
   });
 }
 
