@@ -2319,6 +2319,10 @@ document.getElementById('csConfirm').addEventListener('click', async () => {
     document.getElementById('fCampaignName').value = '';
     quill?.setContents([]);
     loadHistory();
+    // The Mail-Service finishes the actual sending in the background after
+    // returning campaignId. Poll a few times so the row flips from "Sending"
+    // to "Sent" without requiring a manual page refresh.
+    pollCampaignUntilDone(result.campaignId);
   } catch (err) {
     showBanner('error', `Send failed: ${err.message}`);
   } finally {
@@ -2504,6 +2508,33 @@ async function loadHistory() {
     document.getElementById('historyTbody').innerHTML =
       '<tr><td colspan="4" style="text-align:center;color:var(--ink-3);padding:20px">Could not load history.</td></tr>';
   }
+}
+
+/**
+ * Poll the per-campaign endpoint until the doc transitions from `sending`
+ * to a terminal state (`sent`/`failed`/`partial`). Refreshes the history
+ * row in place so the badge flips without a manual page reload.
+ *
+ * Backoff: 8 attempts at 1.5s, then 2 attempts at 4s — covers ~20s total,
+ * which is enough headroom for a one-recipient send and most batch sends
+ * under ~150 recipients.
+ */
+async function pollCampaignUntilDone(campaignId) {
+  if (!campaignId) return;
+  const delays = [1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 4000, 4000];
+  for (const wait of delays) {
+    await new Promise(r => setTimeout(r, wait));
+    try {
+      const detail = await apiGet(`/campaigns/${encodeURIComponent(campaignId)}`);
+      const status = detail?.campaign?.status || detail?.status;
+      if (status && status !== 'sending') {
+        await loadHistory();
+        return;
+      }
+    } catch (_) { /* swallow — try again on next tick */ }
+  }
+  // After the polling window, do a final refresh in case it landed late.
+  loadHistory();
 }
 
 function renderHistory(campaigns) {
