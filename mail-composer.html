@@ -1097,6 +1097,7 @@
         Upload a CSV where the <strong>first column is the email address</strong> and the remaining columns are merge-tag fields.
         Header row is required — column names become <code>{{tag}}</code> placeholders you can use in the subject and body.
         Example: <code>email,password,examUrl</code> → use <code>{{password}}</code> and <code>{{examUrl}}</code> in your message.
+        <br><strong>Always available:</strong> <code>{{email}}</code> and <code>{{name}}</code> work in every campaign — no need to add them as columns.
       </p>
       <div class="import-file-row">
         <label class="import-file-label" for="mergeFile">
@@ -2111,21 +2112,31 @@ document.getElementById('btnSend').addEventListener('click', () => {
   const manualCount = [...manualRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
   if (manualCount > 0 && activePlatform !== null) audience += ` (+${manualCount} manual)`;
 
+  // Detect which {{tags}} the admin actually used (so we can warn about unmatched tags)
+  const usedTags = extractMergeTagsFromTemplate(subject + ' ' + bodyHtml);
+
   // Build personalizations map: { [emailLower]: { tag: value, ... } }.
-  // Only includes recipients that actually have non-empty fields, AND only if the
-  // body or subject references {{tag}} placeholders we want to substitute.
-  // We always send all recipients' fields if any have them — server skips entries
-  // for unknown emails. Lighter to just ship every map.
+  // We auto-inject `email` and `name` for every recipient so that {{email}}
+  // and {{name}} work without the admin having to add those columns to the CSV
+  // (the address itself is the row key — it's always known).
+  // CSV-supplied fields override the auto-injected pair if there's a clash.
   const personalizations = {};
   let hasAnyFields = false;
   for (const r of activeRecips) {
-    if (r.fields && Object.keys(r.fields).length > 0) {
-      personalizations[r.email.toLowerCase()] = { ...r.fields };
+    const csvFields = (r.fields && Object.keys(r.fields).length > 0) ? r.fields : null;
+    // Auto-inject only when the template actually references {{email}} or {{name}},
+    // or when the recipient already carries CSV fields (so the server takes the
+    // personalized branch). Avoids burning bandwidth on plain newsletters.
+    const wantsAuto = usedTags.includes('email') || usedTags.includes('name');
+    if (csvFields || wantsAuto) {
+      personalizations[r.email.toLowerCase()] = {
+        email: r.email,
+        name:  r.name || '',
+        ...(csvFields || {}),
+      };
       hasAnyFields = true;
     }
   }
-  // Detect which {{tags}} the admin actually used (so we can warn about unmatched tags)
-  const usedTags = extractMergeTagsFromTemplate(subject + ' ' + bodyHtml);
 
   pendingSendPayload = {
     subject, bodyHtml, campaignName,
@@ -2212,8 +2223,10 @@ function openConfirmSendModal({ subject, audience, recipCount, bodyHtml,
   const allFieldNames = personalizations
     ? new Set(Object.values(personalizations).flatMap(v => Object.keys(v || {})))
     : new Set();
-  // Tags referenced in body that have no data anywhere — will render as empty string
-  const missingDataTags = tagsUsed.filter(t => t !== 'email' && !allFieldNames.has(t));
+  // Tags referenced in body that have no data anywhere — will render as empty string.
+  // Both `email` and `name` are auto-injected per recipient, so they're never "missing".
+  const AUTO_INJECTED = new Set(['email', 'name']);
+  const missingDataTags = tagsUsed.filter(t => !AUTO_INJECTED.has(t) && !allFieldNames.has(t));
   if (missingDataTags.length) {
     warnings.push(`The body uses {{${missingDataTags.join('}}, {{')}}} but no recipient has data for ${missingDataTags.length === 1 ? 'this tag' : 'these tags'}. Recipients will see an empty value.`);
   }
