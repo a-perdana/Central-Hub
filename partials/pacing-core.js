@@ -28,6 +28,16 @@ const YEAR_B_KEY    = window.PACING_CONFIG.yearBKey || 'year10';
 const PROGRESS_KEY  = window.PACING_CONFIG.progressKey  || 'statuses';
 const CLASSES_FIELD = window.PACING_CONFIG.classesField || 'igcse_classes';
 const PROGRESS_KEY_RE = new RegExp(`^${PROGRESS_KEY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(.+)$`);
+// `teaching_combos[]` values that qualify a teacher for THIS pacing page.
+// Format: `${level}_${subject}` (e.g. 'igcse_math', 'checkpoint_science').
+// Checkpoint Science accepts biology/chemistry/physics specialists too —
+// matches the firestore.rules `checkpoint_science_pacing` policy.
+const COMBO_KEYS = (() => {
+  const raw = window.PACING_CONFIG.comboKeys || window.PACING_CONFIG.comboKey;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw) return [raw];
+  return [];
+})();
 
 let db, isAdmin = false, isCoordinator = false;
 let chapters = [];
@@ -770,17 +780,34 @@ window.moveTopic = function(ci, ti, dir) {
 };
 
 // ── Shared teacher fetch ──────────────────────────────────────
-// Only includes teachers whose `subjects` array contains SUBJECT_KEY.
-// Legacy teachers with no subjects field are always included.
+// Match by `teaching_combos[]` (e.g. 'igcse_math') — the source of truth
+// for "teaches THIS subject AT THIS level". Falls back to the legacy
+// `subjects[]` projection only when COMBO_KEYS is unset (no comboKey in
+// PACING_CONFIG); a teacher with no `teaching_combos` and no `subjects`
+// is excluded — they haven't completed Settings, so they have no pacing
+// data to show anyway.
 async function fetchTeachers() {
   const snap = await getDocs(query(collection(db, 'users'), where('role_teachershub', 'in', ['teachers_user', 'teachers_admin'])));
   allTeachers = [];
   snap.forEach(d => {
     const data = d.data();
-    const teacherSubjects = data.subjects;
-    if (!teacherSubjects || teacherSubjects.length === 0 || (SUBJECT_KEY && teacherSubjects.includes(SUBJECT_KEY))) {
-      allTeachers.push({ uid: d.id, ...data });
+    const combos = Array.isArray(data.teaching_combos) ? data.teaching_combos : [];
+    const subjects = Array.isArray(data.subjects) ? data.subjects : [];
+
+    let matches = false;
+    if (COMBO_KEYS.length) {
+      if (combos.length) {
+        matches = COMBO_KEYS.some(k => combos.includes(k));
+      } else if (subjects.length && SUBJECT_KEY) {
+        matches = subjects.includes(SUBJECT_KEY);
+      }
+    } else if (SUBJECT_KEY) {
+      matches = !subjects.length || subjects.includes(SUBJECT_KEY);
+    } else {
+      matches = true;
     }
+
+    if (matches) allTeachers.push({ uid: d.id, ...data });
   });
 
   const profileClassSet = new Set();
@@ -824,7 +851,7 @@ function renderProgressView() {
   const aggEl  = document.getElementById('aggBanner');
 
   if (!allTeachers.length) {
-    listEl.innerHTML = '<div class="empty-wrap">No teachers found with role_teachershub set.</div>';
+    listEl.innerHTML = '<div class="empty-wrap">No teachers assigned to this subject + level. Teachers must complete their Teaching Profile in Teachers Hub Settings.</div>';
     aggEl.innerHTML = '';
     return;
   }
