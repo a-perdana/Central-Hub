@@ -1263,6 +1263,41 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- principal_observations ------------------------------
+    // Annual / termly principal leadership observations using the
+    // 8-foci × evidence-indicator rubric (principal-observation-
+    // rubric-v1). Distinct from induction_observations:
+    //   - induction_observations  → year-1 mentee observations (NN1)
+    //   - principal_observations  → annual leadership evaluation;
+    //                               feeds into principal_annual_appraisals
+    //                               (Phase-2 module, not yet wired)
+    //
+    // Audience:
+    //   - Observer (academic_admin / foundation_representative who is
+    //     designated for the school) creates + updates.
+    //   - Subject principal reads own.
+    //   - Same-school AH leadership reads (school_principal +
+    //     academic_coordinator + foundation_representative).
+    //   - central_admin reads all (network audit).
+    match /principal_observations/{obsId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || request.auth.uid == resource.data.observerUid
+                       || isAHUserAtSameSchool(resource.data.principalUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.observerUid
+                    && (isAHUserAtSameSchool(request.resource.data.principalUid)
+                        || isAdmin());
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.observerUid
+                    && resource.data.status != 'submitted';
+      allow delete: if isAdmin();
+    }
+
     // -- induction_observations ------------------------------
     // Stage 3 monthly observations + Q4 formal evaluation.
     // NN1: this collection is induction-scope only; no propagation
