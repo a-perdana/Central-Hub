@@ -211,11 +211,67 @@
       body { background: #fff !important; }
     }
 
+    /* Search bar */
+    .ref-search-wrap {
+      max-width: 1180px; margin: 16px auto 0; padding: 0 24px;
+      display: flex; gap: 14px; align-items: center;
+    }
+    .ref-search {
+      flex: 1; max-width: 480px; position: relative;
+      display: flex; align-items: center;
+    }
+    .ref-search svg {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      width: 16px; height: 16px; color: var(--ink-3); pointer-events: none;
+    }
+    .ref-search input {
+      width: 100%; padding: 9px 32px 9px 38px; font-family: inherit; font-size: 13px;
+      border: 1px solid var(--border); border-radius: 9px; background: var(--white); color: var(--ink);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    .ref-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .ref-search-clear {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--ink-3); font-size: 16px; padding: 2px 6px;
+    }
+    .ref-search-clear:hover { color: var(--ink); }
+    .ref-search-info { font-size: 12px; color: var(--ink-3); }
+
+    /* Recently viewed */
+    .recent-bar {
+      max-width: 1180px; margin: 12px auto 0; padding: 0 24px;
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      font-size: 12px;
+    }
+    .recent-bar .label {
+      font-size: 10.5px; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px;
+    }
+    .recent-bar .recent-chip {
+      cursor: pointer; padding: 4px 10px; border-radius: 8px;
+      background: #faf5ff; color: var(--accent-dk);
+      border: 1px solid var(--accent-2); font-size: 11.5px; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 4px;
+      max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .recent-bar .recent-chip:hover { background: var(--accent-2); }
+    .recent-bar .recent-chip::before { content: '↻'; color: var(--accent); font-size: 11px; }
+
+    /* Hidden state for filtered cards */
+    .ref-card.filtered-out { display: none !important; }
+    .ref-panel.no-matches::after {
+      content: 'No matches in this tab. Clear search or switch tabs.';
+      display: block; padding: 60px 20px; text-align: center;
+      color: var(--ink-3); font-size: 13px; font-style: italic;
+    }
+
     @media (max-width: 720px) {
       .ref-hero { margin: 16px 12px 0; padding: 24px 20px 22px; }
       .ref-tabs { padding: 0 12px; }
       .ref-panel { padding: 20px 14px 60px; }
       .ref-grid { grid-template-columns: 1fr; }
+      .ref-search-wrap { flex-direction: column; align-items: stretch; }
+      .ref-search { max-width: none; }
     }
   </style>
 </head>
@@ -233,6 +289,20 @@
       <span><strong>Last build</strong> <span id="metaBuildDate">—</span></span>
     </div>
   </header>
+
+  <div class="ref-search-wrap">
+    <div class="ref-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" id="refSearchInput" placeholder="Search 49 docs by title, description, or category…" autocomplete="off">
+      <button class="ref-search-clear" id="refSearchClear" style="display:none;" aria-label="Clear search">×</button>
+    </div>
+    <span class="ref-search-info" id="refSearchInfo"></span>
+  </div>
+
+  <div class="recent-bar" id="recentBar" style="display:none;">
+    <span class="label">Recently opened</span>
+    <span id="recentChips"></span>
+  </div>
 
   <nav class="ref-tabs" id="refTabs">
     <button class="ref-tab active" data-tab="handbooks">Induction Handbooks <span class="count" id="cntHandbooks">3</span></button>
@@ -457,6 +527,93 @@
       // Total counter
       const total = MANIFEST.frameworks.length + MANIFEST.audits.length + MANIFEST.cambridge.length + MANIFEST.permen.length + MANIFEST.schemas.length + (handbookCache?.length || 0);
       document.getElementById('metaTotalDocs').innerHTML = `<strong>Indexed</strong> ${total} documents`;
+
+      // Search bar wiring
+      const sInput = document.getElementById('refSearchInput');
+      const sClear = document.getElementById('refSearchClear');
+      sInput.placeholder = `Search ${total} docs by title, description, or category…`;
+      sInput.addEventListener('input', () => applySearch(sInput.value));
+      sClear.addEventListener('click', () => { sInput.value = ''; applySearch(''); sInput.focus(); });
+
+      // Render recent-viewed bar
+      renderRecentBar();
+
+      // Deep-link: ?doc=<id> opens that doc on load
+      const docParam = params.get('doc');
+      if (docParam) {
+        const item = findManifestById(docParam);
+        if (item) {
+          openDoc({ path: item.path, kind: item.kind, title: item.title });
+        }
+      }
+    }
+
+    /* ── Search ─────────────────────────────────────────────────────── */
+    function applySearch(qRaw) {
+      const q = qRaw.trim().toLowerCase();
+      const sClear = document.getElementById('refSearchClear');
+      const sInfo  = document.getElementById('refSearchInfo');
+      sClear.style.display = q ? '' : 'none';
+
+      if (!q) {
+        document.querySelectorAll('.ref-card.filtered-out').forEach(c => c.classList.remove('filtered-out'));
+        document.querySelectorAll('.ref-panel').forEach(p => p.classList.remove('no-matches'));
+        sInfo.textContent = '';
+        return;
+      }
+
+      let totalMatches = 0;
+      document.querySelectorAll('.ref-panel').forEach(panel => {
+        let panelMatches = 0;
+        panel.querySelectorAll('.ref-card').forEach(card => {
+          const text = (card.textContent || '').toLowerCase();
+          const match = text.includes(q);
+          card.classList.toggle('filtered-out', !match);
+          if (match) panelMatches++;
+        });
+        panel.classList.toggle('no-matches', panelMatches === 0);
+        totalMatches += panelMatches;
+      });
+      sInfo.textContent = `${totalMatches} match${totalMatches === 1 ? '' : 'es'}`;
+    }
+
+    /* ── Manifest lookup (for deep-link) ───────────────────────────── */
+    function findManifestById(id) {
+      for (const panel of ['frameworks','audits','cambridge','permen','schemas']) {
+        const item = (MANIFEST[panel] || []).find(it => it.id === id);
+        if (item && item.kind !== 'index') return item;
+        if (item && item.subItems) {
+          const sub = item.subItems.find(s => s.id === id);
+          if (sub) return { ...sub, kind: 'json' };
+        }
+      }
+      return null;
+    }
+
+    /* ── Recently viewed (localStorage, max 5, dedup, MRU first) ───── */
+    const RECENT_KEY = 'ref:recent:v1';
+    function recordRecent(item) {
+      try {
+        const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+        const existing = list.findIndex(r => r.path === item.path);
+        if (existing !== -1) list.splice(existing, 1);
+        list.unshift({ path: item.path, kind: item.kind, title: item.title });
+        if (list.length > 5) list.length = 5;
+        localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+        renderRecentBar();
+      } catch (e) { /* localStorage unavailable — silently skip */ }
+    }
+    function renderRecentBar() {
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) {}
+      const bar = document.getElementById('recentBar');
+      const slot = document.getElementById('recentChips');
+      if (!list.length) { bar.style.display = 'none'; return; }
+      bar.style.display = '';
+      slot.innerHTML = list.map(r => `<span class="recent-chip" data-path="${escapeHtml(r.path)}" data-kind="${escapeHtml(r.kind)}" data-title="${escapeHtml(r.title)}" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>`).join(' ');
+      slot.querySelectorAll('.recent-chip').forEach(el => {
+        el.addEventListener('click', () => openDoc({ path: el.dataset.path, kind: el.dataset.kind, title: el.dataset.title }));
+      });
     }
 
     let handbookCache = [];
@@ -597,6 +754,19 @@
       bodyEl.innerHTML = '<div class="doc-loading">Loading…</div>';
       overlay.classList.add('open');
 
+      // Track recently-viewed (top of MRU list, max 5)
+      recordRecent({ path, kind, title });
+
+      // Deep-link: write the manifest id to URL so the user can share a
+      // specific doc URL. Resolve back-from-path so we don't depend on
+      // every caller passing the id explicitly.
+      const id = idForPath(path);
+      if (id) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('doc', id);
+        window.history.replaceState({}, '', url);
+      }
+
       try {
         const url = `references-data/${path}`;
         const res = await fetch(url);
@@ -621,6 +791,26 @@
 
     function closeDoc() {
       document.getElementById('docModalOverlay').classList.remove('open');
+      // Drop ?doc= so the URL isn't left in a 'pre-opened' state
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('doc')) {
+        url.searchParams.delete('doc');
+        window.history.replaceState({}, '', url);
+      }
+    }
+
+    function idForPath(path) {
+      for (const panel of ['frameworks','audits','cambridge','permen','schemas']) {
+        const items = MANIFEST[panel] || [];
+        for (const it of items) {
+          if (it.path === path) return it.id;
+          if (it.subItems) {
+            const sub = it.subItems.find(s => s.path === path);
+            if (sub) return sub.id;
+          }
+        }
+      }
+      return null;
     }
 
     /* Post-process rendered HTML and convert inline Cambridge / Permendiknas
