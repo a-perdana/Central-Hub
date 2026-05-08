@@ -317,6 +317,7 @@ const htmlFiles = [
   "induction-admin.html",
   "my-induction.html",
   "handbook.html",
+  "references.html",
   "specialist-framework.html",
   "specialist-path.html",
   "specialist-portfolio.html",
@@ -404,6 +405,78 @@ if (fs.existsSync(researchSrcDir)) {
     }
   });
 }
+
+// -- References & Standards data tree.
+//    The /references page (Hub for policy + framework + verbatim) loads
+//    these on demand via fetch('references-data/<path>'). Source of
+//    truth is monorepo-root docs/ and the per-app resources/ folders.
+//    Keep this list in sync with the MANIFEST in references.html.
+const refDestRoot = path.join("dist", "references-data");
+fs.mkdirSync(refDestRoot, { recursive: true });
+
+// Map: [destRelativePath, sourceAbsolutePath]
+const refAssetMap = [
+  // ── Cross-Module Audits ─────────────────────────────────────
+  ["audits/INDEX.md",                                      path.join("..", "docs", "cross-module", "INDEX.md")],
+  ["audits/specialist-content-depth-audit.md",             path.join("..", "docs", "cross-module", "specialist-content-depth-audit.md")],
+  ["audits/school-appraisal-x-principal-rubric-mapping.json", path.join("..", "docs", "cross-module", "school-appraisal-x-principal-rubric-mapping.json")],
+  ["audits/principal-360-framework-v1.json",               path.join("..", "docs", "cross-module", "principal-360-framework-v1.json")],
+  ["audits/principal-coaching-framework-v1.json",          path.join("..", "docs", "cross-module", "principal-coaching-framework-v1.json")],
+
+  // ── Frameworks ──────────────────────────────────────────────
+  // Appraisal v2 + Principal Appraisal v1 — read from AH/CH resources
+  // which are kept byte-identical with TH copies via tag scripts.
+  ["frameworks/appraisal-framework-v2.json",               path.join("..", "Academic Hub", "resources", "appraisal-framework-v2.json")],
+  ["frameworks/principal-appraisal-framework-v1.json",     path.join("..", "Academic Hub", "resources", "principal-appraisal-framework-v1.json")],
+  ["frameworks/teaching-competency-framework.json",        path.join("resources", "teaching-competency-framework.json")],
+  ["frameworks/leadership-competency-framework.json",      path.join("resources", "leadership-competency-framework.json")],
+  ["frameworks/teacher-kpi-extensions-v1.json",            path.join("..", "docs", "kpi", "teacher-kpi-extensions-v1.json")],
+  ["frameworks/teacher-kpi-legacy-backfill-v1.json",       path.join("..", "docs", "kpi", "teacher-kpi-legacy-backfill-v1.json")],
+
+  // ── Weekly checklists × 8 sub-roles ────────────────────────
+  ["frameworks/weekly-checklists/_academic-year-arc.json",        path.join("..", "docs", "weekly-checklists", "_academic-year-arc.json")],
+  ["frameworks/weekly-checklists/subject-teacher.json",           path.join("..", "docs", "weekly-checklists", "subject-teacher.json")],
+  ["frameworks/weekly-checklists/subject-leader.json",            path.join("..", "docs", "weekly-checklists", "subject-leader.json")],
+  ["frameworks/weekly-checklists/school-principal.json",          path.join("..", "docs", "weekly-checklists", "school-principal.json")],
+  ["frameworks/weekly-checklists/academic-coordinator.json",      path.join("..", "docs", "weekly-checklists", "academic-coordinator.json")],
+  ["frameworks/weekly-checklists/cambridge-coordinator.json",     path.join("..", "docs", "weekly-checklists", "cambridge-coordinator.json")],
+  ["frameworks/weekly-checklists/foundation-representative.json", path.join("..", "docs", "weekly-checklists", "foundation-representative.json")],
+  ["frameworks/weekly-checklists/subject-specialist.json",        path.join("..", "docs", "weekly-checklists", "subject-specialist.json")],
+  ["frameworks/weekly-checklists/director.json",                  path.join("..", "docs", "weekly-checklists", "director.json")],
+
+  // ── Cambridge verbatim ──────────────────────────────────────
+  ["cambridge/teacher-standards-2023.json",         path.join("..", "docs", "research", "cambridge", "teacher-standards-2023.json")],
+  ["cambridge/teacher-standards-rationale.json",    path.join("..", "docs", "research", "cambridge", "teacher-standards-rationale.json")],
+  ["cambridge/school-leader-standards-2023.json",   path.join("..", "docs", "research", "cambridge", "school-leader-standards-2023.json")],
+  ["cambridge/mentoring-guide-2020.json",           path.join("..", "docs", "research", "cambridge", "mentoring-guide-2020.json")],
+  ["cambridge/ictl-5881-syllabus.json",             path.join("..", "docs", "research", "cambridge", "ictl-5881-syllabus.json")],
+
+  // ── Permendiknas / Permendikbud verbatim ────────────────────
+  ["permendiknas/no-10-2025-skl.json",  path.join("..", "docs", "research", "permendiknas", "no-10-2025-skl.json")],
+  ["permendiknas/no-27-2010-pigp.json", path.join("..", "docs", "research", "permendiknas", "no-27-2010-pigp.json")],
+  ["permendiknas/no-16-2007.json",      path.join("..", "docs", "research", "permendiknas", "no-16-2007.json")],
+
+  // ── Schemas & Governance ────────────────────────────────────
+  ["schemas/FIRESTORE_SCHEMA.md",        path.join("..", "docs", "FIRESTORE_SCHEMA.md")],
+  ["schemas/DESIGN_SYSTEM.md",           path.join("..", "docs", "DESIGN_SYSTEM.md")],
+  ["schemas/CONTRIBUTING-FIRESTORE.md",  path.join("..", "docs", "CONTRIBUTING-FIRESTORE.md")],
+  ["schemas/db-diagram.md",              path.join("..", "docs", "db-diagram.md")],
+  ["schemas/INDUCTION_CHARTER.md",       path.join("..", "docs", "induction", "INDUCTION_CHARTER.md")],
+];
+
+let refCopied = 0, refMissing = 0;
+refAssetMap.forEach(([rel, src]) => {
+  const dest = path.join(refDestRoot, rel);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, dest);
+    refCopied++;
+  } else {
+    console.warn(`WARNING: references-data source missing: ${src} (skipped)`);
+    refMissing++;
+  }
+});
+console.log(`Copied: dist/references-data/ (${refCopied} files, ${refMissing} missing)`);
 
 // -- Copy firestore.rules so /rules-viewer can fetch it at runtime.
 //    Read-only display; the live enforcement comes from the deployed
