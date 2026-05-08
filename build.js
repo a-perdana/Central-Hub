@@ -319,6 +319,7 @@ const htmlFiles = [
   "handbook.html",
   "references.html",
   "principal-coaching-session.html",
+  "principal-coaching-hub.html",
   "specialist-framework.html",
   "specialist-path.html",
   "specialist-portfolio.html",
