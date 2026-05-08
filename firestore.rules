@@ -1263,6 +1263,29 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- principal_annual_appraisals -------------------------
+    // Annual leadership appraisal — F1-F5 + F_LEAD weighted scoring,
+    // composite + A-F band. Doc id: {principalUid}_{academicYear}.
+    // Submitted docs are immutable.
+    match /principal_annual_appraisals/{appraisalId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || request.auth.uid == resource.data.appraiserUid
+                       || isAHUserAtSameSchool(resource.data.principalUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.appraiserUid
+                    && (isAHUserAtSameSchool(request.resource.data.principalUid)
+                        || isAdmin());
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.appraiserUid
+                    && resource.data.status != 'submitted';
+      allow delete: if isAdmin();
+    }
+
     // -- principal_observations ------------------------------
     // Annual / termly principal leadership observations using the
     // 8-foci × evidence-indicator rubric (principal-observation-
