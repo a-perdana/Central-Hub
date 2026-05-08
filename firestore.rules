@@ -1263,6 +1263,47 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- principal_360_cycles --------------------------------
+    // Each principal × cycle window has a cycles doc that gates whether
+    // responses are accepted (status: 'planned' / 'open' / 'closed').
+    // Created by central_admin or foundation_representative; read-open
+    // to all auth users so respondents can verify the cycle exists.
+    match /principal_360_cycles/{cycleId} {
+      allow get:    if isSignedIn();
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // -- principal_360_responses -----------------------------
+    // Anonymous response docs — auto-id, no respondent uid persisted.
+    // Charter NN5: only Cloud-Function-maintained aggregates expose any
+    // computed mean to a human; raw response docs are list-blocked from
+    // ordinary clients.
+    match /principal_360_responses/{respId} {
+      // Reads: only admin (forensic). No list at all — even the principal
+      // sees only the aggregated view via principal_360_aggregates.
+      allow get:    if isAdmin();
+      allow list:   if false;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // -- principal_360_aggregates ----------------------------
+    // Cloud Function-maintained anonymous summary; the principal + the
+    // appraiser read this once min_respondents threshold is met.
+    match /principal_360_aggregates/{aggId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || isAHUserAtSameSchool(resource.data.principalUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create, update, delete: if isAdmin();
+    }
+
     // -- principal_annual_appraisals -------------------------
     // Annual leadership appraisal — F1-F5 + F_LEAD weighted scoring,
     // composite + A-F band. Doc id: {principalUid}_{academicYear}.
