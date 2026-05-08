@@ -353,6 +353,28 @@
     .task-chip.priority-important { background: #cffafe; color: #155e75; font-weight: 600; }
     .task-chip.priority-support   { background: #f1f5f9; color: #475569; }
     .task-chip.framework { background: #f0fdf4; color: #14532d; font-family: 'DM Mono', monospace; font-size: 10px; }
+    /* Cambridge cross-reference chips — wired by cambridge-crossref.js. */
+    .task-chip.cts {
+      background: #ede9fe; color: #4c1d95; font-family: 'DM Mono', monospace;
+      font-size: 10.5px; font-weight: 600;
+    }
+    .task-chip.cts:hover { background: #ddd6fe; cursor: pointer; }
+    .task-chip.permen {
+      background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace;
+      font-size: 10.5px;
+    }
+    .task-meta .hb-tag.skl {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10.5px; font-weight: 500; padding: 3px 9px; border-radius: 999px;
+      background: #d1fae5; color: #065f46; cursor: pointer; font-family: 'DM Mono', monospace;
+    }
+    .task-meta .hb-tag.skl:hover { background: #a7f3d0; }
+    .task-meta .hb-tag.pigp {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10.5px; font-weight: 500; padding: 3px 9px; border-radius: 999px;
+      background: #fee2e2; color: #991b1b; cursor: pointer; font-family: 'DM Mono', monospace;
+    }
+    .task-meta .hb-tag.pigp:hover { background: #fecaca; }
     .task-note-indicator {
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 11px; color: var(--accent-dk);
@@ -4024,10 +4046,32 @@ function buildTaskCard(task, _catColor) {
   chips.push(`<span class="task-cat">${escHtml(catLabel)}</span>`);
   if (timing)             chips.push(`<span class="task-chip timing">⏰ ${escHtml(timing)}</span>`);
   if (Number.isFinite(duration)) chips.push(`<span class="task-chip duration">${duration} min</span>`);
-  if (frameworkAnchors.length) {
-    const fa = frameworkAnchors[0];
-    const more = frameworkAnchors.length > 1 ? ` +${frameworkAnchors.length - 1}` : '';
-    chips.push(`<span class="task-chip framework" title="${escAttr(frameworkAnchors.join(' · '))}">📖 ${escHtml(fa)}${more}</span>`);
+
+  // Cambridge cross-reference chips — auto-wired by cambridge-crossref.js
+  const refsRegulatory = Array.isArray(task.regulatory_anchor) ? task.regulatory_anchor.filter(Boolean) : [];
+  const otherFramework = [];
+  frameworkAnchors.forEach(ref => {
+    const m = ref.match(/CTS\s*([0-9]+\.[0-9]+)/i);
+    if (m) {
+      chips.push(`<span class="task-chip cts" title="Cambridge Teacher Standards CTS ${m[1]}">CTS ${m[1]}</span>`);
+    } else {
+      otherFramework.push(ref);
+    }
+  });
+  refsRegulatory.forEach(ref => {
+    const upper = ref.toUpperCase();
+    if (upper.includes('PIGP') || upper.includes('PERMENDIKNAS_27_2010')) {
+      chips.push(`<span class="hb-tag pigp">PIGP</span>`);
+    } else if (upper.includes('SKL') || upper.includes('PERMENDIKDASMEN_10_2025')) {
+      chips.push(`<span class="hb-tag skl">SKL</span>`);
+    } else {
+      chips.push(`<span class="task-chip permen" title="${escAttr(ref)}">${escHtml(ref.replace(/_/g, ' ').replace(/PERMENDIKBUD/i, 'Permendikbud').replace(/PERMENDIKDASMEN/i, 'Permendikdasmen').slice(0, 28))}</span>`);
+    }
+  });
+  if (otherFramework.length) {
+    const fa = otherFramework[0];
+    const more = otherFramework.length > 1 ? ` +${otherFramework.length - 1}` : '';
+    chips.push(`<span class="task-chip framework" title="${escAttr(otherFramework.join(' · '))}">📖 ${escHtml(fa)}${more}</span>`);
   }
   if (note) chips.push(`<span class="task-note-indicator">📝 Note</span>`);
 
@@ -4038,7 +4082,8 @@ function buildTaskCard(task, _catColor) {
     if (timing)      rows.push(`<div class="detail-row"><div class="detail-label">When</div><div class="detail-value">${escHtml(timing)}</div></div>`);
     if (appliesWhen) rows.push(`<div class="detail-row"><div class="detail-label">Applies when</div><div class="detail-value">${escHtml(appliesWhen)}</div></div>`);
     if (evidence.length) rows.push(`<div class="detail-row"><div class="detail-label">Evidence</div><div class="detail-value"><ul>${evidence.map(e => `<li>${escHtml(e)}</li>`).join('')}</ul></div></div>`);
-    if (frameworkAnchors.length) rows.push(`<div class="detail-row"><div class="detail-label">Anchored in</div><div class="detail-value">${frameworkAnchors.map(escHtml).join(' · ')}</div></div>`);
+    if (frameworkAnchors.length) rows.push(`<div class="detail-row"><div class="detail-label">Frameworks</div><div class="detail-value">${frameworkAnchors.map(escHtml).join(' · ')}</div></div>`);
+    if (refsRegulatory.length) rows.push(`<div class="detail-row"><div class="detail-label">Regulatory</div><div class="detail-value">${refsRegulatory.map(escHtml).join(' · ')}</div></div>`);
     if (missedAction) rows.push(`<div class="detail-row"><div class="detail-label">If missed</div><div class="detail-value">${escHtml(missedAction)}</div></div>`);
     if (firstTime) rows.push(`<div class="detail-row"><div class="detail-label">First time?</div><div class="detail-value"><div class="first-time-guide">${escHtml(firstTime)}</div></div></div>`);
     detailHtml = `<div class="task-detail">${rows.join('')}</div>`;
@@ -4349,6 +4394,5 @@ document.addEventListener('keydown', e => {
   });
 })();
 </script>
-<script src="cambridge-crossref.js" defer></script>
 </body>
 </html>
