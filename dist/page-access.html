@@ -3271,7 +3271,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       pages = [];
       snap.forEach(d => {
         const data = d.data();
-        if (data.platform !== platform) return;
+        // Match either single-platform docs (data.platform === <tab>) OR
+        // multi-platform shared-slug docs (data.platforms[] includes <tab>).
+        // Shared slugs (handbook, my-induction, observation-entry, references)
+        // need to surface in every tab they participate in so admins can
+        // narrow visibility per platform.
+        const docPlatform  = data.platform;
+        const docPlatforms = Array.isArray(data.platforms) ? data.platforms : (docPlatform ? [docPlatform] : []);
+        if (!docPlatforms.includes(platform)) return;
         const visible_to = Array.isArray(data.visible_to) ? [...data.visible_to] : [];
         const hidden = data.hidden === true;
         pages.push({
@@ -3280,6 +3287,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           description: data.description || '',
           visible_to,
           hidden,
+          isShared:    docPlatforms.length > 1,
           _original:   [...visible_to],
           _originalHidden: hidden,
         });
