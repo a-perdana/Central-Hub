@@ -153,6 +153,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 | `induction_programs/{programId}` | 3 handbook templates seeded from `docs/induction/handbook-*.json`. **Source of truth is JSON; Firestore docs are reverted on next seed.** | central_admin via seed |
 | `induction_assignments/{menteeUid}` | One active induction per user. NN3+NN4 enforced (mentor must hold cert; three party uids required). | central_admin |
 | `induction_progress` · `induction_observations` · `induction_journal` · `induction_pulses` · `mentor_certifications` · `induction_journal_aggregates` | Induction module collections. NN1+NN2 enforced in rules. See root CLAUDE.md "Induction Module" section for full architecture. | various |
+| `principal_observations` · `principal_annual_appraisals` · `principal_coaching_sessions` · `principal_360_cycles` · `principal_360_responses` · `principal_360_aggregates` | **Principal Evaluation Module (Phase-2, 2026-05-09).** Annual leadership cycle. Submitted forms immutable. Coaching collection's read-rule excludes Foundation Reps (confidentiality). 360 responses persist NO respondent uid (NN5). See root CLAUDE.md "Principal Evaluation Module" + `docs/FIRESTORE_SCHEMA.md §17`. Cloud Function `aggregatePrincipal360Responses` planned but not yet shipped. | various |
 | `page_access_config/{slug}` | Per-page sub-role visibility (all 3 hubs). Edited via `/page-access`. Seeded by `scripts/page-access/seed-{ah,th,ch}-page-access.js`. | central_admin |
 | `nav_config/{docId}` | Admin-editable navbar config. **PK is mixed:** `nav_config/v1` for CH (legacy, supports columns + nested submenu groups, in-place editor in `partials/navbar.html`); `nav_config/academichub` and `nav_config/teachershub` for AH/TH (flat shape `{platform, items:[{key,label,hidden}], updatedAt}`, edited via shared `shared-design/nav-edit-simple.js`). | each hub's admin |
 | `school_appraisals_archive_v1/{docId}` | **Tombstone (retired 2026-05-03).** No client code reads/writes; central_admin only for forensics. Active appraisal collection is `school_appraisals_v2`. | central_admin only |
@@ -202,6 +203,12 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 **Induction (HQ-side):** `induction-admin`, `my-induction`, `handbook`
 
 **Activities + Cambridge:** `cambridge-calendar`, `cambridge-standards`
+
+**References & Standards (2026-05-09):** `references` — single HQ surface for every framework / audit / handbook / Cambridge standard / Indonesian regulation. 6 tabs · 49 docs · search + `?doc=<id>` deep-link + localStorage MRU-5 recently-viewed. References-data lives in `dist/references-data/` (build copies from monorepo `docs/` + AH/CH `resources/`). AH and TH `/references` fetch this cross-origin (CORS-open).
+
+**Principal Evaluation Module (Phase-2, 2026-05-09):**
+- `principal-coaching-session` — mentor session form, `ch_sub_roles.director` only. 5-stage agenda from `principal-coaching-framework-v1.json`. Logged sessions immutable. Foundation Reps **excluded at rule level** for coaching confidentiality. Doc id: `{principalUid}_{YYYY-MM-DD}`.
+- AH-side principal pages (`principal-observation-entry`, `principal-appraisal-entry`, `principal-360-respond`, `principal-360-results`, `principal-coaching-view`) live in Academic Hub but write to collections whose rules are hosted here. See `firestore.rules` "Principal Evaluation Module" block.
 
 ---
 
