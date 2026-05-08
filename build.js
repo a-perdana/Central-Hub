@@ -318,6 +318,7 @@ const htmlFiles = [
   "my-induction.html",
   "handbook.html",
   "references.html",
+  "principal-coaching-session.html",
   "specialist-framework.html",
   "specialist-path.html",
   "specialist-portfolio.html",

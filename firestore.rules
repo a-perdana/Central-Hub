@@ -1263,6 +1263,31 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- principal_coaching_sessions -------------------------
+    // Mentor (HQ Director) writes; coachee (principal) reads own.
+    // Foundation Reps EXCLUDED from access (coaching confidentiality).
+    // Doc id: {principalUid}_{YYYY-MM-DD}.
+    // Logged sessions are immutable.
+    match /principal_coaching_sessions/{sessionId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || request.auth.uid == resource.data.mentorUid
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.mentorUid
+                    && (
+                       isAdmin()
+                       || ('director' in (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ch_sub_roles))
+                    );
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.mentorUid
+                    && resource.data.status != 'logged';
+      allow delete: if isAdmin();
+    }
+
     // -- principal_360_cycles --------------------------------
     // Each principal × cycle window has a cycles doc that gates whether
     // responses are accepted (status: 'planned' / 'open' / 'closed').
