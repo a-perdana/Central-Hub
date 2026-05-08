@@ -189,25 +189,26 @@ Walkthrough notes use Semesta D1-D6 for simplicity; appraisal items use CTS for 
 
 ---
 
-## Module health snapshot — 2026-05-08
+## Module health snapshot — 2026-05-09
 
 | Module | Production state | Content depth | Cross-link integrity |
 |---|---|---|---|
-| **Weekly checklists** (8 roles) | ✓ seeded (320 docs + 1 essentials) | Full | ✓ 18/18 competency_link, 11/11 F3L weekly_checklist_link |
-| **KPI** | ✓ live (15 items) | Full | ✓ all 15 items fully cross-linked (CTS + competency + appraisal + weekly); 3 intentional weekly_link nulls with rationale (survey-driven, termly-driven, cross-cutting) |
+| **Weekly checklists** (8 roles) | ✓ live — 320 docs + 1 essentials. Cards now structured: priority strip · category names · timing/duration/framework chips · Cambridge cross-ref chips (auto-wired) · expandable detail | Full | ✓ 18/18 competency_link, 11/11 F3L weekly_checklist_link, all CTS/PIGP/SKL refs surfaced as clickable chips |
+| **KPI** | ✓ live (15 items) | Full | ✓ all 15 items fully cross-linked |
 | **Teacher Appraisal v2.1** | ✓ live | Full (87 items + L7-L10 added) | ✓ |
-| **Principal Appraisal v1.0** | ⚠ JSON authored, UI to-build | Full | ✓ |
+| **Principal Appraisal v1.0** | ✓ live (`/principal-appraisal-entry`) — F1-F5 + F_LEAD weighted composite + A-F band, doc id `{principalUid}_{academicYear}`, immutable on submit | Full | ✓ Cambridge SLS chips clickable in framework cards |
 | **Teacher Competency** (`teachers` track) | ✓ live | 96/96 hand-authored entries | — (read-only target) |
 | **Leader Competency** (`leaders` track) | ✓ live | 96/96 hand-authored entries | — (read-only target) |
-| **Specialist Competency** (`specialists` track) | ✓ live | 96/96 hand-authored entries; reading length 94% of TH+AH baseline; Indonesia-context density 67% (audit MINOR gap — hand-authored quality with some shorter entries) | — (read-only target) |
+| **Specialist Competency** (`specialists` track) | ✓ live | 96/96 hand-authored entries; reading length 94% of TH+AH baseline; Indonesia-context density 67% (audit MINOR gap) | — (read-only target) |
 | **Subject Teacher Induction** | ✓ live | Full | ✓ |
 | **Principal Induction** | ✓ live | Full | ✓ |
 | **Specialist Induction** | ✓ live | Full | ✓ |
-| **Principal Observation Rubric** | ⚠ JSON authored, UI to-build | Full | ✓ |
-| **Principal Operating Cadence** | ✓ JSON live, surfaces in weekly-checklist | Full | ✓ |
-| **Principal 360°** | ✓ ([file](principal-360-framework-v1.json)) | — | UI to-build |
-| **Principal Coaching cycle** | ✓ ([file](principal-coaching-framework-v1.json)) | — | UI to-build |
+| **Principal Observation Rubric** | ✓ live (`/principal-observation-entry`) — 8 foci × E/D/N + 4 narrative fields, no score, immutable on submit | Full | ✓ |
+| **Principal Operating Cadence** | ✓ live, surfaces in weekly-checklist | Full | ✓ |
+| **Principal 360°** | ✓ UI live (`/principal-360-respond` + `/principal-360-results`) — anonymous respond + threshold-gated aggregate view. **Cloud Function `aggregatePrincipal360Responses` pending** (until then results page shows 'no aggregate yet') | Full | ✓ NN5 enforced (no respondent uid persisted) |
+| **Principal Coaching cycle** | ✓ live — CH `/principal-coaching-session` (mentor form, HQ Director only) + AH `/principal-coaching-view` (coachee read-only). 5-stage agenda · Foundation Reps EXCLUDED at rule level | Full | ✓ |
 | **School Appraisal v2 ↔ Principal Rubric mapping** | ✓ ([file](school-appraisal-x-principal-rubric-mapping.json)) | — | — |
+| **References & Standards hub** (CH /references; narrowed AH+TH variants) | ✓ live — 49 docs in CH (full superset) · 16 in AH · 15 in TH. Modal viewer auto-wires CTS/SKL/PIGP chips | Full | ✓ |
 
 Items resolved 2026-05-08:
 - ✓ school_appraisals_v2 d1 ↔ Principal Rubric explicit mapping ([file](school-appraisal-x-principal-rubric-mapping.json))
@@ -218,12 +219,17 @@ Items resolved 2026-05-08:
 - ✓ Specialist competency polish round (43 entries expanded; reading length 70% → 94% of TH+AH baseline; audit moves from MARGINAL to MINOR gap)
 - ✓ Principal Coaching cycle framework spec ([file](principal-coaching-framework-v1.json)) — 2 modes (year-1 induction overlay + year-2+ ongoing), 5-stage 60-min agenda, charter NN1+NN2+NN3+NN5 compliant, full evidence lineage to F2/F5
 
-All major content-layer specs now closed. Items remaining at ⚠ are exclusively UI implementation work — to be delivered in development cycles, not authoring rounds:
+All Phase-2 UIs landed 2026-05-09 (form/skeleton level). Remaining work is functional rounding rather than authoring:
 
-1. Principal Observation Rubric UI variant in `ObservationEntry.html?type=principal_leadership`
-2. Principal 360° UI implementation (3 pages + Cloud Function)
-3. Principal Coaching cycle UI implementation (3 pages: coachee view + mentor view + admin audit)
-4. Principal Annual Appraisal UI implementation (`principal-appraisal-entry.html`)
+1. ✓ Principal Observation Rubric UI — `/principal-observation-entry` (Phase-2 D, 2026-05-09)
+2. ✓ Principal 360° respond + results UIs — `/principal-360-respond`, `/principal-360-results` (Phase-2 E, 2026-05-09). Cloud Function `aggregatePrincipal360Responses` still pending — until it ships, results show empty state.
+3. ✓ Principal Coaching cycle UIs — CH `/principal-coaching-session` (mentor) + AH `/principal-coaching-view` (coachee) (Phase-2 F, 2026-05-09). Admin audit page deferred (HQ Director can read all sessions via direct doc URL — no urgent need for a list view yet).
+4. ✓ Principal Annual Appraisal UI — `/principal-appraisal-entry` (Phase-2 G, 2026-05-09). Composite + A-F band auto-computed.
+
+Pending follow-up work:
+- Cloud Function for principal_360_responses → principal_360_aggregates (Charter NN5 anonymisation enforced at runtime, currently relies on rule-level list-block + planned aggregator)
+- /principal-coaching-history admin audit page (low priority — direct URL access works for now)
+- Wire Phase-2 navigation entries into AH navbar Induction & Reference column (currently URL-direct only)
 
 ---
 

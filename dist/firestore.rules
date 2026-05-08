@@ -1263,6 +1263,130 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- principal_coaching_sessions -------------------------
+    // Mentor (HQ Director) writes; coachee (principal) reads own.
+    // Foundation Reps EXCLUDED from access (coaching confidentiality).
+    // Doc id: {principalUid}_{YYYY-MM-DD}.
+    // Logged sessions are immutable.
+    match /principal_coaching_sessions/{sessionId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || request.auth.uid == resource.data.mentorUid
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.mentorUid
+                    && (
+                       isAdmin()
+                       || ('director' in (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ch_sub_roles))
+                    );
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.mentorUid
+                    && resource.data.status != 'logged';
+      allow delete: if isAdmin();
+    }
+
+    // -- principal_360_cycles --------------------------------
+    // Each principal × cycle window has a cycles doc that gates whether
+    // responses are accepted (status: 'planned' / 'open' / 'closed').
+    // Created by central_admin or foundation_representative; read-open
+    // to all auth users so respondents can verify the cycle exists.
+    match /principal_360_cycles/{cycleId} {
+      allow get:    if isSignedIn();
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // -- principal_360_responses -----------------------------
+    // Anonymous response docs — auto-id, no respondent uid persisted.
+    // Charter NN5: only Cloud-Function-maintained aggregates expose any
+    // computed mean to a human; raw response docs are list-blocked from
+    // ordinary clients.
+    match /principal_360_responses/{respId} {
+      // Reads: only admin (forensic). No list at all — even the principal
+      // sees only the aggregated view via principal_360_aggregates.
+      allow get:    if isAdmin();
+      allow list:   if false;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // -- principal_360_aggregates ----------------------------
+    // Cloud Function-maintained anonymous summary; the principal + the
+    // appraiser read this once min_respondents threshold is met.
+    match /principal_360_aggregates/{aggId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || isAHUserAtSameSchool(resource.data.principalUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -- principal_annual_appraisals -------------------------
+    // Annual leadership appraisal — F1-F5 + F_LEAD weighted scoring,
+    // composite + A-F band. Doc id: {principalUid}_{academicYear}.
+    // Submitted docs are immutable.
+    match /principal_annual_appraisals/{appraisalId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || request.auth.uid == resource.data.appraiserUid
+                       || isAHUserAtSameSchool(resource.data.principalUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.appraiserUid
+                    && (isAHUserAtSameSchool(request.resource.data.principalUid)
+                        || isAdmin());
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.appraiserUid
+                    && resource.data.status != 'submitted';
+      allow delete: if isAdmin();
+    }
+
+    // -- principal_observations ------------------------------
+    // Annual / termly principal leadership observations using the
+    // 8-foci × evidence-indicator rubric (principal-observation-
+    // rubric-v1). Distinct from induction_observations:
+    //   - induction_observations  → year-1 mentee observations (NN1)
+    //   - principal_observations  → annual leadership evaluation;
+    //                               feeds into principal_annual_appraisals
+    //                               (Phase-2 module, not yet wired)
+    //
+    // Audience:
+    //   - Observer (academic_admin / foundation_representative who is
+    //     designated for the school) creates + updates.
+    //   - Subject principal reads own.
+    //   - Same-school AH leadership reads (school_principal +
+    //     academic_coordinator + foundation_representative).
+    //   - central_admin reads all (network audit).
+    match /principal_observations/{obsId} {
+      allow get:    if isSignedIn() && (
+                       request.auth.uid == resource.data.principalUid
+                       || request.auth.uid == resource.data.observerUid
+                       || isAHUserAtSameSchool(resource.data.principalUid)
+                       || isAdmin()
+                    );
+      allow list:   if isAdmin()
+                    || (isSignedIn() && request.auth.uid != null);
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.observerUid
+                    && (isAHUserAtSameSchool(request.resource.data.principalUid)
+                        || isAdmin());
+      allow update: if isSignedIn()
+                    && request.auth.uid == resource.data.observerUid
+                    && resource.data.status != 'submitted';
+      allow delete: if isAdmin();
+    }
+
     // -- induction_observations ------------------------------
     // Stage 3 monthly observations + Q4 formal evaluation.
     // NN1: this collection is induction-scope only; no propagation

@@ -613,7 +613,68 @@ The 7 collections that implement the Eduversal Induction Charter (subject teache
 
 ---
 
-### 17. Careers + Interview Module (2026-05-04)
+### 17. Principal Evaluation Module (2026-05-09 — Phase-2)
+
+Annual / termly principal leadership evaluation. **Distinct from
+induction_observations** (NN1) — that collection is year-1 mentee-scope
+only and never feeds appraisal scoring. This module is the principal-
+side annual cycle: observation → 360 → coaching → annual appraisal.
+
+The first sub-collection (`principal_observations`) is wired in 2026-05;
+the others (`principal_360_responses`, `principal_coaching_sessions`,
+`principal_annual_appraisals`) ship as the matching UIs land.
+
+#### `principal_observations/{obsId}` — 8-foci formative observation
+**PK:** auto-id (`{principalUid}_{timestamp}`).
+**Fields:** `principalUid →users.uid`, `schoolId →partner_schools.id`, `observerUid →users.uid`, `observerName`, `observerRole` (`'foundation_representative'`/`'academic_admin'`/`'central_admin'`), `visitDate`, `visitType` (`'scheduled_appraisal_visit'`/`'termly_check_in'`/`'follow_up_visit'`/`'thematic_review'`/`'joint_eduversal_yayasan_visit'`/`'pre_centre_readiness_visit'`), `foci{P1..P8: { code: 'E'|'D'|'N', notes: string }}`, `narratives{PNF1..PNF4: string}`, `rubricVersion`, `status` (`'draft'`/`'submitted'`), `updatedAt`, `submittedAt?`.
+**FKs:** `users.uid`, `partner_schools.id`.
+**Writers:** observer (`observerUid`) — create + update while `status != 'submitted'`. Submitted docs are immutable at the rule level. `central_admin` may delete.
+**Read scope:** principal (own); observer (own); same-school AH leadership; `central_admin`.
+**Notes:** No score is computed (`scoring: 'none_formative'` per the rubric JSON). This collection feeds the upcoming `principal_annual_appraisals` (Phase-2 G) — observer evidence summarised in F2 of that framework. Source rubric: `Academic Hub/resources/principal-observation-rubric.json` (v1.0, 8 foci × 55 evidence indicators × E/D/N).
+
+#### `principal_annual_appraisals/{principalUid}_{academicYear}` — Annual leadership appraisal
+**PK:** composite `{principalUid}_{academicYear}` (one appraisal per principal per year).
+**Fields:** `principalUid →users.uid`, `schoolId →partner_schools.id`, `academicYear` (e.g. `'2025-2026'`), `appraiserUid →users.uid`, `appraiserName`, `appraiserRole` (`'foundation_representative'`/`'academic_admin'`/`'central_admin'`), `scores{itemId: 1-4}` keyed by framework item id (F1-1, F2-1, …, F_LEAD-1), `narratives{PNF1..PNF6: string}`, `composite` (1-4 weighted average), `compositePercent` (0-100, computed `(composite-1)/3*100`), `band` (A-F predicate), `frameworkVersion`, `status` (`'draft'`/`'submitted'`), `updatedAt`, `submittedAt?`.
+**FKs:** `users.uid`, `partner_schools.id`.
+**Writers:** appraiser (`appraiserUid`) — create + update while `status != 'submitted'`. Submitted is immutable. `central_admin` may delete.
+**Read scope:** principal (own); appraiser (own); same-school AH leadership; `central_admin`.
+**Notes:** Source framework: `Academic Hub/resources/principal-appraisal-framework-v1.json` (v1.0, F1-F5 + F_LEAD with weighted composite). Composite + band auto-computed client-side and persisted; the inputs (per-item scores) remain authoritative.
+
+#### `principal_coaching_sessions/{principalUid}_{YYYY-MM-DD}` — Coaching session log
+**PK:** composite `{principalUid}_{YYYY-MM-DD}`.
+**Fields:** `principalUid →users.uid` (coachee), `mentorUid →users.uid` (HQ Director), `mentorName`, `schoolId →partner_schools.id`, `sessionDate`, `mode` (`'year_1_induction'`/`'year_2_plus'`), `agenda{1_check_in: { notes }, 2_review_commitments: { commitment, outcome, outcome_reason }, 3_focus_topic: { notes }, 4_strategic_horizon: { notes }, 5_close_and_log: { notes }}`, `newCommitments[{ text, dueWeek }]`, `mentorReflection`, `status` (`'draft'`/`'logged'`), `updatedAt`, `loggedAt?`.
+**FKs:** `users.uid`, `partner_schools.id`.
+**Writers:** mentor (`mentorUid`) — must hold `ch_sub_roles.director` OR be `central_admin`. Update allowed until `status='logged'` (then immutable).
+**Read scope:** coachee (own); mentor (own); `central_admin`. **Foundation Reps explicitly EXCLUDED** to preserve coaching confidentiality (per framework `data_model.access_control`).
+**Notes:** Source framework: `docs/cross-module/principal-coaching-framework-v1.json`. Stage `1_check_in` is the personal check-in — UI surfaces it with a private treatment but rule-level access is the same as the rest of the doc; the privacy is operational ("HQ won't audit this stage") not technical. Audit access for `central_admin` is by design.
+
+#### `principal_360_cycles/{cycleId}` — Survey window
+**PK:** auto-id or `{principalUid}_{academicYear}_{window}` (W17 / W38).
+**Fields:** `principalUid →users.uid`, `schoolId →partner_schools.id`, `academicYear`, `window` (`'W17'`/`'W38'`/`'mid_year'`/`'end_year'`), `status` (`'planned'`/`'open'`/`'closed'`), `openedAt?`, `closedAt?`, `eligibleCohorts[]` (`['staff','parent','student']`), `inviteToken?` (random — used in survey link), `createdAt`.
+**FKs:** `users.uid`, `partner_schools.id`.
+**Writers:** `central_admin` only (cycle launch is governed).
+**Read scope:** any signed-in user (so respondents can verify cycle is open).
+**Notes:** Source framework: `docs/cross-module/principal-360-framework-v1.json`. NN5: status='open' is the only state in which `principal_360_responses` accepts new docs (rule reads cycles to gate respond writes).
+
+#### `principal_360_responses/{respId}` — Anonymous individual response
+**PK:** auto-id.
+**Fields:** `cycleId →principal_360_cycles.id`, `principalUid →users.uid` (denormalised for queries), `schoolId →partner_schools.id`, `cohort` (`'staff'`/`'parent'`/`'student'`), `responses{questionId: 0-4}`, `narratives{nfId: string}`, `submittedAt`. **Notably absent:** any field identifying the respondent.
+**FKs:** `principal_360_cycles.id`, `users.uid`, `partner_schools.id`.
+**Writers:** any signed-in user (create only). No update/delete except admin.
+**Read scope:** **`central_admin` only** (forensic). `list` is rule-blocked — even admin lists go through aggregator. Charter NN5.
+**Notes:** No respondent uid persisted. Idempotency hint via client-side `localStorage[360responded:cycleId:uid]` — Cloud Function-side dedup TBD. Cloud Function `aggregatePrincipal360Responses` (planned) reads this collection on every write and updates the corresponding `principal_360_aggregates` doc.
+
+#### `principal_360_aggregates/{cycleId}` — Computed summary
+**PK:** same as cycleId (`{principalUid}_{academicYear}_{window}`).
+**Fields:** `cycleId`, `principalUid →users.uid`, `schoolId →partner_schools.id`, `cohortStats{cohortId: { respondentCount, perFocusMean{P1..P8: 0-4}, narrativesCount }}`, `composite{F3_360_score: 0-4}` (weighted across cohorts per framework), `aboveThreshold{cohortId: bool}` (true iff respondentCount >= min_respondents_to_report), `lastAggregatedAt`.
+**FKs:** `users.uid`, `partner_schools.id`.
+**Writers:** Cloud Function only.
+**Read scope:** principal (own); same-school AH leadership; `central_admin`. NEVER exposed when below threshold.
+**Notes:** This is the only collection a human reads for 360 results. NN5 enforced: `aboveThreshold[c] === false` → cohort hidden in UI.
+
+---
+
+### 18. Careers + Interview Module (2026-05-04)
 
 Public teacher recruitment + structured interview scoring. Lives in Teachers Hub `/careers` (public) and `/careers-admin` + `/interview-scorecard` (auth'd). Backed by 6 Firestore collections + 1 mail-extension queue. Two new `th_sub_roles` values: `interviewer` and `hiring_manager`.
 
