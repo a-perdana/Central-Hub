@@ -1,0 +1,291 @@
+{
+  "$schema": "eduversal-firestore-schema-v1",
+  "domain": "induction",
+  "version": "1.0",
+  "publishedOn": "2026-05-04",
+  "purpose": "Schema specification for the 6 Firestore collections that implement the Eduversal Induction module. This JSON is consumed by lint:firestore, by FIRESTORE_SCHEMA.md generation, and by future seed and migration scripts. Edit alongside Central Hub/firestore.rules and docs/FIRESTORE_SCHEMA.md.",
+  "linkedDocuments": [
+    "docs/induction/INDUCTION_CHARTER.json",
+    "docs/induction/handbook-subject-teacher-v2.json",
+    "docs/induction/handbook-principal-v1.json",
+    "docs/induction/handbook-specialist-v1.json"
+  ],
+  "collections": [
+    {
+      "name": "induction_programs",
+      "summary": "Handbook templates. One doc per role-version (subject_teacher, principal, specialist).",
+      "pk": "stable slug — programId (e.g. 'handbook_subject_teacher_v2', 'eduversal_principal_v1', 'eduversal_specialist_v1')",
+      "fields": [
+        {"name": "handbookId", "type": "string", "notes": "matches doc id"},
+        {"name": "version", "type": "string", "example": "2.0"},
+        {"name": "targetRole", "type": "enum", "values": ["subject_teacher", "school_principal", "subject_specialist"]},
+        {"name": "audience", "type": "object", "subFields": ["platform", "role", "subRole"]},
+        {"name": "duration", "type": "object"},
+        {"name": "stages", "type": "array<stageObject>", "notes": "see handbook JSON for stage shape"},
+        {"name": "linkedFrameworks", "type": "object", "notes": "Cambridge / Permendiknas references"},
+        {"name": "openItems", "type": "array<string>"},
+        {"name": "createdAt", "type": "Timestamp"},
+        {"name": "updatedAt", "type": "Timestamp"}
+      ],
+      "fks": [],
+      "writers": "central_admin only (write); seed script seed-induction-programs.js writes initial 3 docs from handbook JSON files",
+      "readScope": {
+        "get": "any authorised user (mentees and mentors need to read their program)",
+        "list": "central_admin"
+      },
+      "indexes": [],
+      "notes": "Source of truth is the JSON in docs/induction/. Firestore docs are populated by the seed script. Hand-edits in Firestore that diverge from the JSON are reverted on next seed run."
+    },
+    {
+      "name": "induction_assignments",
+      "summary": "One doc per induction'd user. Names the three required parties (mentee, mentor, school leader) and the program.",
+      "pk": "uid (mentee's user uid)",
+      "fields": [
+        {"name": "uid", "type": "string", "fk": "users.uid", "notes": "mentee's uid; matches doc id"},
+        {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
+        {"name": "hireDate", "type": "Timestamp", "notes": "anchor date for all stage day computations"},
+        {"name": "mentorUid", "type": "string", "fk": "users.uid", "notes": "must hold active Mentor Certification (rule-checked)"},
+        {"name": "schoolLeaderUid", "type": "string", "fk": "users.uid", "notes": "for principal induction this is the Foundation Rep; for specialist induction this is the HQ Director"},
+        {"name": "schoolId", "type": "string", "fk": "partner_schools.id", "notes": "specialist induction uses 'eduversal_hq'"},
+        {"name": "status", "type": "enum", "values": ["pre_arrival", "active", "paused", "completed", "extended", "withdrew"]},
+        {"name": "currentStageId", "type": "string", "notes": "denormalised, computed from hireDate + program stages"},
+        {"name": "createdAt", "type": "Timestamp"},
+        {"name": "startedAt", "type": "Timestamp", "notes": "set when status moves to 'active'"},
+        {"name": "completedAt", "type": "Timestamp", "optional": true},
+        {"name": "agreementSignedByMentor", "type": "Timestamp", "optional": true},
+        {"name": "agreementSignedByMentee", "type": "Timestamp", "optional": true},
+        {"name": "extensionGrantedBy", "type": "string", "optional": true, "fk": "users.uid"},
+        {"name": "extensionEndDate", "type": "Timestamp", "optional": true}
+      ],
+      "fks": ["users.uid", "induction_programs.handbookId", "partner_schools.id"],
+      "writers": "central_admin (create / update status); rule enforces (a) mentor has active certification, (b) all three uids present at create, (c) status transitions follow allowed graph",
+      "readScope": {
+        "get": "owner (mentee) / mentorUid / schoolLeaderUid / central_admin",
+        "list": "central_admin only"
+      },
+      "indexes": [
+        {"fields": ["schoolId", "status"], "purpose": "school-leader team-induction view"},
+        {"fields": ["mentorUid", "status"], "purpose": "mentor my-mentees view"},
+        {"fields": ["status", "hireDate"], "purpose": "HQ cohort-completion dashboard"}
+      ],
+      "notes": "Unique on uid (one active induction per user). Charter Non-Negotiable 4: cannot create with any of mentee/mentor/schoolLeader missing."
+    },
+    {
+      "name": "induction_progress",
+      "summary": "One doc per (mentee, task). Task completion state.",
+      "pk": "composite — {uid}_{taskId}",
+      "fields": [
+        {"name": "uid", "type": "string", "fk": "users.uid", "notes": "mentee's uid"},
+        {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
+        {"name": "stageId", "type": "string", "notes": "from program stages array"},
+        {"name": "taskId", "type": "string", "notes": "from program task array; appears in doc id"},
+        {"name": "completedAt", "type": "Timestamp", "optional": true},
+        {"name": "completedBy", "type": "string", "optional": true, "fk": "users.uid", "notes": "may differ from uid for tasks owned by mentor or school leader"},
+        {"name": "mentorSignedOffAt", "type": "Timestamp", "optional": true},
+        {"name": "mentorUid", "type": "string", "optional": true, "fk": "users.uid"},
+        {"name": "schoolLeaderSignedOffAt", "type": "Timestamp", "optional": true},
+        {"name": "schoolLeaderUid", "type": "string", "optional": true, "fk": "users.uid"},
+        {"name": "reflectionHtml", "type": "string", "optional": true, "notes": "sanitised HTML, allowlist: P/BR/STRONG/EM/UL/OL/LI/H3/H4"},
+        {"name": "evidenceUrl", "type": "string", "optional": true, "notes": "Firebase Storage path, see storagePathPattern"},
+        {"name": "evidenceFileName", "type": "string", "optional": true},
+        {"name": "createdAt", "type": "Timestamp"},
+        {"name": "updatedAt", "type": "Timestamp"}
+      ],
+      "fks": ["users.uid", "induction_programs.handbookId"],
+      "writers": "owner (mentee) for self-owned tasks; mentor for mentor-owned tasks; school leader for school-leader-owned tasks; rule checks the task's ownerRole in the program doc against requester's relationship to the assignment",
+      "readScope": {
+        "get": "owner / mentor / schoolLeader / central_admin",
+        "list": "central_admin (cohort completion); mentor for own mentees only (uid where induction_assignments.mentorUid == request.auth.uid); school leader for own school"
+      },
+      "indexes": [
+        {"fields": ["uid", "stageId"], "purpose": "mentee my-induction view by stage"},
+        {"fields": ["programId", "stageId"], "purpose": "HQ stage-completion analytics"}
+      ],
+      "storagePathPattern": "induction_evidence/{uid}/{taskId}/{timestamp}_{filename}",
+      "storageMaxBytes": 26214400,
+      "notes": "Doc only created when task is acted on; absence = not yet started. 'completed' = completedAt set. 'mentor-signed-off' = mentorSignedOffAt set (only if program task has mentorSignOffRequired = true)."
+    },
+    {
+      "name": "induction_observations",
+      "summary": "Structured monthly observation records (Stage 3 cycle for subject teachers; specialist walkthroughs in Stage 2 for specialists). Q4 formal evaluation also written here with type='formal_evaluation'.",
+      "pk": "auto-id",
+      "fields": [
+        {"name": "menteeUid", "type": "string", "fk": "users.uid"},
+        {"name": "observerUid", "type": "string", "fk": "users.uid"},
+        {"name": "observerRole", "type": "enum", "values": ["mentor", "school_leader", "specialist", "specialist_mentor"]},
+        {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
+        {"name": "stageId", "type": "string"},
+        {"name": "observationType", "type": "enum", "values": ["co_teach", "mentor_observes_mentee", "mentee_observes_mentor", "mentee_observes_other_teacher", "formal_evaluation", "specialist_walkthrough"]},
+        {"name": "observationNumber", "type": "number", "notes": "month-of-induction for teacher cycle (2-9), or walkthrough number 1-10 for specialist cycle"},
+        {"name": "observationDate", "type": "Timestamp"},
+        {"name": "preObservationFocus", "type": "string", "notes": "agreed in pre-conference"},
+        {"name": "scored", "type": "boolean", "notes": "co-teach and mentee-observes types are unscored"},
+        {"name": "domainScores", "type": "object", "subFields": ["planning", "management", "instruction", "assessment"], "valueRange": "1-4 (Unsatisfactory / Basic / Proficient / Distinguished)", "optional": "required iff scored=true"},
+        {"name": "overallRubricLevel", "type": "enum", "values": ["unsatisfactory", "basic", "proficient", "distinguished"], "optional": true},
+        {"name": "narrativeGlow", "type": "string"},
+        {"name": "narrativeGrow", "type": "string"},
+        {"name": "narrativeGo", "type": "string"},
+        {"name": "actionPlan", "type": "string"},
+        {"name": "menteeReflection", "type": "string", "optional": true, "notes": "written by mentee after the observation"},
+        {"name": "createdAt", "type": "Timestamp"},
+        {"name": "updatedAt", "type": "Timestamp"},
+        {"name": "completedAt", "type": "Timestamp", "optional": true, "notes": "set when observer marks the write-up as final; expected within 7 days of observationDate per Charter"}
+      ],
+      "fks": ["users.uid", "induction_programs.handbookId"],
+      "writers": "observerUid only (create + update until completedAt set)",
+      "readScope": {
+        "get": "menteeUid / observerUid / mentorUid (from induction_assignments) / schoolLeaderUid (from induction_assignments) / central_admin",
+        "list": "central_admin; menteeUid for own observations; observerUid for own-authored"
+      },
+      "indexes": [
+        {"fields": ["menteeUid", "observationDate"], "purpose": "mentee history view"},
+        {"fields": ["observerUid", "observationDate"], "purpose": "mentor / school-leader own observations"},
+        {"fields": ["programId", "observationType", "completedAt"], "purpose": "HQ cycle completion telemetry"}
+      ],
+      "notes": "Charter Non-Negotiable 1: this collection NEVER feeds teacher_appraisal_results. There is no automatic propagation. Year-1 mentee data is induction-scope only."
+    },
+    {
+      "name": "induction_journal",
+      "summary": "Mentee's private reflections — daily/weekly/per-task. Most-protected collection.",
+      "pk": "composite — {uid}_{date}_{slot} where slot is 'morning'|'evening'|'weekly'|'taskId-XXX'",
+      "fields": [
+        {"name": "uid", "type": "string", "fk": "users.uid", "notes": "mentee's uid"},
+        {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
+        {"name": "stageId", "type": "string"},
+        {"name": "entryType", "type": "enum", "values": ["daily_3_sentence", "weekly_micro_reflection", "monthly_conference_prep", "task_reflection", "stage_end_reflection"]},
+        {"name": "entryDate", "type": "Timestamp"},
+        {"name": "promptSet", "type": "string", "notes": "which prompt template was used (e.g. 'survival_three_sentence_v1')"},
+        {"name": "responses", "type": "object", "notes": "keyed by prompt key from promptSet"},
+        {"name": "visibility", "type": "enum", "values": ["mentee_only", "mentee_and_mentor", "mentee_mentor_school_leader"], "default": "mentee_and_mentor"},
+        {"name": "createdAt", "type": "Timestamp"},
+        {"name": "updatedAt", "type": "Timestamp"}
+      ],
+      "fks": ["users.uid", "induction_programs.handbookId"],
+      "writers": "owner (mentee) only",
+      "readScope": {
+        "get": "owner always; mentor if visibility >= mentee_and_mentor; schoolLeader if visibility == mentee_mentor_school_leader; central_admin NEVER on named entries (rule blocks)",
+        "list": "owner only; mentor for own mentees with visibility >= mentee_and_mentor; central_admin NEVER (rule blocks even for HQ)"
+      },
+      "indexes": [
+        {"fields": ["uid", "entryDate"], "purpose": "mentee timeline view"}
+      ],
+      "notes": "Charter Non-Negotiable 2: HQ never reads named journal entries. Aggregate analysis (e.g. 'how many mentees wrote a journal entry this week') uses Cloud Function aggregation that strips uid before write to a separate induction_journal_aggregates collection (see below)."
+    },
+    {
+      "name": "induction_pulses",
+      "summary": "Weekly 1-question pulse responses. Anonymised at school level for HQ.",
+      "pk": "composite — {uid}_{isoWeekStart}",
+      "fields": [
+        {"name": "uid", "type": "string", "fk": "users.uid"},
+        {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
+        {"name": "schoolId", "type": "string", "fk": "partner_schools.id"},
+        {"name": "stageId", "type": "string"},
+        {"name": "weekStartDate", "type": "Timestamp"},
+        {"name": "score", "type": "number", "valueRange": "1 (very hard) - 5 (very good)"},
+        {"name": "comment", "type": "string", "optional": true, "notes": "freeform, optional"},
+        {"name": "createdAt", "type": "Timestamp"}
+      ],
+      "fks": ["users.uid", "induction_programs.handbookId", "partner_schools.id"],
+      "writers": "owner (mentee) only",
+      "readScope": {
+        "get": "owner / mentor / schoolLeader",
+        "list": "owner only; mentor for own mentees; schoolLeader for own school; central_admin reads aggregated view only (rule routes named queries through Cloud Function that anonymises)"
+      },
+      "indexes": [
+        {"fields": ["uid", "weekStartDate"], "purpose": "mentee history"},
+        {"fields": ["schoolId", "weekStartDate"], "purpose": "school-leader school pulse roll-up"}
+      ],
+      "notes": "Two-consecutive-low-score alarm: a Cloud Function watches creates and on second-consecutive score <= 2 sends notification to mentorUid + schoolLeaderUid (from induction_assignments). Mentee is informed in advance that this alarm exists. Charter Principle 5."
+    },
+    {
+      "name": "mentor_certifications",
+      "summary": "Mentor Certification ledger. A user is eligible to be assigned as mentor only if active=true and validUntil is in the future.",
+      "pk": "composite — {uid}_{certificationType}",
+      "fields": [
+        {"name": "uid", "type": "string", "fk": "users.uid"},
+        {"name": "certificationType", "type": "enum", "values": ["mentor_base", "principal_mentor_endorsement", "specialist_mentor_endorsement"]},
+        {"name": "issuedAt", "type": "Timestamp"},
+        {"name": "validUntil", "type": "Timestamp", "notes": "issuedAt + 24 months"},
+        {"name": "active", "type": "boolean", "notes": "false if revoked or expired (cron job updates this)"},
+        {"name": "issuedBy", "type": "string", "fk": "users.uid", "notes": "central_admin uid"},
+        {"name": "completionEvidence", "type": "object", "notes": "module completion record (date, score, notes)"},
+        {"name": "createdAt", "type": "Timestamp"},
+        {"name": "updatedAt", "type": "Timestamp"}
+      ],
+      "fks": ["users.uid"],
+      "writers": "central_admin only",
+      "readScope": {
+        "get": "owner; central_admin; school leader (to verify mentor candidates in their school); HQ Director (to verify principal/specialist mentor candidates)",
+        "list": "central_admin; school leader for same-school candidates"
+      },
+      "indexes": [
+        {"fields": ["uid", "active"], "purpose": "fast 'is this user a certified mentor' check at assignment time"},
+        {"fields": ["validUntil", "active"], "purpose": "expiry sweeper cron"}
+      ],
+      "notes": "Charter Non-Negotiable 3: assignment rule reads this collection at induction_assignments create time."
+    },
+    {
+      "name": "induction_journal_aggregates",
+      "summary": "Cloud-Function-maintained anonymous aggregates for HQ telemetry. Strictly no uid present.",
+      "pk": "composite — {programId}_{stageId}_{isoWeek}",
+      "fields": [
+        {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
+        {"name": "stageId", "type": "string"},
+        {"name": "isoWeek", "type": "string"},
+        {"name": "totalMentees", "type": "number"},
+        {"name": "menteesWithJournalEntryThisWeek", "type": "number"},
+        {"name": "averageEntriesPerMentee", "type": "number"},
+        {"name": "updatedAt", "type": "Timestamp"}
+      ],
+      "fks": ["induction_programs.handbookId"],
+      "writers": "Cloud Function only (no client write)",
+      "readScope": {
+        "get": "any authorised user (HQ telemetry — no PII)",
+        "list": "central_admin"
+      },
+      "indexes": [
+        {"fields": ["programId", "isoWeek"], "purpose": "HQ dashboard"}
+      ],
+      "notes": "Aggregator that satisfies HQ analytics needs without violating Charter Non-Negotiable 2."
+    }
+  ],
+  "additionalUserFields": [
+    {
+      "field": "users.induction_status",
+      "type": "enum",
+      "values": ["pre_arrival", "first_week", "foundation", "mastery_building", "integration", "listen", "diagnose", "act", "anchor", "network_sense_making", "coaching_apprenticeship", "solo_practice", "strategic_contribution", "completed", null],
+      "notes": "Stage label per role. Null when user has no active induction. Denormalised; the canonical state is induction_assignments.status + currentStageId."
+    },
+    {
+      "field": "users.is_certified_mentor",
+      "type": "boolean",
+      "notes": "Denormalised mirror of mentor_certifications.active. Set by Cloud Function on certification create / expire / revoke. Used by UI to filter mentor pickers."
+    }
+  ],
+  "rolesUsedByRules": {
+    "isMentorOf(menteeUid)": "request.auth.uid == get(/databases/$(database)/documents/induction_assignments/$(menteeUid)).data.mentorUid",
+    "isSchoolLeaderOf(menteeUid)": "request.auth.uid == get(/databases/$(database)/documents/induction_assignments/$(menteeUid)).data.schoolLeaderUid",
+    "hasActiveMentorCertification(uid)": "exists(/databases/$(database)/documents/mentor_certifications/$(uid + '_mentor_base')) && get(/databases/$(database)/documents/mentor_certifications/$(uid + '_mentor_base')).data.active == true",
+    "isCentralAdmin()": "(existing helper, reused)",
+    "isAHUserAtSameSchool(menteeUid)": "(existing helper, reused for school-leader same-school checks)"
+  },
+  "stateMachine": {
+    "induction_assignments.status": {
+      "transitions": [
+        {"from": "pre_arrival", "to": "active", "trigger": "mentee day 1 sign of agreement", "actor": "mentee"},
+        {"from": "active", "to": "paused", "trigger": "extended absence", "actor": "central_admin"},
+        {"from": "paused", "to": "active", "trigger": "return", "actor": "central_admin"},
+        {"from": "active", "to": "completed", "trigger": "stage 4 final task signed off", "actor": "schoolLeader (teacher) / hqDirector (specialist) / hqInductionCoordinator (principal)"},
+        {"from": "active", "to": "extended", "trigger": "joint mentor + school-leader recommendation", "actor": "central_admin"},
+        {"from": "extended", "to": "completed", "trigger": "extension stage final task signed off", "actor": "schoolLeader / hqDirector / hqInductionCoordinator"},
+        {"from": "active|paused|extended", "to": "withdrew", "trigger": "mentee leaves Eduversal", "actor": "central_admin"}
+      ]
+    }
+  },
+  "openItems": [
+    "Cloud Function for two-consecutive-low-pulse alarm (Phase 1 follow-up).",
+    "Cloud Function for induction_journal_aggregates maintenance (Phase 1 follow-up).",
+    "Cron job for mentor_certifications expiry sweeping (Phase 1 follow-up).",
+    "Decide whether induction_observations should propagate any anonymised signal to network_health.html dashboards (Charter Principle 3 says no individual data; aggregate trends allowed)."
+  ]
+}

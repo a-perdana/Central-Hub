@@ -417,17 +417,33 @@ fs.mkdirSync(refDestRoot, { recursive: true });
 // Map: [destRelativePath, sourceAbsolutePath]
 const refAssetMap = [
   // ── Cross-Module Audits ─────────────────────────────────────
-  ["audits/INDEX.md",                                      path.join("..", "docs", "cross-module", "INDEX.md")],
-  ["audits/specialist-content-depth-audit.md",             path.join("..", "docs", "cross-module", "specialist-content-depth-audit.md")],
+  ["audits/INDEX.md",                                         path.join("..", "docs", "cross-module", "INDEX.md")],
+  ["audits/specialist-content-depth-audit.md",                path.join("..", "docs", "cross-module", "specialist-content-depth-audit.md")],
   ["audits/school-appraisal-x-principal-rubric-mapping.json", path.join("..", "docs", "cross-module", "school-appraisal-x-principal-rubric-mapping.json")],
-  ["audits/principal-360-framework-v1.json",               path.join("..", "docs", "cross-module", "principal-360-framework-v1.json")],
-  ["audits/principal-coaching-framework-v1.json",          path.join("..", "docs", "cross-module", "principal-coaching-framework-v1.json")],
+  ["audits/principal-360-framework-v1.json",                  path.join("..", "docs", "cross-module", "principal-360-framework-v1.json")],
+  ["audits/principal-coaching-framework-v1.json",             path.join("..", "docs", "cross-module", "principal-coaching-framework-v1.json")],
+  // Provenance / hand-author backfills — preserved as an audit trail
+  // for the May 2026 content-quality sweep. Source-of-truth is now in
+  // Firestore; these JSONs are the hand-authored set the seeders read.
+  ["audits/competency-content-backfill-v1.json",              path.join("..", "docs", "competency", "competency-content-backfill-v1.json")],
+  ["audits/specialist-content-backfill-v1.json",              path.join("..", "docs", "competency", "specialist-content-backfill-v1.json")],
+  ["audits/specialist-content-backfill-v1-part2.json",        path.join("..", "docs", "competency", "specialist-content-backfill-v1-part2.json")],
+  ["audits/specialist-content-polish-v1.json",                path.join("..", "docs", "competency", "specialist-content-polish-v1.json")],
+  // Heyet board proposal — early Round 1 deliverable, archived but
+  // kept reachable for executive context.
+  ["audits/HEYET-PROPOSAL.md",                                path.join("..", "docs", "principal-development", "HEYET-PROPOSAL.md")],
 
   // ── Frameworks ──────────────────────────────────────────────
   // Appraisal v2 + Principal Appraisal v1 — read from AH/CH resources
   // which are kept byte-identical with TH copies via tag scripts.
   ["frameworks/appraisal-framework-v2.json",               path.join("..", "Academic Hub", "resources", "appraisal-framework-v2.json")],
   ["frameworks/principal-appraisal-framework-v1.json",     path.join("..", "Academic Hub", "resources", "principal-appraisal-framework-v1.json")],
+  ["frameworks/principal-observation-rubric.json",         path.join("..", "Academic Hub", "resources", "principal-observation-rubric.json")],
+  ["frameworks/principal-operating-cadence.json",          path.join("..", "Academic Hub", "resources", "principal-operating-cadence.json")],
+  ["frameworks/school-appraisal-framework.json",           path.join("..", "Academic Hub", "resources", "school-appraisal-framework.json")],
+  ["frameworks/appraisal-levels.json",                     path.join("..", "Academic Hub", "resources", "appraisal-levels.json")],
+  ["frameworks/walkthrough-rubric.json",                   path.join("..", "Academic Hub", "resources", "walkthrough-rubric.json")],
+  ["frameworks/coaching-questions.json",                   path.join("..", "Academic Hub", "resources", "coaching-questions.json")],
   ["frameworks/teaching-competency-framework.json",        path.join("resources", "teaching-competency-framework.json")],
   ["frameworks/leadership-competency-framework.json",      path.join("resources", "leadership-competency-framework.json")],
   ["frameworks/teacher-kpi-extensions-v1.json",            path.join("..", "docs", "kpi", "teacher-kpi-extensions-v1.json")],
@@ -457,11 +473,16 @@ const refAssetMap = [
   ["permendiknas/no-16-2007.json",      path.join("..", "docs", "research", "permendiknas", "no-16-2007.json")],
 
   // ── Schemas & Governance ────────────────────────────────────
-  ["schemas/FIRESTORE_SCHEMA.md",        path.join("..", "docs", "FIRESTORE_SCHEMA.md")],
-  ["schemas/DESIGN_SYSTEM.md",           path.join("..", "docs", "DESIGN_SYSTEM.md")],
-  ["schemas/CONTRIBUTING-FIRESTORE.md",  path.join("..", "docs", "CONTRIBUTING-FIRESTORE.md")],
-  ["schemas/db-diagram.md",              path.join("..", "docs", "db-diagram.md")],
-  ["schemas/INDUCTION_CHARTER.md",       path.join("..", "docs", "induction", "INDUCTION_CHARTER.md")],
+  ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "FIRESTORE_SCHEMA.md")],
+  ["schemas/DESIGN_SYSTEM.md",                     path.join("..", "docs", "DESIGN_SYSTEM.md")],
+  ["schemas/CONTRIBUTING-FIRESTORE.md",            path.join("..", "docs", "CONTRIBUTING-FIRESTORE.md")],
+  ["schemas/db-diagram.md",                        path.join("..", "docs", "db-diagram.md")],
+  ["schemas/INDUCTION_CHARTER.md",                 path.join("..", "docs", "induction", "INDUCTION_CHARTER.md")],
+  ["schemas/INDUCTION_CHARTER.json",               path.join("..", "docs", "induction", "INDUCTION_CHARTER.json")],
+  ["schemas/induction-firestore-schema.json",     path.join("..", "docs", "induction", "firestore-schema.json")],
+  ["schemas/MENTOR_CERTIFICATION_CURRICULUM.md",   path.join("..", "docs", "induction", "MENTOR_CERTIFICATION_CURRICULUM.md")],
+  ["schemas/SIGNIFICANT_CONCERN_POLICY.md",        path.join("..", "docs", "induction", "SIGNIFICANT_CONCERN_POLICY.md")],
+  ["schemas/weekly-checklists-SCHEMA.md",          path.join("..", "docs", "weekly-checklists", "SCHEMA.md")],
 ];
 
 let refCopied = 0, refMissing = 0;
