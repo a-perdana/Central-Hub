@@ -169,6 +169,35 @@
 
     /* JSON pretty-render */
     .json-render { background: #0f172a; color: #e2e8f0; padding: 16px 20px; border-radius: 10px; font-family: 'DM Mono', monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+    /* Cross-ref chips inside JSON viewer — clickable inline tokens for CTS / SKL / PIGP refs */
+    .json-render .task-chip.cts {
+      display: inline-block; padding: 0 6px; margin: 0 1px; border-radius: 4px;
+      background: rgba(167,139,250,0.22); color: #ddd6fe; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .json-render .task-chip.cts:hover { background: rgba(167,139,250,0.42); }
+    .json-render .hb-tag.skl, .json-render .hb-tag.pigp {
+      display: inline-block; padding: 0 6px; margin: 0 1px; border-radius: 4px;
+      cursor: pointer; font-weight: 600; transition: background 0.15s;
+    }
+    .json-render .hb-tag.skl  { background: rgba(110,231,183,0.22); color: #6ee7b7; }
+    .json-render .hb-tag.pigp { background: rgba(252,165,165,0.22); color: #fca5a5; }
+    .json-render .hb-tag.skl:hover  { background: rgba(110,231,183,0.42); }
+    .json-render .hb-tag.pigp:hover { background: rgba(252,165,165,0.42); }
+    /* MD render — same idea for prose-style audit docs */
+    .md-render .task-chip.cts {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      background: #ede9fe; color: #4c1d95; font-weight: 600;
+      font-family: 'DM Mono', monospace; font-size: 12px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .md-render .task-chip.cts:hover { background: #ddd6fe; }
+    .md-render .hb-tag.skl, .md-render .hb-tag.pigp {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      cursor: pointer; font-weight: 600; font-family: 'DM Mono', monospace; font-size: 12px;
+    }
+    .md-render .hb-tag.skl  { background: #d1fae5; color: #065f46; }
+    .md-render .hb-tag.pigp { background: #fee2e2; color: #991b1b; }
 
     /* Loading + error states */
     .doc-loading { text-align: center; padding: 60px 20px; color: var(--ink-3); font-size: 13px; }
@@ -576,11 +605,11 @@
 
         if (kind === 'md') {
           const html = window.marked ? window.marked.parse(text) : `<pre>${escapeHtml(text)}</pre>`;
-          bodyEl.innerHTML = `<div class="md-render">${html}</div>`;
+          bodyEl.innerHTML = `<div class="md-render">${injectCrossrefChips(html)}</div>`;
         } else if (kind === 'json') {
           let pretty = text;
           try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch(_) {}
-          bodyEl.innerHTML = `<pre class="json-render">${escapeHtml(pretty)}</pre>`;
+          bodyEl.innerHTML = `<pre class="json-render">${injectCrossrefChips(escapeHtml(pretty))}</pre>`;
         } else {
           bodyEl.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
         }
@@ -592,6 +621,27 @@
 
     function closeDoc() {
       document.getElementById('docModalOverlay').classList.remove('open');
+    }
+
+    /* Post-process rendered HTML and convert inline Cambridge / Permendiknas
+       references into chip elements that cambridge-crossref.js auto-wires.
+       Operates on already-escaped HTML so we never re-introduce unsafe markup —
+       all replaced tokens are static literals.
+
+       Patterns:
+         CTS X.Y                              → <span class="task-chip cts" title="Cambridge Teacher Standards CTS X.Y">CTS X.Y</span>
+         PIGP pasal-N / PIGP lampiran-…       → <span class="hb-tag pigp">PIGP …</span>
+         SKL: kewargaan (etc)                 → <span class="hb-tag skl">SKL: …</span>
+    */
+    function injectCrossrefChips(html) {
+      let out = html;
+      // CTS X.Y — only when not already inside an anchor or class chip
+      out = out.replace(/\bCTS\s+(\d+\.\d+)\b/g, (m, n) => `<span class="task-chip cts" title="Cambridge Teacher Standards CTS ${n}">CTS ${n}</span>`);
+      // PIGP pasal-N / PIGP lampiran-X
+      out = out.replace(/\bPIGP\s+((?:pasal|lampiran)-[A-Za-z0-9-]+)/gi, (m, n) => `<span class="hb-tag pigp">PIGP ${n}</span>`);
+      // SKL: dimension_id
+      out = out.replace(/\bSKL[:\s]+([a-z_]+)\b/gi, (m, n) => `<span class="hb-tag skl">SKL: ${n}</span>`);
+      return out;
     }
 
     function escapeHtml(s) {
