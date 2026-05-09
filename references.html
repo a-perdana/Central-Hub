@@ -842,10 +842,13 @@
         central_user: 'HQ User',
       })[role] || role.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+      // Empty role rail is silently dropped — central_user with no
+      // sub-roles shouldn't see a "For your role · No items match" stripe;
+      // the binding + forward rails alone communicate the page's purpose.
       host.innerHTML = `
         ${roleHits.length ? renderRail('role', `For your role`, roleLabel, roleHits) : ''}
-        ${renderRail('binding', `Charter & Binding`, `${bindingHits.length} non-negotiable docs`, bindingHits)}
-        ${renderRail('forward', `Phase-2 Forward`, `${forwardHits.length} draft frameworks`, forwardHits)}
+        ${bindingHits.length ? renderRail('binding', `Charter & Binding`, `${bindingHits.length} non-negotiable docs`, bindingHits) : ''}
+        ${forwardHits.length ? renderRail('forward', `Phase-2 Forward`, `${forwardHits.length} draft frameworks`, forwardHits) : ''}
       `;
 
       host.querySelectorAll('.ref-rail-card').forEach(el => {
@@ -857,14 +860,9 @@
     }
 
     function renderRail(variant, title, sub, items) {
-      if (!items.length) return `
-        <section class="ref-rail-section">
-          <div class="ref-rail-head">
-            <span class="ref-rail-title"><span class="dot ${variant}"></span>${escapeHtml(title)}</span>
-            <span class="ref-rail-sub">${escapeHtml(sub)}</span>
-          </div>
-          <div class="ref-rail-empty">No items match this rail right now.</div>
-        </section>`;
+      // Empty rails are dropped at the call-site (renderRails) — guard here
+      // anyway so a future caller can't surface a "No items match" strip.
+      if (!items.length) return '';
       const cards = items.map(it => {
         const tag = (it.meta || []).find(m => /binding|forward|live|authoritative/.test(m)) || it._cat;
         return `
