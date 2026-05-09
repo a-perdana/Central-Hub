@@ -3317,7 +3317,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
-  import { collection, getDocs, updateDoc, deleteDoc, doc as fsDoc, query, where, orderBy }
+  import { collection, getDoc, getDocs, updateDoc, deleteDoc, doc as fsDoc, query, where, orderBy }
     from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
   let db;
@@ -3914,6 +3914,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; btn.textContent = 'Saving…';
+    const prevTH = allUsers.find(x => x.id === editingId)?.approval_status_teachershub;
     try {
       await updateDoc(fsDoc(db, 'users', editingId), {
         displayName,
@@ -3941,6 +3942,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         u.approval_status_academichub = approvalAH; u.ah_sub_roles = ahSubRoles;
         u.role_teachershub = roleTH; u.approval_status_teachershub = approvalTH;
         u.th_sub_roles = thSubRoles; u.role_researchhub = roleRH;
+      }
+      // Welcome email if TH approval just flipped to approved via the
+      // edit drawer (parallels setApprovalStatus). Fire-and-forget.
+      if (u && approvalTH === 'approved' && prevTH !== 'approved') {
+        notifyApprovedTHUser(u).catch(err => console.warn('Approval email failed:', err));
       }
       closeDrawer();
       applyFilters();
@@ -4006,15 +4012,117 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     toastTimer = setTimeout(() => toast.classList.remove('show'), 3500);
   }
 
+  // ── Welcome email on TH approval ────────────────────────────────
+  // Fire-and-forget POST to the Resend mail-service. Body comes from
+  // mail_templates/th_approved_welcome (admin-editable in /mail-composer
+  // → System Templates). Falls back to a built-in default if the doc
+  // has not been customised yet.
+  const TH_APPROVED_DEFAULT_SUBJECT =
+    'Welcome to Teachers Hub — your account is now active';
+  const TH_APPROVED_DEFAULT_BODY = `
+<p>Hi {{userName}},</p>
+<p>Good news — your <strong>Teachers Hub</strong> account has been approved and is ready to use. Welcome aboard!</p>
+<p>Teachers Hub is Eduversal's platform built to support you in your day-to-day curriculum delivery. Once you sign in you'll find:</p>
+<ul style="line-height:1.7;padding-left:22px;margin:14px 0">
+  <li><strong>Pacing guides</strong> — week-by-week plans for IGCSE, AS / A-Level and Checkpoint, aligned to the Cambridge syllabus.</li>
+  <li><strong>Schemes of work</strong> — teaching guides with learning objectives, common misconceptions and key vocabulary.</li>
+  <li><strong>Progression grids</strong> — see how each topic builds across Stages 7, 8 and 9.</li>
+  <li><strong>KPI &amp; Self-Appraisal</strong> — track your progress against the Cambridge Teacher Standards.</li>
+  <li><strong>Competency Framework</strong> — a 4-level CPD ladder with evidence portfolio and certificates.</li>
+</ul>
+<p style="margin-top:22px">
+  <a href="{{loginUrl}}" style="display:inline-block;background:linear-gradient(135deg,#6c5ce7 0%,#0891b2 100%);color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;box-shadow:0 4px 14px rgba(108,92,231,0.25)">Sign in to Teachers Hub &rarr;</a>
+</p>
+<p style="color:#64748b;font-size:13.5px;margin-top:28px;line-height:1.6">
+  We're at the tail end of Semester II — a perfect window to explore the Hub before next academic year begins. Spend 15&ndash;20 minutes clicking around, try the pacing tools for your subject, and please send us your honest feedback on what works, what is confusing and what is missing.
+</p>
+<p style="color:#64748b;font-size:13px;margin-top:16px">School on file: <strong>{{schoolName}}</strong>. If anything looks wrong, reply to this email and we'll fix it.</p>
+<p style="margin-top:22px">&mdash; The Eduversal Team</p>`.trim();
+
+  function _renderTpl(str, values) {
+    return String(str || '').replace(/\{\{(\w+)\}\}/g, (_, k) =>
+      Object.prototype.hasOwnProperty.call(values, k) ? String(values[k] ?? '') : '');
+  }
+
+  async function notifyApprovedTHUser(u) {
+    const url    = (window.ENV?.MAIL_SERVICE_URL || '').replace(/\/$/, '');
+    const secret = window.ENV?.MAIL_SERVICE_SECRET || '';
+    if (!url || !secret) {
+      console.info('[approve-mail] mail-service not configured — skipping');
+      return;
+    }
+    if (!u?.email) return;
+
+    let subject = TH_APPROVED_DEFAULT_SUBJECT;
+    let body    = TH_APPROVED_DEFAULT_BODY;
+    try {
+      const snap = await getDoc(fsDoc(db, 'mail_templates', 'th_approved_welcome'));
+      if (snap.exists()) {
+        const t = snap.data();
+        if (t.subject)  subject = t.subject;
+        if (t.bodyHtml) body    = t.bodyHtml;
+      }
+    } catch (e) {
+      console.info('[approve-mail] template fetch failed, using default:', e?.message);
+    }
+
+    const values = {
+      userName:   u.displayName || u.email.split('@')[0] || 'Teacher',
+      schoolName: u.school || '—',
+      loginUrl:   'https://teachershub.eduversal.org/login',
+    };
+
+    try {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(url + '/send-transactional', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + secret,
+        },
+        body: JSON.stringify({
+          toEmail:      u.email,
+          toName:       u.displayName || '',
+          subject:      _renderTpl(subject, values),
+          bodyHtml:     _renderTpl(body,    values),
+          templateName: 'default',
+          tags: [
+            { name: 'kind',     value: 'th-approved-welcome' },
+            { name: 'platform', value: 'teachershub' },
+          ],
+        }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.warn('[approve-mail] mail-service rejected:', res.status, data);
+      } else {
+        console.info('[approve-mail] welcome email queued for', u.email);
+      }
+    } catch (e) {
+      console.warn('[approve-mail] network error:', e?.message);
+    }
+  }
+
   async function setApprovalStatus(id, status, platform) {
     const field = platform === 'th' ? 'approval_status_teachershub' : 'approval_status_academichub';
+    const u    = allUsers.find(x => x.id === id);
+    const wasApproved = u?.[field] === 'approved';
     try {
       await updateDoc(fsDoc(db, 'users', id), { [field]: status });
-      const u = allUsers.find(x => x.id === id);
       if (u) u[field] = status;
       const name = u?.displayName || u?.email?.split('@')[0] || 'User';
       showToast(status, name, platform);
       applyFilters();
+
+      // Welcome email on TH approval transition. Fire-and-forget; do
+      // not block the toast/UI on mail success. Suppressed if the user
+      // was already approved (prevents repeats when admin re-saves).
+      if (platform === 'th' && status === 'approved' && !wasApproved && u) {
+        notifyApprovedTHUser(u).catch(err => console.warn('Approval email failed:', err));
+      }
     } catch (e) {
       // surface error in toast colour, not alert()
       const toast = document.getElementById('actionToast');
