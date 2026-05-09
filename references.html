@@ -695,6 +695,16 @@
       sInput.addEventListener('input', () => applySearch(sInput.value));
       sClear.addEventListener('click', () => { sInput.value = ''; applySearch(''); sInput.focus(); });
 
+      // Restore search/filter from URL.
+      //   ?q=anything   — free-text search restored verbatim
+      //   ?tag=NN3      — alias that drives the same search; use this in
+      //                   shared links for human-readable intent.
+      const initialQuery = params.get('q') || params.get('tag') || '';
+      if (initialQuery) {
+        sInput.value = initialQuery;
+        applySearch(initialQuery);
+      }
+
       // Tag click → drive search. Delegated at document level so the same
       // handler works for tags rendered inside grid cards AND any tags that
       // might later appear inside the doc viewer modal. A nested anchor
@@ -749,6 +759,17 @@
       const sClear = document.getElementById('refSearchClear');
       const sInfo  = document.getElementById('refSearchInfo');
       sClear.style.display = q ? '' : 'none';
+
+      // Reflect the active query in the URL so links can be shared.
+      // Use replaceState to avoid polluting the browser back-stack while
+      // the user is typing. Always normalise to ?q=, dropping any inbound
+      // ?tag= alias so a cleared search leaves a truly clean URL.
+      const url = new URL(window.location.href);
+      const trimmed = qRaw.trim();
+      url.searchParams.delete('tag');
+      if (trimmed) url.searchParams.set('q', trimmed);
+      else url.searchParams.delete('q');
+      window.history.replaceState({}, '', url);
 
       if (!q) {
         document.querySelectorAll('.ref-card.filtered-out').forEach(c => c.classList.remove('filtered-out'));
