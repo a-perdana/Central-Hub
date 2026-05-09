@@ -37,18 +37,31 @@ service cloud.firestore {
       return isEduversal() || isSchoolUser() || isEmailPasswordUser();
     }
 
-    // Helper: read the caller's Firestore profile
+    // Helper: caller's users/{uid} doc exists. Use this BEFORE userProfile()
+    // to avoid throwing on missing-doc reads (which would silently collapse
+    // every role check to false → "Missing or insufficient permissions").
+    function userProfileExists() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Helper: read the caller's Firestore profile.
+    // Callers must guard with userProfileExists() OR rely on the per-role
+    // helpers below (isAdmin, isTeachersUser, etc.) which already guard.
     function userProfile() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isAdmin() {
-      return isAuthorized() && userProfile().role_centralhub == 'central_admin';
+      return isAuthorized() && userProfileExists()
+             && userProfile().role_centralhub == 'central_admin';
     }
 
     function isCHCoordinator() {
-      return isAuthorized() &&
+      return isAuthorized() && userProfileExists() &&
              userProfile().role_centralhub == 'central_user' &&
+             ('ch_sub_roles' in userProfile()) &&
+             userProfile().ch_sub_roles is list &&
              userProfile().ch_sub_roles.hasAny(['coordinator']);
     }
 
@@ -61,7 +74,7 @@ service cloud.firestore {
     // instead). Pass an array (e.g. ['biology','chemistry','physics']
     // for combined-science pacing) to allow any matching specialist.
     function isCHSubjectSpecialist(subjects) {
-      return isAuthorized()
+      return isAuthorized() && userProfileExists()
              && (userProfile().role_centralhub == 'central_user'
                  || userProfile().role_centralhub == 'central_admin')
              && ('ch_subjects' in userProfile())
@@ -71,14 +84,14 @@ service cloud.firestore {
 
     // Academic Hub admin: central_admin or academic_admin can create/edit/delete AH content
     function isAHAdmin() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin'  ||
         userProfile().role_academichub == 'academic_admin'
       );
     }
 
     function isModerator() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin'  ||
         userProfile().role_academichub == 'academic_admin' ||
         userProfile().role_academichub == 'academic_user'
@@ -86,28 +99,28 @@ service cloud.firestore {
     }
 
     function isCentralUser() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub == 'central_admin' ||
         userProfile().role_centralhub == 'central_user'
       );
     }
 
     function isAcademicUser() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_academichub == 'academic_admin' ||
         userProfile().role_academichub == 'academic_user'
       );
     }
 
     function isTeachersUser() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_teachershub == 'teachers_admin' ||
         userProfile().role_teachershub == 'teachers_user'
       );
     }
 
     function isTHAdmin() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin' ||
         userProfile().role_teachershub == 'teachers_admin'
       );
@@ -533,7 +546,8 @@ service cloud.firestore {
 
     // Teachers Hub admin: teachers_admin role
     function isTeachersAdmin() {
-      return isAuthorized() && userProfile().role_teachershub == 'teachers_admin';
+      return isAuthorized() && userProfileExists() &&
+             userProfile().role_teachershub == 'teachers_admin';
     }
 
     // -- Cambridge syllabus reference data (all levels: IGCSE, AS/A-Level, Checkpoint) -----------------------
