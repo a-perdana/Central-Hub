@@ -993,9 +993,17 @@ service cloud.firestore {
 
     // -- mail_templates (Reusable newsletter templates) ------
     // Saved from mail-composer.html "Save as Template" action.
-    // central_admin only.
+    // - Freeform templates: central_admin read+write only.
+    // - System templates (kind:'system'): any signed-in authorized user
+    //   may read by ID — needed because auth-guard.js / Cloud Function
+    //   notification paths run as the new pending user, not as admin.
+    //   Listing the collection still requires admin (no `list` for
+    //   non-admins, since rules don't filter list reads by field).
     match /mail_templates/{templateId} {
-      allow read, write: if isAdmin();
+      allow get:    if isAdmin()
+                    || (isAuthorized() && resource.data.kind == 'system');
+      allow list:   if isAdmin();
+      allow write:  if isAdmin();
     }
 
     // -- competency_evidence (Teacher & Admin evidence submissions) --

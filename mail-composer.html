@@ -945,6 +945,17 @@
       </div>
     </div>
 
+    <!-- System Templates -->
+    <div class="card">
+      <p class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        System Templates <span style="font-size:.75rem;font-weight:400;color:var(--ink-3)">(automated notifications — body sent by the platform)</span>
+      </p>
+      <div id="sysTplList" class="tpl-list">
+        <div class="tpl-empty">Loading system templates…</div>
+      </div>
+    </div>
+
     <!-- Campaign History -->
     <div id="historySection">
       <p style="font-size:.95rem;font-weight:700;color:var(--ink);margin-bottom:14px">
@@ -1058,6 +1069,33 @@
     <div class="test-modal-footer">
       <button class="btn-cancel-sm" id="testCancel">Cancel</button>
       <button class="btn-send-sm"   id="testSend">Send Test</button>
+    </div>
+  </div>
+</div>
+
+<!-- System Template Edit Modal -->
+<div class="save-tpl-overlay" id="sysTplEditModal">
+  <div class="save-tpl-modal" style="max-width:760px;width:100%">
+    <h3 id="sysTplEditHeading">Edit System Template</h3>
+    <p id="sysTplEditDesc" style="font-size:.82rem;color:var(--ink-3);margin-bottom:14px;line-height:1.55">—</p>
+
+    <div class="form-group">
+      <label class="form-label" for="sysTplSubject">Subject</label>
+      <input class="form-input" type="text" id="sysTplSubject" placeholder="Email subject line" maxlength="180">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Body</label>
+      <div id="sysTplQuillEditor" style="background:#fff;min-height:240px"></div>
+      <div class="form-hint" id="sysTplMergeHint" style="margin-top:8px">
+        Available placeholders: <code>{{userName}}</code>, <code>{{userEmail}}</code>, <code>{{schoolName}}</code>, <code>{{signupTime}}</code>, <code>{{consoleUrl}}</code>
+      </div>
+    </div>
+
+    <div class="save-tpl-modal-footer" style="justify-content:space-between">
+      <button class="btn-cancel-sm" id="sysTplResetDefault" style="margin-right:auto">Reset to default</button>
+      <button class="btn-cancel-sm" id="sysTplEditCancel">Cancel</button>
+      <button class="btn-send-sm"   id="sysTplEditConfirm">Save</button>
     </div>
   </div>
 </div>
@@ -1239,7 +1277,7 @@
 
 <script type="module">
 import {
-  collection, doc, addDoc, getDocs, getDoc, deleteDoc,
+  collection, doc, addDoc, getDocs, getDoc, deleteDoc, setDoc,
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL }
@@ -1379,10 +1417,12 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   setupQuickSearch();
   setupImportModal();
   setupTemplates();
+  setupSystemTemplates();
   await loadHistory();
   await loadAllCounts();
   await loadFilteredRecipients();
   await loadTemplates();
+  await loadSystemTemplates();
 });
 
 /* ================================================================
@@ -3096,6 +3136,191 @@ async function deleteTemplate(id, btn) {
     console.error('Delete template error:', err);
     showBanner('error', `Could not delete template: ${err.message}`);
   }
+}
+
+/* ================================================================
+   SYSTEM TEMPLATES — automated-notification bodies
+   ─────────────────────────────────────────────────────────────────
+   Stored in mail_templates with kind:'system' + a fixed doc id (key).
+   Each entry is read by an auth-guard / Cloud Function path at
+   notification time. The catalogue below is the source of truth — if
+   no Firestore doc exists yet, the default body is shown for editing
+   and seeded on first save. Readable by any signed-in user (the
+   firestore rule is loosened for kind:'system' docs only).
+   ================================================================ */
+const SYSTEM_TEMPLATE_CATALOGUE = [
+  {
+    key:   'th_pending_notification',
+    title: 'Teachers Hub — New pending user',
+    desc:  'Sent to Eduversal admins when a new teacher signs up to the Teachers Hub and lands on the Waiting page. Triggered by /auth-guard.js the first time a users/{uid} doc is created with approval_status_teachershub:"pending".',
+    placeholders: ['userName', 'userEmail', 'schoolName', 'signupTime', 'consoleUrl'],
+    defaultSubject: 'New Teachers Hub signup awaiting approval — {{userName}}',
+    defaultBody: `<p>Hi team,</p>
+<p>A new user has signed up to the <strong>Teachers Hub</strong> and is waiting for approval.</p>
+<table style="border-collapse:collapse;margin:14px 0;font-size:14px">
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">Name</td><td style="padding:6px 0"><strong>{{userName}}</strong></td></tr>
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">Email</td><td style="padding:6px 0">{{userEmail}}</td></tr>
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">School</td><td style="padding:6px 0">{{schoolName}}</td></tr>
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">Signed up</td><td style="padding:6px 0">{{signupTime}}</td></tr>
+</table>
+<p>Review and approve them in the Central Hub console:</p>
+<p><a href="{{consoleUrl}}" style="display:inline-block;background:#6c5ce7;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open Console →</a></p>
+<p style="color:#64748b;font-size:13px;margin-top:24px">If this looks like a mistaken or unauthorised signup, you can reject the account from the same screen.</p>`,
+  },
+];
+
+let systemTemplatesCache = new Map(); // key → { subject, bodyHtml, ... }
+let sysTplQuill = null;
+let sysTplCurrentKey = null;
+
+function setupSystemTemplates() {
+  const overlay     = document.getElementById('sysTplEditModal');
+  const cancelBtn   = document.getElementById('sysTplEditCancel');
+  const confirmBtn  = document.getElementById('sysTplEditConfirm');
+  const resetBtn    = document.getElementById('sysTplResetDefault');
+
+  cancelBtn.addEventListener('click', () => closeSystemTemplateEditor());
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeSystemTemplateEditor(); });
+
+  resetBtn.addEventListener('click', () => {
+    const entry = SYSTEM_TEMPLATE_CATALOGUE.find(e => e.key === sysTplCurrentKey);
+    if (!entry) return;
+    document.getElementById('sysTplSubject').value = entry.defaultSubject;
+    if (sysTplQuill) sysTplQuill.clipboard.dangerouslyPasteHTML(entry.defaultBody);
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    const key = sysTplCurrentKey;
+    if (!key) return;
+    const subject  = document.getElementById('sysTplSubject').value.trim();
+    const bodyHtml = sysTplQuill?.root.innerHTML || '';
+    if (!subject)  return showBanner('error', 'Subject is required.');
+    if (!bodyHtml) return showBanner('error', 'Body cannot be empty.');
+
+    confirmBtn.disabled = true;
+    const originalText = confirmBtn.textContent;
+    confirmBtn.textContent = 'Saving…';
+    try {
+      const entry = SYSTEM_TEMPLATE_CATALOGUE.find(e => e.key === key);
+      await setDoc(doc(window.db, 'mail_templates', key), {
+        kind:        'system',
+        key,
+        name:        entry?.title || key,
+        description: entry?.description || '',
+        subject,
+        bodyHtml,
+        updatedAt:   serverTimestamp(),
+        updatedBy:   window.currentUser?.email || '',
+      }, { merge: true });
+      closeSystemTemplateEditor();
+      showBanner('success', `System template "${entry?.title || key}" saved.`);
+      await loadSystemTemplates();
+    } catch (err) {
+      console.error('Save system template error:', err);
+      showBanner('error', `Could not save: ${err.message}`);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = originalText;
+    }
+  });
+}
+
+async function loadSystemTemplates() {
+  const listEl = document.getElementById('sysTplList');
+  systemTemplatesCache = new Map();
+  try {
+    // Fetch each known system template by id (no orderBy — the
+    // catalogue defines display order). Missing docs are fine; the
+    // entry shows as "default" until first save.
+    await Promise.all(SYSTEM_TEMPLATE_CATALOGUE.map(async entry => {
+      try {
+        const snap = await getDoc(doc(window.db, 'mail_templates', entry.key));
+        if (snap.exists()) systemTemplatesCache.set(entry.key, snap.data());
+      } catch (_) {}
+    }));
+    renderSystemTemplates();
+  } catch (err) {
+    console.error('loadSystemTemplates error:', err);
+    listEl.innerHTML = '<div class="tpl-empty">Could not load system templates.</div>';
+  }
+}
+
+function renderSystemTemplates() {
+  const listEl = document.getElementById('sysTplList');
+  if (!SYSTEM_TEMPLATE_CATALOGUE.length) {
+    listEl.innerHTML = '<div class="tpl-empty">No system templates defined.</div>';
+    return;
+  }
+  listEl.innerHTML = SYSTEM_TEMPLATE_CATALOGUE.map(entry => {
+    const saved = systemTemplatesCache.get(entry.key);
+    const status = saved
+      ? `<span style="color:#059669;font-weight:500">Customised</span>`
+      : `<span style="color:var(--ink-3)">Default</span>`;
+    const updated = saved?.updatedAt?.toDate
+      ? saved.updatedAt.toDate().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+      : '';
+    const updatedBy = saved?.updatedBy ? ` · ${escHtml(saved.updatedBy)}` : '';
+    const metaTail = saved ? ` · ${updated}${updatedBy}` : '';
+    return `<div class="tpl-row" data-sys-key="${escHtml(entry.key)}">
+      <div class="tpl-info">
+        <div class="tpl-name">${escHtml(entry.title)} <span style="font-size:.74rem;font-weight:400;margin-left:6px">· ${status}${metaTail}</span></div>
+        <div class="tpl-meta">${escHtml(entry.desc)}</div>
+      </div>
+      <div class="tpl-actions">
+        <button class="tpl-btn" data-action="edit" title="Edit subject and body">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Edit
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('.tpl-row').forEach(row => {
+    const key = row.dataset.sysKey;
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openSystemTemplateEditor(key));
+  });
+}
+
+function openSystemTemplateEditor(key) {
+  const entry = SYSTEM_TEMPLATE_CATALOGUE.find(e => e.key === key);
+  if (!entry) return;
+  sysTplCurrentKey = key;
+  const saved = systemTemplatesCache.get(key);
+
+  document.getElementById('sysTplEditHeading').textContent = `Edit · ${entry.title}`;
+  document.getElementById('sysTplEditDesc').textContent    = entry.desc;
+  document.getElementById('sysTplSubject').value           = saved?.subject || entry.defaultSubject;
+  document.getElementById('sysTplMergeHint').innerHTML     = entry.placeholders?.length
+    ? 'Available placeholders: ' + entry.placeholders.map(p => `<code>{{${p}}}</code>`).join(', ')
+    : 'No placeholders for this template.';
+
+  // Lazy-init the Quill instance on the modal's editor div the first
+  // time we open it (the main composer Quill is a separate instance).
+  if (!sysTplQuill) {
+    sysTplQuill = new Quill('#sysTplQuillEditor', {
+      theme: 'snow',
+      modules: {
+        toolbar: [
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ color: [] }, { background: [] }],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          [{ align: [] }],
+          ['link'],
+          ['blockquote', 'code-block'],
+          ['clean'],
+        ],
+      },
+    });
+  }
+  sysTplQuill.clipboard.dangerouslyPasteHTML(saved?.bodyHtml || entry.defaultBody);
+
+  document.getElementById('sysTplEditModal').classList.add('open');
+  setTimeout(() => document.getElementById('sysTplSubject').focus(), 60);
+}
+
+function closeSystemTemplateEditor() {
+  document.getElementById('sysTplEditModal').classList.remove('open');
+  sysTplCurrentKey = null;
 }
 </script>
 
