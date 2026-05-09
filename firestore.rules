@@ -775,11 +775,15 @@ service cloud.firestore {
     // Write: academic_admin OR academic_user with school_principal/academic_coordinator sub-role
     // Teacher: read only their own evaluation
     match /teacher_kpi_evaluations/{submissionId} {
-      allow read: if isAdmin()
+      // Teacher owner read first — relies only on the resource itself, not on
+      // userProfile() which can throw on missing/partial profiles and silently
+      // collapse the OR chain to false. Matches the same pattern used on
+      // teacher_kpi_submissions.
+      allow read: if isSignedIn() && resource != null && resource.data.teacherUid == request.auth.uid
+                  || isAdmin()
                   || isAHAdmin()
                   || isTeachersAdmin()
-                  || (isAcademicUser() && userProfile().uid == resource.data.evaluatorInfo.evaluatorUid)
-                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid);
+                  || (isAcademicUser() && userProfile().uid == resource.data.evaluatorInfo.evaluatorUid);
       allow create, update: if isAHAdmin()
                             || (isAcademicUser()
                                 && (userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator'])));
