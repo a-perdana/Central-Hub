@@ -1656,9 +1656,22 @@ function setupQuickSearch() {
     const q = this.value.trim();
     wrap.classList.toggle('has-value', q.length > 0);
     if (q.length < 1) { closeDropdown(); return; }
-    const matches = allApiRecipients
-      .filter(r => r.name?.toLowerCase().includes(q.toLowerCase()) || r.email.toLowerCase().includes(q.toLowerCase()))
-      .slice(0, 12);
+    const ql = q.toLowerCase();
+    // Search both registered platform users (allApiRecipients) and the
+    // Staff Database (allStaffRecipients). Dedupe by email so the same
+    // person doesn't appear twice when they exist in both pools.
+    const seen = new Set();
+    const pool = [...allApiRecipients, ...allStaffRecipients];
+    const matches = [];
+    for (const r of pool) {
+      const key = r.email.toLowerCase();
+      if (seen.has(key)) continue;
+      if (r.name?.toLowerCase().includes(ql) || key.includes(ql)) {
+        seen.add(key);
+        matches.push(r);
+        if (matches.length >= 12) break;
+      }
+    }
     renderDropdown(matches, q);
   });
 
@@ -1732,7 +1745,9 @@ function setupQuickSearch() {
 }
 
 window.addFromSearch = function(emailKey) {
-  const r = allApiRecipients.find(x => x.email.toLowerCase() === emailKey);
+  const r =
+    allApiRecipients.find(x => x.email.toLowerCase() === emailKey) ||
+    allStaffRecipients.find(x => x.email.toLowerCase() === emailKey);
   if (!r) return;
   manualRecipients.set(emailKey, r);
   excludedEmails.delete(emailKey); // un-exclude if previously removed
@@ -3362,6 +3377,32 @@ const SYSTEM_TEMPLATE_CATALOGUE = [
 <p style="color:#64748b;font-size:13px;margin-top:16px">School on file: <strong>{{schoolName}}</strong>. If anything looks wrong, reply to this email and we'll fix it.</p>
 <p style="margin-top:22px">— The Eduversal Team</p>`,
   },
+  {
+    key:   'th_invite_to_join',
+    title: 'Teachers Hub — Invite to join',
+    desc:  'Bulk invitation for staff who have not yet signed up to the Teachers Hub. Pair with the Staff chip + School filter for a school-by-school rollout. Click Load to drop subject + body into the composer, then send.',
+    placeholders: ['name', 'school'],
+    defaultSubject: 'You\'re invited to join Teachers Hub — your Eduversal teaching companion',
+    defaultBody: `<p>Hi {{name}},</p>
+<p>We're rolling out <strong>Teachers Hub</strong> across the Eduversal network — a single workspace built to support you in everyday teaching, planning and CPD. We'd love {{school}} to be on board, and we've already added you to the staff directory.</p>
+<p>Once you sign up (it takes 30 seconds with your school email), you'll find:</p>
+<ul style="line-height:1.7;padding-left:22px;margin:14px 0">
+  <li><strong>Pacing guides</strong> — week-by-week plans for IGCSE, AS / A-Level and Checkpoint, aligned to the Cambridge syllabus.</li>
+  <li><strong>Schemes of work</strong> — teaching guides with learning objectives, common misconceptions and key vocabulary.</li>
+  <li><strong>Progression grids</strong> — see how each topic builds across Stages 7, 8 and 9.</li>
+  <li><strong>KPI &amp; Self-Appraisal</strong> — track your progress against the Cambridge Teacher Standards.</li>
+  <li><strong>Competency Framework</strong> — a 4-level CPD ladder with evidence portfolio and certificates.</li>
+</ul>
+<p style="margin-top:22px">
+  <a href="https://teachershub.eduversal.org/login" style="display:inline-block;background:linear-gradient(135deg,#6c5ce7 0%,#0891b2 100%);color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;box-shadow:0 4px 14px rgba(108,92,231,0.25)">Sign up to Teachers Hub →</a>
+</p>
+<p style="color:#64748b;font-size:13.5px;margin-top:24px;line-height:1.6">
+  <strong>How sign-up works:</strong> head to the link above, choose <em>Sign up</em>, and use your school email address. Your account will land in a short approval queue — once we tick it off, you'll get a welcome email and full access to the Hub.
+</p>
+<p style="color:#64748b;font-size:13px;margin-top:16px">School on file: <strong>{{school}}</strong>. If this is wrong, just reply to this email.</p>
+<p style="color:#64748b;font-size:13px;margin-top:8px">Questions or trouble signing up? Reply to this email and we'll help.</p>
+<p style="margin-top:22px">— The Eduversal Team</p>`,
+  },
 ];
 
 let systemTemplatesCache = new Map(); // key → { subject, bodyHtml, ... }
@@ -3464,6 +3505,10 @@ function renderSystemTemplates() {
         <div class="tpl-meta">${escHtml(entry.desc)}</div>
       </div>
       <div class="tpl-actions">
+        <button class="tpl-btn" data-action="load" title="Load this template into the composer">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Load
+        </button>
         <button class="tpl-btn" data-action="edit" title="Edit subject and body">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           Edit
@@ -3474,7 +3519,24 @@ function renderSystemTemplates() {
   listEl.querySelectorAll('.tpl-row').forEach(row => {
     const key = row.dataset.sysKey;
     row.querySelector('[data-action="edit"]').addEventListener('click', () => openSystemTemplateEditor(key));
+    row.querySelector('[data-action="load"]').addEventListener('click', () => loadSystemTemplateIntoEditor(key));
   });
+}
+
+function loadSystemTemplateIntoEditor(key) {
+  const entry = SYSTEM_TEMPLATE_CATALOGUE.find(e => e.key === key);
+  if (!entry) return;
+  const saved = systemTemplatesCache.get(key);
+  const subject  = saved?.subject  || entry.defaultSubject;
+  const bodyHtml = saved?.bodyHtml || entry.defaultBody;
+
+  const subjectInput = document.getElementById('fSubject');
+  subjectInput.value = subject;
+  document.getElementById('subjectCount').textContent = `${subject.length} / 150`;
+  if (quill) quill.clipboard.dangerouslyPasteHTML(bodyHtml);
+  validateForm();
+  showBanner('success', `Template "${entry.title}" loaded into the editor.`);
+  document.getElementById('quillEditor').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function openSystemTemplateEditor(key) {
