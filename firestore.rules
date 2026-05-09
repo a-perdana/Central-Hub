@@ -187,16 +187,26 @@ service cloud.firestore {
     }
 
     // -- staff -----------------------------------------------
-    // Self-link path: a user logging in for the first time may write
-    // their own auth uid into the staff doc that matches their email
-    // (auth-guard.js does this on first sign-in). Restricted to:
-    //   - The doc's emailLower must match the requester's email
-    //   - Only userId / linkedAt / invited fields may change
-    //   - The userId being written must be the requester's own uid
-    // Everything else (create, delete, full updates) stays admin-only.
+    // Two self-managed paths so auth-guard.js can keep staff/ in sync
+    // with first logins, even for users HQ never seeded:
+    //   - Self-CREATE: a signed-in user may create the staff doc that
+    //     would match their own email. Doc id must be deterministic
+    //     (sha1(emailLower).slice(0,20) — auth-guard computes this),
+    //     emailLower must match auth.token.email, and userId must
+    //     equal auth.uid. Source field locks the row to the
+    //     'auth-guard-autocreate' provenance so the seed pipeline
+    //     can still distinguish CSV-imported rows.
+    //   - Self-UPDATE (link-back): on first login against an
+    //     HQ-seeded row, write userId/linkedAt/invited only.
+    // Everything else stays admin-only.
     match /staff/{staffId} {
       allow read:   if isAuthorized();
-      allow create, delete: if isAdmin();
+      allow delete: if isAdmin();
+      allow create: if isAdmin() ||
+        (isSignedIn()
+         && request.resource.data.emailLower == request.auth.token.email.lower()
+         && request.resource.data.userId == request.auth.uid
+         && request.resource.data.source == 'auth-guard-autocreate');
       allow update: if isAdmin() ||
         (isSignedIn()
          && resource.data.emailLower == request.auth.token.email.lower()

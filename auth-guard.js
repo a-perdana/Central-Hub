@@ -99,10 +99,23 @@ const SUBJECT_GATE_BYPASS = new Set(['', 'index', 'login']);
 
 // ── Staff ↔ users bridge ─────────────────────────────────────────
 // On a user's very first login, look up `staff/{...}` by emailLower.
-// If found, copy schoolId / school / displayName / phone / position
-// onto the new users/{uid} doc, AND write the user's uid back to the
-// staff doc (bidirectional link). All errors are swallowed — bridging
-// is a best-effort enrichment, never blocks signup.
+//   - If found: copy schoolId/school/displayName/phone/position onto
+//     the new users/{uid} doc + write userId back to the staff doc
+//     (bidirectional link).
+//   - If NOT found: auto-create a new staff doc keyed by
+//     sha1(emailLower) (same id pattern as seed-staff.js) so the user
+//     shows up in /staff immediately as Linked. Marked
+//     source:'auth-guard-autocreate' to distinguish from CSV seeds.
+// All errors are swallowed — bridging is best-effort, never blocks signup.
+async function staffDocIdFor(emailLower) {
+  // Mirror scripts/staff/seed-staff.js: sha1(emailLower).slice(0,20).
+  const buf = new TextEncoder().encode(emailLower);
+  const hash = await crypto.subtle.digest('SHA-1', buf);
+  const hex = Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 20);
+}
+
 async function applyStaffBridge(database, user, newProfile) {
   if (!user?.email) return;
   const emailLower = user.email.toLowerCase();
@@ -112,23 +125,44 @@ async function applyStaffBridge(database, user, newProfile) {
       where('emailLower', '==', emailLower),
       limit(1),
     ));
-    if (snap.empty) return;
-    const staffDoc = snap.docs[0];
-    const staff = staffDoc.data() || {};
-    if (staff.schoolId)                      newProfile.schoolId = staff.schoolId;
-    if (staff.school)                        newProfile.school = staff.school;
-    if (!newProfile.displayName && staff.name) newProfile.displayName = staff.name;
-    if (staff.phone)                         newProfile.phone = staff.phone;
-    if (staff.position)                      newProfile.title = staff.position;
-    newProfile.staffId = staffDoc.id;
-    // Bidirectional link so /staff page can show "linked" status.
-    // `userId` (FK -> users.uid) per naming convention — staff doc id is
-    // sha1(emailLower), not the auth uid.
-    await setDoc(doc(database, 'staff', staffDoc.id), {
-      userId:   user.uid,
-      linkedAt: serverTimestamp(),
-      invited:  false,
-    }, { merge: true });
+    if (!snap.empty) {
+      // ── Existing staff row → copy across + back-link ────────────
+      const staffDoc = snap.docs[0];
+      const staff = staffDoc.data() || {};
+      if (staff.schoolId)                        newProfile.schoolId = staff.schoolId;
+      if (staff.school)                          newProfile.school = staff.school;
+      if (!newProfile.displayName && staff.name) newProfile.displayName = staff.name;
+      if (staff.phone)                           newProfile.phone = staff.phone;
+      if (staff.position)                        newProfile.title = staff.position;
+      newProfile.staffId = staffDoc.id;
+      // userId (FK -> users.uid) per naming convention — staff doc id is
+      // sha1(emailLower), not the auth uid.
+      await setDoc(doc(database, 'staff', staffDoc.id), {
+        userId:   user.uid,
+        linkedAt: serverTimestamp(),
+        invited:  false,
+      }, { merge: true });
+    } else {
+      // ── No staff row yet → auto-create one ──────────────────────
+      // Uses the same deterministic id pattern as seed-staff.js so a
+      // later CSV re-seed for this email merges instead of duplicating.
+      const staffId = await staffDocIdFor(emailLower);
+      await setDoc(doc(database, 'staff', staffId), {
+        name:       newProfile.displayName || user.displayName || '',
+        email:      user.email,
+        emailLower,
+        schoolId:   newProfile.schoolId || null,
+        school:     newProfile.school   || null,
+        role:       'teacher',
+        status:     'active',
+        userId:     user.uid,
+        linkedAt:   serverTimestamp(),
+        invited:    false,
+        source:     'auth-guard-autocreate',
+        createdAt:  serverTimestamp(),
+      });
+      newProfile.staffId = staffId;
+    }
   } catch (err) {
     console.warn('auth-guard: staff bridge failed (non-fatal)', err);
   }

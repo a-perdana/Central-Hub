@@ -907,11 +907,14 @@
         <div class="platform-chip" data-platform="researchhub" onclick="togglePlatformChip(this)">
           <span>Research Hub</span><span class="chip-count" id="cnt-researchhub">—</span>
         </div>
+        <div class="platform-chip" data-platform="staff" onclick="togglePlatformChip(this)" title="Send to entries in the Staff database (not platform users yet)">
+          <span>Staff</span><span class="chip-count" id="cnt-staff">—</span>
+        </div>
       </div>
 
       <!-- Role / Sub-role accordion (shown when a specific platform is selected) -->
       <div class="plat-accordion" id="platAccordion">
-        <div class="plat-acc-row">
+        <div class="plat-acc-row" id="roleRow">
           <span class="plat-acc-label">Role</span>
           <div class="plat-acc-chips">
             <span class="acc-chip active" data-role="all" onclick="toggleAccChip(this,'role')">All</span>
@@ -922,6 +925,10 @@
         <div class="plat-acc-row" id="subRoleRow" style="display:none">
           <span class="plat-acc-label">Sub-role</span>
           <div class="plat-acc-chips" id="subRoleChips"></div>
+        </div>
+        <div class="plat-acc-row" id="schoolRow" style="display:none">
+          <span class="plat-acc-label">School</span>
+          <div class="plat-acc-chips" id="schoolChips"></div>
         </div>
       </div>
 
@@ -1463,6 +1470,7 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   setupSystemTemplates();
   setupTemplateTabs();
   await loadHistory();
+  await loadStaffPool();
   await loadAllCounts();
   await loadFilteredRecipients();
   await loadTemplates();
@@ -1477,12 +1485,17 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
    excludedEmails   : Set of emails manually unchecked in modal
    finalList()      : union of chip+manual minus excluded
    ================================================================ */
-let activePlatform   = null;  // null = no chip selected (search-only); '' = All; 'xyz' = specific
+let activePlatform   = null;  // null = no chip selected (search-only); '' = All; 'xyz' = specific; 'staff' = staff DB
 let activeRole       = 'all';
 let activeSubRole    = '';
+let activeSchoolId   = '';   // only used when activePlatform === 'staff'; '' = all schools
 let allApiRecipients = []; // full /recipients pool (no platform filter) for search
 let chipRecipients   = new Map(); // email → recip obj (from chip selection)
 let manualRecipients = new Map(); // email → recip obj (added via search)
+
+// Staff DB cache — fetched once from Firestore (separate from /recipients API)
+let allStaffRecipients = []; // [{ email, name, schoolId, schoolName, source:'staff', fields:{} }]
+let allPartnerSchools  = []; // [{ id, name }] for school sub-chips
 
 function finalList() {
   const merged = new Map([...chipRecipients, ...manualRecipients]);
@@ -1507,9 +1520,18 @@ window.togglePlatformChip = function(el) {
     activePlatform = clicked;
     document.querySelectorAll('.platform-chip').forEach(c =>
       c.classList.toggle('active', c.dataset.platform === clicked));
-    if (activePlatform) {
-      // Specific platform: show accordion
+    if (activePlatform === 'staff') {
+      // Staff DB: show School filter only (no role/sub-role for staff)
       document.getElementById('platAccordion').classList.add('open');
+      document.getElementById('roleRow').style.display = 'none';
+      document.getElementById('subRoleRow').style.display = 'none';
+      document.getElementById('schoolRow').style.display = '';
+      renderSchoolChips();
+    } else if (activePlatform) {
+      // Specific platform: show Role + Sub-role accordion
+      document.getElementById('platAccordion').classList.add('open');
+      document.getElementById('roleRow').style.display = '';
+      document.getElementById('schoolRow').style.display = 'none';
       renderSubRoleChips();
       document.querySelectorAll('.acc-chip[data-role]').forEach(c =>
         c.classList.toggle('active', c.dataset.role === 'all'));
@@ -1518,7 +1540,7 @@ window.togglePlatformChip = function(el) {
       document.getElementById('platAccordion').classList.remove('open');
     }
   }
-  activeRole = 'all'; activeSubRole = '';
+  activeRole = 'all'; activeSubRole = ''; activeSchoolId = '';
   fetchChipRecipients();
 };
 
@@ -1551,6 +1573,36 @@ function renderSubRoleChips() {
   ).join('');
 }
 
+function renderSchoolChips() {
+  const chips = document.getElementById('schoolChips');
+  // 'All Schools' first (active by default), then one chip per partner school
+  // sorted by name. Counts come from the cached staff pool so admins see how
+  // many staff each school holds before clicking.
+  const counts = new Map();
+  for (const s of allStaffRecipients) {
+    counts.set(s.schoolId || '', (counts.get(s.schoolId || '') || 0) + 1);
+  }
+  const sorted = [...allPartnerSchools].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const items = [
+    `<span class="acc-chip active" data-schoolid="" onclick="toggleSchoolChip(this)">All Schools <span style="opacity:.65;margin-left:4px">${allStaffRecipients.length}</span></span>`,
+    ...sorted.map(s => {
+      const n = counts.get(s.id) || 0;
+      if (!n) return '';
+      return `<span class="acc-chip" data-schoolid="${escAttr(s.id)}" onclick="toggleSchoolChip(this)">${escHtml(s.name)} <span style="opacity:.65;margin-left:4px">${n}</span></span>`;
+    }),
+  ];
+  chips.innerHTML = items.filter(Boolean).join('');
+}
+
+window.toggleSchoolChip = function(el) {
+  const id = el.dataset.schoolid || '';
+  if (activeSchoolId === id) return; // already active
+  document.querySelectorAll('#schoolChips .acc-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeSchoolId = id;
+  fetchChipRecipients();
+};
+
 /* ================================================================
    FETCH CHIP RECIPIENTS (platform/role/subrole → chipRecipients)
    ================================================================ */
@@ -1558,6 +1610,16 @@ async function fetchChipRecipients() {
   if (activePlatform === null) {
     // No chip selected — clear chip recipients, keep manual ones
     chipRecipients = new Map();
+    syncRecipientDisplay();
+    return;
+  }
+  // Staff chip is sourced from the staff/ Firestore collection (NOT the
+  // mail-service /recipients endpoint, which only knows about platform users).
+  if (activePlatform === 'staff') {
+    const filtered = activeSchoolId
+      ? allStaffRecipients.filter(s => s.schoolId === activeSchoolId)
+      : allStaffRecipients;
+    chipRecipients = new Map(filtered.map(r => [r.email.toLowerCase(), r]));
     syncRecipientDisplay();
     return;
   }
@@ -2099,17 +2161,26 @@ function updateMergeTagsRail(list) {
 }
 
 function updateFilterSummary() {
-  const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
+  const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub', staff:'Staff Database' };
   const total = finalList().length;
   const chipCount   = [...chipRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
   const manualCount = [...manualRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
 
   let desc = activePlatform === null ? 'No chip filter (search only)' : (activePlatform ? platLabels[activePlatform] : 'All Platforms');
-  if (activeRole === 'admin') desc += ' · Admins';
-  else if (activeRole === 'user') desc += ' · Users';
-  if (activeSubRole) {
-    const found = (SUBROLES[activePlatform] || []).find(o => o.value === activeSubRole);
-    if (found) desc += ' · ' + found.label;
+  if (activePlatform === 'staff') {
+    if (activeSchoolId) {
+      const school = allPartnerSchools.find(s => s.id === activeSchoolId);
+      if (school) desc += ' · ' + school.name;
+    } else {
+      desc += ' · All Schools';
+    }
+  } else {
+    if (activeRole === 'admin') desc += ' · Admins';
+    else if (activeRole === 'user') desc += ' · Users';
+    if (activeSubRole) {
+      const found = (SUBROLES[activePlatform] || []).find(o => o.value === activeSubRole);
+      if (found) desc += ' · ' + found.label;
+    }
   }
   let summary = `<strong>${total}</strong> recipient${total !== 1 ? 's' : ''} · ${desc}`;
   if (manualCount > 0) summary += ` <span style="color:var(--accent)">+${manualCount} added manually</span>`;
@@ -2130,6 +2201,50 @@ async function loadAllCounts() {
   });
   // Also store full pool for search
   allApiRecipients = results[0].recipients || [];
+  // Staff chip count (separate Firestore source — populated by loadStaffPool)
+  document.getElementById('cnt-staff').textContent = allStaffRecipients.length;
+}
+
+/* ================================================================
+   STAFF POOL — read staff/ + partner_schools/ once for the Staff chip.
+   Distinct from /recipients (which only returns users who have logged
+   into a hub). Many of the 463 seeded staff have no users/{uid} yet —
+   this is the channel for inviting them.
+   ================================================================ */
+async function loadStaffPool() {
+  try {
+    const [staffSnap, schoolsSnap] = await Promise.all([
+      // @lint-allow-unbounded — admin-only mail-composer; full staff sweep needed to compose campaigns
+      getDocs(collection(window.db, 'staff')),
+      // @lint-allow-unbounded — admin-only; partner_schools is a small fixed list (~16)
+      getDocs(collection(window.db, 'partner_schools')),
+    ]);
+    allPartnerSchools = schoolsSnap.docs.map(d => ({
+      id: d.id, name: d.data().name || d.id,
+    }));
+    const schoolNameById = new Map(allPartnerSchools.map(s => [s.id, s.name]));
+    const seen = new Set(); // dedupe by lowercased email — staff csv has duplicates
+    allStaffRecipients = [];
+    for (const d of staffSnap.docs) {
+      const v = d.data() || {};
+      const email = (v.email || '').trim().toLowerCase();
+      if (!email || !email.includes('@')) continue;
+      if (seen.has(email)) continue;
+      seen.add(email);
+      allStaffRecipients.push({
+        email,
+        name:        v.name || '',
+        schoolId:    v.schoolId || '',
+        schoolName:  schoolNameById.get(v.schoolId) || v.school || '',
+        source:      'staff',
+        fields:      { name: v.name || '', school: v.school || '' },
+      });
+    }
+  } catch (err) {
+    console.error('loadStaffPool error:', err);
+    allStaffRecipients = [];
+    allPartnerSchools  = [];
+  }
 }
 
 /* ================================================================
@@ -2275,16 +2390,25 @@ document.getElementById('btnSend').addEventListener('click', () => {
   if (recipCount === 0) return showBanner('error', 'No recipients selected.');
 
   // Build human-readable audience description from current chip state
-  const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub' };
+  const platLabels = { teachershub:'Teachers Hub', academichub:'Academic Hub', centralhub:'Central Hub', researchhub:'Research Hub', staff:'Staff Database' };
   let audience;
   if (activePlatform === null)      audience = 'Manual list only';
   else if (activePlatform === '')   audience = 'All Platforms';
   else                              audience = platLabels[activePlatform] || activePlatform;
-  if (activeRole === 'admin')       audience += ' · Admins';
-  else if (activeRole === 'user')   audience += ' · Users';
-  if (activeSubRole) {
-    const found = (SUBROLES[activePlatform] || []).find(o => o.value === activeSubRole);
-    if (found) audience += ' · ' + found.label;
+  if (activePlatform === 'staff') {
+    if (activeSchoolId) {
+      const school = allPartnerSchools.find(s => s.id === activeSchoolId);
+      if (school) audience += ' · ' + school.name;
+    } else {
+      audience += ' · All Schools';
+    }
+  } else {
+    if (activeRole === 'admin')       audience += ' · Admins';
+    else if (activeRole === 'user')   audience += ' · Users';
+    if (activeSubRole) {
+      const found = (SUBROLES[activePlatform] || []).find(o => o.value === activeSubRole);
+      if (found) audience += ' · ' + found.label;
+    }
   }
   const manualCount = [...manualRecipients.values()].filter(r => !excludedEmails.has(r.email.toLowerCase())).length;
   if (manualCount > 0 && activePlatform !== null) audience += ` (+${manualCount} manual)`;
