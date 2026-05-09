@@ -949,9 +949,72 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
 
   await Promise.all([
     loadOverview(db),
-    loadCycles(db)
+    loadCycles(db),
+    maybeRenderPrincipalAnnualPanel(db)
   ]);
 });
+
+// `appraisals?type=principal-annual` → render a Principal Annual Appraisal
+// summary panel + CTA to the AH-side entry form. The entry form itself
+// lives at https://academichub.eduversal.org/principal-appraisal-entry
+// (Foundation Rep + central_admin only); this CH-side panel gives HQ a
+// network-wide read across `principal_annual_appraisals` while a dedicated
+// admin page is on the roadmap.
+async function maybeRenderPrincipalAnnualPanel(db) {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('type') !== 'principal-annual') return;
+
+  const main = document.querySelector('.page-wrap') || document.body;
+  const panel = document.createElement('section');
+  panel.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px;margin:0 0 24px;box-shadow:0 2px 8px rgba(15,23,42,0.04)';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px">
+      <div style="background:linear-gradient(135deg,#6c5ce7 0%,#0891b2 100%);color:#fff;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🎯</div>
+      <div style="flex:1">
+        <div style="font-size:.74rem;font-weight:600;color:#6c5ce7;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Phase-2 · Principal Evaluation Module</div>
+        <h2 style="font-size:1.18rem;font-weight:700;color:var(--ink);margin:0 0 6px">Principal Annual Appraisal</h2>
+        <p style="font-size:.86rem;color:var(--ink-3);margin:0;line-height:1.5">Network-wide read of <code style="background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:.78rem">principal_annual_appraisals</code> (F1–F5 + F_LEAD weighted composite + A–F band). Annual cycle owned by Foundation Reps, reviewed by HQ. The entry form lives on Academic Hub.</p>
+      </div>
+    </div>
+    <div id="paaSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
+      <div style="color:#94a3b8;font-size:.85rem;padding:10px 0">Loading summary…</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="https://academichub.eduversal.org/principal-appraisal-entry" target="_blank" rel="noopener" style="background:#6c5ce7;color:#fff;padding:9px 16px;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px">Open AH Entry Form ↗</a>
+      <a href="appraisals" style="background:#f1f5f9;color:var(--ink);padding:9px 16px;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none">← Back to Appraisals Hub</a>
+    </div>
+  `;
+  // Insert at top of page-wrap, before any other content.
+  main.insertBefore(panel, main.firstChild);
+
+  // Pull summary numbers — fail-quiet if collection empty / rule-blocked.
+  try {
+    const snap = await getDocs(query(collection(db, 'principal_annual_appraisals'), orderBy('createdAt', 'desc')));
+    const all = snap.docs.map(d => d.data());
+    const thisYear = all.filter(a => a.academicYear === CURRENT_YEAR);
+    const submitted = thisYear.filter(a => a.status === 'submitted' || a.status === 'finalised').length;
+    const draft = thisYear.filter(a => a.status === 'draft').length;
+    const composites = thisYear.map(a => a.compositePercent).filter(v => typeof v === 'number');
+    const avg = composites.length ? (composites.reduce((s, v) => s + v, 0) / composites.length).toFixed(1) + '%' : '—';
+    const bandA = thisYear.filter(a => a.predicate === 'A').length;
+    const cell = (label, value, accent) => `
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px">
+        <div style="font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">${label}</div>
+        <div style="font-size:1.4rem;font-weight:700;color:${accent || 'var(--ink)'};line-height:1.1">${value}</div>
+      </div>
+    `;
+    document.getElementById('paaSummary').innerHTML =
+      cell(`${CURRENT_YEAR} total`, thisYear.length) +
+      cell('Submitted', submitted, '#0891b2') +
+      cell('In draft', draft, '#d97706') +
+      cell('Avg composite', avg, '#6c5ce7') +
+      cell('Band A', bandA, '#16a34a');
+  } catch (err) {
+    console.warn('[principal-annual] summary load failed:', err);
+    document.getElementById('paaSummary').innerHTML =
+      '<div style="color:#94a3b8;font-size:.82rem">Summary unavailable — collection may be empty or your role may not have read access.</div>';
+  }
+}
 </script>
 
 </body>

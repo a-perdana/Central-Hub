@@ -546,11 +546,51 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
   if (!isAdmin) {
     document.querySelector('.hero-sub').textContent = 'Read-only view — admin access required to review or issue certificates.';
   }
+  applyTrackParamFromUrl();
   await Promise.all([loadEvidence(), loadIssuedCerts()]);
   renderStats();
   renderEvidence();
   populateDomainDropdown();
 });
+
+// `competency-admin?track=teachers|leaders|specialists` → preselect the
+// matching platform filter chip + show a banner explaining we're standing
+// in for a dedicated framework viewer page (which is on the roadmap).
+// Track → competency_evidence.platform mapping:
+//   teachers    → 'teachers'   (TH subject_teacher / subject_leader)
+//   leaders     → 'academic'   (AH leadership sub-roles)
+//   specialists → 'central'    (CH HQ Subject Specialists)
+function applyTrackParamFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const track = params.get('track');
+  if (!track) return;
+  const TRACK_TO_PLATFORM = { teachers: 'teachers', leaders: 'academic', specialists: 'central' };
+  const TRACK_LABEL = { teachers: 'Teachers Framework (CTS 2023)', leaders: 'Leaders Framework (CSL 2023)', specialists: 'Specialist Framework (hybrid)' };
+  const platform = TRACK_TO_PLATFORM[track];
+  if (!platform) return;
+  platFilter = platform;
+  // Reflect in chip UI — find the chip by its text label and toggle 'active'.
+  const labelByTrack = { teachers: 'Teachers', leaders: 'Academic', specialists: 'Specialists' };
+  const targetLabel = labelByTrack[track];
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    if (['All', 'Teachers', 'Academic', 'Specialists'].includes(c.textContent.trim())) {
+      c.classList.toggle('active', c.textContent.trim() === targetLabel);
+    }
+  });
+  // Banner — sits at the top of the page main, dismissable per session.
+  const banner = document.createElement('div');
+  banner.style.cssText = 'background:linear-gradient(135deg,#6c5ce7 0%,#0891b2 100%);color:#fff;padding:14px 20px;margin:0 0 20px;border-radius:10px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 12px rgba(108,92,231,0.18)';
+  banner.innerHTML = `
+    <div style="font-size:22px;line-height:1">🎯</div>
+    <div style="flex:1">
+      <div style="font-weight:600;font-size:15px;margin-bottom:2px">${TRACK_LABEL[track]}</div>
+      <div style="font-size:13px;opacity:0.92">Showing evidence for the ${track} track. A dedicated framework viewer page is on the roadmap; until then this filtered Competency Admin view stands in.</div>
+    </div>
+    <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1" aria-label="Dismiss">×</button>
+  `;
+  const main = document.querySelector('main') || document.body;
+  main.insertBefore(banner, main.firstChild);
+}
 
 async function loadEvidence() {
   const q = query(
@@ -1081,9 +1121,9 @@ window.setEvFilter = function(f, btn) {
 };
 window.setPlatFilter = function(f, btn) {
   platFilter = f;
-  // reset platform filter buttons only
   document.querySelectorAll('.filter-chip').forEach(c => {
-    if (c.textContent === 'All' || c.textContent === 'Teachers' || c.textContent === 'Academic') {
+    const t = c.textContent.trim();
+    if (t === 'All' || t === 'Teachers' || t === 'Academic' || t === 'Specialists') {
       c.classList.remove('active');
     }
   });
