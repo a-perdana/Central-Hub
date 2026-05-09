@@ -298,6 +298,32 @@
     .md-render .hb-tag.skl  { background: #d1fae5; color: #065f46; }
     .md-render .hb-tag.pigp { background: #fee2e2; color: #991b1b; }
 
+    /* Reverse-index: 'Referenced by' strip rendered above doc body so the
+       reader sees inbound connections before reading the doc itself. Same
+       visual language as outbound .ref-conn but a different label + icon
+       direction (↘ in instead of ↗ out). */
+    .doc-back {
+      margin: -8px 0 18px; padding: 10px 14px;
+      background: #faf5ff; border: 1px solid var(--accent-2); border-radius: 10px;
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+    .doc-back-label {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.04em; text-transform: uppercase; margin-right: 4px;
+    }
+    .doc-back-chip {
+      padding: 3px 10px; border-radius: 6px;
+      background: #fff; color: var(--accent-dk);
+      font-size: 11.5px; font-weight: 500;
+      border: 1px solid var(--accent-2); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 4px;
+      transition: background .12s, border-color .12s;
+    }
+    .doc-back-chip::before {
+      content: '↘'; color: var(--accent); font-weight: 600; font-size: 10.5px;
+    }
+    .doc-back-chip:hover { background: var(--accent-2); border-color: var(--accent); }
+
     /* Loading + error states */
     .doc-loading { text-align: center; padding: 60px 20px; color: var(--ink-3); font-size: 13px; }
     .doc-error { background: #fee2e2; color: #991b1b; padding: 14px 18px; border-radius: 10px; font-size: 13px; }
@@ -1078,6 +1104,11 @@
         window.history.replaceState({}, '', url);
       }
 
+      // Reverse-index strip — prepended above whatever body content loads.
+      // Built from MANIFEST.connectedTo, so the chip strip itself is ready
+      // even before fetch resolves.
+      const backStrip = id ? renderBackChips(id) : '';
+
       try {
         const url = `references-data/${path}`;
         const res = await fetch(url);
@@ -1086,14 +1117,27 @@
 
         if (kind === 'md') {
           const html = window.marked ? window.marked.parse(text) : `<pre>${escapeHtml(text)}</pre>`;
-          bodyEl.innerHTML = `<div class="md-render">${injectCrossrefChips(html)}</div>`;
+          bodyEl.innerHTML = `${backStrip}<div class="md-render">${injectCrossrefChips(html)}</div>`;
         } else if (kind === 'json') {
           let pretty = text;
           try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch(_) {}
-          bodyEl.innerHTML = `<pre class="json-render">${injectCrossrefChips(escapeHtml(pretty))}</pre>`;
+          bodyEl.innerHTML = `${backStrip}<pre class="json-render">${injectCrossrefChips(escapeHtml(pretty))}</pre>`;
         } else {
-          bodyEl.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+          bodyEl.innerHTML = `${backStrip}<pre>${escapeHtml(text)}</pre>`;
         }
+
+        // Wire back-chip clicks to re-open the referenced doc in the same
+        // modal (keeps the user in the reading flow).
+        bodyEl.querySelectorAll('[data-action="open-back"]').forEach(el => {
+          const fire = (e) => {
+            e.preventDefault();
+            openDoc({ path: el.dataset.path, kind: el.dataset.kind, title: el.dataset.title });
+          };
+          el.addEventListener('click', fire);
+          el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') fire(e);
+          });
+        });
       } catch (err) {
         console.error('openDoc', err);
         bodyEl.innerHTML = `<div class="doc-error">Could not load: ${escapeHtml(err.message || 'unknown')}<br><br>Make sure <code>build.js</code> copied the file into <code>dist/references-data/</code>.</div>`;
@@ -1108,6 +1152,41 @@
         url.searchParams.delete('doc');
         window.history.replaceState({}, '', url);
       }
+    }
+
+    /* Reverse index: id -> [{id,title,path,kind} of every entry that lists
+       it in connectedTo]. Built lazily once and cached — MANIFEST is static
+       at runtime so a single pass is enough. */
+    let _reverseIndex = null;
+    function buildReverseIndex() {
+      if (_reverseIndex) return _reverseIndex;
+      const idx = {};
+      for (const cat of ['frameworks','audits','cambridge','permen','schemas']) {
+        for (const item of (MANIFEST[cat] || [])) {
+          if (!Array.isArray(item.connectedTo)) continue;
+          // Index entries themselves have no openable path; skip them as
+          // sources so we don't dead-end the back-chip.
+          if (item.kind === 'index') continue;
+          for (const targetId of item.connectedTo) {
+            (idx[targetId] = idx[targetId] || []).push({
+              id: item.id, title: item.title, path: item.path, kind: item.kind
+            });
+          }
+        }
+      }
+      _reverseIndex = idx;
+      return idx;
+    }
+
+    function renderBackChips(currentId) {
+      const idx = buildReverseIndex();
+      const incoming = idx[currentId] || [];
+      if (!incoming.length) return '';
+      const chips = incoming.map(it =>
+        `<span class="doc-back-chip" role="button" tabindex="0" data-action="open-back" data-path="${escapeHtml(it.path)}" data-kind="${escapeHtml(it.kind)}" data-title="${escapeHtml(it.title)}" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</span>`
+      ).join('');
+      const noun = incoming.length === 1 ? 'doc' : 'docs';
+      return `<div class="doc-back"><span class="doc-back-label">Referenced by ${incoming.length} ${noun}</span>${chips}</div>`;
     }
 
     function idForPath(path) {
