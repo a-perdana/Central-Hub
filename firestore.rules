@@ -803,10 +803,15 @@ service cloud.firestore {
     // forge a submission claiming to belong to another school.
     // Delete: central_admin only.
     match /teacher_kpi_submissions/{submissionId} {
-      allow read: if isAdmin()
+      // Owner read: any signed-in user can read their own submission, even
+      // before their TH role/profile fields are fully populated. The doc-owner
+      // check (resource.data.userId == auth.uid) is the strongest guarantee;
+      // we don't gate it on userProfile() lookups that could throw on missing
+      // sibling fields and silently collapse the whole OR chain to false.
+      allow read: if isSignedIn() && resource != null && resource.data.userId == request.auth.uid
+                  || isAdmin()
                   || isTeachersAdmin()
                   || isAHAdmin()
-                  || (isTeachersUser() && resource.data.userId == request.auth.uid)
                   || (isAcademicUser()
                       && resource.data.schoolId != null
                       && resource.data.schoolId == userProfile().schoolId
