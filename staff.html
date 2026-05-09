@@ -27,6 +27,19 @@
     /* Staff badges */
     .badge-violet { background: #ede9fe; color: #5b21b6; }
 
+    /* Level mini-chips: small inline tag for SMP/SMA/SD/KG/PG */
+    .level-chip-row { display: flex; gap: 4px; flex-wrap: wrap; }
+    .level-chip {
+      display: inline-flex; align-items: center; padding: 2px 7px;
+      font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em;
+      background: #f1f5f9; color: var(--ink-2);
+      border-radius: 4px; line-height: 1.4;
+    }
+
+    /* Linked / Not-yet badges */
+    .badge-linked  { background: #dcfce7; color: #166534; }
+    .badge-invited { background: #fef3c7; color: #92400e; }
+
     /* SECTION DIVIDER */
     .section-divider { margin: 36px 0 20px; display: flex; align-items: center; gap: 14px; }
     .section-divider h2 { font-size: 1rem; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
@@ -77,6 +90,19 @@
       <option value="pending">Pending</option>
       <option value="inactive">Inactive</option>
     </select>
+    <select class="filter-select" id="levelFilter" aria-label="Filter by level">
+      <option value="">All levels</option>
+      <option value="PG">PG</option>
+      <option value="KG">KG</option>
+      <option value="SD">SD</option>
+      <option value="SMP">SMP</option>
+      <option value="SMA">SMA</option>
+    </select>
+    <select class="filter-select" id="linkedFilter" aria-label="Filter by linked status">
+      <option value="">All link states</option>
+      <option value="linked">Linked</option>
+      <option value="invited">Not yet linked</option>
+    </select>
     <span class="staff-count" id="staffCount"></span>
     <button class="btn-add" id="addStaffBtn" aria-label="Add staff member">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -93,16 +119,19 @@
           <th data-sort="role">Role ↕</th>
           <th data-sort="school">School ↕</th>
           <th>Department</th>
+          <th>Levels</th>
           <th data-sort="status">Status ↕</th>
+          <th>Linked</th>
           <th id="actionsHeader" style="display:none">Actions</th>
         </tr>
       </thead>
       <tbody id="staffBody">
-        <tr><td colspan="6" style="padding:48px;text-align:center;color:var(--ink-3)">
+        <tr><td colspan="8" style="padding:48px;text-align:center;color:var(--ink-3)">
           <span class="skel" style="height:16px;width:60%;display:block;margin:auto"></span>
         </td></tr>
       </tbody>
     </table>
+    <div class="pagination" id="staffPagination"></div>
   </div>
 
   <!-- TEACHERS DATABASE SECTION -->
@@ -213,6 +242,8 @@
   let editingId   = null;
   let sortKey     = 'name';
   let sortAsc     = true;
+  let staffPage   = 1;
+  const STAFF_PAGE_SIZE = 25;
 
   const ROLE_BADGE = {
     teacher:     '<span class="badge badge-teal">Teacher</span>',
@@ -261,8 +292,10 @@
   }
 
   function bindEvents() {
-    ['searchInput','schoolFilter','roleFilter','statusFilter'].forEach(id =>
-      document.getElementById(id).addEventListener('input', applyFilters));
+    // Filter changes always reset to page 1 — otherwise narrowing the
+    // result set leaves the user on a now-empty page.
+    ['searchInput','schoolFilter','roleFilter','statusFilter','levelFilter','linkedFilter'].forEach(id =>
+      document.getElementById(id).addEventListener('input', () => { staffPage = 1; applyFilters(); }));
     document.querySelectorAll('th[data-sort]').forEach(th =>
       th.addEventListener('click', () => {
         const k = th.dataset.sort;
@@ -281,28 +314,90 @@
   }
 
   function applyFilters() {
-    const q  = document.getElementById('searchInput').value.toLowerCase();
-    const sc = document.getElementById('schoolFilter').value;
-    const ro = document.getElementById('roleFilter').value;
-    const st = document.getElementById('statusFilter').value;
+    const q   = document.getElementById('searchInput').value.toLowerCase();
+    const sc  = document.getElementById('schoolFilter').value;
+    const ro  = document.getElementById('roleFilter').value;
+    const st  = document.getElementById('statusFilter').value;
+    const lv  = document.getElementById('levelFilter').value;
+    const lk  = document.getElementById('linkedFilter').value;
     let list = allStaff.filter(s =>
       (!q  || s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.school?.toLowerCase().includes(q)) &&
       (!sc || s.school === sc) &&
       (!ro || s.role   === ro) &&
-      (!st || s.status === st)
+      (!st || s.status === st) &&
+      (!lv || (Array.isArray(s.levels) && s.levels.includes(lv))) &&
+      (!lk
+        || (lk === 'linked'  && !!s.userId)
+        || (lk === 'invited' && !s.userId))
     ).sort((a, b) => {
       const va = (a[sortKey] || '').toLowerCase();
       const vb = (b[sortKey] || '').toLowerCase();
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
-    document.getElementById('staffCount').textContent = `${list.length} member${list.length !== 1 ? 's' : ''}`;
-    renderTable(list);
+
+    // Clamp page if filter shrunk the result set (e.g. user was on
+    // page 12 then typed a query that returns 30 rows).
+    const totalPages = Math.max(1, Math.ceil(list.length / STAFF_PAGE_SIZE));
+    if (staffPage > totalPages) staffPage = totalPages;
+
+    const start = (staffPage - 1) * STAFF_PAGE_SIZE;
+    const pageRows = list.slice(start, start + STAFF_PAGE_SIZE);
+
+    const countEl = document.getElementById('staffCount');
+    if (list.length === 0) {
+      countEl.textContent = '0 members';
+    } else {
+      const rangeEnd = Math.min(start + STAFF_PAGE_SIZE, list.length);
+      countEl.textContent = `Showing ${start + 1}–${rangeEnd} of ${list.length}`;
+    }
+
+    renderTable(pageRows);
+    renderPagination(list.length, totalPages);
+  }
+
+  function renderPagination(total, totalPages) {
+    const el = document.getElementById('staffPagination');
+    if (total <= STAFF_PAGE_SIZE) { el.innerHTML = ''; return; }
+
+    // Build a windowed page list — first, last, and a slice around the
+    // current page — so 463 rows / 25 (=19 pages) doesn't render 19
+    // buttons in a row on small screens.
+    const pages = new Set([1, totalPages]);
+    for (let p = staffPage - 2; p <= staffPage + 2; p++) {
+      if (p > 1 && p < totalPages) pages.add(p);
+    }
+    const sorted = [...pages].sort((a, b) => a - b);
+
+    let html = '';
+    html += `<button class="page-btn" ${staffPage === 1 ? 'disabled' : ''} data-page="${staffPage - 1}">‹ Prev</button>`;
+    let prev = 0;
+    for (const p of sorted) {
+      if (prev && p > prev + 1) html += `<span class="page-btn" style="border:none;background:transparent;cursor:default">…</span>`;
+      const cls = p === staffPage ? 'page-btn active' : 'page-btn';
+      html += `<button class="${cls}" data-page="${p}">${p}</button>`;
+      prev = p;
+    }
+    html += `<button class="page-btn" ${staffPage === totalPages ? 'disabled' : ''} data-page="${staffPage + 1}">Next ›</button>`;
+    el.innerHTML = html;
+
+    el.querySelectorAll('button[data-page]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = Number(btn.dataset.page);
+        if (target >= 1 && target <= totalPages && target !== staffPage) {
+          staffPage = target;
+          applyFilters();
+          // Scroll the table-wrap (not the page) so the user sees the new
+          // top row after clicking a page button.
+          document.querySelector('.table-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
   }
 
   function renderTable(list) {
     const body = document.getElementById('staffBody');
     if (!list.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="6">No staff members match your filters.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="8">No staff members match your filters.</td></tr>';
       return;
     }
     body.innerHTML = list.map(s => {
@@ -312,6 +407,12 @@
           <button class="btn-action" onclick="editStaff('${s.id}')">Edit</button>
           <button class="btn-action btn-action-del" onclick="deleteStaff('${s.id}')">Delete</button>
         </div></td>` : '';
+      const levelsHtml = Array.isArray(s.levels) && s.levels.length
+        ? `<div class="level-chip-row">${s.levels.map(l => `<span class="level-chip">${esc(l)}</span>`).join('')}</div>`
+        : '<span style="color:var(--ink-3)">—</span>';
+      const linkedHtml = s.userId
+        ? '<span class="badge badge-linked">Linked</span>'
+        : '<span class="badge badge-invited">Not yet</span>';
       return `
         <tr>
           <td>
@@ -326,7 +427,9 @@
           <td>${ROLE_BADGE[s.role] || esc(s.role||'—')}</td>
           <td>${esc(s.school||'—')}</td>
           <td>${esc(s.department||'—')}</td>
+          <td>${levelsHtml}</td>
           <td>${STATUS_BADGE[s.status] || esc(s.status||'—')}</td>
+          <td>${linkedHtml}</td>
           ${actions}
         </tr>`;
     }).join('');
