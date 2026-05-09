@@ -205,7 +205,7 @@ Walkthrough notes use Semesta D1-D6 for simplicity; appraisal items use CTS for 
 | **Specialist Induction** | ✓ live | Full | ✓ |
 | **Principal Observation Rubric** | ✓ live (`/principal-observation-entry`) — 8 foci × E/D/N + 4 narrative fields, no score, immutable on submit | Full | ✓ |
 | **Principal Operating Cadence** | ✓ live, surfaces in weekly-checklist | Full | ✓ |
-| **Principal 360°** | ✓ UI live (`/principal-360-respond` + `/principal-360-results`) — anonymous respond + threshold-gated aggregate view. **Cloud Function `aggregatePrincipal360Responses` pending** (until then results page shows 'no aggregate yet') | Full | ✓ NN5 enforced (no respondent uid persisted) |
+| **Principal 360°** | ✓ UI live (`/principal-360-respond` + `/principal-360-results` + CH `/principal-360-admin`) — anonymous respond + threshold-gated aggregate view + cycle launch admin. Cloud Function `aggregatePrincipal360Responses` deployed 2026-05-09 (write-trigger; weight redistribution for below-threshold cohorts; persists no respondent uid). | Full | ✓ NN5 enforced (no respondent uid persisted; aggregator never reads respondent identifier) |
 | **Principal Coaching cycle** | ✓ live — CH `/principal-coaching-session` (mentor form, HQ Director only) + AH `/principal-coaching-view` (coachee read-only). 5-stage agenda · Foundation Reps EXCLUDED at rule level | Full | ✓ |
 | **School Appraisal v2 ↔ Principal Rubric mapping** | ✓ ([file](school-appraisal-x-principal-rubric-mapping.json)) | — | — |
 | **References & Standards hub** (CH /references; narrowed AH+TH variants) | ✓ live — 49 docs in CH (full superset) · 16 in AH · 15 in TH. Modal viewer auto-wires CTS/SKL/PIGP chips | Full | ✓ |
@@ -227,7 +227,8 @@ All Phase-2 UIs landed 2026-05-09 (form/skeleton level). Remaining work is funct
 4. ✓ Principal Annual Appraisal UI — `/principal-appraisal-entry` (Phase-2 G, 2026-05-09). Composite + A-F band auto-computed.
 
 Pending follow-up work:
-- Cloud Function for principal_360_responses → principal_360_aggregates (Charter NN5 anonymisation enforced at runtime, currently relies on rule-level list-block + planned aggregator)
+- ✓ Cloud Function `aggregatePrincipal360Responses` for principal_360_responses → principal_360_aggregates (2026-05-09 — write-trigger, threshold-aware cohort gating, weight redistribution for below-threshold cohorts, no respondent uid touched). Code in [`Central Hub/functions/index.js`](../../Central%20Hub/functions/index.js) — deploy requires Blaze billing.
+- ✓ CH `/principal-360-admin` cycle launch UI (2026-05-09 — central_admin tooling: create cycle, open/close, copy cohort-specific invite links, monitor per-cohort response counts + composite F3). Replaces "admin manually creates cycle docs in Firestore" workflow.
 - /principal-coaching-history admin audit page (low priority — direct URL access works for now)
 - Wire Phase-2 navigation entries into AH navbar Induction & Reference column (currently URL-direct only)
 
