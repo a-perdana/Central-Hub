@@ -218,7 +218,13 @@ service cloud.firestore {
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      // Admin can update freely; any authorised user can bump commentCount only
+      // (so non-admin commenters can keep the count in sync after addDoc).
+      allow update: if isAdmin()
+                       || (isAuthorized()
+                           && request.resource.data.diff(resource.data).affectedKeys()
+                                .hasOnly(['commentCount']));
 
       // comments sub-collection (used by Academic Hub & Teachers Hub)
       match /comments/{commentId} {
