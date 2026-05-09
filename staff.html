@@ -40,16 +40,6 @@
     .badge-linked  { background: #dcfce7; color: #166534; }
     .badge-invited { background: #fef3c7; color: #92400e; }
 
-    /* SECTION DIVIDER */
-    .section-divider { margin: 36px 0 20px; display: flex; align-items: center; gap: 14px; }
-    .section-divider h2 { font-size: 1rem; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-    .section-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-
-    /* TEACHERS TOOLBAR */
-    .teachers-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-    .teachers-toolbar .toolbar-search { flex: 1; min-width: 180px; }
-    .teachers-count { font-size: 0.85rem; color: var(--ink-3); padding: 0 4px; }
-
     /* RESPONSIVE */
     @media (max-width: 768px) {
       .page-content { padding: 20px 16px; }
@@ -60,7 +50,6 @@
     @media (max-width: 560px) {
       .toolbar { flex-direction: column; align-items: stretch; }
       .toolbar-search { min-width: 0; }
-      .teachers-toolbar { flex-direction: column; align-items: stretch; }
     }
   </style>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
@@ -134,46 +123,6 @@
     <div class="pagination" id="staffPagination"></div>
   </div>
 
-  <!-- TEACHERS DATABASE SECTION -->
-  <div class="section-divider"><h2>Teachers Database</h2></div>
-
-  <div class="teachers-toolbar">
-    <div class="toolbar-search">
-      <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-input" id="tchSearch" type="search" placeholder="Search by name, school, or subject…" aria-label="Search teachers">
-    </div>
-    <select class="filter-select" id="tchSchool" aria-label="Filter by school"><option value="">All schools</option></select>
-    <select class="filter-select" id="tchLevel" aria-label="Filter by level"><option value="">All levels</option></select>
-    <select class="filter-select" id="tchNat" aria-label="Filter by nationality">
-      <option value="">All nationalities</option>
-      <option value="Native">Indonesian</option>
-      <option value="Foreign">International</option>
-    </select>
-    <span class="teachers-count" id="tchCount"></span>
-  </div>
-
-  <div class="table-wrap">
-    <table aria-label="Teachers database">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Name</th>
-          <th>School</th>
-          <th>Level</th>
-          <th>Subject</th>
-          <th>Degree</th>
-          <th>Nationality</th>
-          <th>Employment</th>
-        </tr>
-      </thead>
-      <tbody id="tchBody">
-        <tr><td colspan="8" style="padding:48px;text-align:center;color:var(--ink-3)">
-          <span class="skel" style="height:16px;width:60%;display:block;margin:auto"></span>
-        </td></tr>
-      </tbody>
-    </table>
-    <div class="pagination" id="tchPagination"></div>
-  </div>
 </div>
 
 <!-- ADD / EDIT DRAWER -->
@@ -228,7 +177,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
@@ -523,130 +471,6 @@
 
   window.editStaff   = editStaff;
   window.deleteStaff = deleteStaff;
-
-  // ===== Teachers Database (Excel) =====
-  let tchAll = [], tchFiltered = [], tchPage = 1;
-  const TCH_PAGE_SIZE = 25;
-
-  function shortDegree(d) {
-    if (!d) return '—';
-    if (d.includes('Master') || d.includes('S2')) return "Master's (S2)";
-    if (d.includes('Bachelor') || d.includes('S1')) return "Bachelor's (S1)";
-    if (d.includes('Doctorate') || d.includes('Ph.D')) return 'Doctorate';
-    if (d.includes('High school')) return 'High School';
-    return d;
-  }
-
-  function tchNatBadge(n) {
-    if (n === 'Native')  return '<span class="badge badge-teal">Indonesian</span>';
-    if (n === 'Foreign') return '<span class="badge badge-red">International</span>';
-    return '—';
-  }
-
-  function tchEmpBadge(e) {
-    if (!e) return '—';
-    if (e.includes('Permanent')) return '<span class="badge badge-green">PKWTT</span>';
-    if (e.includes('Fixed'))     return '<span class="badge badge-amber">PKWT</span>';
-    return `<span class="badge badge-violet">${esc(e)}</span>`;
-  }
-
-  async function loadTeachersExcel() {
-    try {
-      const resp = await fetch('resources/Teachers Database.xlsx');
-      if (!resp.ok) throw new Error('not found');
-      const buf  = await resp.arrayBuffer();
-      const wb   = XLSX.read(buf, { type: 'array' });
-      const ws   = wb.Sheets['25_26'] || wb.Sheets[wb.SheetNames[0]];
-      tchAll = XLSX.utils.sheet_to_json(ws);
-      tchFiltered = tchAll;
-
-      // Populate school + level filters
-      const schools = [...new Set(tchAll.map(r => r.curr_school).filter(Boolean))].sort();
-      const levels  = [...new Set(tchAll.map(r => r.level).filter(Boolean))].sort();
-      const schSel  = document.getElementById('tchSchool');
-      const lvlSel  = document.getElementById('tchLevel');
-      schSel.insertAdjacentHTML('beforeend', schools.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join(''));
-      lvlSel.insertAdjacentHTML('beforeend', levels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join(''));
-
-      tchApplyFilters();
-
-      ['tchSearch','tchSchool','tchLevel','tchNat'].forEach(id =>
-        document.getElementById(id).addEventListener('input', tchApplyFilters));
-    } catch(e) {
-      document.getElementById('tchBody').innerHTML =
-        '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--ink-3)">Could not load Teachers Database.</td></tr>';
-    }
-  }
-
-  function tchApplyFilters() {
-    const q   = document.getElementById('tchSearch').value.toLowerCase();
-    const sc  = document.getElementById('tchSchool').value;
-    const lv  = document.getElementById('tchLevel').value;
-    const nat = document.getElementById('tchNat').value;
-
-    tchFiltered = tchAll.filter(r =>
-      (!q   || [r.name, r.curr_school, r.main_subject].join(' ').toLowerCase().includes(q)) &&
-      (!sc  || r.curr_school === sc) &&
-      (!lv  || r.level === lv) &&
-      (!nat || r.nationality === nat)
-    );
-    tchPage = 1;
-    document.getElementById('tchCount').textContent = `${tchFiltered.length} teacher${tchFiltered.length !== 1 ? 's' : ''}`;
-    tchRenderTable();
-  }
-
-  function tchRenderTable() {
-    const start = (tchPage - 1) * TCH_PAGE_SIZE;
-    const page  = tchFiltered.slice(start, start + TCH_PAGE_SIZE);
-    const tbody = document.getElementById('tchBody');
-    if (!tchFiltered.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--ink-3)">No teachers match your filters.</td></tr>';
-      document.getElementById('tchPagination').innerHTML = '';
-      return;
-    }
-    tbody.innerHTML = page.map((r, i) => `
-      <tr>
-        <td style="color:var(--ink-3);font-size:0.8rem">${start + i + 1}</td>
-        <td style="font-weight:500">${esc(r.name || '—')}</td>
-        <td>${esc(r.curr_school || '—')}</td>
-        <td><span class="badge badge-teal">${esc(r.level || '—')}</span></td>
-        <td>${esc(r.main_subject || '—')}</td>
-        <td style="font-size:0.82rem;color:var(--ink-2)">${esc(shortDegree(r.highest_degree))}</td>
-        <td>${tchNatBadge(r.nationality)}</td>
-        <td>${tchEmpBadge(r.employment_status)}</td>
-      </tr>`).join('');
-    tchRenderPagination();
-  }
-
-  function tchRenderPagination() {
-    const totalPages = Math.ceil(tchFiltered.length / TCH_PAGE_SIZE);
-    const pag = document.getElementById('tchPagination');
-    if (totalPages <= 1) { pag.innerHTML = ''; return; }
-
-    let html = `<button class="page-btn" onclick="tchGoPage(${tchPage-1})" ${tchPage===1?'disabled':''}>‹</button>`;
-    const show = [];
-    for (let p = 1; p <= totalPages; p++) {
-      if (p === 1 || p === totalPages || Math.abs(p - tchPage) <= 2) show.push(p);
-    }
-    let prev = null;
-    show.forEach(p => {
-      if (prev && p - prev > 1) html += `<span style="color:var(--ink-3);padding:0 4px">…</span>`;
-      html += `<button class="page-btn ${p===tchPage?'active':''}" onclick="tchGoPage(${p})">${p}</button>`;
-      prev = p;
-    });
-    html += `<button class="page-btn" onclick="tchGoPage(${tchPage+1})" ${tchPage===totalPages?'disabled':''}>›</button>`;
-    pag.innerHTML = html;
-  }
-
-  window.tchGoPage = function(p) {
-    const totalPages = Math.ceil(tchFiltered.length / TCH_PAGE_SIZE);
-    if (p < 1 || p > totalPages) return;
-    tchPage = p;
-    tchRenderTable();
-    document.getElementById('tchBody').closest('.table-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  document.addEventListener('authReady', () => loadTeachersExcel());
 </script>
 </body>
 </html>
