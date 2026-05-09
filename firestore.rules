@@ -1536,14 +1536,20 @@ service cloud.firestore {
     match /topics/{topicId} {
       allow read:   if isAuthorized();
       allow create: if isAuthorized();
-      allow update: if isAuthorized() &&
-                       (resource.data.author == request.auth.token.email || isAdmin());
-      allow delete: if isAdmin();
+      // Author / admin can do full updates; any authorised user can bump replyCount only
+      // (so non-author repliers keep the count in sync after addDoc to /replies).
+      allow update: if isAuthorized() && (
+                       resource.data.authorUid == request.auth.uid
+                    || isAdmin()
+                    || request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['replyCount']));
+      allow delete: if isAuthorized() && (resource.data.authorUid == request.auth.uid || isAdmin());
 
       match /replies/{replyId} {
         allow read:   if isAuthorized();
         allow create: if isAuthorized();
-        allow update, delete: if isAdmin();
+        allow update, delete: if isAuthorized() &&
+                                 (resource.data.authorUid == request.auth.uid || isAdmin());
       }
     }
 
