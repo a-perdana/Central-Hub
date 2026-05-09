@@ -187,9 +187,22 @@ service cloud.firestore {
     }
 
     // -- staff -----------------------------------------------
+    // Self-link path: a user logging in for the first time may write
+    // their own auth uid into the staff doc that matches their email
+    // (auth-guard.js does this on first sign-in). Restricted to:
+    //   - The doc's emailLower must match the requester's email
+    //   - Only userId / linkedAt / invited fields may change
+    //   - The userId being written must be the requester's own uid
+    // Everything else (create, delete, full updates) stays admin-only.
     match /staff/{staffId} {
       allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (isSignedIn()
+         && resource.data.emailLower == request.auth.token.email.lower()
+         && request.resource.data.userId == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['userId', 'linkedAt', 'invited']));
     }
 
     // -- announcements ---------------------------------------
