@@ -3047,6 +3047,26 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .doc-modal-close:hover { color: var(--ink); background: #f3f4f6; }
     .doc-modal-body { padding: 24px 28px; overflow: auto; flex: 1; }
 
+    /* Modal nav buttons — cycle through the visible (post-filter) cards in
+       the active panel. Keyboard ←/→ wired to the same handlers. */
+    .doc-modal-nav {
+      display: inline-flex; align-items: center; gap: 6px; margin-right: 8px;
+    }
+    .doc-modal-nav-btn {
+      background: #f3f4f6; border: 1px solid var(--border); color: var(--ink-2);
+      cursor: pointer; padding: 4px 10px; border-radius: 6px;
+      font-size: 12px; font-weight: 600; line-height: 1.2;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .doc-modal-nav-btn:hover:not([disabled]) {
+      background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk);
+    }
+    .doc-modal-nav-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+    .doc-modal-nav-pos {
+      font-size: 11px; color: var(--ink-3); font-weight: 500;
+      font-variant-numeric: tabular-nums; padding: 0 4px;
+    }
+
     /* Markdown rendering */
     .md-render h1, .md-render h2, .md-render h3, .md-render h4 { font-family: 'Lora', serif; color: var(--ink); margin: 18px 0 10px; line-height: 1.3; }
     .md-render h1 { font-size: 1.7rem; border-bottom: 2px solid var(--accent-2); padding-bottom: 8px; }
@@ -3323,6 +3343,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <div class="doc-modal-title" id="docModalTitle">Loading…</div>
           <div class="doc-modal-meta" id="docModalMeta"></div>
         </div>
+        <div class="doc-modal-nav" id="docModalNav">
+          <button class="doc-modal-nav-btn" id="docNavPrev" aria-label="Previous (left arrow)" title="Previous (←)">←</button>
+          <span class="doc-modal-nav-pos" id="docNavPos"></span>
+          <button class="doc-modal-nav-btn" id="docNavNext" aria-label="Next (right arrow)" title="Next (→)">→</button>
+        </div>
         <button class="doc-modal-close" id="docModalClose" aria-label="Close">×</button>
       </div>
       <div class="doc-modal-body" id="docModalBody">
@@ -3463,7 +3488,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       document.getElementById('docModalOverlay').addEventListener('click', (e) => {
         if (e.target.id === 'docModalOverlay') closeDoc();
       });
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDoc(); });
+
+      // Modal prev/next nav — buttons + arrow keys. Arrow keys only fire
+      // when the modal is open AND focus isn't in a typing context (so the
+      // search box still gets cursor movement when active).
+      document.getElementById('docNavPrev').addEventListener('click', () => navDoc(-1));
+      document.getElementById('docNavNext').addEventListener('click', () => navDoc(+1));
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { closeDoc(); return; }
+        const overlay = document.getElementById('docModalOverlay');
+        if (!overlay.classList.contains('open')) return;
+        const inField = e.target.matches && e.target.matches('input, textarea, [contenteditable]');
+        if (inField) return;
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); navDoc(-1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); navDoc(+1); }
+      });
 
       // Render static manifests
       renderGrid('frameworks', MANIFEST.frameworks);
@@ -3476,6 +3515,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // so render synchronously before kicking off the Firestore round-trip.
       // First paint feels noticeably snappier on slower connections.
       renderRails();
+
+      // Kick off the search index fetch in the background. We don't await
+      // it — the user can still type and get DOM-text results immediately;
+      // once the index lands, subsequent keystrokes get the wider recall.
+      loadSearchIndex();
 
       // Handbooks: load from Firestore induction_programs
       await loadHandbooks();
@@ -3550,6 +3594,23 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     /* ── Search ─────────────────────────────────────────────────────── */
+    /* Returns Set of references-data paths that the build-time index marks
+       as containing the query (tokens or headings substring match).
+       Empty Set if the index hasn't loaded yet — caller falls back to
+       DOM-only behaviour, which is a strict subset. */
+    function indexHits(q) {
+      const hits = new Set();
+      const idx = _searchIndex && _searchIndex.docs;
+      if (!idx) return hits;
+      const ql = q.toLowerCase();
+      for (const [path, entry] of Object.entries(idx)) {
+        const inTokens   = (entry.tokens   || []).some(t => t.toLowerCase().includes(ql));
+        const inHeadings = (entry.headings || []).some(h => h.toLowerCase().includes(ql));
+        if (inTokens || inHeadings) hits.add(path);
+      }
+      return hits;
+    }
+
     function applySearch(qRaw) {
       const q = qRaw.trim().toLowerCase();
       const sClear = document.getElementById('refSearchClear');
@@ -3574,19 +3635,37 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         return;
       }
 
+      // Build-time content index hits — a card whose data-path matches an
+      // indexed path counts as a hit even if its DOM text doesn't include
+      // the query. This is what makes 'NN3' surface FIRESTORE_SCHEMA.md.
+      const idxPaths = indexHits(q);
+
       let totalMatches = 0;
+      let extraFromIndex = 0;
       document.querySelectorAll('.ref-panel').forEach(panel => {
         let panelMatches = 0;
         panel.querySelectorAll('.ref-card').forEach(card => {
           const text = (card.textContent || '').toLowerCase();
-          const match = text.includes(q);
+          const path = card.dataset.path; // present on all open-doc cards
+          const matchText  = text.includes(q);
+          const matchIndex = path && idxPaths.has(path);
+          const match = matchText || matchIndex;
           card.classList.toggle('filtered-out', !match);
-          if (match) panelMatches++;
+          if (match) {
+            panelMatches++;
+            if (!matchText && matchIndex) extraFromIndex++;
+          }
         });
         panel.classList.toggle('no-matches', panelMatches === 0);
         totalMatches += panelMatches;
       });
-      sInfo.textContent = `${totalMatches} match${totalMatches === 1 ? '' : 'es'}`;
+
+      // Surface the extra recall so the user understands why a card with
+      // no visible mention of "NN3" is still showing.
+      const extra = extraFromIndex > 0
+        ? ` (+${extraFromIndex} from doc body)`
+        : '';
+      sInfo.textContent = `${totalMatches} match${totalMatches === 1 ? '' : 'es'}${extra}`;
     }
 
     /* ── Curated rails ──────────────────────────────────────────────
@@ -3780,6 +3859,29 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       });
     }
 
+    /* Build-time content search index — generated by build.js into
+       dist/references-search-index.json. Maps each references-data path
+       to { tokens, headings } extracted from the file body. Lets the
+       search input match terms that appear INSIDE a doc but not in its
+       MANIFEST title/desc/tags (e.g. 'NN3' inside FIRESTORE_SCHEMA.md).
+       Fetched once on boot, cached in memory; failures are non-fatal —
+       search falls back to DOM-text only. */
+    let _searchIndex = null;
+    async function loadSearchIndex() {
+      if (_searchIndex !== null) return _searchIndex;
+      try {
+        const res = await fetch('references-search-index.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        _searchIndex = json;
+        return json;
+      } catch (err) {
+        console.warn('Search index unavailable; falling back to DOM-only search.', err);
+        _searchIndex = { docs: {} }; // empty stub keeps applySearch simple
+        return _searchIndex;
+      }
+    }
+
     let handbookCache = [];
 
     async function loadHandbooks() {
@@ -3964,6 +4066,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     /* ── Document modal ──────────────────────────────────────────── */
+    /* Track the doc currently in the modal so prev/next can compute the
+       neighbour from whichever panel is active. Updated on every openDoc;
+       reset to null on close. */
+    let _currentDocPath = null;
+
     async function openDoc({ path, kind, title }) {
       const overlay = document.getElementById('docModalOverlay');
       const titleEl = document.getElementById('docModalTitle');
@@ -3974,6 +4081,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       metaEl.textContent = `${kind.toUpperCase()} · references-data/${path}`;
       bodyEl.innerHTML = '<div class="doc-loading">Loading…</div>';
       overlay.classList.add('open');
+      _currentDocPath = path;
+      updateModalNav();
 
       // Track recently-viewed (top of MRU list, max 5)
       recordRecent({ path, kind, title });
@@ -4030,12 +4139,52 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     function closeDoc() {
       document.getElementById('docModalOverlay').classList.remove('open');
+      _currentDocPath = null;
       // Drop ?doc= so the URL isn't left in a 'pre-opened' state
       const url = new URL(window.location.href);
       if (url.searchParams.has('doc')) {
         url.searchParams.delete('doc');
         window.history.replaceState({}, '', url);
       }
+    }
+
+    /* Walk the active panel's grid in DOM order, skipping filtered-out
+       cards, and return the openable (data-path) entries. Used by both
+       prev/next nav and the position label. */
+    function visibleDocsInActivePanel() {
+      const panel = document.querySelector('.ref-panel.active');
+      if (!panel) return [];
+      const cards = panel.querySelectorAll('.ref-card[data-action="open-doc"][data-path]:not(.filtered-out)');
+      return [...cards].map(c => ({
+        path: c.dataset.path, kind: c.dataset.kind, title: c.dataset.title
+      }));
+    }
+
+    function updateModalNav() {
+      const prevBtn = document.getElementById('docNavPrev');
+      const nextBtn = document.getElementById('docNavNext');
+      const posEl   = document.getElementById('docNavPos');
+      const docs = visibleDocsInActivePanel();
+      const idx = docs.findIndex(d => d.path === _currentDocPath);
+      // Doc opened from a rail / connected chip / handbook may not be in
+      // the active panel — disable nav rather than guess a neighbour.
+      if (idx === -1 || docs.length <= 1) {
+        prevBtn.disabled = true; nextBtn.disabled = true;
+        posEl.textContent = '';
+        return;
+      }
+      prevBtn.disabled = (idx === 0);
+      nextBtn.disabled = (idx === docs.length - 1);
+      posEl.textContent = `${idx + 1} / ${docs.length}`;
+    }
+
+    function navDoc(delta) {
+      const docs = visibleDocsInActivePanel();
+      const idx = docs.findIndex(d => d.path === _currentDocPath);
+      if (idx === -1) return;
+      const next = idx + delta;
+      if (next < 0 || next >= docs.length) return;
+      openDoc(docs[next]);
     }
 
     /* Reverse index: id -> [{id,title,path,kind} of every entry that lists
