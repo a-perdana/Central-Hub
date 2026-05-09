@@ -703,11 +703,20 @@
       outline: none;
     }
     .recip-search:focus { border-color: var(--accent); background: #fff; }
-    .recip-check-all {
+    .recip-check-all,
+    .recip-incomplete-toggle {
       display: flex; align-items: center; gap: 6px; white-space: nowrap;
       font-size: .82rem; color: var(--ink-2); cursor: pointer;
     }
-    .recip-check-all input { accent-color: var(--accent); }
+    .recip-check-all input,
+    .recip-incomplete-toggle input { accent-color: var(--accent); }
+    .recip-issue-tag {
+      font-size: .68rem; font-weight: 600; color: #b45309;
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 4px; padding: 1px 6px;
+      flex-shrink: 0; white-space: nowrap;
+    }
+    .recip-issue-tag.is-error { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
     .recip-modal-body {
       flex: 1; overflow-y: auto; padding: 8px 12px;
     }
@@ -1041,6 +1050,7 @@
       <ul class="recip-breakdown" id="recipBreakdown">
         <li><span>Registered teachers</span> <strong id="brRegistered">—</strong></li>
         <li><span>Manual contacts</span>     <strong id="brManual">—</strong></li>
+        <li id="brIncompleteRow" style="display:none"><span style="color:#b45309">⚠ Missing data</span> <strong id="brIncomplete" style="color:#b45309">0</strong></li>
       </ul>
       <button class="btn-view-recip-sm" id="btnViewRecipSm" style="display:none;margin-top:12px">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -1242,6 +1252,9 @@
         <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input class="recip-search" id="recipSearch" type="text" placeholder="Search by name or email…">
       </div>
+      <label class="recip-incomplete-toggle" title="Show only recipients missing data referenced by the loaded template">
+        <input type="checkbox" id="recipIncompleteOnly"> Incomplete only <span id="recipIncompleteCount" style="font-size:.78rem;color:var(--ink-3);margin-left:4px"></span>
+      </label>
       <label class="recip-check-all">
         <input type="checkbox" id="recipCheckAll"> Select all
       </label>
@@ -2296,6 +2309,22 @@ function validateForm() {
   document.getElementById('recipCount').textContent    = sendCount;
   document.getElementById('brRegistered').textContent  = sendList.filter(r => r.source !== 'manual').length;
   document.getElementById('brManual').textContent      = sendList.filter(r => r.source === 'manual').length;
+
+  // Live "missing data" badge — counts recipients with at least one issue
+  // against the currently-loaded template tags. Hidden when nothing's wrong
+  // so admins composing plain newsletters never see it.
+  const tags = currentTemplateTags();
+  const incompleteRow = document.getElementById('brIncompleteRow');
+  if (incompleteRow) {
+    const incomplete = sendList.filter(r => recipientIssues(r, tags).length).length;
+    if (incomplete > 0) {
+      document.getElementById('brIncomplete').textContent = incomplete;
+      incompleteRow.style.display = '';
+    } else {
+      incompleteRow.style.display = 'none';
+    }
+  }
+
   document.getElementById('btnSend').disabled = !(subject && hasText && sendCount > 0);
 }
 
@@ -2478,6 +2507,36 @@ function extractMergeTagsFromTemplate(template) {
   return [...set];
 }
 
+// Cheap email shape check — same regex Resend uses internally for syntactic
+// validation. Catches blanks, missing @, missing TLD. Doesn't verify deliverability.
+function isValidEmail(s) {
+  return typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
+// Returns the list of issues for a single recipient against the currently-loaded
+// template's tag set. Used by both the Recipients modal (per-row chip) and the
+// Confirm Send modal (aggregate counts).
+function recipientIssues(r, usedTags) {
+  const issues = [];
+  if (!isValidEmail(r.email)) issues.push('email');
+  for (const tag of (usedTags || [])) {
+    if (tag === 'email') continue; // already covered above
+    let val;
+    if (tag === 'name') val = r.fields?.name ?? r.name;
+    else                val = r.fields?.[tag];
+    if (val == null || String(val).trim() === '') issues.push(tag);
+  }
+  return issues;
+}
+
+// Pulls the {{tags}} from the live composer (subject + Quill HTML). Returns []
+// when Quill isn't ready yet — callers gracefully render no warnings.
+function currentTemplateTags() {
+  const subject  = document.getElementById('fSubject')?.value || '';
+  const bodyHtml = quill?.root?.innerHTML || '';
+  return extractMergeTagsFromTemplate(subject + ' ' + bodyHtml);
+}
+
 // Mirror of the server's applyMergeTags — used only for the confirm modal preview.
 // Plain-text rendering (no HTML escape needed for the body sample shown in the modal,
 // since we already textContent it).
@@ -2539,6 +2598,36 @@ function openConfirmSendModal({ subject, audience, recipCount, bodyHtml,
   const allFieldNames = personalizations
     ? new Set(Object.values(personalizations).flatMap(v => Object.keys(v || {})))
     : new Set();
+
+  // Per-tag aggregate: how many recipients in THIS send have a blank value
+  // for each {{tag}} the template references? This is what the admin really
+  // wants — "12 of 47 recipients have empty {{name}}" — and surfaces in
+  // addition to the structural template/field warnings below.
+  if (tagsUsed.length && activeRecips && activeRecips.length) {
+    const perTagBlanks = new Map(); // tagName → count
+    let invalidEmail = 0;
+    for (const r of activeRecips) {
+      if (!isValidEmail(r.email)) invalidEmail++;
+      for (const tag of tagsUsed) {
+        if (tag === 'email') continue;
+        let val;
+        if (tag === 'name') val = r.fields?.name ?? r.name;
+        else                val = r.fields?.[tag];
+        if (val == null || String(val).trim() === '') {
+          perTagBlanks.set(tag, (perTagBlanks.get(tag) || 0) + 1);
+        }
+      }
+    }
+    if (invalidEmail > 0) {
+      warnings.push(`${invalidEmail} of ${recipCount} recipient${invalidEmail === 1 ? ' has' : 's have'} an invalid email address — Resend will reject ${invalidEmail === 1 ? 'it' : 'them'}.`);
+    }
+    for (const [tag, blanks] of perTagBlanks) {
+      if (blanks > 0) {
+        warnings.push(`${blanks} of ${recipCount} recipient${blanks === 1 ? ' has' : 's have'} no value for {{${tag}}} — that tag will render blank for ${blanks === 1 ? 'them' : 'those'}.`);
+      }
+    }
+  }
+
   // Tags referenced in body that have no data anywhere — will render as empty string.
   // Both `email` and `name` are auto-injected per recipient, so they're never "missing".
   const AUTO_INJECTED = new Set(['email', 'name']);
@@ -3076,15 +3165,25 @@ document.getElementById('recipSearch').addEventListener('input', function() {
   renderRecipModal(mergedPool, this.value.trim());
 });
 
+document.getElementById('recipIncompleteOnly').addEventListener('change', function() {
+  const mergedPool = [...new Map([...chipRecipients, ...manualRecipients]).values()];
+  renderRecipModal(mergedPool, document.getElementById('recipSearch').value.trim());
+});
+
 document.getElementById('recipCheckAll').addEventListener('change', function() {
   const query = document.getElementById('recipSearch').value.trim().toLowerCase();
+  const incompleteOnly = !!document.getElementById('recipIncompleteOnly').checked;
+  const tags = currentTemplateTags();
   const list  = [...new Map([...chipRecipients, ...manualRecipients]).values()];
-  const visible = list.filter(r =>
+  let visible = list.filter(r =>
     !query ||
     r.name?.toLowerCase().includes(query) ||
     r.email.toLowerCase().includes(query) ||
     r.schoolName?.toLowerCase().includes(query)
   );
+  if (incompleteOnly) {
+    visible = visible.filter(r => recipientIssues(r, tags).length);
+  }
   if (this.checked) {
     visible.forEach(r => excludedEmails.delete(r.email.toLowerCase()));
   } else {
@@ -3117,23 +3216,49 @@ window.toggleRecipRow = function(email) {
 
 function renderRecipModal(list, query) {
   const q = (query || '').toLowerCase();
-  const filtered = list.filter(r =>
-    !q ||
-    r.name?.toLowerCase().includes(q) ||
-    r.email.toLowerCase().includes(q) ||
-    r.schoolName?.toLowerCase().includes(q)
-  );
+  const incompleteOnly = !!document.getElementById('recipIncompleteOnly')?.checked;
+  const tags = currentTemplateTags();
+
+  // Build (recipient, issues) tuples once so the filter + the rendered chip
+  // see the same answer.
+  const enriched = list
+    .filter(r =>
+      !q ||
+      r.name?.toLowerCase().includes(q) ||
+      r.email.toLowerCase().includes(q) ||
+      r.schoolName?.toLowerCase().includes(q)
+    )
+    .map(r => ({ r, issues: recipientIssues(r, tags) }));
+
+  // Update the "Incomplete only" badge count using the search-filtered set
+  // (so the count reflects what the admin would see if they toggled it on).
+  const incompleteCount = enriched.filter(x => x.issues.length).length;
+  const cntEl = document.getElementById('recipIncompleteCount');
+  if (cntEl) cntEl.textContent = incompleteCount ? `(${incompleteCount})` : '';
+
+  const filtered = incompleteOnly
+    ? enriched.filter(x => x.issues.length).map(x => x)
+    : enriched;
 
   const body = document.getElementById('recipModalBody');
   if (!filtered.length) {
-    body.innerHTML = `<div class="recip-empty">No recipients match your search.</div>`;
+    body.innerHTML = `<div class="recip-empty">${incompleteOnly && tags.length ? 'No recipients are missing data for the loaded template.' : 'No recipients match your search.'}</div>`;
     return;
   }
 
-  body.innerHTML = filtered.map(r => {
+  body.innerHTML = filtered.map(({ r, issues }) => {
     const key      = r.email.toLowerCase();
     const included = !excludedEmails.has(key);
     const initials = (r.name || r.email).slice(0,2).toUpperCase();
+    // Render an issue chip when the loaded template uses tags this recipient
+    // can't fill. `email` is treated as an error (won't deliver), other tags
+    // as warnings (delivers but renders blank).
+    let issueChip = '';
+    if (issues.length) {
+      const isErr = issues.includes('email');
+      const label = issues.map(i => i === 'email' ? 'invalid email' : `missing {{${i}}}`).join(' · ');
+      issueChip = `<span class="recip-issue-tag${isErr ? ' is-error' : ''}" title="${escAttr(label)}">${escHtml(label)}</span>`;
+    }
     return `<div class="recip-row${included ? '' : ' excluded'}" data-email="${escHtml(key)}" onclick="toggleRecipRow(this.dataset.email)">
       <input type="checkbox" ${included ? 'checked' : ''} onclick="event.stopPropagation();toggleRecipRow(this.closest('.recip-row').dataset.email)">
       <div class="recip-avatar-sm">${escHtml(initials)}</div>
@@ -3141,15 +3266,17 @@ function renderRecipModal(list, query) {
         <div class="recip-name">${escHtml(r.name || r.email)}</div>
         <div class="recip-email">${escHtml(r.email)}</div>
       </div>
+      ${issueChip}
       ${r.schoolName ? `<span class="recip-school-tag" title="${escHtml(r.schoolName)}">${escHtml(r.schoolName)}</span>` : ''}
     </div>`;
   }).join('');
 
   // Sync "select all" checkbox state
-  const allChecked = filtered.every(r => !excludedEmails.has(r.email.toLowerCase()));
+  const visibleList = filtered.map(x => x.r);
+  const allChecked = visibleList.every(r => !excludedEmails.has(r.email.toLowerCase()));
   document.getElementById('recipCheckAll').checked = allChecked;
   document.getElementById('recipCheckAll').indeterminate =
-    !allChecked && filtered.some(r => !excludedEmails.has(r.email.toLowerCase()));
+    !allChecked && visibleList.some(r => !excludedEmails.has(r.email.toLowerCase()));
 }
 
 function updateRecipModalMeta() {
