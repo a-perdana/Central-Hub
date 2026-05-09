@@ -266,6 +266,7 @@ const htmlFiles = [
   "announcements.html",
   "messageboard.html",
   "schools.html",
+  "pilot-enrolment.html",
   "staff.html",
   "documents.html",
   "login.html",
