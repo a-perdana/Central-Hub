@@ -155,7 +155,11 @@
       font-family: 'DM Mono', monospace; font-size: 10.5px; font-weight: 500;
       letter-spacing: 0.01em;
       border: 1px solid #e2e8f0;
+      cursor: pointer; user-select: none;
+      transition: filter .12s, transform .1s;
     }
+    .ref-tag:hover { filter: brightness(0.94); transform: translateY(-1px); }
+    .ref-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* Tag families share a color cue so the eye groups concepts at a glance. */
     .ref-tag.fam-nn   { background: #fef2f2; color: #991b1b; border-color: #fecaca; } /* NN1-NN5 */
     .ref-tag.fam-cts  { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; } /* CTS-anchored */
@@ -663,6 +667,41 @@
       sInput.addEventListener('input', () => applySearch(sInput.value));
       sClear.addEventListener('click', () => { sInput.value = ''; applySearch(''); sInput.focus(); });
 
+      // Tag click → drive search. Delegated at document level so the same
+      // handler works for tags rendered inside grid cards AND any tags that
+      // might later appear inside the doc viewer modal. A nested anchor
+      // (parent card is <a>) would normally swallow the click — we
+      // preventDefault + stopPropagation to override.
+      const triggerTagSearch = (tag) => {
+        sInput.value = tag;
+        applySearch(tag);
+        // If the doc modal is open, close it so the user can see the
+        // filtered grid behind it.
+        const overlay = document.getElementById('docModalOverlay');
+        if (overlay && overlay.classList.contains('open')) closeDoc();
+        sInput.focus();
+        sInput.select();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      // Capture phase so we run BEFORE the parent card's bubble-phase
+      // handler fires openDoc(). Without capture:true the modal would
+      // briefly flash open before being closed by triggerTagSearch.
+      document.addEventListener('click', (e) => {
+        const tagEl = e.target.closest && e.target.closest('.ref-tag[data-tag]');
+        if (!tagEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        triggerTagSearch(tagEl.dataset.tag);
+      }, true);
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const tagEl = e.target.closest && e.target.closest('.ref-tag[data-tag]');
+        if (!tagEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        triggerTagSearch(tagEl.dataset.tag);
+      }, true);
+
       // Render recent-viewed bar
       renderRecentBar();
 
@@ -993,7 +1032,9 @@
           /^F[1-5L]$|^F_LEAD$/i.test(t)   ? 'fam-f'    :
           /^SKL\b/i.test(t)               ? 'fam-skl'  :
           /^PIGP\b/i.test(t)              ? 'fam-pigp' : '';
-        return `<span class="ref-tag ${fam}">${escapeHtml(t)}</span>`;
+        // role+tabindex make this keyboard-accessible; data-tag is read by
+        // the delegated click handler in boot() to drive search.
+        return `<span class="ref-tag ${fam}" role="button" tabindex="0" data-tag="${escapeHtml(t)}" title="Filter to &quot;${escapeHtml(t)}&quot;">${escapeHtml(t)}</span>`;
       }).join('');
       return `<div class="ref-tags">${chips}</div>`;
     }
