@@ -108,6 +108,26 @@ service firebase.storage {
              .data.role_centralhub == 'central_admin';
     }
 
+    // User profile uploads — profile photo + CV (Teachers Hub /settings).
+    // Path: user_profile/{uid}/{kind}/{timestamp}_{filename}
+    //   - {uid}  = the owning user's auth uid
+    //   - {kind} = 'photo' (image, ≤5 MB) | 'cv' (PDF/DOC/DOCX, ≤10 MB)
+    // Read is open to any signed-in user (photos appear in directory, CVs
+    // are linkable from the user's profile). Owner-only write/delete.
+    // MIME / size enforcement happens client-side in settings.html — server
+    // rule keeps a hard ≤10 MB ceiling so a tampered client can't blow the
+    // bucket up.
+    match /user_profile/{uid}/{kind}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if request.auth != null
+        && (request.auth.uid == uid
+            || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                 .data.role_centralhub == 'central_admin');
+    }
+
     // Mail-composer image embeds. Quill's "image" toolbar button uploads
     // here instead of inlining base64 — Gmail silently drops data:image
     // URIs in newsletters, but external <img src=https://...> renders
