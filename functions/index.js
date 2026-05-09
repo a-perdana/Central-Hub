@@ -1,10 +1,16 @@
 /**
  * Cloud Functions — centralhub-8727b
  *
- * Phase 5 (2026-05-04): three induction-module functions.
- *   1. onPulseWritten        — fires alarm on 2 consecutive low scores
- *   2. onJournalWritten      — maintains anonymous induction_journal_aggregates
- *   3. expireMentorCerts     — daily cron, sets active=false on expired certs
+ * Induction-module (Phase 5, 2026-05-04):
+ *   1. onPulseWritten                   — fires alarm on 2 consecutive low scores
+ *   2. onJournalWritten                 — maintains anonymous induction_journal_aggregates
+ *   3. expireMentorCerts                — daily cron, sets active=false on expired certs
+ *
+ * Principal Evaluation Module (Phase-2, 2026-05-09):
+ *   4. aggregatePrincipal360Responses   — recompute principal_360_aggregates/{cycleId}
+ *                                         on every response write. Charter NN5:
+ *                                         threshold-gated cohort visibility, no
+ *                                         respondent uid in any output.
  *
  * Deploy:
  *   cd "Central Hub/functions" && npm install
@@ -180,6 +186,147 @@ exports.expireMentorCerts = onSchedule(
     console.log(`[cert-sweep] expired ${expiredSnap.size} certifications`);
   }
 );
+
+// ───────────────────────────────────────────────────────────────
+// 4. PRINCIPAL 360° AGGREGATOR — aggregatePrincipal360Responses
+//    On every principal_360_responses write, recompute the matching
+//    principal_360_aggregates/{cycleId} doc:
+//      - per-cohort respondentCount + perFocusMean (P1..P8) + narrativesCount
+//      - aboveThreshold[c] = (respondentCount >= COHORT_THRESHOLD)  (Charter NN5)
+//      - composite.F3_360_score: weighted across ABOVE-THRESHOLD cohorts only.
+//        Below-threshold cohort weight is redistributed proportionally to the
+//        remaining cohorts (per framework data_aggregation_rules).
+//    No respondent uid is read or persisted — the trigger only sees the doc
+//    that was just written + the rest of the cohort.
+//
+//    Source framework: docs/cross-module/principal-360-framework-v1.json
+// ───────────────────────────────────────────────────────────────
+const FOCUS_KEYS       = ["P1","P2","P3","P4","P5","P6","P7","P8"];
+const COHORT_THRESHOLD = 5;          // min_respondents_to_report
+const COHORT_WEIGHTS   = { staff: 0.60, parent: 0.25, student: 0.15 };
+
+exports.aggregatePrincipal360Responses = onDocumentWritten(
+  {
+    document: "principal_360_responses/{respId}",
+    region: "asia-southeast1",
+  },
+  async (event) => {
+    const after  = event.data?.after?.data();
+    const before = event.data?.before?.data();
+    const data   = after || before;
+    if (!data) return;
+
+    const cycleId = data.cycleId;
+    if (!cycleId) {
+      console.warn("[360-agg] response missing cycleId; skipping", event.params);
+      return;
+    }
+
+    // Load cycle for principalUid + schoolId denormalisation on the aggregate.
+    const cycleSnap = await db.collection("principal_360_cycles").doc(cycleId).get();
+    if (!cycleSnap.exists) {
+      console.warn(`[360-agg] cycle ${cycleId} not found; skipping`);
+      return;
+    }
+    const cycle = cycleSnap.data();
+
+    // Pull every response for this cycle. Bounded by the school's eligible
+    // pool (typically < 200), so a full re-derive each write is cheaper than
+    // maintaining incremental counters that can drift.
+    const respSnap = await db.collection("principal_360_responses")
+      .where("cycleId", "==", cycleId)
+      .get();
+
+    const cohortStats = { staff: blank(), parent: blank(), student: blank() };
+
+    respSnap.docs.forEach((d) => {
+      const r = d.data();
+      const c = r.cohort;
+      if (!cohortStats[c]) return;     // unknown cohort — defensive
+      const stats = cohortStats[c];
+      stats.respondentCount++;
+
+      // Tally narratives (any non-empty narrative field counts as one).
+      if (r.narratives && Object.values(r.narratives).some((v) => (v || "").toString().trim().length > 0)) {
+        stats.narrativesCount++;
+      }
+
+      // Tally per-question scores grouped by focus.
+      // Question id format: "P1-Q-S1" / "P3-Q-T2" / etc — first 2 chars = focus.
+      const responses = r.responses || {};
+      Object.keys(responses).forEach((qId) => {
+        const v = responses[qId];
+        // Charter NN5: 0 = "Cannot Comment / Not Observed" — explicitly excluded.
+        if (typeof v !== "number" || v <= 0 || v > 4) return;
+        const focus = (qId || "").slice(0, 2).toUpperCase();
+        if (!FOCUS_KEYS.includes(focus)) return;
+        if (!stats._focusSum)   stats._focusSum   = {};
+        if (!stats._focusCount) stats._focusCount = {};
+        stats._focusSum[focus]   = (stats._focusSum[focus]   || 0) + v;
+        stats._focusCount[focus] = (stats._focusCount[focus] || 0) + 1;
+      });
+    });
+
+    // Convert sums → means; drop the working _focus* fields from the persisted
+    // doc so we never expose raw count/sum (NN5 — only the mean is observable).
+    const aboveThreshold = {};
+    Object.keys(cohortStats).forEach((c) => {
+      const s = cohortStats[c];
+      const mean = {};
+      FOCUS_KEYS.forEach((k) => {
+        const sum = s._focusSum?.[k];
+        const cnt = s._focusCount?.[k];
+        if (cnt > 0) mean[k] = sum / cnt;
+      });
+      s.perFocusMean = mean;
+      delete s._focusSum;
+      delete s._focusCount;
+      aboveThreshold[c] = s.respondentCount >= COHORT_THRESHOLD;
+    });
+
+    // F3 composite — weighted across ABOVE-threshold cohorts only.
+    // Per framework: "If a cohort has < 5 respondents, redistribute its
+    // weight proportionally to the remaining cohorts."
+    let weightSum = 0;
+    Object.keys(COHORT_WEIGHTS).forEach((c) => {
+      if (aboveThreshold[c]) weightSum += COHORT_WEIGHTS[c];
+    });
+    let f3 = null;
+    if (weightSum > 0) {
+      let acc = 0;
+      Object.keys(COHORT_WEIGHTS).forEach((c) => {
+        if (!aboveThreshold[c]) return;
+        const focusMeans = cohortStats[c].perFocusMean;
+        const vals = FOCUS_KEYS.map((k) => focusMeans[k]).filter((v) => typeof v === "number");
+        if (vals.length === 0) return;
+        const cohortMean = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const w = COHORT_WEIGHTS[c] / weightSum;            // normalised
+        acc += cohortMean * w;
+      });
+      f3 = round2(acc);
+    }
+
+    const aggDoc = {
+      cycleId,
+      principalUid: cycle.principalUid || null,
+      schoolId:     cycle.schoolId     || null,
+      cohortStats,
+      aboveThreshold,
+      composite: { F3_360_score: f3 },
+      lastAggregatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await db.collection("principal_360_aggregates").doc(cycleId).set(aggDoc, { merge: true });
+    console.log(`[360-agg] cycle=${cycleId} totals s=${cohortStats.staff.respondentCount} p=${cohortStats.parent.respondentCount} t=${cohortStats.student.respondentCount} F3=${f3}`);
+  }
+);
+
+function blank() {
+  return { respondentCount: 0, narrativesCount: 0, perFocusMean: {} };
+}
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
 
 // ───────────────────────────────────────────────────────────────
 // HELPERS
