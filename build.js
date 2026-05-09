@@ -502,6 +502,83 @@ refAssetMap.forEach(([rel, src]) => {
 });
 console.log(`Copied: dist/references-data/ (${refCopied} files, ${refMissing} missing)`);
 
+// ── References search index ─────────────────────────────────────────
+// Scans every successfully-copied references-data file and extracts:
+//   - special tokens (NN[1-5], CTS X.Y, F[1-5L], F_LEAD, PIGP pasal-N,
+//     SKL: dimension) — so 'NN3' finds every doc that uses NN3, not just
+//     ones whose MANIFEST tag literally lists 'NN3'.
+//   - headings (markdown # ## ### or top-level JSON keys) — give the
+//     search a few prose anchors per doc.
+// Runtime references.html fetches dist/references-search-index.json once
+// at boot and unions matches with the existing DOM-text search.
+function extractTokens(text) {
+  const tokens = new Set();
+
+  // NN1-NN5
+  for (const m of text.matchAll(/\bNN[1-5]\b/g)) tokens.add(m[0]);
+
+  // CTS X.Y (Cambridge Teacher Standards) — also store the bare 'CTS' so a
+  // search for 'CTS' alone surfaces every doc that anchors to the standard.
+  for (const m of text.matchAll(/\bCTS\s*(\d+\.\d+)\b/g)) {
+    tokens.add(`CTS ${m[1]}`);
+  }
+  if (/\bCTS\b/.test(text)) tokens.add('CTS');
+
+  // F1-F5, F_LEAD, F3L
+  for (const m of text.matchAll(/\bF(?:_LEAD|[1-5][A-Z]?)\b/g)) tokens.add(m[0]);
+
+  // PIGP — bare mention OR with pasal-N / lampiran-X qualifier
+  if (/\bPIGP\b/.test(text)) tokens.add('PIGP');
+  for (const m of text.matchAll(/\bPIGP\s+(?:pasal|lampiran)-[\w-]+/gi)) {
+    tokens.add(m[0].replace(/\s+/g, ' '));
+  }
+
+  // SKL — bare mention OR with dimension_id
+  if (/\bSKL\b/.test(text)) tokens.add('SKL');
+  for (const m of text.matchAll(/\bSKL[:\s]+([a-z_]+)\b/gi)) tokens.add(`SKL: ${m[1]}`);
+
+  return [...tokens];
+}
+
+function extractHeadings(text, kind) {
+  const out = [];
+  if (kind === 'md') {
+    for (const line of text.split(/\r?\n/)) {
+      const m = line.match(/^(#{1,3})\s+(.+?)\s*$/);
+      if (m && out.length < 12) out.push(m[2]);
+    }
+  } else if (kind === 'json') {
+    try {
+      const obj = JSON.parse(text);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        for (const k of Object.keys(obj).slice(0, 12)) out.push(k);
+      }
+    } catch (_) { /* malformed JSON — skip headings, tokens still work */ }
+  }
+  return out;
+}
+
+const searchIndex = { version: '1', builtAt: new Date().toISOString(), docs: {} };
+let indexedDocs = 0;
+refAssetMap.forEach(([rel, src]) => {
+  if (!fs.existsSync(src)) return;
+  const text = fs.readFileSync(src, 'utf8');
+  const kind = rel.endsWith('.md') ? 'md' : rel.endsWith('.json') ? 'json' : 'unknown';
+  const tokens = extractTokens(text);
+  const headings = extractHeadings(text, kind);
+  // Only persist entries that actually carry tokens or headings — empty
+  // payloads add bytes and noise without helping recall.
+  if (tokens.length || headings.length) {
+    searchIndex.docs[rel] = { tokens, headings };
+    indexedDocs++;
+  }
+});
+fs.writeFileSync(
+  path.join('dist', 'references-search-index.json'),
+  JSON.stringify(searchIndex)
+);
+console.log(`Generated: dist/references-search-index.json (${indexedDocs} docs indexed)`);
+
 // -- Copy firestore.rules so /rules-viewer can fetch it at runtime.
 //    Read-only display; the live enforcement comes from the deployed
 //    rules at console.firebase.google.com, this is just the

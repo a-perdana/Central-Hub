@@ -2951,7 +2951,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       font-family: 'DM Mono', monospace; font-size: 10.5px; font-weight: 500;
       letter-spacing: 0.01em;
       border: 1px solid #e2e8f0;
+      cursor: pointer; user-select: none;
+      transition: filter .12s, transform .1s;
     }
+    .ref-tag:hover { filter: brightness(0.94); transform: translateY(-1px); }
+    .ref-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* Tag families share a color cue so the eye groups concepts at a glance. */
     .ref-tag.fam-nn   { background: #fef2f2; color: #991b1b; border-color: #fecaca; } /* NN1-NN5 */
     .ref-tag.fam-cts  { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; } /* CTS-anchored */
@@ -3187,12 +3191,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     @media (max-width: 720px) {
-      .ref-hero { margin: 16px 12px 0; padding: 24px 20px 22px; }
+      .ref-hero { margin: 16px 12px 0; padding: 16px 18px; gap: 12px; }
+      .ref-title { font-size: 1.25rem; }
+      .ref-meta { gap: 12px; font-size: 11px; }
       .ref-tabs { padding: 0 12px; }
       .ref-panel { padding: 20px 14px 60px; }
       .ref-grid { grid-template-columns: 1fr; }
-      .ref-search-wrap { flex-direction: column; align-items: stretch; }
+      .ref-search-wrap { flex-direction: column; align-items: stretch; padding: 0 14px; }
       .ref-search { max-width: none; }
+      .recent-bar { padding: 0 14px; }
+
+      /* Rails: tighter padding + smaller card so 1.5 cards peek into view
+         on a 360-wide screen (standard mid-range Android). */
+      .ref-rails { padding: 0 14px; gap: 14px; }
+      .ref-rail-section { padding: 12px 14px; }
+      .ref-rail-track { gap: 10px; }
+      .ref-rail-card { flex-basis: 220px; padding: 10px 12px; }
+      .ref-rail-card-title { font-size: 12.5px; }
+
+      /* Modal: shrink overlay padding + body padding so we don't waste
+         ~15% of a 360-wide screen on margins. */
+      .doc-modal-overlay { padding: 12px; }
+      .doc-modal-head { padding: 14px 16px; }
+      .doc-modal-body { padding: 18px 16px; }
+      .doc-modal-title { font-size: 1.05rem; }
+      .doc-back { padding: 8px 12px; margin: -4px 0 14px; }
+
+      /* Larger tap targets on mobile (WCAG 2.5.5 min ~24px target).
+         Desktop chip is 14px tall — bumping vertical padding gets us to
+         ~24px without breaking the desktop aesthetic. */
+      .ref-tag { padding: 4px 9px; font-size: 11px; }
+      .ref-conn-chip { padding: 5px 11px; font-size: 11.5px; }
+      .doc-back-chip { padding: 5px 12px; font-size: 12px; }
     }
   </style>
 </head>
@@ -3442,11 +3472,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       renderGrid('permen',     MANIFEST.permen);
       renderGrid('schemas',    MANIFEST.schemas);
 
+      // Curated rails — independent of handbook fetch (only reads MANIFEST),
+      // so render synchronously before kicking off the Firestore round-trip.
+      // First paint feels noticeably snappier on slower connections.
+      renderRails();
+
       // Handbooks: load from Firestore induction_programs
       await loadHandbooks();
-
-      // Curated rails — render after manifest + handbooks are ready
-      renderRails();
 
       // Total counter
       const total = MANIFEST.frameworks.length + MANIFEST.audits.length + MANIFEST.cambridge.length + MANIFEST.permen.length + MANIFEST.schemas.length + (handbookCache?.length || 0);
@@ -3458,6 +3490,51 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       sInput.placeholder = `Search ${total} docs — try "NN3", "F3L", "mentor-cert"…`;
       sInput.addEventListener('input', () => applySearch(sInput.value));
       sClear.addEventListener('click', () => { sInput.value = ''; applySearch(''); sInput.focus(); });
+
+      // Restore search/filter from URL.
+      //   ?q=anything   — free-text search restored verbatim
+      //   ?tag=NN3      — alias that drives the same search; use this in
+      //                   shared links for human-readable intent.
+      const initialQuery = params.get('q') || params.get('tag') || '';
+      if (initialQuery) {
+        sInput.value = initialQuery;
+        applySearch(initialQuery);
+      }
+
+      // Tag click → drive search. Delegated at document level so the same
+      // handler works for tags rendered inside grid cards AND any tags that
+      // might later appear inside the doc viewer modal. A nested anchor
+      // (parent card is <a>) would normally swallow the click — we
+      // preventDefault + stopPropagation to override.
+      const triggerTagSearch = (tag) => {
+        sInput.value = tag;
+        applySearch(tag);
+        // If the doc modal is open, close it so the user can see the
+        // filtered grid behind it.
+        const overlay = document.getElementById('docModalOverlay');
+        if (overlay && overlay.classList.contains('open')) closeDoc();
+        sInput.focus();
+        sInput.select();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      // Capture phase so we run BEFORE the parent card's bubble-phase
+      // handler fires openDoc(). Without capture:true the modal would
+      // briefly flash open before being closed by triggerTagSearch.
+      document.addEventListener('click', (e) => {
+        const tagEl = e.target.closest && e.target.closest('.ref-tag[data-tag]');
+        if (!tagEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        triggerTagSearch(tagEl.dataset.tag);
+      }, true);
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const tagEl = e.target.closest && e.target.closest('.ref-tag[data-tag]');
+        if (!tagEl) return;
+        e.preventDefault();
+        e.stopPropagation();
+        triggerTagSearch(tagEl.dataset.tag);
+      }, true);
 
       // Render recent-viewed bar
       renderRecentBar();
@@ -3478,6 +3555,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const sClear = document.getElementById('refSearchClear');
       const sInfo  = document.getElementById('refSearchInfo');
       sClear.style.display = q ? '' : 'none';
+
+      // Reflect the active query in the URL so links can be shared.
+      // Use replaceState to avoid polluting the browser back-stack while
+      // the user is typing. Always normalise to ?q=, dropping any inbound
+      // ?tag= alias so a cleared search leaves a truly clean URL.
+      const url = new URL(window.location.href);
+      const trimmed = qRaw.trim();
+      url.searchParams.delete('tag');
+      if (trimmed) url.searchParams.set('q', trimmed);
+      else url.searchParams.delete('q');
+      window.history.replaceState({}, '', url);
 
       if (!q) {
         document.querySelectorAll('.ref-card.filtered-out').forEach(c => c.classList.remove('filtered-out'));
@@ -3599,10 +3687,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         central_user: 'HQ User',
       })[role] || role.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+      // Empty role rail is silently dropped — central_user with no
+      // sub-roles shouldn't see a "For your role · No items match" stripe;
+      // the binding + forward rails alone communicate the page's purpose.
       host.innerHTML = `
         ${roleHits.length ? renderRail('role', `For your role`, roleLabel, roleHits) : ''}
-        ${renderRail('binding', `Charter & Binding`, `${bindingHits.length} non-negotiable docs`, bindingHits)}
-        ${renderRail('forward', `Phase-2 Forward`, `${forwardHits.length} draft frameworks`, forwardHits)}
+        ${bindingHits.length ? renderRail('binding', `Charter & Binding`, `${bindingHits.length} non-negotiable docs`, bindingHits) : ''}
+        ${forwardHits.length ? renderRail('forward', `Phase-2 Forward`, `${forwardHits.length} draft frameworks`, forwardHits) : ''}
       `;
 
       host.querySelectorAll('.ref-rail-card').forEach(el => {
@@ -3614,14 +3705,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     function renderRail(variant, title, sub, items) {
-      if (!items.length) return `
-        <section class="ref-rail-section">
-          <div class="ref-rail-head">
-            <span class="ref-rail-title"><span class="dot ${variant}"></span>${escapeHtml(title)}</span>
-            <span class="ref-rail-sub">${escapeHtml(sub)}</span>
-          </div>
-          <div class="ref-rail-empty">No items match this rail right now.</div>
-        </section>`;
+      // Empty rails are dropped at the call-site (renderRails) — guard here
+      // anyway so a future caller can't surface a "No items match" strip.
+      if (!items.length) return '';
       const cards = items.map(it => {
         const tag = (it.meta || []).find(m => /binding|forward|live|authoritative/.test(m)) || it._cat;
         return `
@@ -3789,7 +3875,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           /^F[1-5L]$|^F_LEAD$/i.test(t)   ? 'fam-f'    :
           /^SKL\b/i.test(t)               ? 'fam-skl'  :
           /^PIGP\b/i.test(t)              ? 'fam-pigp' : '';
-        return `<span class="ref-tag ${fam}">${escapeHtml(t)}</span>`;
+        // role+tabindex make this keyboard-accessible; data-tag is read by
+        // the delegated click handler in boot() to drive search.
+        return `<span class="ref-tag ${fam}" role="button" tabindex="0" data-tag="${escapeHtml(t)}" title="Filter to &quot;${escapeHtml(t)}&quot;">${escapeHtml(t)}</span>`;
       }).join('');
       return `<div class="ref-tags">${chips}</div>`;
     }
