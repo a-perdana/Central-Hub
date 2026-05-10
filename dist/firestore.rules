@@ -410,6 +410,97 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- EASE Growth (Phase 2 adaptive cross-grade engine) ---
+    // Math/English/Science only, 3 windows/year (Fall/Winter/Spring).
+    // Network-uniform — every partner school's students draw from the
+    // same item bank. Items have an author-assigned 3-band difficulty
+    // (easy/medium/hard) until enough live response data lets us
+    // calibrate logits in a Phase-3 Cloud Function batch job.
+    //
+    // Six collections:
+    //   ease_items/{itemId}        — item bank (admin/coordinator write)
+    //   ease_test_windows/{wId}    — Fall/Winter/Spring open windows
+    //   ease_sessions/{sId}        — one student × one subject × one window
+    //   ease_responses/{rId}       — adaptive trail rows (immutable)
+    //   ease_growth/{uid}_{subj}   — cross-window aggregate
+    //   parent_share_tokens/{tok}  — token-gated read of one report
+    //
+    // Read scopes:
+    //   - items: any authorised staff for review; active students read
+    //     only the next item picked for their session (one at a time).
+    //     For MVP simplicity students read all items for their subject;
+    //     exposure capping comes in Phase 3.
+    //   - sessions / responses: owner (student) + same-school staff
+    //     + admin. Responses are immutable once written.
+    //   - growth: owner + same-school staff + admin (no student listing
+    //     across schools — students see only own).
+    //   - parent_share_tokens: anyone with the token gets the read
+    //     (rule allows by id), but never list.
+    match /ease_items/{itemId} {
+      allow get, list: if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if isAdmin() || isCHCoordinator();
+    }
+
+    match /ease_test_windows/{windowId} {
+      allow get, list: if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /ease_sessions/{sessionId} {
+      allow get: if isAuthorized() ||
+                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow list: if isAuthorized();
+      // Student creates their own session at start time (subjectId +
+      // windowId pinned by client; rule pins studentUid).
+      allow create: if isAdmin() ||
+                       (isActiveStudent()
+                        && request.resource.data.studentUid == request.auth.uid
+                        && request.resource.data.schoolId == studentDoc().schoolId);
+      // Student updates own session while in_progress (responses pushed
+      // during run, then status flipped to 'submitted'). Final ritScore
+      // / standardError / percentile written at submit. Once submitted,
+      // the doc is immutable for students.
+      allow update: if isAdmin() ||
+                       (isSignedIn() && resource.data.studentUid == request.auth.uid
+                        && resource.data.status == 'in_progress'
+                        && request.resource.data.studentUid == resource.data.studentUid
+                        && request.resource.data.windowId == resource.data.windowId
+                        && request.resource.data.subjectId == resource.data.subjectId);
+      allow delete: if isAdmin();
+    }
+
+    match /ease_responses/{responseId} {
+      allow get, list: if isAuthorized() ||
+                          (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      // Student appends own response while session in_progress.
+      // Immutable after creation.
+      allow create: if isAdmin() ||
+                       (isActiveStudent()
+                        && request.resource.data.studentUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /ease_growth/{growthId} {
+      allow get: if isAuthorized() ||
+                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow list: if isAuthorized();
+      allow create, update: if isAdmin() ||
+                               (isActiveStudent()
+                                && request.resource.data.studentUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /parent_share_tokens/{token} {
+      // get-by-id only — no list, even for admin.
+      allow get: if true;     // token IS the auth — anyone with the URL
+      allow list: if false;
+      allow create: if isAdmin() ||
+                       (isActiveStudent()
+                        && request.resource.data.studentUid == request.auth.uid);
+      allow update, delete: if isAdmin() ||
+                               (isSignedIn() && resource.data.studentUid == request.auth.uid);
+    }
+
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();

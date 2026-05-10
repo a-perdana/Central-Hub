@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EASE Window Admin — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%236c5ce7'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    :root { --accent: #0891b2; --accent-2: #ecfeff; }
+    .hero { background: linear-gradient(140deg, #083344 0%, #155e75 50%, #0891b2 100%); padding: 36px 40px; color: #fff; }
+    .hero-inner { max-width: 1080px; margin: 0 auto; }
+    .hero h1 { font-family: 'Lora', serif; font-size: 1.7rem; }
+    .hero p { color: rgba(255,255,255,.7); font-size: .9rem; max-width: 580px; }
+    .page-wrap { max-width: 1080px; margin: 0 auto; padding: 28px 32px 80px; }
+
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+    .btn-primary { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-secondary { padding: 7px 14px; background: #fff; color: var(--ink); border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
+    .btn-danger { padding: 7px 14px; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
+
+    .window-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 12px; }
+    .window-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .window-name { font-family: 'Lora', serif; font-weight: 600; font-size: 1.15rem; }
+    .window-meta { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+    .pill { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+    .pill-draft { background: #f3f4f6; color: #4b5563; }
+    .pill-open { background: #dcfce7; color: #166534; }
+    .pill-closed { background: #fee2e2; color: #b91c1c; }
+
+    /* Modal — same compact pattern */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 40px 20px; }
+    .modal-overlay.is-open { display: flex; }
+    .modal { background: #fff; border-radius: 14px; width: min(560px, 100%); max-height: calc(100vh - 80px); display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+    .modal h2 { font-family: 'Lora', serif; font-size: 1.3rem; padding: 24px 24px 0; }
+    .modal-body { padding: 14px 24px 4px; overflow-y: auto; flex: 1 1 auto; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 24px; border-top: 1px solid var(--border); background: #fff; flex-shrink: 0; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 12.5px; font-weight: 500; color: var(--ink-2); margin-bottom: 5px; }
+    .field input, .field select { width: 100%; padding: 9px 12px; font-family: inherit; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; }
+    .field-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .checkbox-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .checkbox-row label { display: inline-flex; gap: 4px; align-items: center; font-size: 13px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; cursor: pointer; }
+
+    .empty { text-align: center; padding: 60px 20px; color: var(--ink-3); }
+    .access-warn { padding: 14px 18px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 10px; margin-bottom: 18px; font-size: 13px; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 18px; background: var(--ink); color: #fff; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; z-index: 999; }
+    .toast.is-visible { opacity: 1; }
+  </style>
+</head>
+<body>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div style="font-size:.7rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.45); margin-bottom:8px;">EASE Growth Engine</div>
+      <h1>EASE Window Admin</h1>
+      <p>Open and close the three EASE Growth windows per academic year. Students can only start an EASE session while a window's status is open and now is between opensAt and closesAt.</p>
+    </div>
+  </header>
+
+  <main class="page-wrap">
+    <a href="index" style="font-size:.86rem; color:var(--ink-3); text-decoration:none;">← Back to Central Hub</a>
+    <div id="accessWarn" class="access-warn" hidden style="margin-top:18px"></div>
+
+    <div class="toolbar" style="margin-top:18px">
+      <span style="margin-left:auto"></span>
+      <button id="newBtn" class="btn-primary">+ New window</button>
+    </div>
+
+    <div id="windowsBox"></div>
+  </main>
+
+  <div id="wModal" class="modal-overlay" role="dialog" aria-hidden="true">
+    <div class="modal">
+      <h2 id="wTitle">New window</h2>
+      <div class="modal-body">
+        <div class="field-grid-2">
+          <div class="field"><label>Academic year</label><input id="wYear" placeholder="2025-2026" value="2025-2026"></div>
+          <div class="field"><label>Window</label>
+            <select id="wWindow"><option value="fall">Fall</option><option value="winter">Winter</option><option value="spring">Spring</option></select>
+          </div>
+        </div>
+        <div class="field-grid-2">
+          <div class="field"><label>Opens at</label><input id="wOpens" type="datetime-local"></div>
+          <div class="field"><label>Closes at</label><input id="wCloses" type="datetime-local"></div>
+        </div>
+        <div class="field"><label>Subjects in this window</label>
+          <div class="checkbox-row">
+            <label><input type="checkbox" value="math" checked> Math</label>
+            <label><input type="checkbox" value="english" checked> English</label>
+            <label><input type="checkbox" value="science" checked> Science</label>
+          </div>
+        </div>
+        <div class="field-grid-2">
+          <div class="field"><label>Item count target</label><input id="wTarget" type="number" min="10" max="50" value="25"></div>
+          <div class="field"><label>SE stop threshold</label><input id="wSE" type="number" step="0.05" min="0.1" max="1" value="0.4"></div>
+        </div>
+        <div class="field"><label>Status</label>
+          <select id="wStatus"><option value="draft">Draft (hidden from students)</option><option value="open">Open (students can start)</option><option value="closed">Closed (read-only)</option></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="wCancel" type="button">Cancel</button>
+        <button class="btn-primary" id="wSave" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+    import {
+      collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp, Timestamp
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    let windows = [];
+    let editingId = null;
+
+    document.addEventListener('authReady', () => {
+      const profile = window.userProfile || {};
+      if (profile.role_centralhub !== 'central_admin') {
+        document.getElementById('accessWarn').hidden = false;
+        document.getElementById('accessWarn').textContent = 'Window admin restricted to central_admin only.';
+        return;
+      }
+      onSnapshot(collection(window.db, 'ease_test_windows'),
+        snap => { windows = snap.docs.map(d => ({ id: d.id, ...d.data() })); render(); },
+        err => console.error('[ease-window] error', err)
+      );
+    });
+
+    document.getElementById('newBtn').addEventListener('click', () => openModal(null));
+    document.getElementById('wCancel').addEventListener('click', () => document.getElementById('wModal').classList.remove('is-open'));
+    document.getElementById('wSave').addEventListener('click', save);
+
+    function render() {
+      const box = document.getElementById('windowsBox');
+      if (windows.length === 0) {
+        box.innerHTML = '<div class="empty">No windows yet. Click + New window.</div>';
+        return;
+      }
+      windows.sort((a, b) => (a.academicYear || '').localeCompare(b.academicYear || '') || (a.window || '').localeCompare(b.window || ''));
+      box.innerHTML = windows.map(w => `
+        <div class="window-card">
+          <div class="window-row">
+            <div>
+              <div class="window-name">${escHtml(w.academicYear)} · ${escHtml(w.window || '')}</div>
+              <div class="window-meta">${formatTs(w.opensAt)} → ${formatTs(w.closesAt)} · subjects: ${(w.subjects || []).join(', ')} · target ${w.itemCountTarget || 25} items</div>
+            </div>
+            <span class="pill pill-${escAttr(w.status || 'draft')}">${escHtml(w.status || 'draft')}</span>
+            <div style="display:flex; gap:6px">
+              <button class="btn-secondary" data-act="edit" data-id="${escAttr(w.id)}">Edit</button>
+              <button class="btn-danger" data-act="del" data-id="${escAttr(w.id)}">Delete</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      box.querySelectorAll('button[data-act]').forEach(b => {
+        b.addEventListener('click', () => action(b.dataset.act, b.dataset.id));
+      });
+    }
+
+    async function action(act, id) {
+      if (act === 'edit') return openModal(id);
+      if (act === 'del') {
+        if (!confirm('Delete this window? Existing sessions reference it — they will keep working as historical record.')) return;
+        try { await deleteDoc(doc(window.db, 'ease_test_windows', id)); toast('Deleted.'); }
+        catch (e) { toast('Failed: ' + (e.message || e.code)); }
+      }
+    }
+
+    async function openModal(id) {
+      editingId = id;
+      let w = { academicYear: '2025-2026', window: 'fall', subjects: ['math','english','science'], itemCountTarget: 25, seStopThreshold: 0.4, status: 'draft' };
+      if (id) {
+        const snap = await getDoc(doc(window.db, 'ease_test_windows', id));
+        if (snap.exists()) w = { id, ...snap.data() };
+      }
+      document.getElementById('wTitle').textContent = id ? 'Edit window' : 'New window';
+      document.getElementById('wYear').value = w.academicYear;
+      document.getElementById('wWindow').value = w.window;
+      document.getElementById('wTarget').value = w.itemCountTarget || 25;
+      document.getElementById('wSE').value = w.seStopThreshold || 0.4;
+      document.getElementById('wStatus').value = w.status || 'draft';
+      const subjs = new Set(w.subjects || []);
+      document.querySelectorAll('.checkbox-row input').forEach(c => c.checked = subjs.has(c.value));
+      const now = new Date();
+      const opens = w.opensAt && w.opensAt.toDate ? w.opensAt.toDate() : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0);
+      const closes = w.closesAt && w.closesAt.toDate ? w.closesAt.toDate() : new Date(opens.getTime() + 14*24*60*60*1000);
+      document.getElementById('wOpens').value = toLocal(opens);
+      document.getElementById('wCloses').value = toLocal(closes);
+      document.getElementById('wModal').classList.add('is-open');
+    }
+
+    function toLocal(d) {
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function save() {
+      const academicYear = document.getElementById('wYear').value.trim();
+      const window_ = document.getElementById('wWindow').value;
+      const subjects = Array.from(document.querySelectorAll('.checkbox-row input:checked')).map(c => c.value);
+      const opens = new Date(document.getElementById('wOpens').value);
+      const closes = new Date(document.getElementById('wCloses').value);
+      if (!academicYear || !window_) return toast('Year + window required.');
+      if (subjects.length === 0) return toast('Pick at least 1 subject.');
+      if (closes <= opens) return toast('Closes must be after Opens.');
+      const docId = `${academicYear}_${window_}`;
+      const payload = {
+        academicYear, window: window_, subjects,
+        opensAt: Timestamp.fromDate(opens),
+        closesAt: Timestamp.fromDate(closes),
+        itemCountTarget: Number(document.getElementById('wTarget').value),
+        seStopThreshold: Number(document.getElementById('wSE').value),
+        status: document.getElementById('wStatus').value,
+        updatedAt: serverTimestamp(),
+      };
+      try {
+        await setDoc(doc(window.db, 'ease_test_windows', docId), payload, { merge: true });
+        toast('Saved.');
+        document.getElementById('wModal').classList.remove('is-open');
+      } catch (e) { toast('Save failed: ' + (e.message || e.code)); }
+    }
+
+    function formatTs(ts) {
+      if (!ts || !ts.toDate) return '—';
+      return ts.toDate().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escAttr(s) { return escHtml(s); }
+  </script>
+</body>
+</html>

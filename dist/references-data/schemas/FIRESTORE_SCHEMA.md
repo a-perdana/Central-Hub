@@ -700,7 +700,7 @@ the others (`principal_360_responses`, `principal_coaching_sessions`,
 
 ### 19. Chapter Tests + Sessions (Students Hub assessment delivery, 2026-05-10)
 
-The student-side delivery system. Chapter tests are network-uniform mastery checks authored by HQ Subject Specialists; sessions schedule them for one class at a time; attempts are per-student records that flow from `draft → in_progress → submitted/scored`. EASE Growth (adaptive cross-grade) ships separately in Phase 2 with its own ease-* collections — sketched in `docs/STUDENTS-HUB-ARCHITECTURE.md` §3.3, deliberately not catalogued here until rules ship.
+The student-side delivery system. Chapter tests are network-uniform mastery checks authored by HQ Subject Specialists; sessions schedule them for one class at a time; attempts are per-student records that flow from `draft → in_progress → submitted/scored`. EASE Growth (adaptive cross-grade) catalogued at the bottom of this section as part of Phase 2 (2026-05-10).
 
 #### `chapter_tests/{testId}`
 **PK:** Slugged composite `{subjectId}_{stage}_{unitCode}_v{version}` (e.g. `math_7_7ni-04_v1`). Lowercased, non-alphanumeric → `-`.
@@ -754,6 +754,64 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 - Auto-scoring runs client-side at submit (MCQ exact match, numeric numeric-equality + string fallback, short text case-insensitive trim). Phase 2 will add server-side re-grade via Cloud Function for essay flagging.
 - The `tabSwitches` counter is informational, not a hard kill switch — heavy lockdown (Safe Exam Browser-style) is a Phase 2 conversation.
 - `responses[]` is denormalised into the attempt doc instead of a subcollection because all-at-once read is more common than per-response reads, and item count is bounded (typically 5–25 per chapter test).
+
+---
+
+#### `ease_items/{itemId}`
+**PK:** Auto-id.
+**Fields:** `subjectId` (`'math' | 'english' | 'science'`), `strandCode` (e.g. `'algebra'`, `'reading'`, `'cell-biology'`), `difficulty` (`'easy' | 'medium' | 'hard'`), `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short), `explanation`, `cambridgeStandardRefs[]`, `stage_min` (Year 7..), `stage_max` (Year 12), `pilotPhase` (`true` while uncalibrated — Phase 2/3), `seenCount`, `correctRate`, `authorUid`, `createdAt`, `updatedAt`.
+**FKs:** `authorUid → users.uid`.
+**Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `ease-item-author.html`).
+**Read:** any authorised staff; active students (current MVP reads the bank as needed).
+**Notes:** Author-assigned difficulty bands MVP. Phase 3 Cloud Function will calibrate per-item logit + discrimination from response data and fold those onto the doc, leaving `difficulty` as a bootstrap.
+
+---
+
+#### `ease_test_windows/{windowId}`
+**PK:** Composite `{academicYear}_{window}` (e.g. `2025-2026_fall`).
+**Fields:** `academicYear`, `window` (`'fall' | 'winter' | 'spring'`), `subjects[]`, `opensAt`, `closesAt`, `description`, `status` (`'draft' | 'open' | 'closed'`), `itemCountTarget` (default 25), `seStopThreshold` (default 0.4), `createdAt`, `updatedAt`.
+**Writers:** `central_admin`.
+**Read:** any authorised staff; active students.
+**Notes:** Three windows per academic year. Students start a fresh `ease_sessions` doc per window per subject.
+
+---
+
+#### `ease_sessions/{sessionId}`
+**PK:** Auto-id (composite `{studentUid}_{windowId}_{subjectId}` is conceptually unique but auto-id keeps re-attempts flexible).
+**Fields:** `studentUid →students.uid`, `schoolId →partner_schools.id`, `subjectId`, `windowId →ease_test_windows.id`, `startedAt`, `submittedAt`, `status` (`'in_progress' | 'submitted' | 'cancelled'`), `itemsAnswered`, `currentTheta` (logit), `currentSE`, `ritScore` (RIT-equivalent 100–300 scale on submit), `standardError`, `percentile` (within network), `cambridgeStageEquivalent` (e.g. `'Late Stage 8'` post-calibration).
+**FKs:** `studentUid → students.uid` · `schoolId → partner_schools.id` · `windowId → ease_test_windows.id`.
+**Writers:** student creates own session (rule pins `studentUid == auth.uid` and `schoolId == students/{uid}.schoolId`). Updates own session while `in_progress`. Once `submitted`, immutable for student.
+**Read:** owner; same-school staff; admin.
+**Notes:** Adaptive trail of individual responses lives in `ease_responses` keyed by `sessionId`.
+
+---
+
+#### `ease_responses/{responseId}`
+**PK:** Auto-id.
+**Fields:** `sessionId →ease_sessions.id`, `studentUid →students.uid`, `seq` (1..N), `itemId →ease_items.id`, `answerGiven`, `isCorrect`, `timeMs`, `theta_after` (logit), `se_after`, `createdAt`.
+**FKs:** `sessionId → ease_sessions.id` · `studentUid → students.uid` · `itemId → ease_items.id`.
+**Writers:** student appends own response while session is `in_progress`. **Immutable** after creation.
+**Read:** owner; same-school staff; admin.
+**Notes:** Per-response row supports re-running calibration on historical data without re-asking students.
+
+---
+
+#### `ease_growth/{studentUid}_{subjectId}`
+**PK:** Composite `{studentUid}_{subjectId}` — one doc per student per subject, accumulated across windows.
+**Fields:** `studentUid →students.uid`, `subjectId`, `windows[]` (array of `{windowId, ritScore, percentile, growthVsPrev, submittedAt}`), `latestRit`, `projectedNextRit` (Phase 3), `alignedToTargetIGCSEGrade` (Phase 3), `updatedAt`.
+**FKs:** `studentUid → students.uid`.
+**Writers:** student writes own doc on submit (current MVP); Phase 3 Cloud Function recomputes server-side.
+**Read:** owner; same-school staff; admin.
+**Notes:** Cross-window comparability is unreliable until items are calibrated; UI must label early windows as "window-specific norm" before window 4. See `docs/STUDENTS-HUB-ARCHITECTURE.md` §7.
+
+---
+
+#### `parent_share_tokens/{token}`
+**PK:** Random URL-safe token (≥24 chars).
+**Fields:** `studentUid →students.uid`, `attemptId →chapter_test_attempts.id` OR `sessionId →ease_sessions.id` (one of), `expiresAt`, `createdAt`.
+**Writers:** student creates own token; admin can manage.
+**Read:** anyone with the token (rule allows `get` by id, blocks `list` even for admin). Token is the credential.
+**Notes:** Used by Students Hub `/shared?token=…` parent-share landing. Tokens are short-lived (default 30 days) and student can revoke by deleting the doc.
 
 ---
 
