@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings — Central Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%237c3aed'/><text x='50' y='62' text-anchor='middle' font-size='34' font-family='DM Sans, sans-serif' font-weight='700' fill='%23fff'>C</text></svg>">
+
+<script src="firebase-config.js"></script>
+<script type="module" src="auth-guard.js"></script>
+
+<style>
+  :root {
+    --accent:    #7c3aed;
+    --accent-dk: #6d28d9;
+    --accent-2:  #f5f3ff;
+  }
+
+  /* ── Settings layout ─────────────────────────────────────────── */
+  /* Navbar is position:sticky/relative in CH (not fixed) so no body padding-top needed */
+  .settings-wrap {
+    display: flex;
+    min-height: calc(100vh - 56px);
+    background: #f5f4f0;
+  }
+
+  .settings-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-right: 1px solid #e8e6e0;
+    padding: 28px 12px;
+  }
+  .settings-sidebar-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #a8a49c;
+    padding: 0 10px;
+    margin-bottom: 10px;
+  }
+  .settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #5a5568;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    transition: background .15s, color .15s;
+    margin-bottom: 2px;
+  }
+  .settings-nav-item svg {
+    width: 16px; height: 16px; flex-shrink: 0;
+    color: #a8a49c; transition: color .15s;
+  }
+  .settings-nav-item:hover {
+    background: #f5f4f0;
+    color: #1a1a2e;
+  }
+  .settings-nav-item:hover svg { color: var(--accent); }
+  .settings-nav-item.active {
+    background: rgba(124, 58, 237, 0.10);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .settings-nav-item.active svg { color: var(--accent); }
+
+  .settings-progress-card {
+    margin: 0 10px 20px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(124,58,237,0.04));
+    border: 1px solid rgba(124,58,237,0.18);
+    border-radius: 12px;
+  }
+  .settings-progress-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .settings-progress-bar-wrap {
+    background: rgba(124,58,237,0.15);
+    border-radius: 99px;
+    height: 6px;
+    margin-bottom: 5px;
+    overflow: hidden;
+  }
+  .settings-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #a78bfa);
+    border-radius: 99px;
+    transition: width .5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .settings-progress-pct {
+    font-size: 11px;
+    color: #8b80c8;
+    font-weight: 500;
+  }
+
+  .settings-content { flex: 1; min-width: 0; }
+  .settings-content-inner { padding: 36px 40px 80px; max-width: 740px; }
+
+  .settings-panel { display: none; }
+  .settings-panel.active { display: block; }
+
+  .settings-section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .settings-section-sub {
+    font-size: 13.5px;
+    color: #8b8b9e;
+    margin-bottom: 28px;
+    line-height: 1.5;
+  }
+
+  .settings-card {
+    background: #ffffff;
+    border: 1px solid #e8e6e0;
+    border-radius: 16px;
+    padding: 24px 26px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .settings-card-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    color: #a8a49c;
+    margin-bottom: 14px;
+  }
+
+  /* Profile photo uploader */
+  .photo-uploader {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .photo-preview {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #0891b2);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Lora', serif;
+    font-size: 30px;
+    font-weight: 600;
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.18);
+  }
+  .photo-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .photo-action-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .photo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: #fafaf8;
+    border: 1.5px solid #e0ddd6;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a2e;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .photo-btn:hover { background: #f3f0e8; border-color: var(--accent); color: var(--accent); }
+  .photo-btn.danger { color: #dc2626; }
+  .photo-btn.danger:hover { background: rgba(220,38,38,0.06); border-color: rgba(220,38,38,0.4); color: #dc2626; }
+  .photo-hint {
+    font-size: 12px;
+    color: #8b8b9e;
+  }
+
+  .settings-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid #e0ddd6;
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: #1a1a2e;
+    background: #fafaf8;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+    box-sizing: border-box;
+  }
+  .settings-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+    background: #fff;
+  }
+  .settings-input::placeholder { color: #b8b4ac; }
+  .settings-input:disabled {
+    background: #f0efeb;
+    color: #a8a49c;
+    cursor: not-allowed;
+  }
+  .settings-input-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #5a5568;
+    margin-bottom: 6px;
+  }
+  .settings-input-wrap { margin-bottom: 16px; }
+  .settings-input-wrap:last-child { margin-bottom: 0; }
+
+  .settings-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid #e0ddd6;
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: #1a1a2e;
+    background: #fafaf8;
+    outline: none;
+    resize: vertical;
+    min-height: 80px;
+    transition: border-color .15s, box-shadow .15s;
+    box-sizing: border-box;
+  }
+  .settings-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+    background: #fff;
+  }
+  .settings-textarea::placeholder { color: #b8b4ac; }
+  .settings-char-count {
+    font-size: 11px;
+    color: #a8a49c;
+    text-align: right;
+    margin-top: 4px;
+  }
+
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .settings-row .settings-input-wrap { margin-bottom: 0; }
+
+  .settings-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 22px;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    margin-top: 4px;
+  }
+  .settings-save-btn:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(124,58,237,0.35);
+  }
+  .settings-save-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+  .settings-save-btn svg { width: 15px; height: 15px; }
+
+  .settings-msg {
+    font-size: 12.5px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    display: none;
+    line-height: 1.4;
+  }
+  .settings-msg.ok   { display:block; background:rgba(5,150,105,.1); color:#059669; border:1px solid rgba(5,150,105,.2); }
+  .settings-msg.err  { display:block; background:rgba(220,38,38,.08); color:#dc2626; border:1px solid rgba(220,38,38,.18); }
+
+  #settingsToast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 9999;
+    padding: 11px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .22s, transform .22s;
+    pointer-events: none;
+  }
+  #settingsToast.show { opacity: 1; transform: translateY(0); }
+  #settingsToast.ok  { background:#059669; color:#fff; }
+  #settingsToast.err { background:#dc2626; color:#fff; }
+
+  /* Read-only chips for Specialty & Roles panel */
+  .readonly-chip-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #fafaf8;
+    border: 1.5px solid #e0ddd6;
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .readonly-chip-row:last-child { margin-bottom: 0; }
+  .readonly-chip-icon {
+    width: 18px; height: 18px; flex-shrink: 0;
+    color: var(--accent);
+  }
+  .readonly-chip-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #a8a49c;
+    min-width: 92px;
+  }
+  .readonly-chip-value {
+    flex: 1;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+  .readonly-chip-value.empty { color: #b8b4ac; font-weight: 400; font-style: italic; }
+  .pill-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 11px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(124,58,237,0.10);
+    color: var(--accent);
+    border: 1px solid rgba(124,58,237,0.25);
+  }
+  .pill-chip.subject {
+    background: rgba(8,145,178,0.10);
+    color: #0891b2;
+    border-color: rgba(8,145,178,0.25);
+  }
+
+  /* Password collapse */
+  .pw-toggle {
+    font-size: 13px;
+    color: #8b8b9e;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: color .15s;
+    user-select: none;
+    margin-bottom: 12px;
+  }
+  .pw-toggle:hover { color: var(--accent); }
+  .pw-fields { display: none; }
+  .pw-fields.open { display: block; }
+
+  /* Notification toggles */
+  .notif-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid #f0efeb;
+  }
+  .notif-row:last-child { border-bottom: none; }
+  .notif-row-info { flex: 1; min-width: 0; }
+  .notif-row-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 2px;
+  }
+  .notif-row-sub {
+    font-size: 12px;
+    color: #a8a49c;
+  }
+  .toggle-switch {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    flex-shrink: 0;
+    margin-left: 16px;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: #ddd;
+    border-radius: 99px;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 18px; height: 18px;
+    left: 3px; top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle-switch input:checked + .toggle-track { background: var(--accent); }
+  .toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
+
+  /* Mobile tabs */
+  .settings-mobile-tabs {
+    display: none;
+    background: #fff;
+    border-bottom: 1px solid #e8e6e0;
+    overflow-x: auto;
+    padding: 0 16px;
+    gap: 0;
+    scrollbar-width: none;
+  }
+  .settings-mobile-tabs::-webkit-scrollbar { display: none; }
+  .settings-mobile-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 13px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: #a8a49c;
+    border: none;
+    background: none;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  .settings-mobile-tab svg { width: 14px; height: 14px; }
+  .settings-mobile-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  @media (max-width: 768px) {
+    .settings-sidebar { display: none; }
+    .settings-mobile-tabs { display: flex; }
+    .settings-content-inner { padding: 20px 16px 60px; max-width: none; }
+  }
+</style>
+</head>
+<body style="display:none">
+<!-- SHARED_NAVBAR -->
+
+<div class="settings-wrap">
+  <aside class="settings-sidebar">
+    <div class="settings-progress-card" id="sProgressCard" style="display:none;">
+      <div class="settings-progress-label">Profile Completeness</div>
+      <div class="settings-progress-bar-wrap">
+        <div class="settings-progress-bar" id="sProgressBar" style="width:0%"></div>
+      </div>
+      <div class="settings-progress-pct" id="sProgressPct">0% complete</div>
+    </div>
+
+    <div class="settings-sidebar-title">Account</div>
+    <button class="settings-nav-item active" data-panel="personal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Personal Info
+    </button>
+    <button class="settings-nav-item" data-panel="specialty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+      Specialty &amp; Roles
+    </button>
+    <button class="settings-nav-item" data-panel="account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Account &amp; Security
+    </button>
+    <button class="settings-nav-item" data-panel="notifications">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications
+    </button>
+  </aside>
+
+  <div class="settings-mobile-tabs" id="sMobileTabs">
+    <button class="settings-mobile-tab active" data-panel="personal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Personal
+    </button>
+    <button class="settings-mobile-tab" data-panel="specialty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+      Specialty
+    </button>
+    <button class="settings-mobile-tab" data-panel="account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Account
+    </button>
+    <button class="settings-mobile-tab" data-panel="notifications">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifs
+    </button>
+  </div>
+
+  <main class="settings-content">
+  <div class="settings-content-inner">
+
+    <!-- Personal Info -->
+    <div class="settings-panel active" id="sPanel-personal">
+      <div class="settings-section-title">Personal Info</div>
+      <div class="settings-section-sub">Your name, photo, and contact information visible across CentralHub.</div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">Profile Photo</div>
+        <div class="photo-uploader">
+          <div class="photo-preview" id="sPhotoPreview"></div>
+          <div class="photo-actions">
+            <div class="photo-action-row">
+              <input type="file" id="sPhotoInput" accept="image/png,image/jpeg,image/webp" style="display:none;">
+              <button type="button" class="photo-btn" id="sPhotoUploadBtn">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Upload photo
+              </button>
+              <button type="button" class="photo-btn danger" id="sPhotoRemoveBtn" style="display:none;">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                Remove
+              </button>
+            </div>
+            <div class="photo-hint">PNG, JPG or WebP · max 5 MB</div>
+            <div class="settings-msg" id="sPhotoMsg"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">Name &amp; Identity</div>
+        <div class="settings-input-wrap">
+          <label class="settings-input-label" for="sDisplayName">Full name <span style="color:#dc2626">*</span></label>
+          <input type="text" class="settings-input" id="sDisplayName" placeholder="Your full name">
+        </div>
+        <div class="settings-input-wrap">
+          <label class="settings-input-label" for="sTitle">Title / Position</label>
+          <input type="text" class="settings-input" id="sTitle" placeholder="e.g. Director of Secondary Schools, Math Specialist">
+        </div>
+        <div class="settings-input-wrap">
+          <label class="settings-input-label" for="sBio">Bio / Tagline</label>
+          <textarea class="settings-textarea" id="sBio" placeholder="e.g. HQ Math Specialist supporting Cambridge programmes across the network…" maxlength="200"></textarea>
+          <div class="settings-char-count"><span id="sBioCount">0</span>/200</div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">Contact</div>
+        <div class="settings-row">
+          <div class="settings-input-wrap">
+            <label class="settings-input-label" for="sPhone">Phone number</label>
+            <input type="tel" class="settings-input" id="sPhone" placeholder="+62 xxx xxx xxxx">
+          </div>
+          <div class="settings-input-wrap">
+            <label class="settings-input-label" for="sLinkedin">LinkedIn profile</label>
+            <input type="url" class="settings-input" id="sLinkedin" placeholder="https://linkedin.com/in/username">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <button class="settings-save-btn" id="sPersonalBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Save Personal Info
+        </button>
+        <div class="settings-msg" id="sPersonalMsg"></div>
+      </div>
+    </div>
+
+    <!-- Specialty & Roles -->
+    <div class="settings-panel" id="sPanel-specialty">
+      <div class="settings-section-title">Specialty &amp; Roles</div>
+      <div class="settings-section-sub">Your CentralHub role, sub-roles, and subject specialties. Managed by central_admin.</div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">Your access</div>
+
+        <div class="readonly-chip-row">
+          <svg class="readonly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><circle cx="12" cy="12" r="10"/></svg>
+          <div class="readonly-chip-label">Role</div>
+          <div class="readonly-chip-value" id="sRoRole">—</div>
+        </div>
+
+        <div class="readonly-chip-row">
+          <svg class="readonly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <div class="readonly-chip-label">Sub-roles</div>
+          <div class="readonly-chip-value pill-chips" id="sRoSubRoles">—</div>
+        </div>
+
+        <div class="readonly-chip-row">
+          <svg class="readonly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          <div class="readonly-chip-label">Subjects</div>
+          <div class="readonly-chip-value pill-chips" id="sRoSubjects">—</div>
+        </div>
+
+        <div style="font-size:12.5px;color:#a8a49c;margin-top:14px;line-height:1.5;">
+          To request changes to your role, sub-roles or subject assignments, contact a central_admin to edit your record from <a href="console" style="color:var(--accent);text-decoration:none;font-weight:600">/console</a>.
+        </div>
+      </div>
+    </div>
+
+    <!-- Account & Security -->
+    <div class="settings-panel" id="sPanel-account">
+      <div class="settings-section-title">Account &amp; Security</div>
+      <div class="settings-section-sub">Your login credentials.</div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">Email</div>
+        <div class="settings-input-wrap">
+          <label class="settings-input-label">Email address</label>
+          <input type="email" class="settings-input" id="sEmail" disabled>
+        </div>
+      </div>
+
+      <div class="settings-card" id="sPwCard" style="display:none;">
+        <div class="settings-card-label">Password</div>
+        <div class="pw-toggle" id="sPwToggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="6 9 12 15 18 9"/></svg>
+          Change password
+        </div>
+        <div class="pw-fields" id="sPwFields">
+          <div class="settings-input-wrap">
+            <label class="settings-input-label" for="sPwCurrent">Current password</label>
+            <input type="password" class="settings-input" id="sPwCurrent" placeholder="Enter current password">
+          </div>
+          <div class="settings-input-wrap">
+            <label class="settings-input-label" for="sPwNew">New password</label>
+            <input type="password" class="settings-input" id="sPwNew" placeholder="Minimum 6 characters">
+          </div>
+          <div class="settings-input-wrap">
+            <label class="settings-input-label" for="sPwConfirm">Confirm new password</label>
+            <input type="password" class="settings-input" id="sPwConfirm" placeholder="Repeat new password">
+          </div>
+          <button class="settings-save-btn" id="sPwBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Update Password
+          </button>
+          <div class="settings-msg" id="sPwMsg"></div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">Session</div>
+        <button id="sSignOutBtn" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:rgba(220,38,38,0.08);border:1.5px solid rgba(220,38,38,0.2);border-radius:10px;color:#dc2626;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .15s;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign Out
+        </button>
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div class="settings-panel" id="sPanel-notifications">
+      <div class="settings-section-title">Notifications</div>
+      <div class="settings-section-sub">Choose which updates you'd like to receive on Central Hub.</div>
+
+      <div class="settings-card">
+        <div class="settings-card-label">In-App Notifications</div>
+        <div class="notif-row">
+          <div class="notif-row-info">
+            <div class="notif-row-title">New Announcements</div>
+            <div class="notif-row-sub">Get notified when a new announcement is posted.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sNotifAnnouncements" checked>
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+        <div class="notif-row">
+          <div class="notif-row-info">
+            <div class="notif-row-title">Message Board</div>
+            <div class="notif-row-sub">Show badge when new topics are posted.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sNotifMessages" checked>
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+        <div class="notif-row">
+          <div class="notif-row-info">
+            <div class="notif-row-title">Calendar Reminders</div>
+            <div class="notif-row-sub">Alerts for upcoming events on the academic + Cambridge calendar.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sNotifCalendar" checked>
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+        <div class="notif-row">
+          <div class="notif-row-info">
+            <div class="notif-row-title">Feedback &amp; Surveys</div>
+            <div class="notif-row-sub">Notifications for new survey responses and feedback submissions.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sNotifFeedback" checked>
+            <div class="toggle-track"></div>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <button class="settings-save-btn" id="sNotifBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Save Preferences
+        </button>
+        <div class="settings-msg" id="sNotifMsg"></div>
+      </div>
+    </div>
+
+  </div>
+  </main>
+</div>
+
+<script type="module">
+import { signOut, updatePassword, updateProfile, EmailAuthProvider, reauthenticateWithCredential }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { doc, setDoc }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+const SUBJECT_LABELS = {
+  math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
+  physics: 'Physics', science: 'Science', english: 'English',
+  bahasa: 'Bahasa', religion: 'Religion',
+};
+const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
+
+function calcProgress(p) {
+  let score = 0;
+  if (p.displayName?.trim())                                 score += 25;
+  if (p.title?.trim())                                       score += 15;
+  if (p.bio?.trim())                                         score += 15;
+  if (p.phone?.trim())                                       score += 15;
+  if (p.linkedin_url?.trim())                                score += 10;
+  if (p.photoURL)                                            score += 20;
+  return Math.min(score, 100);
+}
+function renderProgress(p) {
+  const pct = calcProgress(p);
+  const bar  = document.getElementById('sProgressBar');
+  const pctEl = document.getElementById('sProgressPct');
+  const card = document.getElementById('sProgressCard');
+  if (bar) bar.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '% complete';
+  if (card) card.style.display = '';
+}
+
+function switchPanel(panelKey) {
+  document.querySelectorAll('.settings-nav-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.panel === panelKey);
+  });
+  document.querySelectorAll('.settings-mobile-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.panel === panelKey);
+  });
+  document.querySelectorAll('.settings-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === 'sPanel-' + panelKey);
+  });
+}
+document.querySelectorAll('.settings-nav-item, .settings-mobile-tab').forEach(btn => {
+  btn.addEventListener('click', () => switchPanel(btn.dataset.panel));
+});
+const hashPanel = window.location.hash.replace('#', '');
+if (['personal','specialty','account','notifications'].includes(hashPanel)) {
+  switchPanel(hashPanel);
+}
+
+document.getElementById('sBio').addEventListener('input', function() {
+  document.getElementById('sBioCount').textContent = this.value.length;
+});
+
+document.getElementById('sPwToggle').addEventListener('click', function() {
+  const fields = document.getElementById('sPwFields');
+  const open = fields.classList.toggle('open');
+  const icon = this.querySelector('svg');
+  if (icon) icon.style.transform = open ? 'rotate(180deg)' : '';
+  this.lastChild.textContent = open ? ' Hide password change' : ' Change password';
+});
+
+let _toastTimer = null;
+function showToast(text, type = 'ok') {
+  const el = document.getElementById('settingsToast');
+  if (!el) return;
+  clearTimeout(_toastTimer);
+  el.textContent = text;
+  el.className = type;
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+function showMsg(id, text, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'settings-msg ' + type;
+  if (type === 'ok') setTimeout(() => { el.className = 'settings-msg'; }, 3000);
+}
+
+// Wait for auth-guard to finish, then wire everything up.
+function ready(fn) {
+  if (window.currentUser && window.userProfile) { fn(); return; }
+  document.addEventListener('authReady', fn, { once: true });
+}
+
+ready(async () => {
+  const user    = window.currentUser;
+  const profile = window.userProfile;
+  const db      = window.db;
+  const auth    = window.auth;
+  const storage = window.storage;
+
+  renderProgress(profile);
+
+  // Specialty & Roles
+  const isAdmin = profile.role_centralhub === 'central_admin';
+  document.getElementById('sRoRole').textContent = isAdmin ? 'Central Admin' : 'Central User';
+
+  const subRolesEl = document.getElementById('sRoSubRoles');
+  const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
+  subRolesEl.innerHTML = '';
+  if (!subRoles.length) {
+    subRolesEl.textContent = 'None assigned';
+    subRolesEl.classList.add('empty');
+  } else {
+    subRoles.forEach(key => {
+      const chip = document.createElement('span');
+      chip.className = 'pill-chip';
+      chip.textContent = SUB_ROLE_LABELS[key] || key;
+      subRolesEl.appendChild(chip);
+    });
+  }
+
+  const subjectsEl = document.getElementById('sRoSubjects');
+  const subjects = Array.isArray(profile.ch_subjects) ? profile.ch_subjects : [];
+  subjectsEl.innerHTML = '';
+  if (!subjects.length) {
+    subjectsEl.textContent = isAdmin || subRoles.includes('director')
+      ? 'All subjects (admin/director bypass)'
+      : 'None — request from central_admin';
+    subjectsEl.classList.add('empty');
+  } else {
+    subjects.forEach(key => {
+      const chip = document.createElement('span');
+      chip.className = 'pill-chip subject';
+      chip.textContent = SUBJECT_LABELS[key] || key;
+      subjectsEl.appendChild(chip);
+    });
+  }
+
+  // Personal Info inputs
+  document.getElementById('sDisplayName').value = profile.displayName || '';
+  document.getElementById('sTitle').value       = profile.title || '';
+  document.getElementById('sBio').value         = profile.bio || '';
+  document.getElementById('sBioCount').textContent = (profile.bio || '').length;
+  document.getElementById('sPhone').value       = profile.phone || '';
+  document.getElementById('sLinkedin').value    = profile.linkedin_url || '';
+
+  // Profile photo render + upload
+  const photoPreviewEl = document.getElementById('sPhotoPreview');
+  const photoRemoveBtn = document.getElementById('sPhotoRemoveBtn');
+  function renderPhotoPreview(url, fallbackName) {
+    if (url) {
+      photoPreviewEl.style.backgroundImage = `url("${url}")`;
+      photoPreviewEl.textContent = '';
+      photoRemoveBtn.style.display = '';
+    } else {
+      photoPreviewEl.style.backgroundImage = '';
+      const initial = (fallbackName || user.email || '?').trim().charAt(0).toUpperCase();
+      photoPreviewEl.textContent = initial;
+      photoRemoveBtn.style.display = 'none';
+    }
+  }
+  renderPhotoPreview(profile.photoURL || user.photoURL || '', profile.displayName);
+
+  document.getElementById('sPhotoUploadBtn').addEventListener('click', () => {
+    document.getElementById('sPhotoInput').click();
+  });
+  document.getElementById('sPhotoInput').addEventListener('change', async (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      showMsg('sPhotoMsg', 'Please pick a PNG, JPG or WebP image.', 'err');
+      ev.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showMsg('sPhotoMsg', 'Image is larger than 5 MB.', 'err');
+      ev.target.value = '';
+      return;
+    }
+    showMsg('sPhotoMsg', 'Uploading…', 'ok');
+    try {
+      // Mirror the legacy auth-guard modal upload path so the existing
+      // Storage rule for users/{uid}/avatar still applies.
+      const sRef = storageRef(storage, `users/${user.uid}/avatar`);
+      const snap = await uploadBytes(sRef, file, { contentType: file.type });
+      const url = await getDownloadURL(snap.ref);
+      await setDoc(doc(db, 'users', user.uid), { photoURL: url }, { merge: true });
+      try { await updateProfile(user, { photoURL: url }); } catch { /* non-fatal */ }
+      window.userProfile = { ...window.userProfile, photoURL: url };
+      renderPhotoPreview(url, profile.displayName);
+      showMsg('sPhotoMsg', 'Photo updated ✓', 'ok');
+      renderProgress(window.userProfile);
+    } catch (e) {
+      console.warn('photo upload failed', e);
+      showMsg('sPhotoMsg', 'Upload failed. Try again.', 'err');
+    } finally {
+      ev.target.value = '';
+    }
+  });
+  document.getElementById('sPhotoRemoveBtn').addEventListener('click', async () => {
+    if (!window.userProfile?.photoURL) return;
+    showMsg('sPhotoMsg', 'Removing…', 'ok');
+    try {
+      try { await deleteObject(storageRef(storage, `users/${user.uid}/avatar`)); }
+      catch (e) { console.warn('photo delete (storage) failed', e); }
+      await setDoc(doc(db, 'users', user.uid), { photoURL: '' }, { merge: true });
+      try { await updateProfile(user, { photoURL: '' }); } catch { /* non-fatal */ }
+      window.userProfile = { ...window.userProfile, photoURL: '' };
+      renderPhotoPreview('', profile.displayName);
+      showMsg('sPhotoMsg', 'Photo removed ✓', 'ok');
+      renderProgress(window.userProfile);
+    } catch (e) {
+      showMsg('sPhotoMsg', 'Failed to remove. Try again.', 'err');
+    }
+  });
+
+  document.getElementById('sPersonalBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('sPersonalBtn');
+    const displayName = document.getElementById('sDisplayName').value.trim();
+    const title       = document.getElementById('sTitle').value.trim();
+    const bio         = document.getElementById('sBio').value.trim();
+    const phone       = document.getElementById('sPhone').value.trim();
+    const linkedinRaw = document.getElementById('sLinkedin').value.trim();
+
+    if (!displayName) { showMsg('sPersonalMsg', 'Full name is required.', 'err'); return; }
+
+    let linkedin_url = '';
+    if (linkedinRaw) {
+      const candidate = /^https?:\/\//i.test(linkedinRaw) ? linkedinRaw : 'https://' + linkedinRaw;
+      try {
+        const u = new URL(candidate);
+        if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) {
+          showMsg('sPersonalMsg', 'LinkedIn URL must be on linkedin.com.', 'err');
+          return;
+        }
+        linkedin_url = u.toString();
+      } catch {
+        showMsg('sPersonalMsg', 'LinkedIn URL is not valid.', 'err');
+        return;
+      }
+    }
+
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        displayName, title, bio, phone, linkedin_url,
+      }, { merge: true });
+      if (user.displayName !== displayName) {
+        try { await updateProfile(user, { displayName }); } catch { /* non-fatal */ }
+      }
+      window.userProfile = { ...window.userProfile, displayName, title, bio, phone, linkedin_url };
+      renderProgress(window.userProfile);
+      showMsg('sPersonalMsg', 'Personal info saved ✓', 'ok');
+    } catch (e) {
+      console.warn('personal save failed', e);
+      showMsg('sPersonalMsg', 'Failed to save. Try again.', 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Personal Info';
+    }
+  });
+
+  // Account & Security
+  document.getElementById('sEmail').value = user.email || '';
+
+  const isPasswordUser = user.providerData.some(p => p.providerId === 'password');
+  if (isPasswordUser) document.getElementById('sPwCard').style.display = '';
+
+  document.getElementById('sPwBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('sPwBtn');
+    const current = document.getElementById('sPwCurrent').value;
+    const newPw    = document.getElementById('sPwNew').value;
+    const confirm  = document.getElementById('sPwConfirm').value;
+    if (!current) { showMsg('sPwMsg', 'Enter your current password.', 'err'); return; }
+    if (newPw.length < 6) { showMsg('sPwMsg', 'New password must be at least 6 characters.', 'err'); return; }
+    if (newPw !== confirm) { showMsg('sPwMsg', 'Passwords do not match.', 'err'); return; }
+    btn.disabled = true; btn.textContent = 'Updating…';
+    try {
+      const credential = EmailAuthProvider.credential(user.email, current);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPw);
+      document.getElementById('sPwCurrent').value = '';
+      document.getElementById('sPwNew').value = '';
+      document.getElementById('sPwConfirm').value = '';
+      document.getElementById('sPwFields').classList.remove('open');
+      showMsg('sPwMsg', 'Password updated ✓', 'ok');
+    } catch (e) {
+      const msg = e.code === 'auth/wrong-password' ? 'Current password is incorrect.' : 'Failed to update. Try again.';
+      showMsg('sPwMsg', msg, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Update Password';
+    }
+  });
+
+  document.getElementById('sSignOutBtn').addEventListener('click', async () => {
+    await signOut(auth);
+    window.location.href = 'login';
+  });
+
+  // Notifications
+  const prefs = profile.notification_prefs || {};
+  if (prefs.announcements !== false) document.getElementById('sNotifAnnouncements').checked = true;
+  if (prefs.messages      !== false) document.getElementById('sNotifMessages').checked = true;
+  if (prefs.calendar      !== false) document.getElementById('sNotifCalendar').checked = true;
+  if (prefs.feedback      !== false) document.getElementById('sNotifFeedback').checked = true;
+
+  document.getElementById('sNotifBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('sNotifBtn');
+    const notification_prefs = {
+      announcements: document.getElementById('sNotifAnnouncements').checked,
+      messages:      document.getElementById('sNotifMessages').checked,
+      calendar:      document.getElementById('sNotifCalendar').checked,
+      feedback:      document.getElementById('sNotifFeedback').checked,
+    };
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await setDoc(doc(db, 'users', user.uid), { notification_prefs }, { merge: true });
+      window.userProfile = { ...window.userProfile, notification_prefs };
+      showMsg('sNotifMsg', 'Preferences saved ✓', 'ok');
+    } catch (e) {
+      showMsg('sNotifMsg', 'Failed to save. Try again.', 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Preferences';
+    }
+  });
+});
+</script>
+<div id="settingsToast"></div>
+</body>
+</html>

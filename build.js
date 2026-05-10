@@ -331,6 +331,7 @@ const htmlFiles = [
   "rules-viewer.html",
   "design-system.html",
   "cambridge-standards.html",
+  "settings.html",
 ];
 
 htmlFiles.forEach((file) => {
