@@ -304,7 +304,7 @@ const htmlFiles = [
   "weekly-checklist.html",
   "feedback-management.html",
   "cambridge-calendar.html",
-  "event-calendar.html",
+  "school-events.html",
   "curriculum-map.html",
   "national-alignment.html",
   "kpi-admin.html",
