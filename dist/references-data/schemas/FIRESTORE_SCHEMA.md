@@ -125,6 +125,25 @@ The catalogue below groups collections by the business domain they serve. Within
 
 ---
 
+#### `students/{uid}`
+**PK:** Firebase Auth UID (Google SSO). Owned by **Students Hub**.
+**Fields:** `uid`, `email`, `emailLower` (lookup key), `displayName`, `photoURL`, `schoolId →partner_schools.id` (nullable until class picker resolves), `school` (denormalised), `classId →partner_schools/{id}/classes/{classId}` (nullable until class picker), `className` (denormalised), `gradeLevel` (number), `status` (`'needs_class'` | `'pending_approval'` | `'active'` | `'rejected'` | `'graduated'`), `createdAt`, `classPickedAt`, `approvedAt`, `approvedBy →users.uid`, `lastLoginAt`.
+**FKs:** `schoolId → partner_schools.id` · `classId → partner_schools/{id}/classes/{classId}` · `approvedBy → users.uid` (the teacher / admin who approved).
+**Writers:**
+- Self-CREATE on first Google SSO. Rule pins `uid == auth.uid`, `emailLower == lowercase(token.email)`, `status == 'needs_class'` so a student can't bootstrap themselves to `active` or impersonate another uid.
+- Self-UPDATE in two narrow envelopes: (1) class picker transition `needs_class → pending_approval` (affected keys ⊂ `{schoolId, school, classId, className, gradeLevel, status, classPickedAt}`); (2) login touch (affected keys ⊂ `{lastLoginAt, displayName, photoURL}`).
+- Admin / TH admin / AH admin can update freely (used for `pending_approval → active|rejected` and `active → graduated`).
+**Read:** owner (self) · `central_admin` · `academic_admin` · `teachers_admin`. Same-school class teachers come in Phase 2 via `chapter_test_attempts` rule scoping.
+**Indexes:** none yet.
+**Notes:**
+- **Distinct from `users/{uid}`** — students are NOT tracked in `users/{uid}` and do not have any `role_*hub` / sub-role / approval fields. Hub selection is the discriminator: a person who signs into `studentshub.eduversal.org` becomes a student; same email signing into `teachershub.eduversal.org` follows the staff path. Both records can co-exist for hybrid edge cases without conflict.
+- **Domain whitelist is runtime-derived** from `partner_schools.domain`. Students Hub `auth-guard.js` queries `partner_schools where domain == emailDomain limit 2` at sign-in; 0 matches → reject, 1 → schoolId pre-filled, 2+ → multi-school domain (the picker shows a school step first).
+- **Class picker filter** (`Students Hub/class-picker.html`): `ALLOWED_GRADES = [7, 8]` for the Grade-7-8 pilot. Bump when expanding.
+- **Trust-but-verify enrolment** — a student's class pick lands them in `pending_approval`, not `active`. A class teacher confirms membership via TH (Phase 1.5 `/student-approvals` page; Phase 1 stopgap = direct Firestore Console flip).
+- **No deletion at end of year** — `status='graduated'` preserves growth history. Hard-delete only via admin Cloud Function on explicit school request.
+
+---
+
 ### 2. Communication & Content
 
 #### `announcements/{annId}`
@@ -676,6 +695,65 @@ the others (`principal_360_responses`, `principal_coaching_sessions`,
 **Writers:** Cloud Function only.
 **Read scope:** principal (own); same-school AH leadership; `central_admin`. NEVER exposed when below threshold.
 **Notes:** This is the only collection a human reads for 360 results. NN5 enforced: `aboveThreshold[c] === false` → cohort hidden in UI.
+
+---
+
+### 19. Chapter Tests + Sessions (Students Hub assessment delivery, 2026-05-10)
+
+The student-side delivery system. Chapter tests are network-uniform mastery checks authored by HQ Subject Specialists; sessions schedule them for one class at a time; attempts are per-student records that flow from `draft → in_progress → submitted/scored`. EASE Growth (adaptive cross-grade) ships separately in Phase 2 with its own ease-* collections — sketched in `docs/STUDENTS-HUB-ARCHITECTURE.md` §3.3, deliberately not catalogued here until rules ship.
+
+#### `chapter_tests/{testId}`
+**PK:** Slugged composite `{subjectId}_{stage}_{unitCode}_v{version}` (e.g. `math_7_7ni-04_v1`). Lowercased, non-alphanumeric → `-`.
+**Fields:** `subjectId`, `stage` (number), `unitCode`, `unitTitle`, `version` (default 1), `description`, `durationMin` (default 30), `passThresholdPct` (default 60), `itemCount`, `totalMarks`, `status` (`'draft' | 'published' | 'archived'`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
+**Subcollections:**
+- `chapter_tests/{testId}/items/{itemId}` — auto-id. Fields: `seq`, `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `options[]` (mcq only), `correctIdx` (mcq), `correctAnswer` (numeric/short), `marks` (default 1), `difficulty` (`'easy' | 'medium' | 'hard'`), `explanation`, `createdAt`.
+
+**FKs:** `authorUid → users.uid`. The `unitCode` informally references `*_pacing` collection units but is not an enforced FK — Specialists type the code freehand.
+**Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `chapter-test-author.html`).
+**Read scope:**
+- `get`/`list` for any authorised staff (CH/AH/TH browse + scheduling).
+- `get` for **active students** when `status == 'published'` — needed by the test runner to load the test definition for an attempt the student owns.
+- Items subcollection: same scope as parent — active students read items when fetching test content for their attempt.
+**Notes:**
+- Network-uniform: every partner school's students take the same items. Version bump (`v2`) is recommended over in-place edits once a test has live attempts.
+- Subject specialty filter is applied client-side via `ch_subjects[]`; rules don't gate on subject (kept simple — admin/coordinator can author across subjects if needed).
+
+---
+
+#### `scheduled_sessions/{sessionId}`
+**PK:** Auto-id.
+**Fields:** `testId →chapter_tests.id`, `testTitle` (denormalised), `subjectId`, `schoolId →partner_schools.id`, `classId →partner_schools/{id}/classes/{classId}`, `className` (denormalised), `gradeLevel`, `teacherUid →users.uid`, `teacherName`, `opensAt`, `closesAt`, `note`, `attemptCount` (count of pre-created attempts), `durationMin`, `cancelled` (boolean, default false), `cancelledAt`, `createdAt`.
+**FKs:** `testId → chapter_tests.id` · `schoolId → partner_schools.id` · `classId → partner_schools/{id}/classes/{classId}` · `teacherUid → users.uid`.
+**Writers:**
+- **Create**: `central_admin` OR same-school `teachers_admin` / `teachers_user` with `subject_teacher` / `subject_leader` sub-role. The `teacherUid` field MUST equal the requester (rule-pinned).
+- **Update**: same scope as create (used to flip `cancelled: true`).
+- **Delete**: `central_admin` only.
+**Read scope:**
+- Any authorised staff (TH launcher list, AH school dashboards, CH cross-school monitoring).
+- **Active students** read sessions where `schoolId == own schoolId AND className == own className` so the dashboard can show schedule cards.
+**Notes:**
+- A schedule launches a write batch: 1 `scheduled_sessions` doc + N `chapter_test_attempts` docs (one per active student in the class).
+- `cancelled: true` is the soft-delete pattern — pre-created attempts remain so audit trail stays intact.
+- Session "status" is computed client-side from the now-vs-window comparison (no `status` field) — schedule filtering is client-only.
+
+---
+
+#### `chapter_test_attempts/{attemptId}`
+**PK:** Composite `{sessionId}_{studentUid}` — deterministic so a teacher pre-creates one attempt per student at schedule time and re-runs are idempotent.
+**Fields:** `attemptId`, `sessionId →scheduled_sessions.id`, `testId →chapter_tests.id`, `testTitle` (denormalised), `studentUid →students.uid`, `studentName` (denormalised), `schoolId →partner_schools.id`, `classId`, `className`, `opensAt`, `closesAt`, `status` (`'draft' | 'in_progress' | 'submitted' | 'scored' | 'flagged' | 'cancelled'`), `startedAt`, `submittedAt`, `responses[]` (per-item: `{ itemId, seq, answer, isCorrect, marks, type }`), `rawScorePct`, `earnedMarks`, `totalMarks`, `passed` (boolean), `autoSubmit` (boolean — true if timer ran out), `tabSwitches` (lockdown counter), `createdAt`, `updatedAt`.
+**FKs:** `sessionId → scheduled_sessions.id` · `testId → chapter_tests.id` · `studentUid → students.uid` · `schoolId → partner_schools.id`.
+**Writers:**
+- **Create**: `central_admin` OR same-school teacher (write batch from `scheduled_sessions` create). Students CANNOT create their own attempts.
+- **Update (student self)**: ONLY when own attempt + `status ∈ ['draft','in_progress']` + affected keys ⊂ `{status, startedAt, submittedAt, responses, rawScorePct, earnedMarks, totalMarks, passed, autoSubmit, tabSwitches, updatedAt}` + `studentUid` / `testId` / `sessionId` immutable. Once `submitted` / `scored` / `flagged`, the doc is **immutable for students** (rule-enforced).
+- **Update (teacher / admin)**: same-school teachers OR admin can update freely (used for Phase 2 essay regrading + status overrides).
+- **Delete**: admin only.
+**Read scope:**
+- Owner (student) gets own attempts.
+- Any authorised staff lists/reads (admin scoping via TH/AH dashboards).
+**Notes:**
+- Auto-scoring runs client-side at submit (MCQ exact match, numeric numeric-equality + string fallback, short text case-insensitive trim). Phase 2 will add server-side re-grade via Cloud Function for essay flagging.
+- The `tabSwitches` counter is informational, not a hard kill switch — heavy lockdown (Safe Exam Browser-style) is a Phase 2 conversation.
+- `responses[]` is denormalised into the attempt doc instead of a subcollection because all-at-once read is more common than per-response reads, and item count is bounded (typically 5–25 per chapter test).
 
 ---
 

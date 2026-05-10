@@ -310,6 +310,106 @@ service cloud.firestore {
         ));
     }
 
+    // -- chapter_tests ---------------------------------------
+    // Network-uniform chapter mastery tests authored by HQ Subject
+    // Specialists. Items live in a subcollection.
+    //
+    // - Read: any authorised staff (CH/AH/TH) for browsing + scheduling;
+    //   active students may read PUBLISHED tests so the test runner can
+    //   load the test definition for an attempt they own. Drafts are
+    //   hidden from students.
+    // - Items subcollection: same read scope; active students read items
+    //   only when their attempt is in_progress / submitted (they need
+    //   stems to take the test and to see their report).
+    // - Write: central_admin OR CH coordinator OR CH director (subject
+    //   specialty filter is applied client-side; rule keeps gate simple).
+    match /chapter_tests/{testId} {
+      allow get: if isAuthorized() ||
+                    (isActiveStudent() && resource.data.status == 'published');
+      allow list: if isAuthorized();
+      allow create, update, delete: if isAdmin() || isCHCoordinator();
+
+      match /items/{itemId} {
+        allow get: if isAuthorized() || isActiveStudent();
+        allow list: if isAuthorized() || isActiveStudent();
+        allow create, update, delete: if isAdmin() || isCHCoordinator();
+      }
+    }
+
+    // -- scheduled_sessions ----------------------------------
+    // A teacher schedules a published chapter_test for one of their
+    // classes. Each session writes N draft chapter_test_attempts (one
+    // per active student in the class) at create time via a batched
+    // write from the launcher page.
+    //
+    // - Read: any authorised staff; active students read sessions for
+    //   their own school+class so the dashboard can show schedule cards.
+    // - Create/update/delete: admin OR teachers_admin OR teachers_user
+    //   with a subject_teacher / subject_leader sub-role at the same
+    //   school as the session's schoolId.
+    function isTeacherAtSchool(schoolId) {
+      return isAuthorized() && userProfileExists()
+             && userProfile().schoolId == schoolId
+             && (
+               userProfile().role_teachershub == 'teachers_admin'
+               || (userProfile().role_teachershub == 'teachers_user'
+                   && 'th_sub_roles' in userProfile()
+                   && userProfile().th_sub_roles is list
+                   && userProfile().th_sub_roles.hasAny(['subject_teacher','subject_leader']))
+             );
+    }
+    match /scheduled_sessions/{sessionId} {
+      allow get, list: if isAuthorized() ||
+                          (isActiveStudent()
+                           && studentDoc().schoolId == resource.data.schoolId
+                           && studentDoc().className == resource.data.className);
+      allow create: if isAdmin() ||
+                       (isTeacherAtSchool(request.resource.data.schoolId)
+                        && request.resource.data.teacherUid == request.auth.uid);
+      allow update: if isAdmin() ||
+                       (isTeacherAtSchool(resource.data.schoolId)
+                        && resource.data.teacherUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // -- chapter_test_attempts -------------------------------
+    // Per-student attempt record. Doc id pattern: {sessionId}_{studentUid}.
+    //
+    // - Read: owner (student) · any same-school staff · admin.
+    // - Create: ONLY at session schedule time, by the teacher running
+    //   the launcher (must match session.teacherUid). Admin can also
+    //   create. Students CANNOT create their own attempts — that would
+    //   bypass class membership checks.
+    // - Update: owner can write responses while in_progress within the
+    //   time window, and submit (status → submitted/scored). Once
+    //   submitted, the doc is IMMUTABLE for students. Teacher / admin
+    //   can update freely (regrading flagged essays in Phase 2).
+    match /chapter_test_attempts/{attemptId} {
+      allow get: if isAuthorized() ||
+                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow list: if isAuthorized();
+
+      allow create: if isAdmin() ||
+                       (isTeacherAtSchool(request.resource.data.schoolId)
+                        && request.resource.data.studentUid != null);
+
+      // Student self-update: only on their own attempt, only while in
+      // an active in_progress / draft state, only writing the answer
+      // payload + status flip to submitted/scored.
+      allow update: if isAdmin() || isTeacherAtSchool(resource.data.schoolId) ||
+        (isSignedIn() && resource.data.studentUid == request.auth.uid
+         && resource.data.status in ['draft', 'in_progress']
+         && request.resource.data.studentUid == resource.data.studentUid
+         && request.resource.data.testId == resource.data.testId
+         && request.resource.data.sessionId == resource.data.sessionId
+         && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status','startedAt','submittedAt','responses',
+                        'rawScorePct','earnedMarks','totalMarks','passed',
+                        'autoSubmit','tabSwitches','updatedAt']));
+
+      allow delete: if isAdmin();
+    }
+
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();

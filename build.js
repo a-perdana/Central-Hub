@@ -327,6 +327,7 @@ const htmlFiles = [
   "specialist-portfolio.html",
   "specialist-certificates.html",
   "orientation-admin.html",
+  "chapter-test-author.html",
   "page-access.html",
   "rules-viewer.html",
   "design-system.html",
