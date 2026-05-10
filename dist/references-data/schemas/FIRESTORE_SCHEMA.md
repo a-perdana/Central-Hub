@@ -704,7 +704,7 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 
 #### `chapter_tests/{testId}`
 **PK:** Slugged composite `{subjectId}_{stage}_{unitCode}_v{version}` (e.g. `math_7_7ni-04_v1`). Lowercased, non-alphanumeric → `-`.
-**Fields:** `subjectId`, `stage` (number), `unitCode`, `unitTitle`, `version` (default 1), `description`, `durationMin` (default 30), `passThresholdPct` (default 60), `itemCount`, `totalMarks`, `status` (`'draft' | 'published' | 'archived'`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
+**Fields:** `subjectId`, `stage` (Year number 7..12 — field name historical, UI labels it "Year" since Eduversal partner schools are Indonesian; "Stage" terminology only relevant inside Cambridge syllabus references), `unitCode`, `unitTitle`, `version` (default 1), `description`, `durationMin` (default 30), `passThresholdPct` (default 60), `itemCount`, `totalMarks`, `status` (`'draft' | 'published' | 'archived'`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
 **Subcollections:**
 - `chapter_tests/{testId}/items/{itemId}` — auto-id. Fields: `seq`, `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `options[]` (mcq only), `correctIdx` (mcq), `correctAnswer` (numeric/short), `marks` (default 1), `difficulty` (`'easy' | 'medium' | 'hard'`), `explanation`, `createdAt`.
 
