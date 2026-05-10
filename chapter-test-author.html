@@ -129,6 +129,8 @@
   <script src="firebase-config.js"></script>
   <script type="module" src="auth-guard.js"></script>
 
+  <!-- SHARED_NAVBAR -->
+
   <header class="hero">
     <div class="hero-inner">
       <div style="font-size:.7rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.45); margin-bottom:8px;">Assessment Authoring</div>
@@ -329,14 +331,26 @@
 
     function subscribe() {
       if (unsub) unsub();
-      // Load tests; filter client-side by mySubjects (small collection MVP)
+      // No orderBy on the query — orderBy('updatedAt') silently drops docs
+      // missing the field. Sort client-side instead. Tests collection is
+      // small (network-wide, ≤ a few hundred at most), so unfiltered read
+      // is fine.
       unsub = onSnapshot(
-        query(collection(window.db, 'chapter_tests'), orderBy('updatedAt', 'desc')),
+        collection(window.db, 'chapter_tests'),
         snap => {
-          tests = snap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter(t => mySubjects.length === 0 || mySubjects.includes(t.subjectId));
+          const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          tests = all
+            .filter(t => mySubjects.length === 0 || mySubjects.includes(t.subjectId))
+            .sort((a, b) => {
+              const ta = a.updatedAt && a.updatedAt.toDate ? a.updatedAt.toDate().getTime() : 0;
+              const tb = b.updatedAt && b.updatedAt.toDate ? b.updatedAt.toDate().getTime() : 0;
+              return tb - ta;
+            });
+          console.log('[chapter-test-author] tests loaded:', all.length, '· after subject filter:', tests.length, '· mySubjects:', mySubjects);
           render();
+        },
+        err => {
+          console.error('[chapter-test-author] subscribe error:', err);
         }
       );
     }
