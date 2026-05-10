@@ -240,6 +240,236 @@
     borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#374151", fontSize: 13,
   };
 
+  // ─── 2-MONTH STRIP VIEW ─────────────────────────────────────────────────────
+  // Wide-scan calendar grid: 2 months side by side with category-colored
+  // event cells + dashed-frame multi-day continuation + per-month foot panel
+  // listing events. Mirrors the AH/TH/CH school-events strip but consumes
+  // the academic calendar's department + category palette via getEventStyle().
+  const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  function StripView({ anchorMonth, anchorYear, events, onShift, onDayClick }) {
+    // Build per-day index — first day = "start", subsequent days = "continuation"
+    const { byDay, contByDay } = useMemo(() => {
+      const bd = {}, cb = {};
+      events.forEach(ev => {
+        if (!ev.date_start) return;
+        const start = parseDate(ev.date_start);
+        const end   = parseDate(ev.date_end || ev.date_start);
+        let cur = new Date(start);
+        let isFirst = true;
+        while (cur <= end) {
+          const key = isoDate(cur);
+          if (isFirst) (bd[key] = bd[key] || []).push(ev);
+          else         (cb[key] = cb[key] || []).push(ev);
+          cur.setDate(cur.getDate() + 1);
+          isFirst = false;
+        }
+      });
+      return { byDay: bd, contByDay: cb };
+    }, [events]);
+
+    let mB = anchorMonth + 1, yB = anchorYear;
+    if (mB > 11) { mB = 0; yB += 1; }
+    const labelA = `${MONTHS[anchorMonth]} ${anchorYear}`;
+    const labelB = `${MONTHS[mB]} ${yB}`;
+
+    return (
+      <div style={{ padding: "20px 24px 32px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <button onClick={() => onShift(-2)} style={navBtnStyle}>← Prev 2 months</button>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A" }}>{labelA} – {labelB}</div>
+          <button onClick={() => onShift( 2)} style={navBtnStyle}>Next 2 months →</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }} className="strip-grid">
+          <StripMonth year={anchorYear} month={anchorMonth} byDay={byDay} contByDay={contByDay} onDayClick={onDayClick} />
+          <StripMonth year={yB}        month={mB}          byDay={byDay} contByDay={contByDay} onDayClick={onDayClick} />
+        </div>
+        <style>{`
+          @media (max-width: 900px) { .strip-grid { grid-template-columns: 1fr !important; gap: 18px !important; } }
+        `}</style>
+      </div>
+    );
+  }
+
+  function StripMonth({ year, month, byDay, contByDay, onDayClick }) {
+    const today = new Date();
+    const isCurrent = (today.getFullYear() === year && today.getMonth() === month);
+    const firstDay  = new Date(year, month, 1).getDay();
+    const lastDate  = new Date(year, month + 1, 0).getDate();
+
+    const cells = [];
+    // Empty cells before the 1st
+    for (let i = 0; i < firstDay; i++) {
+      cells.push(<div key={`e${i}`} style={{ aspectRatio: "1 / 1", minHeight: 36 }} />);
+    }
+    const dayList = []; // foot panel items
+    for (let d = 1; d <= lastDate; d++) {
+      const key = `${year}-${String(month + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const startEvts = byDay[key] || [];
+      const contEvts  = contByDay[key] || [];
+      const allEvts   = [...startEvts, ...contEvts];
+      const isToday   = (today.getFullYear() === year && today.getMonth() === month && today.getDate() === d);
+
+      let cellStyle = {
+        aspectRatio: "1 / 1", minHeight: 36, background: "white", borderRadius: 6,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 13, fontWeight: 500, color: "#0F172A", position: "relative",
+        cursor: allEvts.length ? "pointer" : "default",
+        outline: isToday ? "2px solid #2563EB" : "none", outlineOffset: -2,
+        transition: "transform 0.1s",
+      };
+      let extra = null; // multi-event dot indicator
+
+      if (allEvts.length > 0) {
+        const dominant = startEvts[0] || contEvts[0];
+        const st = getEventStyle(dominant);
+        const isContOnly = startEvts.length === 0 && contEvts.length > 0;
+        if (isContOnly) {
+          // Continuation: white background + dashed outline in cat color
+          cellStyle.background = "white";
+          extra = (
+            <div style={{
+              position: "absolute", inset: 2, borderRadius: 5,
+              border: `2px dashed ${st.color}`, opacity: 0.55, pointerEvents: "none",
+            }} />
+          );
+        } else {
+          cellStyle.background = st.color;
+          cellStyle.color = "#fff";
+          cellStyle.fontWeight = 700;
+        }
+        if (isToday) {
+          // Make the today outline visible against colored cells
+          cellStyle.outline = "2px solid #fff";
+          cellStyle.boxShadow = "0 0 0 2px #2563EB";
+        }
+      }
+
+      cells.push(
+        <div
+          key={d}
+          title={allEvts.map(e => e.title).join(" · ")}
+          onClick={allEvts.length ? () => onDayClick(key, allEvts) : undefined}
+          onMouseEnter={allEvts.length ? (e) => { e.currentTarget.style.transform = "scale(1.06)"; e.currentTarget.style.zIndex = "2"; } : undefined}
+          onMouseLeave={allEvts.length ? (e) => { e.currentTarget.style.transform = ""; e.currentTarget.style.zIndex = ""; } : undefined}
+          style={cellStyle}
+        >
+          {extra}
+          <span style={{ position: "relative", zIndex: 1 }}>{d}</span>
+          {allEvts.length > 1 && (
+            <span style={{
+              position: "absolute", top: 3, right: 3,
+              width: 5, height: 5, borderRadius: "50%",
+              background: cellStyle.background === "white" ? "#0F172A" : "rgba(255,255,255,0.85)",
+            }} />
+          )}
+        </div>
+      );
+
+      if (startEvts.length > 0) startEvts.forEach(ev => dayList.push({ day: d, ev }));
+    }
+
+    return (
+      <div style={{ background: "white", border: `1px solid ${isCurrent ? "#2563EB" : "#E2E8F0"}`, borderRadius: 12,
+                    boxShadow: isCurrent ? "0 0 0 2px rgba(37,99,235,0.15), 0 1px 3px rgba(0,0,0,0.06)" : "0 1px 3px rgba(0,0,0,0.06)",
+                    overflow: "hidden" }}>
+        <div style={{
+          background: isCurrent
+            ? "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)"
+            : "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
+          color: "#fff", textAlign: "center", padding: "10px 14px",
+          fontSize: 13, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase",
+        }}>{MONTHS[month]}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, padding: 10, background: "#F1F5F9" }}>
+          {DOW.map(d => (
+            <div key={d} style={{ fontSize: 10, fontWeight: 700, color: "#64748B",
+              textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center", padding: "6px 0 4px" }}>{d}</div>
+          ))}
+          {cells}
+        </div>
+        <div style={{ padding: "12px 16px", borderTop: "1px solid #E2E8F0",
+                      maxHeight: 220, overflowY: "auto" }}>
+          {dayList.length === 0
+            ? <div style={{ fontSize: 12, color: "#94A3B8", fontStyle: "italic" }}>No events this month.</div>
+            : dayList.map(({ day, ev }, i) => {
+                let dayLabel = String(day);
+                if (ev.date_end && ev.date_end !== ev.date_start) {
+                  const endParts = String(ev.date_end).split("-").map(Number);
+                  const sameMonth = (endParts[0] === year && endParts[1] === month + 1);
+                  if (sameMonth) dayLabel = `${day}-${endParts[2]}`;
+                }
+                const st = getEventStyle(ev);
+                return (
+                  <div key={`${day}-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, lineHeight: 1.4, padding: "4px 0" }}>
+                    <span style={{ fontWeight: 700, minWidth: 36, flexShrink: 0, color: st.color }}>{dayLabel}:</span>
+                    <span style={{ color: "#0F172A", flex: 1 }}>{ev.title}</span>
+                  </div>
+                );
+              })
+          }
+        </div>
+      </div>
+    );
+  }
+
+  // Day-detail popover used by StripView when clicking a cell. Lists every
+  // event on that day with category badge + date range + click-through to
+  // the existing event-details modal.
+  function DayDetailPopover({ dateKey, events, onClose, onPick }) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dowName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dt.getDay()];
+    return (
+      <div onClick={onClose} style={{
+        position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)",
+        backdropFilter: "blur(4px)", zIndex: 9000,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}>
+        <div onClick={e => e.stopPropagation()} style={{
+          background: "white", borderRadius: 14, width: "100%", maxWidth: 480,
+          boxShadow: "0 25px 60px rgba(0,0,0,0.22)", overflow: "hidden",
+        }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E2E8F0",
+                        display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0F172A", margin: 0 }}>
+              {dowName}, {d} {MONTHS[m - 1]} {y}
+            </h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer",
+              color: "#94A3B8", fontSize: 22, lineHeight: 1, padding: "0 4px" }}>×</button>
+          </div>
+          <div style={{ padding: "16px 20px", maxHeight: "60vh", overflowY: "auto" }}>
+            {events.map((ev, i) => {
+              const st = getEventStyle(ev);
+              const dateRange = ev.date_start === ev.date_end
+                ? ev.date_start
+                : `${ev.date_start} → ${ev.date_end}`;
+              return (
+                <div key={ev.id || i}
+                  onClick={() => { onPick(ev); onClose(); }}
+                  style={{
+                    padding: 10, border: "1px solid #F1F5F9", borderRadius: 8,
+                    marginBottom: 8, cursor: "pointer",
+                    transition: "background 0.12s, border-color 0.12s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#F8FAFC"; e.currentTarget.style.borderColor = st.border || "#E2E8F0"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = ""; e.currentTarget.style.borderColor = "#F1F5F9"; }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A", marginBottom: 4 }}>{ev.title}</div>
+                  <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 5,
+                                   background: st.bg, color: st.color }}>
+                      {ev.category || ev.department || "—"}
+                    </span>
+                    <span>{dateRange}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── ACADEMIC YEAR SETTINGS MODAL ───────────────────────────────────────────
   function AcademicYearSettingsModal({ yearStart, totalWeeks, terms, onSave, onClose, teachingWeeks, twSyncing, twSyncMsg, onSyncTeachingWeeks, onUpdateWeek }) {
     const [yStart,  setYStart]  = useState(yearStart);
@@ -490,7 +720,22 @@
     const [events,       setEvents]       = useState([]);
     const [dataSource,   setDataSource]   = useState("loading"); // "loading" | "sheets" | "firestore" | "sheets+firestore" | "empty"
     const [selectedEvent, setSelectedEvent] = useState(null);
-    const [view,         setView]         = useState("month");
+    // View persisted in localStorage so user's choice sticks. New default
+    // is "strip" (2-month grid) — wider scan than the single-month grid.
+    const [view, setView] = useState(() => {
+      try { return localStorage.getItem("academicCalView") || "strip"; }
+      catch (_) { return "strip"; }
+    });
+    useEffect(() => {
+      try { localStorage.setItem("academicCalView", view); } catch(_) {}
+    }, [view]);
+    // Strip-view 2-month anchor (separate from currentMonth which the
+    // single-month grid uses). Defaults to today's month.
+    const __today = new Date();
+    const [stripMonth, setStripMonth] = useState(__today.getMonth());
+    const [stripYear,  setStripYear]  = useState(__today.getFullYear());
+    // Day-detail popover for strip view — { dateKey, events[] } | null
+    const [dayDetail, setDayDetail] = useState(null);
     const [activeFilters, setActiveFilters] = useState(new Set(["Academic","College Counseling","Admin/Operations","Cambridge"]));
     const [activeCategoryFilters, setActiveCategoryFilters] = useState(new Set(["Public Holiday","Assessment"]));
     const [formModal,       setFormModal]       = useState(null); // null | { initial } — admin only
@@ -1110,7 +1355,7 @@
                 </div>
               )}
               <div style={{ display: "flex", gap: 6, background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 4 }}>
-                {[["week","Week"],["month","Month"],["list","List"],["all","All Events"]].map(([v, label]) => (
+                {[["strip","2-Month"],["week","Week"],["month","Month"],["list","List"],["all","All Events"]].map(([v, label]) => (
                   <button key={v} onClick={() => setView(v)} style={{
                     padding: "7px 16px", borderRadius: 7, border: "none", cursor: "pointer",
                     background: view === v ? "white" : "transparent",
@@ -1137,6 +1382,24 @@
             ))}
           </div>
         </div>
+
+        {/* ── 2-Month Strip View ── */}
+        {view === "strip" && (
+          <StripView
+            anchorMonth={stripMonth}
+            anchorYear={stripYear}
+            events={filteredEvents}
+            onShift={(deltaMonths) => {
+              let m = stripMonth + deltaMonths;
+              let y = stripYear;
+              while (m > 11) { m -= 12; y += 1; }
+              while (m < 0)  { m += 12; y -= 1; }
+              setStripMonth(m);
+              setStripYear(y);
+            }}
+            onDayClick={(dateKey, evs) => setDayDetail({ dateKey, events: evs })}
+          />
+        )}
 
         {/* ── Month Navigator ── */}
         {view === "month" && (
@@ -1487,6 +1750,16 @@
               <LegendItem key={key} color={cfg.color} label={key} />
             ))}
           </div>
+        )}
+
+        {/* ── Day Detail Popover (strip view) ── */}
+        {dayDetail && (
+          <DayDetailPopover
+            dateKey={dayDetail.dateKey}
+            events={dayDetail.events}
+            onClose={() => setDayDetail(null)}
+            onPick={(ev) => setSelectedEvent(ev)}
+          />
         )}
 
         {/* ── Event Detail Modal ── */}
