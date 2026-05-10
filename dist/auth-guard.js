@@ -18,9 +18,9 @@
 
 import { initializeApp, getApps }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut, updateProfile }
+import { getAuth, onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, collection, serverTimestamp }
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, collection, serverTimestamp, query, where, limit }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -96,6 +96,77 @@ const SYLLABUS_PAGE_SUBJECTS = {
 
 // Pages that NEVER get gated regardless of role (auth flow + dashboard).
 const SUBJECT_GATE_BYPASS = new Set(['', 'index', 'login']);
+
+// ── Staff ↔ users bridge ─────────────────────────────────────────
+// On a user's very first login, look up `staff/{...}` by emailLower.
+//   - If found: copy schoolId/school/displayName/phone/position onto
+//     the new users/{uid} doc + write userId back to the staff doc
+//     (bidirectional link).
+//   - If NOT found: auto-create a new staff doc keyed by
+//     sha1(emailLower) (same id pattern as seed-staff.js) so the user
+//     shows up in /staff immediately as Linked. Marked
+//     source:'auth-guard-autocreate' to distinguish from CSV seeds.
+// All errors are swallowed — bridging is best-effort, never blocks signup.
+async function staffDocIdFor(emailLower) {
+  // Mirror scripts/staff/seed-staff.js: sha1(emailLower).slice(0,20).
+  const buf = new TextEncoder().encode(emailLower);
+  const hash = await crypto.subtle.digest('SHA-1', buf);
+  const hex = Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 20);
+}
+
+async function applyStaffBridge(database, user, newProfile) {
+  if (!user?.email) return;
+  const emailLower = user.email.toLowerCase();
+  try {
+    const snap = await getDocs(query(
+      collection(database, 'staff'),
+      where('emailLower', '==', emailLower),
+      limit(1),
+    ));
+    if (!snap.empty) {
+      // ── Existing staff row → copy across + back-link ────────────
+      const staffDoc = snap.docs[0];
+      const staff = staffDoc.data() || {};
+      if (staff.schoolId)                        newProfile.schoolId = staff.schoolId;
+      if (staff.school)                          newProfile.school = staff.school;
+      if (!newProfile.displayName && staff.name) newProfile.displayName = staff.name;
+      if (staff.phone)                           newProfile.phone = staff.phone;
+      if (staff.position)                        newProfile.title = staff.position;
+      newProfile.staffId = staffDoc.id;
+      // userId (FK -> users.uid) per naming convention — staff doc id is
+      // sha1(emailLower), not the auth uid.
+      await setDoc(doc(database, 'staff', staffDoc.id), {
+        userId:   user.uid,
+        linkedAt: serverTimestamp(),
+        invited:  false,
+      }, { merge: true });
+    } else {
+      // ── No staff row yet → auto-create one ──────────────────────
+      // Uses the same deterministic id pattern as seed-staff.js so a
+      // later CSV re-seed for this email merges instead of duplicating.
+      const staffId = await staffDocIdFor(emailLower);
+      await setDoc(doc(database, 'staff', staffId), {
+        name:       newProfile.displayName || user.displayName || '',
+        email:      user.email,
+        emailLower,
+        schoolId:   newProfile.schoolId || null,
+        school:     newProfile.school   || null,
+        role:       'teacher',
+        status:     'active',
+        userId:     user.uid,
+        linkedAt:   serverTimestamp(),
+        invited:    false,
+        source:     'auth-guard-autocreate',
+        createdAt:  serverTimestamp(),
+      });
+      newProfile.staffId = staffId;
+    }
+  } catch (err) {
+    console.warn('auth-guard: staff bridge failed (non-fatal)', err);
+  }
+}
 
 function currentPageKey() {
   const path = (window.location.pathname || '/').toLowerCase();
@@ -191,7 +262,7 @@ function applySubjectGating(profile) {
 // ch_subjects[]). This one keys off ch_sub_roles[] (director / coordinator).
 // Both can run on the same DOM — they use different `data-*-hidden`
 // attributes and a shared "display: none !important" rule.
-const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login']);
+const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login', 'settings']);
 // Cache TTL — short enough that an admin's page-access save is felt
 // almost immediately by other tabs, long enough to absorb hot navigation.
 // Was 5 min before 2026-05-05; cut to 60s when we noticed admins were
@@ -378,44 +449,6 @@ function promptForName() {
   });
 }
 
-// Profile modal CSS lives in shared-styles.css — no dynamic injection needed.
-
-function formatPhoneInputValue(rawValue) {
-  const hasPlus = rawValue.trim().startsWith('+');
-  let digits = rawValue.replace(/\D/g, '');
-
-  if (!digits) return hasPlus ? '+' : '';
-
-  if (hasPlus && digits.startsWith('62')) {
-    const country = '+62';
-    const local = digits.slice(2, 13);
-    const a = local.slice(0, 3);
-    const b = local.slice(3, 7);
-    const c = local.slice(7, 11);
-    return [country, a, b, c].filter(Boolean).join(' ');
-  }
-
-  if (!hasPlus && digits.startsWith('0')) {
-    const local = digits.slice(0, 12);
-    const a = local.slice(0, 4);
-    const b = local.slice(4, 8);
-    const c = local.slice(8, 12);
-    return [a, b, c].filter(Boolean).join(' ');
-  }
-
-  if (hasPlus) {
-    digits = digits.slice(0, 15);
-    const countryLen = Math.min(3, digits.length);
-    const country = `+${digits.slice(0, countryLen)}`;
-    const rest = digits.slice(countryLen);
-    const chunks = rest.match(/.{1,3}/g) || [];
-    return [country, ...chunks].join(' ').trim();
-  }
-
-  digits = digits.slice(0, 15);
-  return (digits.match(/.{1,3}/g) || []).join(' ').trim();
-}
-
 function getInitials(displayName, email) {
   const seed = (displayName || email || '').trim();
   if (!seed) return 'U';
@@ -444,268 +477,128 @@ function applyAvatarVisual(avatarEl, displayName, email, photoURL) {
   }
 }
 
-let _profileModalMounted = false;
-function mountProfileModal({ user, profile, userRef, navUserName, navAvatar }) {
-  if (_profileModalMounted) return;
+let _profileDropdownMounted = false;
+function mountProfileDropdown({ user, profile, navUserName, navAvatar }) {
+  if (_profileDropdownMounted) return;
   if (!navAvatar) return;
-  _profileModalMounted = true;
+  _profileDropdownMounted = true;
 
+  // Make the avatar look like a popover trigger.
+  navAvatar.style.cursor = 'pointer';
+  navAvatar.title = 'Open profile menu';
+  navAvatar.classList.add('nav-profile-trigger');
   if (navUserName) {
     navUserName.style.cursor = 'pointer';
-    navUserName.title = 'Open profile';
+    navUserName.title = 'Open profile menu';
     navUserName.classList.add('nav-profile-trigger');
   }
-  navAvatar.style.cursor = 'pointer';
-  navAvatar.title = 'Open profile';
-  navAvatar.classList.add('nav-profile-trigger');
 
-  const overlay = document.createElement('div');
-  overlay.className = 'profile-modal-overlay';
-  overlay.innerHTML = `
-    <div class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
-      <div class="profile-modal-head">
-        <h3 id="profileModalTitle">Profile</h3>
-        <button type="button" class="profile-modal-close" id="profileCloseBtn" aria-label="Close profile">×</button>
-      </div>
-      <div class="profile-modal-body">
-        <div class="profile-field">
-          <label>Photo</label>
-          <div class="profile-avatar-editor">
-            <div class="profile-avatar-preview" id="profileAvatarPreview"></div>
-            <div class="profile-avatar-actions">
-              <button type="button" class="profile-btn" id="profilePhotoPickBtn">Choose photo</button>
-              <button type="button" class="profile-btn" id="profilePhotoRemoveBtn">Remove</button>
-              <input id="profilePhotoFile" class="profile-avatar-file" type="file" accept="image/*" />
-            </div>
-          </div>
-        </div>
-        <div class="profile-field">
-          <label for="profileDisplayName">Display name</label>
-          <input id="profileDisplayName" type="text" maxlength="80" />
-        </div>
-        <div class="profile-field">
-          <label for="profilePhone">Phone</label>
-          <input id="profilePhone" type="tel" maxlength="30" placeholder="+62..." />
-        </div>
-        <div class="profile-field">
-          <label for="profileTitle">Title</label>
-          <input id="profileTitle" type="text" maxlength="80" placeholder="Coordinator, Principal, etc." />
-        </div>
-        <div class="profile-field">
-          <label for="profileEmail">Email</label>
-          <input id="profileEmail" type="email" readonly />
-        </div>
-        <div class="profile-field">
-          <label>CentralHub Access <span style="font-size:0.7rem;font-weight:400;color:#8888a8;margin-left:6px">(set by central_admin)</span></label>
-          <div id="profileAccessSummary" style="font-size:0.85rem;color:#1c1c2e;background:#f7f6f3;border:1px solid #e0ddd6;border-radius:8px;padding:10px 12px;line-height:1.6">
-            <em style="color:#8888a8">— loading —</em>
-          </div>
-        </div>
-      </div>
-      <p class="profile-modal-msg" id="profileMsg"></p>
-      <div class="profile-modal-foot">
-        <button type="button" class="profile-btn-signout" id="profileSignOutBtn">Sign out</button>
-        <div style="display:flex;gap:8px">
-          <button type="button" class="profile-btn" id="profileCancelBtn">Cancel</button>
-          <button type="button" class="profile-btn profile-btn-primary" id="profileSaveBtn">Save</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
+  // Render once: the dropdown popover that anchors to the avatar. The
+  // avatar itself stays the click trigger — we just toggle .open on a
+  // wrapper sitting in document.body so it floats above page content.
+  const wrap = document.createElement('div');
+  wrap.className = 'ch-profile-pop';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-label', 'Profile menu');
+  document.body.appendChild(wrap);
 
-  const el = {
-    overlay,
-    close: overlay.querySelector('#profileCloseBtn'),
-    cancel: overlay.querySelector('#profileCancelBtn'),
-    save: overlay.querySelector('#profileSaveBtn'),
-    signOut: overlay.querySelector('#profileSignOutBtn'),
-    msg: overlay.querySelector('#profileMsg'),
-    avatarPreview: overlay.querySelector('#profileAvatarPreview'),
-    photoPickBtn: overlay.querySelector('#profilePhotoPickBtn'),
-    photoRemoveBtn: overlay.querySelector('#profilePhotoRemoveBtn'),
-    photoFile: overlay.querySelector('#profilePhotoFile'),
-    displayName: overlay.querySelector('#profileDisplayName'),
-    phone: overlay.querySelector('#profilePhone'),
-    title: overlay.querySelector('#profileTitle'),
-    email: overlay.querySelector('#profileEmail'),
-    accessSummary: overlay.querySelector('#profileAccessSummary'),
-  };
-
-  const localState = {
-    photoURL: (profile.photoURL || user.photoURL || '').trim(),
-    removePhoto: false,
-    selectedPhotoFile: null,
-  };
-
-  const refreshNav = (name, photoURL) => {
-    const finalName = (name || '').trim() || user.email;
-    if (navUserName) navUserName.textContent = finalName;
-    applyAvatarVisual(navAvatar, finalName, user.email, photoURL);
-  };
-
-  const refreshProfileAvatarPreview = () => {
-    const previewUrl = localState.removePhoto ? '' : localState.photoURL;
-    applyAvatarVisual(el.avatarPreview, el.displayName.value.trim(), user.email, previewUrl);
-  };
-
-  const fill = () => {
-    el.displayName.value = (profile.displayName || user.displayName || '').trim();
-    el.phone.value = (profile.phone || '').trim();
-    el.title.value = (profile.title || '').trim();
-    el.email.value = user.email || '';
-    localState.photoURL = (profile.photoURL || user.photoURL || '').trim();
-    localState.removePhoto = false;
-    localState.selectedPhotoFile = null;
-    el.photoFile.value = '';
-    refreshProfileAvatarPreview();
-    el.msg.textContent = '';
-    el.msg.classList.remove('ok');
-    if (el.accessSummary) renderAccessSummary();
-  };
-
-  // Read-only summary of the user's CentralHub role + sub-roles + subject
-  // specialties. To change any of these, a central_admin must edit the
-  // user's record in console.html.
   const SUBJECT_LABELS = {
     math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
     physics: 'Physics', science: 'Science', english: 'English',
     bahasa: 'Bahasa', religion: 'Religion',
   };
   const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
-  const renderAccessSummary = () => {
-    const role     = profile.role_centralhub || '—';
-    const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
-    const subjects = Array.isArray(profile.ch_subjects) ? profile.ch_subjects : [];
-    const chip = (text) => `<span style="display:inline-block;padding:2px 9px;border-radius:100px;background:#ede9fe;color:#5b21b6;font-size:0.72rem;font-weight:600;margin:2px 4px 2px 0">${text}</span>`;
-    const muted = (text) => `<span style="color:#8888a8;font-style:italic">${text}</span>`;
-    const lines = [];
-    lines.push(`<div><strong style="color:#44445a">Role:</strong> ${role === '—' ? muted('— not set —') : role}</div>`);
-    lines.push(`<div style="margin-top:4px"><strong style="color:#44445a">Sub-roles:</strong> ${subRoles.length ? subRoles.map(r => chip(SUB_ROLE_LABELS[r] || r)).join('') : muted('none')}</div>`);
-    lines.push(`<div style="margin-top:4px"><strong style="color:#44445a">Subject specialties:</strong> ${subjects.length ? subjects.map(s => chip(SUBJECT_LABELS[s] || s)).join('') : muted('none — assign in console to access subject-specific pacing pages')}</div>`);
-    el.accessSummary.innerHTML = lines.join('');
-  };
 
-  const open = () => {
-    fill();
-    overlay.classList.add('open');
-    el.displayName.focus();
-  };
-  const close = () => {
-    overlay.classList.remove('open');
-  };
+  function chip(text, kind) {
+    const cls = kind === 'subject' ? 'ch-pp-chip ch-pp-chip-subject' : 'ch-pp-chip';
+    return '<span class="' + cls + '">' + escapeHtml(text) + '</span>';
+  }
 
-  if (navUserName) navUserName.addEventListener('click', open);
-  navAvatar.addEventListener('click', open);
-  el.close.addEventListener('click', close);
-  el.cancel.addEventListener('click', close);
-  el.signOut.addEventListener('click', async () => {
-    await signOut(auth);
-    window.location.href = 'login';
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function render() {
+    const p = window.userProfile || profile;
+    const displayName = (p.displayName || user.displayName || user.email || '').trim();
+    const isAdmin = p.role_centralhub === 'central_admin';
+    const subRoles = Array.isArray(p.ch_sub_roles) ? p.ch_sub_roles : [];
+    const subjects = Array.isArray(p.ch_subjects)  ? p.ch_subjects  : [];
+
+    const subRoleHtml = subRoles.length
+      ? subRoles.map(r => chip(SUB_ROLE_LABELS[r] || r)).join('')
+      : '<span class="ch-pp-empty">none</span>';
+
+    const subjectFallback = isAdmin || subRoles.includes('director')
+      ? 'all (admin/director bypass)'
+      : 'none assigned';
+    const subjectHtml = subjects.length
+      ? subjects.map(s => chip(SUBJECT_LABELS[s] || s, 'subject')).join('')
+      : '<span class="ch-pp-empty">' + subjectFallback + '</span>';
+
+    const settingsIcon = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    const signOutIcon = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
+
+    wrap.innerHTML =
+      '<div class="ch-pp-head">' +
+        '<div class="ch-pp-name">' + escapeHtml(displayName) + '</div>' +
+        '<div class="ch-pp-email">' + escapeHtml(user.email || '') + '</div>' +
+        '<span class="ch-pp-role-badge' + (isAdmin ? ' admin' : '') + '">' + (isAdmin ? 'Admin' : 'User') + '</span>' +
+      '</div>' +
+      '<div class="ch-pp-info">' +
+        '<div class="ch-pp-info-row">' +
+          '<span class="ch-pp-info-label">Sub-roles</span>' +
+          '<span class="ch-pp-info-value">' + subRoleHtml + '</span>' +
+        '</div>' +
+        '<div class="ch-pp-info-row">' +
+          '<span class="ch-pp-info-label">Subjects</span>' +
+          '<span class="ch-pp-info-value">' + subjectHtml + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<a class="ch-pp-link" href="settings">' + settingsIcon + 'Settings</a>' +
+      '<button type="button" class="ch-pp-signout" id="chPpSignOut">' + signOutIcon + 'Sign out</button>';
+
+    wrap.querySelector('#chPpSignOut').addEventListener('click', async () => {
+      await signOut(auth);
+      window.location.href = 'login';
+    });
+  }
+
+  function position() {
+    const r = navAvatar.getBoundingClientRect();
+    const popW = wrap.offsetWidth || 280;
+    const top = Math.round(r.bottom + 8);
+    const left = Math.max(8, Math.round(r.right - popW));
+    wrap.style.top  = top  + 'px';
+    wrap.style.left = left + 'px';
+  }
+
+  function open() {
+    render();
+    wrap.classList.add('open');
+    requestAnimationFrame(position);
+  }
+  function close() { wrap.classList.remove('open'); }
+  function toggle(e) {
+    if (e) e.stopPropagation();
+    if (wrap.classList.contains('open')) close(); else open();
+  }
+
+  navAvatar.addEventListener('click', toggle);
+  if (navUserName) navUserName.addEventListener('click', toggle);
+  document.addEventListener('click', (e) => {
+    if (!wrap.classList.contains('open')) return;
+    if (wrap.contains(e.target) || navAvatar.contains(e.target) ||
+        (navUserName && navUserName.contains(e.target))) return;
+    close();
   });
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
   });
-  el.displayName.addEventListener('input', refreshProfileAvatarPreview);
-  el.photoPickBtn.addEventListener('click', () => el.photoFile.click());
-  el.photoRemoveBtn.addEventListener('click', () => {
-    localState.removePhoto = true;
-    localState.selectedPhotoFile = null;
-    el.photoFile.value = '';
-    refreshProfileAvatarPreview();
-    el.msg.textContent = 'Photo will be removed when you save.';
-    el.msg.classList.remove('ok');
-  });
-  el.photoFile.addEventListener('change', () => {
-    const file = el.photoFile.files && el.photoFile.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      el.msg.textContent = 'Please choose an image file.';
-      el.msg.classList.remove('ok');
-      el.photoFile.value = '';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      el.msg.textContent = 'Image must be smaller than 5MB.';
-      el.msg.classList.remove('ok');
-      el.photoFile.value = '';
-      return;
-    }
-    localState.selectedPhotoFile = file;
-    localState.removePhoto = false;
-    const objectUrl = URL.createObjectURL(file);
-    localState.photoURL = objectUrl;
-    refreshProfileAvatarPreview();
-    el.msg.textContent = 'Photo selected. Click Save to upload.';
-    el.msg.classList.remove('ok');
-  });
-  el.phone.addEventListener('input', () => {
-    const before = el.phone.value;
-    const prevStart = el.phone.selectionStart || el.phone.value.length;
-    const next = formatPhoneInputValue(before);
-    el.phone.value = next;
-    const delta = next.length - before.length;
-    const nextPos = Math.min(next.length, Math.max(0, prevStart + delta));
-    el.phone.setSelectionRange(nextPos, nextPos);
-  });
-
-  el.save.addEventListener('click', async () => {
-    const nextDisplayName = el.displayName.value.trim();
-    const nextPhone = formatPhoneInputValue(el.phone.value.trim());
-    const nextTitle = el.title.value.trim();
-
-    if (!nextDisplayName) {
-      el.msg.textContent = 'Display name is required.';
-      el.msg.classList.remove('ok');
-      return;
-    }
-
-    el.save.disabled = true;
-    el.msg.textContent = '';
-    try {
-      let nextPhotoURL = (profile.photoURL || user.photoURL || '').trim();
-      const avatarRef = storageRef(storage, `users/${user.uid}/avatar`);
-      if (localState.selectedPhotoFile) {
-        await uploadBytes(avatarRef, localState.selectedPhotoFile, {
-          contentType: localState.selectedPhotoFile.type,
-        });
-        nextPhotoURL = await getDownloadURL(avatarRef);
-      } else if (localState.removePhoto) {
-        nextPhotoURL = '';
-      }
-
-      await setDoc(userRef, {
-        displayName: nextDisplayName,
-        phone: nextPhone,
-        title: nextTitle,
-        photoURL: nextPhotoURL,
-      }, { merge: true });
-
-      if (user.displayName !== nextDisplayName || (user.photoURL || '') !== nextPhotoURL) {
-        await updateProfile(user, {
-          displayName: nextDisplayName,
-          photoURL: nextPhotoURL || null,
-        });
-      }
-
-      profile.displayName = nextDisplayName;
-      profile.phone = nextPhone;
-      profile.title = nextTitle;
-      profile.photoURL = nextPhotoURL;
-      window.userProfile = profile;
-      refreshNav(nextDisplayName, nextPhotoURL);
-
-      el.msg.textContent = 'Profile updated.';
-      el.msg.classList.add('ok');
-      setTimeout(close, 450);
-    } catch (err) {
-      console.error('profile update failed', err);
-      el.msg.textContent = 'Could not save profile. Please try again.';
-      el.msg.classList.remove('ok');
-    } finally {
-      el.save.disabled = false;
-    }
-  });
+  window.addEventListener('resize', () => { if (wrap.classList.contains('open')) position(); });
+  window.addEventListener('scroll', () => { if (wrap.classList.contains('open')) position(); }, true);
 }
 
 // ── Auth state listener ──────────────────────────────────────────
@@ -752,6 +645,9 @@ onAuthStateChanged(auth, async (user) => {
         [PLATFORM_KEY]: DEFAULT_ROLE,
         createdAt:      serverTimestamp(),
       };
+      // Pre-fill from staff/{...} record if HQ has seeded one for this email.
+      // See "Staff ↔ users bridge" section in /docs/FIRESTORE_SCHEMA.md.
+      await applyStaffBridge(db, user, newProfile);
       await setDoc(userRef, newProfile);
       profile = newProfile;
     } else {
@@ -873,7 +769,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   if (navAvatar) {
-    mountProfileModal({ user, profile, userRef, navUserName, navAvatar });
+    mountProfileDropdown({ user, profile, navUserName, navAvatar });
   }
 
   if (logoutBtn) {

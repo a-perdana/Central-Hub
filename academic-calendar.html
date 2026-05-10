@@ -850,6 +850,71 @@
       setSelectedEvent(null);
     }, [reloadAll]);
 
+    // ─── Admin: sync from Google Sheets into calendar_events ─────────────────
+    // Imports every Sheets row that doesn't already have a Firestore doc with
+    // matching sheets_id. Existing FS docs (admin overrides) are left untouched.
+    // Idempotent: re-running only inserts new Sheets rows.
+    const [syncing,    setSyncing]    = useState(false);
+    const [syncMsg,    setSyncMsg]    = useState("");
+
+    const handleSyncFromSheets = useCallback(async () => {
+      setSyncing(true);
+      setSyncMsg("");
+      try {
+        const { getFirestore, collection, addDoc, getDocs, serverTimestamp } = window.__calFS;
+        const db = getFirestore(window.firebaseApp);
+
+        const sheetsRaw = await fetch(SHEETS_API_URL).then(r => r.json());
+        if (!Array.isArray(sheetsRaw) || sheetsRaw.length === 0) {
+          throw new Error("Sheets returned no data");
+        }
+
+        const sheetsRows = sheetsRaw.map(e => e ? {
+          ...e,
+          date_start: normalizeDate(e.date_start) || e.date_start,
+          date_end:   normalizeDate(e.date_end)   || e.date_end,
+        } : null).filter(r => r && r.date_start && r.date_end && r.title);
+
+        const fsSnap = await getDocs(collection(db, FS_COLLECTION));
+        const existingSheetsIds = new Set();
+        fsSnap.docs.forEach(d => {
+          const sid = d.data().sheets_id;
+          if (sid != null) existingSheetsIds.add(String(sid));
+        });
+
+        const toImport = sheetsRows.filter(r => !existingSheetsIds.has(String(r.id)));
+
+        let inserted = 0;
+        for (const r of toImport) {
+          const { id: sheetsId, ...fields } = r;
+          await addDoc(collection(db, FS_COLLECTION), {
+            title:       fields.title || "",
+            department:  fields.department || "Academic",
+            category:    fields.category || "Academic",
+            date_start:  fields.date_start,
+            date_end:    fields.date_end,
+            description: fields.description || "",
+            sheets_id:   sheetsId,
+            sheets_original: {
+              title: fields.title, date_start: fields.date_start, date_end: fields.date_end,
+              department: fields.department, category: fields.category,
+            },
+            createdAt: serverTimestamp(),
+          });
+          inserted++;
+        }
+
+        await reloadAll();
+        const skipped = sheetsRows.length - toImport.length;
+        setSyncMsg(`✓ Synced — ${inserted} imported, ${skipped} already in Firestore.`);
+      } catch (e) {
+        setSyncMsg(`Sync failed: ${e.message}`);
+      } finally {
+        setSyncing(false);
+        setTimeout(() => setSyncMsg(""), 6000);
+      }
+    }, [reloadAll]);
+
     // ─── Admin: delete ────────────────────────────────────────────────────────
     const handleDelete = useCallback(async (fsId) => {
       if (!fsId) return;
@@ -1006,21 +1071,42 @@
             {/* Right side: admin button + view toggle */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
               {isAdmin && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setSettingsModal(true)} style={{
-                    padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",
-                    border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                  }}>
-                    ⚙ Year Settings
-                  </button>
-                  <button onClick={() => setFormModal({ initial: null })} style={{
-                    padding: "9px 18px", background: "#2563EB", color: "#fff",
-                    border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                  }}>
-                    + Add Event
-                  </button>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={handleSyncFromSheets} disabled={syncing} title="Import new events from the Google Sheets master into Firestore. Existing admin overrides are preserved." style={{
+                      padding: "9px 16px", background: syncing ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
+                      color: syncing ? "rgba(255,255,255,0.5)" : "#fff",
+                      border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                      cursor: syncing ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif",
+                    }}>
+                      {syncing ? "Syncing…" : "⟳ Sync from Sheets"}
+                    </button>
+                    <button onClick={() => setSettingsModal(true)} style={{
+                      padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",
+                      border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                      cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                    }}>
+                      ⚙ Year Settings
+                    </button>
+                    <button onClick={() => setFormModal({ initial: null })} style={{
+                      padding: "9px 18px", background: "#2563EB", color: "#fff",
+                      border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                      cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                    }}>
+                      + Add Event
+                    </button>
+                  </div>
+                  {syncMsg && (
+                    <div style={{
+                      fontSize: 11, fontWeight: 600,
+                      color: syncMsg.startsWith("✓") ? "#A7F3D0" : "#FCA5A5",
+                      background: syncMsg.startsWith("✓") ? "rgba(5,150,105,0.18)" : "rgba(220,38,38,0.18)",
+                      border: `1px solid ${syncMsg.startsWith("✓") ? "rgba(167,243,208,0.3)" : "rgba(252,165,165,0.3)"}`,
+                      borderRadius: 6, padding: "4px 10px",
+                    }}>
+                      {syncMsg}
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ display: "flex", gap: 6, background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 4 }}>

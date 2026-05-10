@@ -84,13 +84,13 @@ The catalogue below groups collections by the business domain they serve. Within
 | `{level}_{subject}_classes[]` (TH) | e.g. `igcse_math_classes` — array of class names | TH settings.html |
 | `ch_subjects[]` (CH) | subset of `math`, `biology`, `chemistry`, `physics`, `science`, `english`, `bahasa`, `religion`. Specialty subjects for HQ Subject Specialists; drives subject-scoped pacing rules + dashboards. `science` = combined-science (checkpoint), separate from individual biology/chemistry/physics specialists. Checkpoint Science syllabus + pacing accept any of `biology`/`chemistry`/`physics`/`science` (matches `checkpoint_science_pacing` rule). Empty for Directors / cross-subject coordinators. | console.html |
 
-**FKs:** `schoolId → partner_schools.id`
+**FKs:** `schoolId → partner_schools.id` · `staffId → staff.id` (only set if the user matched a seeded `staff/{...}` row at first login; see "Staff ↔ users bridge" on the `staff` card below).
 **Writers:** owner (write own doc), `central_admin` (write any). First login auto-creates with default role + `pending` approval.
 **Read:** `get` — owner or admin. `list` — `central_admin`, AH admin, CH coordinator (for console + appraisal teacher search).
 **Indexes:** none (no compound queries).
 **Notes:**
 - The legacy single `role` field is **fully removed**.
-- `schoolId` is REQUIRED for AH and TH users (auth-guard re-prompts until set).
+- `schoolId` is REQUIRED for AH and TH users (auth-guard re-prompts until set, unless prefilled from a matching `staff` row at first login).
 - HQ users live under `partner_schools/eduversal_hq` (a virtual school).
 
 ---
@@ -113,10 +113,15 @@ The catalogue below groups collections by the business domain they serve. Within
 ---
 
 #### `staff/{staffId}`
-**PK:** auto-id.
-**Fields:** `name`, `email`, `position`, `department`, `school` (display name; sometimes used like a denormalised key — see "FK naming inconsistencies" in backlog), `phone`, `notes`, `createdAt`.
-**FKs:** loose `school` text field (NOT `schoolId`); see backlog.
-**Writers/Read:** `central_admin` write; any authorised user read.
+**PK:** Deterministic `sha1(emailLower).slice(0,20)` for seeded teachers; auto-id for hand-added rows. Deterministic ids let `seed-staff.js` re-run idempotently.
+**Fields:** `name`, `email`, `emailLower` (lookup key), `phone`, `role` (`'teacher'`/`'admin'`/`'staff'`/`'coordinator'`), `status` (`'active'`/`'pending'`/`'inactive'`), `schoolId →partner_schools.id`, `school` (denormalised display name), `department`, `position`, `notes`, `gender`, `nationality`, `levels[]` (e.g. `['SMP','SMA']`), `createdAt`, `source`.
+**Bridge fields:** `userId →users.uid` (null until first login), `linkedAt` (null until first login), `invited` (`true` while a seeded row is unclaimed; flips to `false` when the matching user signs in for the first time).
+**FKs:** `schoolId → partner_schools.id` · `userId → users.uid` (set at first login by each hub's `auth-guard.js applyStaffBridge()`).
+**Writers:** `central_admin` for everything. Two self-managed paths for the matching user themselves: (1) **self-CREATE** with id `sha1(emailLower).slice(0,20)` and `source:'auth-guard-autocreate'` (used when a user logs in but no HQ-seeded row exists for them — auth-guard writes one); (2) **self-UPDATE** restricted to `userId` / `linkedAt` / `invited` (used when an HQ-seeded row matches and is being linked). Both paths require `emailLower == auth.token.email` AND `userId == auth.uid`.
+**Read:** any authorised user.
+**Notes:**
+- Seeded by [`scripts/staff/seed-staff.js`](../scripts/staff/seed-staff.js) from a network-wide MailSender CSV — 463 teachers across 13 partner schools as of 2026-05-09.
+- The bridge fields enable a **staff ↔ users** join without an Auth account precondition: HQ seeds rows for every contracted teacher; the first time a teacher signs in (any of TH/AH/CH), their auth-guard looks up `staff` by `emailLower`, copies `schoolId`/`school`/`displayName`/`title`/`phone` onto the new `users/{uid}` doc, and writes `userId`/`linkedAt` back here. Both records stay in sync from then on.
 
 ---
 

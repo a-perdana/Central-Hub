@@ -1358,6 +1358,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span class="nav-item-label">Schools</span>
         </a>
+        <a href="pilot-enrolment" class="ch-dd-item" data-nav-page="pilot-enrolment" data-nav-key="pilot-enrolment">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="nav-item-label">Pilot Enrolment</span>
+        </a>
         <a href="staff" class="ch-dd-item" data-nav-page="staff" data-nav-key="staff">
           <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
@@ -1944,6 +1949,7 @@
         <div class="mob-nav-section-body" id="mobSecNetworkBody">
           <div class="mob-nav-subheader">Partner Schools</div>
           <a href="schools"        class="mobile-nav-link" data-mob-page="schools">Schools</a>
+          <a href="pilot-enrolment" class="mobile-nav-link" data-mob-page="pilot-enrolment">Pilot Enrolment</a>
           <a href="staff"          class="mobile-nav-link" data-mob-page="staff">Staff</a>
           <a href="network-health" class="mobile-nav-link" data-mob-page="network-health">Network Health</a>
           <div class="mob-nav-subheader">Hubs</div>
@@ -2145,7 +2151,7 @@
     // ── CH nav dropdowns ───────────────────────────────────────────────────────
     (function initChDropdowns() {
       const groupKeys = {
-        network:    ['schools','staff','network-health'],
+        network:    ['schools','pilot-enrolment','staff','network-health'],
         comms:      ['announcements','messageboard','documents','library','notifications',
                      'activities','weekly-checklist'],
         curriculum: ['academic-calendar','event-calendar','cambridge-calendar',
@@ -3174,7 +3180,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <span class="admin-label">Admin</span>
         <p>Click any date to update it. Dates are saved per series per year.</p>
       </div>
-      <button class="btn btn-primary btn-sm" id="resetSeriesBtn">Reset This Series</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" id="updateFromJsonBtn" title="Paste a full series object (dates + meta) from the seed script to overwrite this series/year">Update from JSON</button>
+        <button class="btn btn-primary btn-sm" id="resetSeriesBtn">Reset This Series</button>
+      </div>
     </div>
 
     <!-- Urgent deadlines banner -->
@@ -3216,6 +3225,35 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <button class="btn btn-ghost btn-sm" id="clearDateBtn">Clear date</button>
       <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
       <button class="btn btn-primary" id="saveEditBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── UPDATE FROM JSON MODAL (admin) ── -->
+<div class="modal-bg" id="jsonModal">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-head">
+      <h3>Update <span id="jsonModalSeriesLabel">Series</span> from JSON</h3>
+      <p>Paste a full series object — either <code>{ dates, meta }</code> (overwrite) or just <code>{ dates }</code> (merge). The doc id is <code id="jsonModalDocId">—</code>.</p>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="jsonModalReplace" style="margin:0">
+          Replace meta entirely (uncheck to keep existing meta and only update <code>dates</code>)
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="jsonModalTextarea">JSON payload</label>
+        <textarea id="jsonModalTextarea" rows="14"
+          style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;background:#0f172a;color:#e2e8f0;outline:none;resize:vertical;min-height:240px"
+          placeholder='{"dates":{"chk_jan_late_entries":{"date":"2027-01-15"}},"meta":{"months":{...}}}'></textarea>
+        <div id="jsonModalError" style="display:none;font-size:12px;color:#dc2626;margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="jsonModalCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="jsonModalApplyBtn">Apply</button>
     </div>
   </div>
 </div>
@@ -3280,6 +3318,12 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
   if (isAdmin) {
     document.getElementById('adminBar').style.display = '';
     document.getElementById('resetSeriesBtn').addEventListener('click', () => openResetModal());
+    document.getElementById('updateFromJsonBtn').addEventListener('click', () => openJsonModal());
+    document.getElementById('jsonModalCancelBtn').addEventListener('click', closeJsonModal);
+    document.getElementById('jsonModalApplyBtn').addEventListener('click', applyJsonUpdate);
+    document.getElementById('jsonModal').addEventListener('click', e => {
+      if (e.target === document.getElementById('jsonModal')) closeJsonModal();
+    });
   }
 
   // Series tab switching
@@ -3701,6 +3745,68 @@ async function confirmReset() {
     showToast('Error resetting.', true);
   } finally {
     btn.disabled = false; btn.textContent = 'Delete & Reset';
+  }
+}
+
+// ── Update from JSON modal ────────────────────────────────────────────────
+// Pasted JSON should match the seed-cambridge-calendar.js shape:
+//   { dates: { fieldKey: { date: 'YYYY-MM-DD', date_end?: 'YYYY-MM-DD' }, ... },
+//     meta:  { months: { jan: { you_send:[], we_send:[], exams_table?, notes:[] }, ... } } }
+// `meta` is optional — leave the "Replace meta entirely" checkbox unchecked
+// to keep the existing meta and only refresh the `dates` map.
+function openJsonModal() {
+  const docId = `${currentYear}_${currentSeries}`;
+  document.getElementById('jsonModalSeriesLabel').textContent = SERIES_LABELS[currentSeries] || currentSeries;
+  document.getElementById('jsonModalDocId').textContent = `cambridge_calendar/${docId}`;
+  document.getElementById('jsonModalTextarea').value = '';
+  document.getElementById('jsonModalReplace').checked = false;
+  document.getElementById('jsonModalError').style.display = 'none';
+  document.getElementById('jsonModal').classList.add('open');
+  setTimeout(() => document.getElementById('jsonModalTextarea').focus(), 50);
+}
+function closeJsonModal() {
+  document.getElementById('jsonModal').classList.remove('open');
+}
+async function applyJsonUpdate() {
+  const errEl = document.getElementById('jsonModalError');
+  errEl.style.display = 'none';
+  const raw = document.getElementById('jsonModalTextarea').value.trim();
+  if (!raw) { errEl.textContent = 'Paste a JSON object first.'; errEl.style.display = ''; return; }
+
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = ''; return; }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    errEl.textContent = 'Top-level value must be an object.'; errEl.style.display = ''; return;
+  }
+  if (!parsed.dates || typeof parsed.dates !== 'object') {
+    errEl.textContent = 'Object must have a `dates` field (object).'; errEl.style.display = ''; return;
+  }
+
+  const replaceMeta = document.getElementById('jsonModalReplace').checked;
+  if (replaceMeta && (!parsed.meta || typeof parsed.meta !== 'object')) {
+    errEl.textContent = '"Replace meta" is checked but no `meta` field in payload.'; errEl.style.display = ''; return;
+  }
+
+  const payload = { dates: parsed.dates, updatedAt: serverTimestamp() };
+  if (parsed.meta && replaceMeta) payload.meta = parsed.meta;
+  // If meta provided but checkbox unchecked, ignore meta — admin asked for dates-only refresh.
+
+  const btn = document.getElementById('jsonModalApplyBtn');
+  btn.disabled = true; btn.textContent = 'Applying…';
+  try {
+    // merge:true preserves any sibling top-level fields not in payload
+    // (e.g. createdAt). Fields that ARE in payload — `dates` and (optionally)
+    // `meta` — get fully replaced, which matches the seed-script semantics.
+    await setDoc(fsDocRef(), payload, { merge: true });
+    showToast('Series updated from JSON.');
+    closeJsonModal();
+    await loadAndRender();
+  } catch (e) {
+    errEl.textContent = 'Save failed: ' + (e.message || 'unknown'); errEl.style.display = '';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Apply';
   }
 }
 

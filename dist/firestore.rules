@@ -7,14 +7,21 @@ service cloud.firestore {
     }
 
     // Domain-based check: @eduversal.org emails
+    // Defensive: token.email may be absent on some session-restore paths;
+    // checking presence first avoids a NoSuchProperty error that would
+    // collapse the whole predicate to false.
     function isEduversal() {
       return isSignedIn() &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email is string &&
              request.auth.token.email.matches('.*@eduversal\\.org$');
     }
 
     // School teachers - any @*.sch.id Google account (Academic Hub / Teachers Hub)
     function isSchoolUser() {
       return isSignedIn() &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email is string &&
              request.auth.token.email.matches('.*@.*\\.sch\\.id');
     }
 
@@ -30,18 +37,31 @@ service cloud.firestore {
       return isEduversal() || isSchoolUser() || isEmailPasswordUser();
     }
 
-    // Helper: read the caller's Firestore profile
+    // Helper: caller's users/{uid} doc exists. Use this BEFORE userProfile()
+    // to avoid throwing on missing-doc reads (which would silently collapse
+    // every role check to false → "Missing or insufficient permissions").
+    function userProfileExists() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Helper: read the caller's Firestore profile.
+    // Callers must guard with userProfileExists() OR rely on the per-role
+    // helpers below (isAdmin, isTeachersUser, etc.) which already guard.
     function userProfile() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isAdmin() {
-      return isAuthorized() && userProfile().role_centralhub == 'central_admin';
+      return isAuthorized() && userProfileExists()
+             && userProfile().role_centralhub == 'central_admin';
     }
 
     function isCHCoordinator() {
-      return isAuthorized() &&
+      return isAuthorized() && userProfileExists() &&
              userProfile().role_centralhub == 'central_user' &&
+             ('ch_sub_roles' in userProfile()) &&
+             userProfile().ch_sub_roles is list &&
              userProfile().ch_sub_roles.hasAny(['coordinator']);
     }
 
@@ -54,7 +74,7 @@ service cloud.firestore {
     // instead). Pass an array (e.g. ['biology','chemistry','physics']
     // for combined-science pacing) to allow any matching specialist.
     function isCHSubjectSpecialist(subjects) {
-      return isAuthorized()
+      return isAuthorized() && userProfileExists()
              && (userProfile().role_centralhub == 'central_user'
                  || userProfile().role_centralhub == 'central_admin')
              && ('ch_subjects' in userProfile())
@@ -64,14 +84,14 @@ service cloud.firestore {
 
     // Academic Hub admin: central_admin or academic_admin can create/edit/delete AH content
     function isAHAdmin() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin'  ||
         userProfile().role_academichub == 'academic_admin'
       );
     }
 
     function isModerator() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin'  ||
         userProfile().role_academichub == 'academic_admin' ||
         userProfile().role_academichub == 'academic_user'
@@ -79,28 +99,28 @@ service cloud.firestore {
     }
 
     function isCentralUser() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub == 'central_admin' ||
         userProfile().role_centralhub == 'central_user'
       );
     }
 
     function isAcademicUser() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_academichub == 'academic_admin' ||
         userProfile().role_academichub == 'academic_user'
       );
     }
 
     function isTeachersUser() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_teachershub == 'teachers_admin' ||
         userProfile().role_teachershub == 'teachers_user'
       );
     }
 
     function isTHAdmin() {
-      return isAuthorized() && (
+      return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin' ||
         userProfile().role_teachershub == 'teachers_admin'
       );
@@ -187,23 +207,52 @@ service cloud.firestore {
     }
 
     // -- staff -----------------------------------------------
+    // Two self-managed paths so auth-guard.js can keep staff/ in sync
+    // with first logins, even for users HQ never seeded:
+    //   - Self-CREATE: a signed-in user may create the staff doc that
+    //     would match their own email. Doc id must be deterministic
+    //     (sha1(emailLower).slice(0,20) — auth-guard computes this),
+    //     emailLower must match auth.token.email, and userId must
+    //     equal auth.uid. Source field locks the row to the
+    //     'auth-guard-autocreate' provenance so the seed pipeline
+    //     can still distinguish CSV-imported rows.
+    //   - Self-UPDATE (link-back): on first login against an
+    //     HQ-seeded row, write userId/linkedAt/invited only.
+    // Everything else stays admin-only.
     match /staff/{staffId} {
       allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
+      allow delete: if isAdmin();
+      allow create: if isAdmin() ||
+        (isSignedIn()
+         && request.resource.data.emailLower == request.auth.token.email.lower()
+         && request.resource.data.userId == request.auth.uid
+         && request.resource.data.source == 'auth-guard-autocreate');
+      allow update: if isAdmin() ||
+        (isSignedIn()
+         && resource.data.emailLower == request.auth.token.email.lower()
+         && request.resource.data.userId == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['userId', 'linkedAt', 'invited']));
     }
 
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      // Admin can update freely; any authorised user can bump commentCount only
+      // (so non-admin commenters can keep the count in sync after addDoc).
+      allow update: if isAdmin()
+                       || (isAuthorized()
+                           && request.resource.data.diff(resource.data).affectedKeys()
+                                .hasOnly(['commentCount']));
 
       // comments sub-collection (used by Academic Hub & Teachers Hub)
       match /comments/{commentId} {
         allow read:   if isAuthorized();
         allow create: if isAuthorized()
-                         && request.resource.data.authorId == request.auth.uid;
+                         && request.resource.data.authorUid == request.auth.uid;
         allow delete: if isAdmin()
-                         || (isAuthorized() && resource.data.authorId == request.auth.uid);
+                         || (isAuthorized() && resource.data.authorUid == request.auth.uid);
         allow update: if false;
       }
     }
@@ -392,10 +441,10 @@ service cloud.firestore {
     // submitted for updates (locks the doc once submitted). Delete:
     // central_admin.
     match /teacher_self_appraisals/{docId} {
-      allow get:    if isAdmin()
+      allow get:    if (isSignedIn() && resource != null && resource.data.userId == request.auth.uid)
+                    || isAdmin()
                     || isAHAdmin()
                     || isTeachersAdmin()
-                    || (isSignedIn() && resource.data.userId == request.auth.uid)
                     || (isAcademicUser()
                         && isAHUserAtSameSchool(resource.data.userId)
                         && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
@@ -497,7 +546,8 @@ service cloud.firestore {
 
     // Teachers Hub admin: teachers_admin role
     function isTeachersAdmin() {
-      return isAuthorized() && userProfile().role_teachershub == 'teachers_admin';
+      return isAuthorized() && userProfileExists() &&
+             userProfile().role_teachershub == 'teachers_admin';
     }
 
     // -- Cambridge syllabus reference data (all levels: IGCSE, AS/A-Level, Checkpoint) -----------------------
@@ -725,11 +775,15 @@ service cloud.firestore {
     // Write: academic_admin OR academic_user with school_principal/academic_coordinator sub-role
     // Teacher: read only their own evaluation
     match /teacher_kpi_evaluations/{submissionId} {
-      allow read: if isAdmin()
+      // Teacher owner read first — relies only on the resource itself, not on
+      // userProfile() which can throw on missing/partial profiles and silently
+      // collapse the OR chain to false. Matches the same pattern used on
+      // teacher_kpi_submissions.
+      allow read: if isSignedIn() && resource != null && resource.data.teacherUid == request.auth.uid
+                  || isAdmin()
                   || isAHAdmin()
                   || isTeachersAdmin()
-                  || (isAcademicUser() && userProfile().uid == resource.data.evaluatorInfo.evaluatorUid)
-                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid);
+                  || (isAcademicUser() && userProfile().uid == resource.data.evaluatorInfo.evaluatorUid);
       allow create, update: if isAHAdmin()
                             || (isAcademicUser()
                                 && (userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator'])));
@@ -753,10 +807,15 @@ service cloud.firestore {
     // forge a submission claiming to belong to another school.
     // Delete: central_admin only.
     match /teacher_kpi_submissions/{submissionId} {
-      allow read: if isAdmin()
+      // Owner read: any signed-in user can read their own submission, even
+      // before their TH role/profile fields are fully populated. The doc-owner
+      // check (resource.data.userId == auth.uid) is the strongest guarantee;
+      // we don't gate it on userProfile() lookups that could throw on missing
+      // sibling fields and silently collapse the whole OR chain to false.
+      allow read: if isSignedIn() && resource != null && resource.data.userId == request.auth.uid
+                  || isAdmin()
                   || isTeachersAdmin()
                   || isAHAdmin()
-                  || (isTeachersUser() && resource.data.userId == request.auth.uid)
                   || (isAcademicUser()
                       && resource.data.schoolId != null
                       && resource.data.schoolId == userProfile().schoolId
@@ -917,10 +976,25 @@ service cloud.firestore {
 
     // -- school_events (Partner Schools Event Calendar) ----------
     // Read: any authorized user
-    // Write: any Central Hub user (central_user or central_admin)
+    // Write:
+    //   - any Central Hub user (network-wide HQ access), OR
+    //   - any Academic Hub user, but only for events at their own school
+    //     (request.resource.data.schoolId must match userProfile().schoolId).
+    //   AH creates also require createdBy == request.auth.uid so the audit
+    //   trail stays honest; CH HQ users may write on behalf of any school.
     match /school_events/{eventId} {
-      allow read:                   if isAuthorized();
-      allow create, update, delete: if isCentralUser();
+      allow read:   if isAuthorized();
+      allow create: if isCentralUser()
+                    || (isAcademicUser()
+                        && request.resource.data.schoolId == userProfile().schoolId
+                        && request.resource.data.createdBy == request.auth.uid);
+      allow update: if isCentralUser()
+                    || (isAcademicUser()
+                        && resource.data.schoolId == userProfile().schoolId
+                        && request.resource.data.schoolId == userProfile().schoolId);
+      allow delete: if isCentralUser()
+                    || (isAcademicUser()
+                        && resource.data.schoolId == userProfile().schoolId);
     }
 
     // -- cambridge_calendar (exam deadline dates per year+series) --
@@ -1507,14 +1581,20 @@ service cloud.firestore {
     match /topics/{topicId} {
       allow read:   if isAuthorized();
       allow create: if isAuthorized();
-      allow update: if isAuthorized() &&
-                       (resource.data.author == request.auth.token.email || isAdmin());
-      allow delete: if isAdmin();
+      // Author / admin can do full updates; any authorised user can bump replyCount only
+      // (so non-author repliers keep the count in sync after addDoc to /replies).
+      allow update: if isAuthorized() && (
+                       resource.data.authorUid == request.auth.uid
+                    || isAdmin()
+                    || request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['replyCount']));
+      allow delete: if isAuthorized() && (resource.data.authorUid == request.auth.uid || isAdmin());
 
       match /replies/{replyId} {
         allow read:   if isAuthorized();
         allow create: if isAuthorized();
-        allow update, delete: if isAdmin();
+        allow update, delete: if isAuthorized() &&
+                                 (resource.data.authorUid == request.auth.uid || isAdmin());
       }
     }
 

@@ -1122,6 +1122,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span class="nav-item-label">Schools</span>
         </a>
+        <a href="pilot-enrolment" class="ch-dd-item" data-nav-page="pilot-enrolment" data-nav-key="pilot-enrolment">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="nav-item-label">Pilot Enrolment</span>
+        </a>
         <a href="staff" class="ch-dd-item" data-nav-page="staff" data-nav-key="staff">
           <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
@@ -1708,6 +1713,7 @@
         <div class="mob-nav-section-body" id="mobSecNetworkBody">
           <div class="mob-nav-subheader">Partner Schools</div>
           <a href="schools"        class="mobile-nav-link" data-mob-page="schools">Schools</a>
+          <a href="pilot-enrolment" class="mobile-nav-link" data-mob-page="pilot-enrolment">Pilot Enrolment</a>
           <a href="staff"          class="mobile-nav-link" data-mob-page="staff">Staff</a>
           <a href="network-health" class="mobile-nav-link" data-mob-page="network-health">Network Health</a>
           <div class="mob-nav-subheader">Hubs</div>
@@ -1909,7 +1915,7 @@
     // ── CH nav dropdowns ───────────────────────────────────────────────────────
     (function initChDropdowns() {
       const groupKeys = {
-        network:    ['schools','staff','network-health'],
+        network:    ['schools','pilot-enrolment','staff','network-health'],
         comms:      ['announcements','messageboard','documents','library','notifications',
                      'activities','weekly-checklist'],
         curriculum: ['academic-calendar','event-calendar','cambridge-calendar',
@@ -3646,6 +3652,71 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       setSelectedEvent(null);
     }, [reloadAll]);
 
+    // ─── Admin: sync from Google Sheets into calendar_events ─────────────────
+    // Imports every Sheets row that doesn't already have a Firestore doc with
+    // matching sheets_id. Existing FS docs (admin overrides) are left untouched.
+    // Idempotent: re-running only inserts new Sheets rows.
+    const [syncing,    setSyncing]    = useState(false);
+    const [syncMsg,    setSyncMsg]    = useState("");
+
+    const handleSyncFromSheets = useCallback(async () => {
+      setSyncing(true);
+      setSyncMsg("");
+      try {
+        const { getFirestore, collection, addDoc, getDocs, serverTimestamp } = window.__calFS;
+        const db = getFirestore(window.firebaseApp);
+
+        const sheetsRaw = await fetch(SHEETS_API_URL).then(r => r.json());
+        if (!Array.isArray(sheetsRaw) || sheetsRaw.length === 0) {
+          throw new Error("Sheets returned no data");
+        }
+
+        const sheetsRows = sheetsRaw.map(e => e ? {
+          ...e,
+          date_start: normalizeDate(e.date_start) || e.date_start,
+          date_end:   normalizeDate(e.date_end)   || e.date_end,
+        } : null).filter(r => r && r.date_start && r.date_end && r.title);
+
+        const fsSnap = await getDocs(collection(db, FS_COLLECTION));
+        const existingSheetsIds = new Set();
+        fsSnap.docs.forEach(d => {
+          const sid = d.data().sheets_id;
+          if (sid != null) existingSheetsIds.add(String(sid));
+        });
+
+        const toImport = sheetsRows.filter(r => !existingSheetsIds.has(String(r.id)));
+
+        let inserted = 0;
+        for (const r of toImport) {
+          const { id: sheetsId, ...fields } = r;
+          await addDoc(collection(db, FS_COLLECTION), {
+            title:       fields.title || "",
+            department:  fields.department || "Academic",
+            category:    fields.category || "Academic",
+            date_start:  fields.date_start,
+            date_end:    fields.date_end,
+            description: fields.description || "",
+            sheets_id:   sheetsId,
+            sheets_original: {
+              title: fields.title, date_start: fields.date_start, date_end: fields.date_end,
+              department: fields.department, category: fields.category,
+            },
+            createdAt: serverTimestamp(),
+          });
+          inserted++;
+        }
+
+        await reloadAll();
+        const skipped = sheetsRows.length - toImport.length;
+        setSyncMsg(`✓ Synced — ${inserted} imported, ${skipped} already in Firestore.`);
+      } catch (e) {
+        setSyncMsg(`Sync failed: ${e.message}`);
+      } finally {
+        setSyncing(false);
+        setTimeout(() => setSyncMsg(""), 6000);
+      }
+    }, [reloadAll]);
+
     // ─── Admin: delete ────────────────────────────────────────────────────────
     const handleDelete = useCallback(async (fsId) => {
       if (!fsId) return;
@@ -3802,21 +3873,42 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             {/* Right side: admin button + view toggle */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
               {isAdmin && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setSettingsModal(true)} style={{
-                    padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",
-                    border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                  }}>
-                    ⚙ Year Settings
-                  </button>
-                  <button onClick={() => setFormModal({ initial: null })} style={{
-                    padding: "9px 18px", background: "#2563EB", color: "#fff",
-                    border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                  }}>
-                    + Add Event
-                  </button>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={handleSyncFromSheets} disabled={syncing} title="Import new events from the Google Sheets master into Firestore. Existing admin overrides are preserved." style={{
+                      padding: "9px 16px", background: syncing ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
+                      color: syncing ? "rgba(255,255,255,0.5)" : "#fff",
+                      border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                      cursor: syncing ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif",
+                    }}>
+                      {syncing ? "Syncing…" : "⟳ Sync from Sheets"}
+                    </button>
+                    <button onClick={() => setSettingsModal(true)} style={{
+                      padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",
+                      border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                      cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                    }}>
+                      ⚙ Year Settings
+                    </button>
+                    <button onClick={() => setFormModal({ initial: null })} style={{
+                      padding: "9px 18px", background: "#2563EB", color: "#fff",
+                      border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                      cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                    }}>
+                      + Add Event
+                    </button>
+                  </div>
+                  {syncMsg && (
+                    <div style={{
+                      fontSize: 11, fontWeight: 600,
+                      color: syncMsg.startsWith("✓") ? "#A7F3D0" : "#FCA5A5",
+                      background: syncMsg.startsWith("✓") ? "rgba(5,150,105,0.18)" : "rgba(220,38,38,0.18)",
+                      border: `1px solid ${syncMsg.startsWith("✓") ? "rgba(167,243,208,0.3)" : "rgba(252,165,165,0.3)"}`,
+                      borderRadius: 6, padding: "4px 10px",
+                    }}>
+                      {syncMsg}
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ display: "flex", gap: 6, background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 4 }}>

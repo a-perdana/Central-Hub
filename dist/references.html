@@ -9,7 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
+  <link rel="stylesheet" href="references-viewer.css">
   <script src="firebase-config.js"></script>
+  <script src="references-viewer.js" defer></script>
   <style>
   .btn-my-tasks {
     font-family: 'DM Sans', sans-serif;
@@ -1045,6 +1047,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span class="nav-item-label">Schools</span>
         </a>
+        <a href="pilot-enrolment" class="ch-dd-item" data-nav-page="pilot-enrolment" data-nav-key="pilot-enrolment">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="nav-item-label">Pilot Enrolment</span>
+        </a>
         <a href="staff" class="ch-dd-item" data-nav-page="staff" data-nav-key="staff">
           <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
@@ -1631,6 +1638,7 @@
         <div class="mob-nav-section-body" id="mobSecNetworkBody">
           <div class="mob-nav-subheader">Partner Schools</div>
           <a href="schools"        class="mobile-nav-link" data-mob-page="schools">Schools</a>
+          <a href="pilot-enrolment" class="mobile-nav-link" data-mob-page="pilot-enrolment">Pilot Enrolment</a>
           <a href="staff"          class="mobile-nav-link" data-mob-page="staff">Staff</a>
           <a href="network-health" class="mobile-nav-link" data-mob-page="network-health">Network Health</a>
           <div class="mob-nav-subheader">Hubs</div>
@@ -1832,7 +1840,7 @@
     // ── CH nav dropdowns ───────────────────────────────────────────────────────
     (function initChDropdowns() {
       const groupKeys = {
-        network:    ['schools','staff','network-health'],
+        network:    ['schools','pilot-enrolment','staff','network-health'],
         comms:      ['announcements','messageboard','documents','library','notifications',
                      'activities','weekly-checklist'],
         curriculum: ['academic-calendar','event-calendar','cambridge-calendar',
@@ -3214,6 +3222,157 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
     .doc-view-kv dt { color: var(--ink-3); font-weight: 600; font-family: 'DM Mono', monospace; font-size: 12px; }
     .doc-view-kv dd { color: var(--ink); margin: 0; }
+    /* Compact summary chip used inside doc-view-kv when a value is itself
+       a small nested object/array — avoids the entire row falling through
+       to raw JSON just because one sub-key is non-primitive. */
+    .doc-view-kv-nested {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 6px; font-size: 11px;
+      background: var(--accent-2); color: var(--accent-dk); font-weight: 600;
+    }
+
+    /* Document Metadata strip — chip-row of flat metadata fields
+       (schema_version, version, edition, publisher, status, language,
+       academic_year, etc.). Sits directly under the header so the reader
+       can see version/effective-date/source at a glance instead of
+       hunting for them inside Raw JSON. */
+    .doc-view-meta-strip {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 12px 16px; border-radius: 10px;
+      background: linear-gradient(135deg, #faf5ff 0%, #f0fdff 100%);
+      border: 1px solid var(--accent-2);
+      margin-top: -8px; /* hug the header */
+    }
+    .doc-view-meta-chip {
+      display: inline-flex; align-items: baseline; gap: 6px;
+      padding: 4px 10px; border-radius: 8px;
+      background: var(--white); border: 1px solid var(--border);
+      font-size: 11.5px; line-height: 1.4;
+    }
+    .doc-view-meta-chip .label {
+      font-size: 9.5px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .doc-view-meta-chip .value {
+      font-size: 12px; color: var(--ink); font-weight: 500;
+      max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .doc-view-meta-chip a.value {
+      color: var(--accent-dk); text-decoration: none;
+    }
+    .doc-view-meta-chip a.value:hover { text-decoration: underline; }
+
+    /* Provenance footer-strip — generation/build metadata. Sits at the
+       very bottom (just before Raw JSON) in muted styling. */
+    .doc-view-provenance {
+      padding: 10px 14px; border-radius: 8px;
+      background: #fafbfc; border: 1px dashed var(--border);
+      font-size: 11.5px; color: var(--ink-3);
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: baseline;
+    }
+    .doc-view-provenance::before {
+      content: '◷'; color: var(--ink-3); font-size: 14px;
+    }
+    .doc-view-provenance b { color: var(--ink-2); font-weight: 600; }
+    .doc-view-provenance code {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: var(--white); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 3px; color: var(--ink-2);
+    }
+
+    /* Theory basis — primary statement plus citations underneath */
+    .doc-view-theory {
+      padding: 14px 16px; border-radius: 10px;
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+    }
+    .doc-view-theory .primary {
+      font-size: 13.5px; color: var(--ink); font-weight: 500; line-height: 1.55;
+    }
+    .doc-view-theory .refs {
+      list-style: none; margin: 10px 0 0; padding: 0;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .doc-view-theory .refs li {
+      font-size: 12px; color: var(--ink-2); line-height: 1.5;
+      padding-left: 14px; position: relative;
+    }
+    .doc-view-theory .refs li::before {
+      content: '↳'; position: absolute; left: 0; top: 0;
+      color: var(--ink-3); font-size: 11px;
+    }
+
+    /* Weights — percentage chip row */
+    .doc-view-weights {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 12px 14px; border-radius: 10px;
+      background: var(--white); border: 1px solid var(--border);
+    }
+    .doc-view-weights .w-chip {
+      display: inline-flex; align-items: baseline; gap: 6px;
+      padding: 6px 12px; border-radius: 8px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-size: 12px; font-weight: 600;
+    }
+    .doc-view-weights .w-chip .w-key {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+    }
+    .doc-view-weights .w-chip .w-val {
+      font-size: 13px; font-weight: 700;
+    }
+
+    /* Level Visibility — note + ordered chip flow */
+    .doc-view-levels-note {
+      font-size: 12.5px; color: var(--ink-2); line-height: 1.55;
+      margin-bottom: 10px;
+    }
+    .doc-view-levels-flow {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      font-family: 'DM Mono', monospace; font-size: 12px;
+    }
+    .doc-view-levels-flow .lvl {
+      padding: 5px 12px; border-radius: 6px;
+      background: var(--accent-2); color: var(--accent-dk); font-weight: 600;
+    }
+    .doc-view-levels-flow .arrow {
+      color: var(--ink-3); font-size: 14px;
+    }
+
+    /* Frameworks/domains array — large card grid */
+    .doc-view-fw-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .doc-view-fw-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+      border-left: 3px solid var(--accent);
+      transition: box-shadow .15s, transform .15s;
+    }
+    .doc-view-fw-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+    .doc-view-fw-card-head {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .doc-view-fw-card-id {
+      font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700;
+      padding: 3px 9px; border-radius: 5px;
+      background: var(--accent-2); color: var(--accent-dk); flex-shrink: 0;
+    }
+    .doc-view-fw-card-title {
+      font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.3;
+    }
+    .doc-view-fw-card-desc {
+      font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+    }
+    .doc-view-fw-card-stats {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+    }
+    .doc-view-fw-card-stat {
+      font-size: 11px; padding: 3px 9px; border-radius: 5px;
+      background: var(--paper); color: var(--ink-2); font-weight: 500;
+      border: 1px solid var(--border);
+    }
+    .doc-view-fw-card-stat strong { color: var(--accent-dk); font-weight: 700; }
 
     /* Raw JSON fallback section — collapsed by default, click to expand */
     .doc-view-raw {
@@ -4515,21 +4674,255 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     /* Flat key-value object (weights, predicate_bands, level_visibility).
-       Only invoked for primitive-only values — nested objects fall through
-       to raw-JSON. */
+       Renders all primitive-valued entries as a kv table; non-primitive
+       values get a compact summary chip ("object · 3 keys" or "array · 5
+       items") so the row stays meaningful instead of falling through to
+       raw JSON. The full nested value remains accessible via the Raw JSON
+       block since the parent key is consumed regardless. */
     function renderFlatObjectSection(label, obj) {
       if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
       const entries = Object.entries(obj);
       if (!entries.length) return null;
-      if (!entries.every(([_, v]) => v === null || v === undefined || typeof v !== 'object')) return null;
-      const rows = entries.map(([k, v]) =>
-        `<dt>${escapeHtml(humaniseKey(k))}</dt><dd>${richString(v)}</dd>`
-      ).join('');
+      const rows = entries.map(([k, v]) => {
+        let valueHtml;
+        if (v === null || v === undefined) {
+          valueHtml = '<span style="color:var(--ink-3);font-style:italic;">—</span>';
+        } else if (Array.isArray(v)) {
+          // Inline if entirely primitive + short; summary chip otherwise.
+          const primOnly = v.every(x => x === null || typeof x !== 'object');
+          if (primOnly && v.length <= 6) {
+            valueHtml = v.map(x => richString(x)).join(', ');
+          } else {
+            valueHtml = `<span class="doc-view-kv-nested">array · ${v.length} item${v.length === 1 ? '' : 's'}</span>`;
+          }
+        } else if (typeof v === 'object') {
+          const subKeys = Object.keys(v);
+          // Inline if shallow + tiny.
+          const allPrim = subKeys.every(sk => v[sk] === null || typeof v[sk] !== 'object');
+          if (allPrim && subKeys.length <= 3) {
+            valueHtml = subKeys.map(sk => `<b style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3);">${escapeHtml(sk)}:</b> ${richString(v[sk])}`).join(' &nbsp;·&nbsp; ');
+          } else {
+            valueHtml = `<span class="doc-view-kv-nested">object · ${subKeys.length} key${subKeys.length === 1 ? '' : 's'}</span>`;
+          }
+        } else {
+          valueHtml = richString(v);
+        }
+        return `<dt>${escapeHtml(humaniseKey(k))}</dt><dd>${valueHtml}</dd>`;
+      }).join('');
       return `
         <section class="doc-view-section">
           <h3>${escapeHtml(label)}</h3>
           <dl class="doc-view-kv">${rows}</dl>
         </section>`;
+    }
+
+    /* Document Metadata strip — chip-row of flat metadata fields rendered
+       directly under the header so version/edition/source/language etc.
+       are visible at a glance. Returns null when no recognised key is
+       present so the caller can skip the section entirely. */
+    const META_FIELDS = [
+      // [key,            label,             linkable?]
+      ['schema_version',  'Schema',          false],
+      ['version',         'Version',         false],
+      ['edition',         'Edition',         false],
+      ['effective_date',  'Effective',       false],
+      ['publishedOn',     'Published',       false],
+      ['downloadedOn',    'Downloaded',      false],
+      ['publisher',       'Publisher',       false],
+      ['status',          'Status',          false],
+      ['track',           'Track',           false],
+      ['platform',        'Platform',        false],
+      ['platform_label',  'Platform',        false],
+      ['hub',             'Hub',             false],
+      ['language',        'Language',        false],
+      ['academic_year',   'Academic Year',   false],
+      ['total_weeks',     'Weeks',           false],
+      ['priority_levels', 'Priority Levels', false],
+      ['copyright',       'Copyright',       false],
+      ['shortName',       'Short Name',      false],
+      ['source',          'Source',          true],
+      ['officialUrl',     'Official URL',    true],
+      ['localPdfPath',    'Local PDF',       false],
+      ['localPdfSha256',  'PDF SHA-256',     false],
+      ['$schema',         'JSON Schema',     true],
+      ['applies_to',      'Applies To',      false],
+    ];
+    function renderDocMetaStrip(obj) {
+      const chips = [];
+      const consumed = [];
+      for (const [key, label, isLink] of META_FIELDS) {
+        if (!(key in obj)) continue;
+        const v = obj[key];
+        if (v === null || v === undefined || typeof v === 'object') continue;
+        const display = String(v);
+        // Truncate SHA-256 + long URLs visually but keep full value in title.
+        const short = display.length > 60 ? display.slice(0, 56) + '…' : display;
+        const valueHtml = (isLink && /^https?:\/\//i.test(display))
+          ? `<a class="value" href="${escapeHtml(display)}" target="_blank" rel="noopener" title="${escapeHtml(display)}">${escapeHtml(short)}</a>`
+          : `<span class="value" title="${escapeHtml(display)}">${escapeHtml(short)}</span>`;
+        chips.push(`<span class="doc-view-meta-chip"><span class="label">${escapeHtml(label)}</span>${valueHtml}</span>`);
+        consumed.push(key);
+      }
+      if (!chips.length) return { html: '', consumed: [] };
+      return {
+        html: `<div class="doc-view-meta-strip">${chips.join('')}</div>`,
+        consumed,
+      };
+    }
+
+    /* theory_basis = { primary: string, references: string[] } */
+    function renderTheoryBasisSection(label, obj) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      const primary = obj.primary;
+      const refs = Array.isArray(obj.references) ? obj.references.filter(r => typeof r === 'string') : [];
+      if (!primary && !refs.length) return null;
+      const refsHtml = refs.length
+        ? `<ul class="refs">${refs.map(r => `<li>${richString(r)}</li>`).join('')}</ul>`
+        : '';
+      return `
+        <section class="doc-view-section">
+          <h3>${escapeHtml(label)}</h3>
+          <div class="doc-view-theory">
+            ${primary ? `<div class="primary">${richString(primary)}</div>` : ''}
+            ${refsHtml}
+          </div>
+        </section>`;
+    }
+
+    /* weights = { F1: 0.2, F2: 0.5, ..., collection_timing?: {...} }
+       Renders the numeric weights as a chip-row; if collection_timing is
+       nested under weights (older shape), pulls it out into its own
+       section so its contents render properly. */
+    function renderWeightsSection(label, obj, extraOut) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      const chips = [];
+      let nestedTiming = null;
+      for (const [k, v] of Object.entries(obj)) {
+        if (k === 'collection_timing' && v && typeof v === 'object' && !Array.isArray(v)) {
+          nestedTiming = v;
+          continue;
+        }
+        if (typeof v === 'number') {
+          const pct = (v >= 0 && v <= 1) ? `${(v * 100).toFixed(0)}%` : String(v);
+          chips.push(`<span class="w-chip"><span class="w-key">${escapeHtml(k)}</span><span class="w-val">${escapeHtml(pct)}</span></span>`);
+        } else if (typeof v === 'string') {
+          chips.push(`<span class="w-chip"><span class="w-key">${escapeHtml(k)}</span><span class="w-val">${escapeHtml(v)}</span></span>`);
+        }
+      }
+      if (!chips.length && !nestedTiming) return null;
+      const main = chips.length
+        ? `<section class="doc-view-section">
+            <h3>${escapeHtml(label)}</h3>
+            <div class="doc-view-weights">${chips.join('')}</div>
+          </section>`
+        : '';
+      // If a nested collection_timing was found, render it as a sibling
+      // section using the existing object-array-or-flat renderer.
+      if (nestedTiming && extraOut) {
+        const timingHtml = renderObjArrayOrFlat('Collection Timing', nestedTiming);
+        if (timingHtml) extraOut.push(timingHtml);
+      }
+      return main || ' '; // ' ' so caller marks key consumed even if only timing was rendered
+    }
+
+    /* level_visibility = { note: string, order: string[] } */
+    function renderLevelVisibilitySection(label, obj) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      const note = typeof obj.note === 'string' ? obj.note : '';
+      const order = Array.isArray(obj.order) ? obj.order.filter(o => typeof o === 'string') : [];
+      if (!note && !order.length) return null;
+      const flowHtml = order.length
+        ? `<div class="doc-view-levels-flow">${
+            order.map((o, i) => `<span class="lvl">${escapeHtml(o)}</span>${i < order.length - 1 ? '<span class="arrow">→</span>' : ''}`).join('')
+          }</div>`
+        : '';
+      return `
+        <section class="doc-view-section">
+          <h3>${escapeHtml(label)}</h3>
+          ${note ? `<div class="doc-view-levels-note">${richString(note)}</div>` : ''}
+          ${flowHtml}
+        </section>`;
+    }
+
+    /* frameworks/domains = array of {id, title, description, weight,
+       items[], items_note?}. Render each as a card; raw items stay
+       reachable via the Raw JSON block. */
+    function renderFrameworkArraySection(label, items) {
+      if (!Array.isArray(items) || !items.length) return null;
+      // Require id+title on every entry, otherwise fall back to generic.
+      if (!items.every(it => it && typeof it === 'object' && (it.id || it.title || it.name))) return null;
+      const cards = items.map(it => {
+        const id    = it.id || '';
+        const title = it.title || it.name || it.label || '';
+        const desc  = it.description || it.summary || it.note || '';
+        const stats = [];
+        if (typeof it.weight === 'number') {
+          const pct = (it.weight >= 0 && it.weight <= 1) ? `${(it.weight * 100).toFixed(0)}%` : String(it.weight);
+          stats.push(`Weight <strong>${escapeHtml(pct)}</strong>`);
+        }
+        if (Array.isArray(it.items)) stats.push(`<strong>${it.items.length}</strong> item${it.items.length === 1 ? '' : 's'}`);
+        if (Array.isArray(it.competencies)) stats.push(`<strong>${it.competencies.length}</strong> competenc${it.competencies.length === 1 ? 'y' : 'ies'}`);
+        if (Array.isArray(it.tasks)) stats.push(`<strong>${it.tasks.length}</strong> task${it.tasks.length === 1 ? '' : 's'}`);
+        if (typeof it.items_note === 'string' && it.items_note) stats.push(escapeHtml(it.items_note));
+        const statsHtml = stats.length
+          ? `<div class="doc-view-fw-card-stats">${stats.map(s => `<span class="doc-view-fw-card-stat">${s}</span>`).join('')}</div>`
+          : '';
+        return `
+          <div class="doc-view-fw-card">
+            <div class="doc-view-fw-card-head">
+              ${id ? `<span class="doc-view-fw-card-id">${escapeHtml(id)}</span>` : ''}
+              <div class="doc-view-fw-card-title">${richString(title)}</div>
+            </div>
+            ${desc ? `<div class="doc-view-fw-card-desc">${richString(desc)}</div>` : ''}
+            ${statsHtml}
+          </div>`;
+      }).join('');
+      return `
+        <section class="doc-view-section">
+          <h3>${escapeHtml(label)} <span class="count">${items.length}</span></h3>
+          <div class="doc-view-fw-grid">${cards}</div>
+        </section>`;
+    }
+
+    /* provenance / last_extended footer-strip — generation/build metadata
+       (by + at + items_added etc). Muted, sits at the bottom. */
+    /* Polymorphic prose-or-structured renderer — for keys that ship as a
+       string in some docs and as an object/array in others (audience,
+       scope, source, rationale, etc.). String → prose card with primary
+       statement; array/object → fall through to obj-or-flat. */
+    function renderProseOrStructured(label, value) {
+      if (typeof value === 'string') {
+        if (!value.trim()) return null;
+        return `<section class="doc-view-section">
+          <h3>${escapeHtml(label)}</h3>
+          <div class="doc-view-theory"><div class="primary">${richString(value)}</div></div>
+        </section>`;
+      }
+      return renderObjArrayOrFlat(label, value);
+    }
+
+    function renderProvenanceFooter(obj) {
+      const blocks = [];
+      ['provenance', 'last_extended'].forEach(key => {
+        if (!(key in obj)) return;
+        const v = obj[key];
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return;
+        const bits = [];
+        for (const [k, val] of Object.entries(v)) {
+          if (val === null || val === undefined) continue;
+          if (Array.isArray(val)) {
+            const allPrim = val.every(x => x === null || typeof x !== 'object');
+            if (allPrim && val.length <= 8) bits.push(`<b>${escapeHtml(humaniseKey(k))}:</b> <code>${escapeHtml(val.join(', '))}</code>`);
+            else bits.push(`<b>${escapeHtml(humaniseKey(k))}:</b> <code>${val.length} entries</code>`);
+          } else if (typeof val !== 'object') {
+            bits.push(`<b>${escapeHtml(humaniseKey(k))}:</b> <code>${escapeHtml(String(val))}</code>`);
+          }
+        }
+        if (bits.length) {
+          blocks.push(`<div class="doc-view-provenance"><span><b>${escapeHtml(humaniseKey(key))}:</b></span>${bits.join('')}</div>`);
+        }
+      });
+      return blocks.length ? blocks.join('') : null;
     }
 
     /* Some keys ship in two shapes across the corpus — array of {code,...}
@@ -4558,21 +4951,45 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // Header consumes its source fields when used.
       const headerKeys = ['title','documentTitle','name','version','edition','effective_date','publishedOn','downloadedOn','publisher','status','description','subtitle','purposeForEduversal'];
       const headerHtml = renderDocHeader(obj);
-      if (headerHtml) headerKeys.forEach(k => k in obj && consumed.add(k));
-      if (headerHtml) out.push(headerHtml);
+      if (headerHtml) {
+        headerKeys.forEach(k => k in obj && consumed.add(k));
+        out.push(headerHtml);
+      }
 
-      // Pattern table: key in JSON -> human label + renderer.
+      // Document Metadata strip — chip-row of flat metadata fields.
+      // Sits directly under the header. Re-consumes some header keys
+      // (version/edition/effective_date) intentionally so they appear in
+      // both places without falling through to Raw JSON.
+      const meta = renderDocMetaStrip(obj);
+      if (meta.html) {
+        meta.consumed.forEach(k => consumed.add(k));
+        out.push(meta.html);
+      }
+
+      // Pattern table: key in JSON -> human label + renderer. Renderers
+      // returning null OR a stand-in ' ' (one space) leave the key
+      // unconsumed; ' ' is used by renderWeightsSection when its only
+      // contribution is a sibling section pushed via extraOut.
       const patterns = [
         ['design_principles',         'Design Principles',          renderStringArraySection],
         ['principles',                'Principles',                 renderStringArraySection],
         ['regulatory_alignment',      'Regulatory Alignment',       renderRefArraySection],
+        ['regulatory_anchors',        'Regulatory Anchors',         renderRefArraySection],
         ['framework_anchors',         'Framework Anchors',          renderRefOrFlatSection],
-        ['cambridge_alignment',       'Cambridge Alignment',        renderRefArraySection],
+        ['cambridge_alignment',       'Cambridge Alignment',        renderRefOrFlatSection],
+        ['theory_basis',              'Theory Basis',               renderTheoryBasisSection],
+        ['weights',                   'Weights',                    (l, v) => renderWeightsSection(l, v, out)],
+        ['level_visibility',          'Level Visibility',           renderLevelVisibilitySection],
+        ['frameworks',                'Frameworks',                 renderFrameworkArraySection],
+        ['domains',                   'Domains',                    renderFrameworkArraySection],
         ['nonNegotiables',            'Non-Negotiables',            renderObjArrayOrFlat],
+        ['charter_compliance',        'Charter Compliance',         renderObjArrayOrFlat],
         ['scoring_scale',             'Scoring Scale',              renderObjArrayOrFlat],
-        ['predicate_bands',           'Predicate Bands',            renderFlatObjectSection],
-        ['weights',                   'Weights',                    renderFlatObjectSection],
-        ['level_visibility',          'Level Visibility',           renderFlatObjectSection],
+        // predicate_bands ships in two shapes across the corpus —
+        // appraisal-framework-v2 has [{label,min,max,description}] (array),
+        // older docs have {A:{}, B:{}, ...} (flat object). renderObjArrayOrFlat
+        // handles both.
+        ['predicate_bands',           'Predicate Bands',            renderObjArrayOrFlat],
         ['cohort_definitions',        'Cohort Definitions',         renderObjArrayOrFlat],
         ['question_bank',             'Question Bank',              renderObjArrayOrFlat],
         ['narrative_fields',          'Narrative Fields',           renderObjArrayOrFlat],
@@ -4584,11 +5001,180 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         ['observer_roles',            'Observer Roles',             renderObjArrayOrFlat],
         ['response_options',          'Response Options',           renderObjArrayOrFlat],
         ['foci',                      'Foci',                       renderObjArrayOrFlat],
+        ['metadata_fields',           'Metadata Fields',            renderObjArrayOrFlat],
+        ['data_sources',              'Data Sources',               renderObjArrayOrFlat],
+        ['task_categories',           'Task Categories',            renderObjArrayOrFlat],
+        ['priority_levels',           'Priority Levels',            renderObjArrayOrFlat],
+        ['recurring_tasks',           'Recurring Tasks',            renderObjArrayOrFlat],
+        ['monthly_tasks',             'Monthly Tasks',              renderObjArrayOrFlat],
+        ['termly_tasks',              'Termly Tasks',               renderObjArrayOrFlat],
+        ['yearly_arc',                'Yearly Arc',                 renderObjArrayOrFlat],
+        ['induction_overlay',         'Induction Overlay',          renderObjArrayOrFlat],
+        ['cambridgeTeacherAttributes','Cambridge Teacher Attributes', renderObjArrayOrFlat],
+        ['structure',                 'Structure',                  renderRefOrFlatSection],
+        ['output',                    'Output',                     renderRefOrFlatSection],
+        ['purpose',                   'Purpose',                    renderRefOrFlatSection],
+        ['context',                   'Context',                    renderRefOrFlatSection],
+        ['entries',                   'Entries',                    renderObjArrayOrFlat],
+        ['post_backfill_state',       'Post-Backfill State',        renderRefOrFlatSection],
+        ['openItems',                 'Open Items',                 renderStringArraySection],
+        ['items',                     'Items',                      renderObjArrayOrFlat],
+        ['relevanceToEduversal',      'Relevance to Eduversal',     (l, v) => typeof v === 'string' ? `<section class="doc-view-section"><h3>${escapeHtml(l)}</h3><div class="doc-view-theory"><div class="primary">${richString(v)}</div></div></section>` : null],
+        // High-frequency long-form prose fields. String-or-richObject; for
+        // strings, render as a single-card prose block (same chrome as
+        // theory_basis). For arrays/objects, fall through to obj-or-flat.
+        ['audience_description',      'Audience',                   renderProseOrStructured],
+        ['scope',                     'Scope',                      renderProseOrStructured],
+        ['purposeNote',               'Purpose',                    renderProseOrStructured],
+        ['globalRationale',           'Global Rationale',           renderProseOrStructured],
+        ['domainRationale',           'Domain Rationale',           renderObjArrayOrFlat],
+        ['rationale',                 'Rationale',                  renderProseOrStructured],
+        // Indonesian regulation specifics
+        ['definitions',               'Definitions',                renderObjArrayOrFlat],
+        ['articles',                  'Articles',                   renderObjArrayOrFlat],
+        ['lampiran',                  'Lampiran',                   renderObjArrayOrFlat],
+        ['eightDimensions',           'Eight Dimensions',           renderObjArrayOrFlat],
+        ['perJenjang',                'Per Jenjang',                renderObjArrayOrFlat],
+        ['progressionAcrossJenjang',  'Progression Across Jenjang', renderObjArrayOrFlat],
+        ['fivePerformanceCategories', 'Five Performance Categories', renderObjArrayOrFlat],
+        ['fourCompetencePillarsAnchor','Four Competence Pillars',   renderObjArrayOrFlat],
+        ['fourPillars',               'Four Pillars',               renderObjArrayOrFlat],
+        ['relevantPenutupArticles',   'Relevant Penutup Articles',  renderObjArrayOrFlat],
+        ['eduversalCompliancePosture','Eduversal Compliance',       renderProseOrStructured],
+        // Cambridge mentoring / ICTL
+        ['publisherContext',          'Publisher Context',          renderProseOrStructured],
+        ['definitionOfMentoring',     'Definition of Mentoring',    renderProseOrStructured],
+        ['valueForMentee',            'Value for Mentee',           renderObjArrayOrFlat],
+        ['valueForMentor',            'Value for Mentor',           renderObjArrayOrFlat],
+        ['responsibilities',          'Responsibilities',           renderObjArrayOrFlat],
+        ['whenToHaveAMentor',         'When to Have a Mentor',      renderProseOrStructured],
+        ['firstMeetingChecklist',     'First Meeting Checklist',    renderObjArrayOrFlat],
+        ['practicalArrangementsHeaders','Practical Arrangements',   renderObjArrayOrFlat],
+        ['conversationCycle',         'Conversation Cycle',         renderObjArrayOrFlat],
+        ['listeningSkills',           'Listening Skills',           renderObjArrayOrFlat],
+        ['questioningSkills',         'Questioning Skills',         renderObjArrayOrFlat],
+        ['smartObjectives',           'SMART Objectives',           renderObjArrayOrFlat],
+        ['growTechnique',             'GROW Technique',             renderObjArrayOrFlat],
+        ['mentoringChallenges',       'Mentoring Challenges',       renderObjArrayOrFlat],
+        ['noFaultTerminationPrinciple','No-Fault Termination',      renderProseOrStructured],
+        ['mentorCertificationCurriculumDraft','Mentor Cert Curriculum', renderObjArrayOrFlat],
+        ['qualificationContext',      'Qualification Context',      renderProseOrStructured],
+        ['designPrinciples',          'Design Principles',          renderStringArraySection],
+        ['certificateAims',           'Certificate Aims',           renderStringArraySection],
+        ['module1',                   'Module 1',                   renderObjArrayOrFlat],
+        ['assessmentCriteria',        'Assessment Criteria',        renderObjArrayOrFlat],
+        ['supportResources',          'Support Resources',          renderObjArrayOrFlat],
+        // Weekly checklists + cadence
+        ['source_inheritance',        'Source Inheritance',         renderProseOrStructured],
+        ['category_mapping',          'Category Mapping',           renderObjArrayOrFlat],
+        ['cadence_to_week_expansion', 'Cadence → Week Expansion',   renderObjArrayOrFlat],
+        ['week_specific_overrides',   'Week-Specific Overrides',    renderObjArrayOrFlat],
+        ['fortnightly_tasks',         'Fortnightly Tasks',          renderObjArrayOrFlat],
+        ['platform_label_alt',        'Platform (Alt Label)',       renderProseOrStructured],
+        ['applies_when_school',       'Applies When (School)',      renderProseOrStructured],
+        ['applies_when_user',         'Applies When (User)',        renderProseOrStructured],
+        ['naming_clarification',      'Naming Clarification',       renderProseOrStructured],
+        // Cadence + calendar anchors (operating cadence + academic year arc)
+        ['parent_rubric',             'Parent Rubric',              renderProseOrStructured],
+        ['cadence_periods',           'Cadence Periods',            renderObjArrayOrFlat],
+        ['indonesian_calendar_anchors','Indonesian Calendar',       renderObjArrayOrFlat],
+        ['cambridge_calendar_anchors','Cambridge Calendar',         renderObjArrayOrFlat],
+        ['eduversal_calendar_anchors','Eduversal Calendar',         renderObjArrayOrFlat],
+        ['eduversal_network_anchors', 'Eduversal Network Anchors',  renderObjArrayOrFlat],
+        ['ease_assessment_windows',   'EASE Assessment Windows',    renderObjArrayOrFlat],
+        ['governance_rhythm_anchors', 'Governance Rhythm',          renderObjArrayOrFlat],
+        ['induction_window_alignment','Induction Window Alignment', renderObjArrayOrFlat],
+        ['reference_documents',       'Reference Documents',        renderObjArrayOrFlat],
+        ['tasks',                     'Tasks',                      renderObjArrayOrFlat],
+        ['system_integration',        'System Integration',         renderObjArrayOrFlat],
+        ['academic_year_template',    'Academic Year Template',     renderObjArrayOrFlat],
+        ['semester_split',            'Semester Split',             renderObjArrayOrFlat],
+        ['usage_notes',               'Usage Notes',                renderProseOrStructured],
+        // Audits / mappings
+        ['school_appraisal_v2_to_principal_rubric','School v2 → Principal Rubric', renderObjArrayOrFlat],
+        ['principal_rubric_to_school_appraisal','Principal → School v2',           renderObjArrayOrFlat],
+        ['triangulation_protocol',    'Triangulation Protocol',     renderObjArrayOrFlat],
+        ['gaps_with_no_principal_rubric_coverage','Coverage Gaps',  renderObjArrayOrFlat],
+        ['principal_foci_mapping_density','Foci Mapping Density',   renderObjArrayOrFlat],
+        ['implementation_notes',      'Implementation Notes',       renderProseOrStructured],
+        // Schemas + induction firestore schema
+        ['domain',                    'Domain',                     renderProseOrStructured],
+        ['linkedDocuments',           'Linked Documents',           renderObjArrayOrFlat],
+        ['collections',               'Collections',                renderObjArrayOrFlat],
+        ['additionalUserFields',      'Additional User Fields',     renderObjArrayOrFlat],
+        ['rolesUsedByRules',          'Roles Used by Rules',        renderObjArrayOrFlat],
+        ['stateMachine',              'State Machine',              renderObjArrayOrFlat],
+        ['publishedBy',               'Published By',               renderProseOrStructured],
+        ['escalationRoute',           'Escalation Route',           renderObjArrayOrFlat],
+        ['review',                    'Review',                     renderObjArrayOrFlat],
+        // Coaching / 360 frameworks
+        ['data_model',                'Data Model',                 renderObjArrayOrFlat],
+        ['evidence_lineage',          'Evidence Lineage',           renderObjArrayOrFlat],
+        ['session_outcome_metrics_tracked','Session Outcome Metrics', renderObjArrayOrFlat],
+        ['common_failure_modes',      'Common Failure Modes',       renderObjArrayOrFlat],
+        ['ui_implementation_phase_2', 'UI Implementation Phase 2',  renderObjArrayOrFlat],
+        ['cycle_calendar',            'Cycle Calendar',             renderObjArrayOrFlat],
+        ['data_aggregation_rules',    'Data Aggregation Rules',     renderObjArrayOrFlat],
+        ['phase_2_implementation',    'Phase 2 Implementation',     renderObjArrayOrFlat],
+        // KPI extensions
+        ['merges_into',               'Merges Into',                renderObjArrayOrFlat],
+        ['merge_policy',              'Merge Policy',               renderProseOrStructured],
+        ['cross_module_links',        'Cross-Module Links',         renderObjArrayOrFlat],
+        ['cross_module_audit',        'Cross-Module Audit',         renderObjArrayOrFlat],
+        ['weight_audit',              'Weight Audit',               renderObjArrayOrFlat],
+        ['format_fidelity_notes',     'Format Fidelity Notes',      renderProseOrStructured],
+        // School-leader / teacher rationale
+        ['audiences',                 'Audiences',                  renderObjArrayOrFlat],
+        ['scopeNote',                 'Scope Note',                 renderProseOrStructured],
+        ['distributedLeadership',     'Distributed Leadership',     renderObjArrayOrFlat],
+        ['rationaleByDomain',         'Rationale by Domain',        renderObjArrayOrFlat],
+        ['relationToOtherStandards',  'Relation to Other Standards', renderObjArrayOrFlat],
+        ['bibliography',              'Bibliography',               renderObjArrayOrFlat],
+        // Observation + visit types
+        ['scoring',                   'Scoring',                    renderRefOrFlatSection],
+        ['indonesian_competency_mapping','Indonesian Competency Mapping', renderObjArrayOrFlat],
+        ['tugas_pokok_mapping',       'Tugas Pokok Mapping',        renderObjArrayOrFlat],
+        ['snp_mapping',               'SNP Mapping',                renderObjArrayOrFlat],
+        ['visit_types',               'Visit Types',                renderObjArrayOrFlat],
+        ['derivative_modules',        'Derivative Modules',         renderObjArrayOrFlat],
+        // Misc one-offs
+        ['source',                    'Source',                     renderProseOrStructured],
+        ['ditetapkanDi',              'Ditetapkan Di',              renderProseOrStructured],
+        ['ditetapkanTanggal',         'Ditetapkan Tanggal',         renderProseOrStructured],
+        ['diundangkanTanggal',        'Diundangkan Tanggal',        renderProseOrStructured],
+        ['berita_negara',             'Berita Negara',              renderProseOrStructured],
+        ['supersedes',                'Supersedes',                 renderProseOrStructured],
+        ['menimbang',                 'Menimbang',                  renderObjArrayOrFlat],
+        ['intendedFirestoreShape',    'Intended Firestore Shape',   renderObjArrayOrFlat],
+        ['regulation',                'Regulation',                 renderProseOrStructured],
+        ['issuer',                    'Issuer',                     renderProseOrStructured],
+        ['datePromulgated',           'Date Promulgated',           renderProseOrStructured],
+        ['level_determination',       'Level Determination',        renderProseOrStructured],
+        ['levels',                    'Levels',                     renderObjArrayOrFlat],
+        ['appraisal_calendar',        'Appraisal Calendar',         renderObjArrayOrFlat],
+        ['firestore_integration',     'Firestore Integration',      renderObjArrayOrFlat],
+        ['schema_lineage',            'Schema Lineage',             renderObjArrayOrFlat],
+        ['teachers_track_entries',    'Teachers Track Entries',     renderObjArrayOrFlat],
+        ['leaders_track_entries',     'Leaders Track Entries',      renderObjArrayOrFlat],
+        ['audience',                  'Audience',                   renderProseOrStructured],
+        ['_continuation_note',        'Continuation Note',          renderProseOrStructured],
+        ['merge_protocol',            'Merge Protocol',             renderProseOrStructured],
+        ['polished_readings',         'Polished Readings',          renderObjArrayOrFlat],
+        ['meta',                      'Meta',                       renderRefOrFlatSection],
+        ['level_order',               'Level Order',                renderStringArraySection],
       ];
       for (const [key, label, fn] of patterns) {
         if (!(key in obj)) continue;
         const html = fn(label, obj[key]);
-        if (html) { out.push(html); consumed.add(key); }
+        if (html) { if (html.trim()) out.push(html); consumed.add(key); }
+      }
+
+      // Provenance footer-strip — sits at the bottom (just before Raw JSON).
+      const provHtml = renderProvenanceFooter(obj);
+      if (provHtml) {
+        if ('provenance'    in obj) consumed.add('provenance');
+        if ('last_extended' in obj) consumed.add('last_extended');
+        out.push(provHtml);
       }
 
       return { html: out.join(''), consumed };

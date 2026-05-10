@@ -976,10 +976,25 @@ service cloud.firestore {
 
     // -- school_events (Partner Schools Event Calendar) ----------
     // Read: any authorized user
-    // Write: any Central Hub user (central_user or central_admin)
+    // Write:
+    //   - any Central Hub user (network-wide HQ access), OR
+    //   - any Academic Hub user, but only for events at their own school
+    //     (request.resource.data.schoolId must match userProfile().schoolId).
+    //   AH creates also require createdBy == request.auth.uid so the audit
+    //   trail stays honest; CH HQ users may write on behalf of any school.
     match /school_events/{eventId} {
-      allow read:                   if isAuthorized();
-      allow create, update, delete: if isCentralUser();
+      allow read:   if isAuthorized();
+      allow create: if isCentralUser()
+                    || (isAcademicUser()
+                        && request.resource.data.schoolId == userProfile().schoolId
+                        && request.resource.data.createdBy == request.auth.uid);
+      allow update: if isCentralUser()
+                    || (isAcademicUser()
+                        && resource.data.schoolId == userProfile().schoolId
+                        && request.resource.data.schoolId == userProfile().schoolId);
+      allow delete: if isCentralUser()
+                    || (isAcademicUser()
+                        && resource.data.schoolId == userProfile().schoolId);
     }
 
     // -- cambridge_calendar (exam deadline dates per year+series) --

@@ -3113,12 +3113,27 @@
       // ── Calendar fallback data — loaded from calendar-fallback.js (window.CAL_DEMO_EVENTS)
       const CAL_DEMO_EVENTS = window.CAL_DEMO_EVENTS || [];
 
-      // ── Shared calendar data fetch (no auth needed, starts immediately) ──────────
-      const CALENDAR_API_URL =
-        "https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec";
-      const _calDataPromise = fetch(CALENDAR_API_URL)
-        .then((r) => r.json())
-        .catch(() => CAL_DEMO_EVENTS);
+      // ── Shared calendar data fetch — reads calendar_events from Firestore.
+      // Falls back to CAL_DEMO_EVENTS if Firestore is unreachable or returns nothing.
+      // The earlier Google Apps Script endpoint is no longer called at runtime;
+      // admins import GSheets rows into calendar_events via /academic-calendar's
+      // "⟳ Sync from Sheets" button.
+      let _resolveCalData;
+      const _calDataPromise = new Promise((resolve) => { _resolveCalData = resolve; });
+      async function _fetchCalendarFromFirestore() {
+        try {
+          const { collection, getDocs, query, orderBy } = await import(
+            "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
+          );
+          const snap = await getDocs(
+            query(collection(window.db, "calendar_events"), orderBy("date_start"))
+          );
+          if (snap.empty) return CAL_DEMO_EVENTS;
+          return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch (_) {
+          return CAL_DEMO_EVENTS;
+        }
+      }
 
       // ── Calendar helpers ──────────────────────────────────────────────────────────
       const CAL_MONTHS_SHORT = [
@@ -3312,8 +3327,9 @@
           .join("");
       }
 
-      // Run immediately — no auth required
-      loadUpcomingEvents();
+      // Calendar fetch runs after auth (Firestore needs an authenticated user).
+      // The earlier "no-auth" GSheets fetch is gone; loadUpcomingEvents is now
+      // kicked off inside the authReady handler below.
 
       // Set hero date immediately (no auth needed)
       document.getElementById("heroDate").textContent =
@@ -3367,6 +3383,12 @@
         ({ detail: { user, profile } }) => {
           db = window.db;
           isCentralAdmin = profile?.role_centralhub === "central_admin" || profile?.role === "central_admin";
+
+          // Now that auth is ready, fetch calendar from Firestore and resolve
+          // the shared promise that loadUpcomingEvents() awaits.
+          _fetchCalendarFromFirestore().then((data) => _resolveCalData(data));
+          loadUpcomingEvents();
+
           const firstName = user.displayName
             ? user.displayName.split(" ")[0]
             : "there";
