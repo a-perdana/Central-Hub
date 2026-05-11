@@ -2997,6 +2997,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         </div>
 
         <div class="filters" id="filters" hidden>
+          <input id="codeSearch" type="search" placeholder="Search question code…" autocomplete="off" style="min-width:180px;">
           <select id="gradeFilter">
             <option value="">All grades (client filter)</option>
           </select>
@@ -3036,6 +3037,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     let activeLesson = null;
     let currentPage = 1;
     let lastTotal = 0;
+    // Per-lesson code index — populated lazily on first code search per lesson.
+    // Shape: { [lessonCode]: Map<code, { page, perPage, item }> }
+    const codeIndex = {};
+    let indexBuildPromise = null;
 
     const $ = (id) => document.getElementById(id);
 
@@ -3158,6 +3163,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       $("lessonFilter").addEventListener("input", renderLessons);
       $("applyBtn").addEventListener("click", () => { currentPage = 1; loadQuestions(); });
       $("resetBtn").addEventListener("click", () => {
+        $("codeSearch").value = "";
         $("gradeFilter").value = "";
         $("typeFilter").value = "";
         $("yearFilter").value = "";
@@ -3165,6 +3171,104 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         currentPage = 1;
         loadQuestions();
       });
+
+      // Code search — debounced. Builds a per-lesson index on first
+      // hit, then resolves codes locally and jumps to the right page.
+      let codeDebounce = null;
+      $("codeSearch").addEventListener("input", () => {
+        clearTimeout(codeDebounce);
+        const raw = $("codeSearch").value.trim().toUpperCase();
+        codeDebounce = setTimeout(() => handleCodeSearch(raw), 250);
+      });
+
+      async function buildCodeIndex(lessonCode) {
+        if (codeIndex[lessonCode]) return codeIndex[lessonCode];
+        if (indexBuildPromise) return indexBuildPromise;
+        const perPage = 200;
+        indexBuildPromise = (async () => {
+          const map = new Map();
+          // First page tells us last_page.
+          const first = await call("/ease/questions", { lesson_code: lessonCode, per_page: perPage, page: 1 });
+          (first.data || []).forEach((it) => { if (it.code) map.set(it.code.toUpperCase(), { page: 1, perPage, item: it }); });
+          const last = first.last_page || 1;
+          for (let p = 2; p <= last; p++) {
+            updateSearchStatus(`Indexing… page ${p}/${last}`);
+            const r = await call("/ease/questions", { lesson_code: lessonCode, per_page: perPage, page: p });
+            (r.data || []).forEach((it) => { if (it.code) map.set(it.code.toUpperCase(), { page: p, perPage, item: it }); });
+          }
+          codeIndex[lessonCode] = map;
+          return map;
+        })().finally(() => { indexBuildPromise = null; });
+        return indexBuildPromise;
+      }
+
+      function updateSearchStatus(text) {
+        const el = $("codeSearch");
+        if (text) el.setAttribute("data-status", text);
+        else el.removeAttribute("data-status");
+        // Cheap progress text shown next to the input.
+        let badge = document.getElementById("codeSearchStatus");
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.id = "codeSearchStatus";
+          badge.style.cssText = "font-size:11.5px;color:var(--ink-3);margin-left:4px;";
+          el.insertAdjacentElement("afterend", badge);
+        }
+        badge.textContent = text || "";
+      }
+
+      async function handleCodeSearch(rawCode) {
+        if (!activeLesson) return;
+        if (!rawCode) {
+          updateSearchStatus("");
+          // Restore normal browse.
+          currentPage = 1;
+          await loadQuestions();
+          return;
+        }
+        // Already-built index?
+        const cached = codeIndex[activeLesson.code];
+        if (cached) {
+          renderCodeMatches(cached, rawCode);
+          return;
+        }
+        updateSearchStatus("Indexing… page 1");
+        try {
+          const map = await buildCodeIndex(activeLesson.code);
+          updateSearchStatus(`Indexed ${map.size} codes`);
+          renderCodeMatches(map, rawCode);
+        } catch (err) {
+          updateSearchStatus("Index failed");
+          $("content").innerHTML = `<div class="err">${escapeHtml(err.message || "Index build failed")}</div>`;
+        }
+      }
+
+      function renderCodeMatches(map, rawCode) {
+        const q = rawCode.toUpperCase();
+        // Exact match first; then prefix; then substring. Cap at 50.
+        const exact = [], prefix = [], contains = [];
+        for (const [code, entry] of map) {
+          if (code === q) exact.push(entry);
+          else if (code.startsWith(q)) prefix.push(entry);
+          else if (code.includes(q)) contains.push(entry);
+        }
+        const matches = [...exact, ...prefix, ...contains].slice(0, 50);
+        updateSearchStatus(`${matches.length} match${matches.length === 1 ? "" : "es"} for "${q}"`);
+        if (!matches.length) {
+          $("content").innerHTML = `<div class="empty"><div class="empty-title">No question with code matching "${escapeHtml(q)}"</div>Indexed ${map.size} codes in this lesson.</div>`;
+          return;
+        }
+        // Synthesize the same shape loadQuestions feeds renderQuestions.
+        const items = matches.map((m) => m.item);
+        $("statRow").hidden = false;
+        $("statRow").innerHTML = `
+          <div class="stat-card"><div class="stat-num">${matches.length}</div><div class="stat-lbl">Code matches</div></div>
+          <div class="stat-card"><div class="stat-num">${map.size}</div><div class="stat-lbl">Indexed codes</div></div>
+          <div class="stat-card"><div class="stat-num">"${escapeHtml(q)}"</div><div class="stat-lbl">Query</div></div>
+          <div class="stat-card"><div class="stat-num">${exact.length}/${prefix.length}/${contains.length}</div><div class="stat-lbl">exact/prefix/contains</div></div>
+        `;
+        renderQuestions(items, { last_page: 1, current_page: 1 });
+      }
 
       function renderLessons() {
         const q = $("lessonFilter").value.toLowerCase();
@@ -3211,6 +3315,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       async function selectLesson(id) {
         activeLesson = allLessons.find((l) => l.id === id) || null;
         currentPage = 1;
+        $("codeSearch").value = "";
+        updateSearchStatus("");
         renderLessons();
         $("filters").hidden = false;
         $("lessonHeader").innerHTML = `<b>${escapeHtml(activeLesson.name)}</b> · <span style="font-family:monospace;font-size:12px;color:var(--ink-3)">${escapeHtml(activeLesson.code)}</span> · ${escapeHtml(activeLesson.level || "")}`;
