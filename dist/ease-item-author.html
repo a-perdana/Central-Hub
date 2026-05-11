@@ -3245,6 +3245,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       tpl.innerHTML = String(html);
       // Remove every <img>; preview row should stay text-only.
       tpl.content.querySelectorAll('img').forEach(n => n.remove());
+      // Remove entire <table> blocks — the compact row preview can't
+      // render a grid, and unwrapping <tr>/<td> dumps every cell as
+      // free-floating text, breaking the row alignment. Tag the
+      // preview so the reader knows there's a table in the full item.
+      const hasTable = tpl.content.querySelector('table') != null;
+      tpl.content.querySelectorAll('table').forEach(n => n.remove());
       const ALLOWED = new Set(['SPAN','STRONG','EM','B','I','U','SUP','SUB']);
       function walk(node) {
         for (const child of [...node.childNodes]) {
@@ -3267,7 +3273,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
       }
       walk(tpl.content);
-      return tpl.innerHTML.replace(/\s+/g, ' ').trim();
+      let out = tpl.innerHTML.replace(/\s+/g, ' ').trim();
+      if (hasTable) {
+        out += ` <span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:500;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;padding:1px 7px;border-radius:99px;vertical-align:1px;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="16" x2="21" y2="16"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/></svg>table</span>`;
+      }
+      return out;
     }
 
     function renderPager() {
