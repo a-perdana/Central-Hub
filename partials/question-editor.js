@@ -170,7 +170,14 @@ export async function mountQuestionEditor(container, opts) {
   });
 
   // Stem + live preview
+  // Imported items carry rich HTML in stemHtml + LaTeX delimiters
+  // \(…\). HQ-authored items carry plain markdown in stem. Prefer
+  // stemHtml as the seed so HQ specialists see the actual question
+  // content (not stripped plain text) and can edit it inline.
+  // marked.parse() passes HTML through; KaTeX auto-render picks up
+  // \(…\) regardless of wrapper tags.
   const stemTA = $('#qe-stem'); const stemPV = $('#qe-stem-preview');
+  if (!item.stem && item.stemHtml) item.stem = item.stemHtml;
   stemTA.value = item.stem || '';
   stemTA.addEventListener('input', () => {
     item.stem = stemTA.value;
@@ -187,6 +194,21 @@ export async function mountQuestionEditor(container, opts) {
   onTypeChange();
 
   // MCQ options
+  // Same seed-from-rich-source pattern as the stem: if optionsHtml[i]
+  // exists and the plain options[i] is empty or matches a stripped
+  // version, swap in the rich source so the editor textarea shows the
+  // real content.
+  if (Array.isArray(item.optionsHtml) && Array.isArray(item.options)) {
+    item.options = item.options.map((plain, i) => {
+      const rich = item.optionsHtml[i];
+      if (!plain && rich) return rich;
+      // Heuristic: if rich is non-empty AND plain is a clear subset
+      // (entities decoded, tags stripped), prefer rich so HQ sees
+      // markdown source they can actually edit.
+      if (rich && plain) return rich;
+      return plain;
+    });
+  }
   const optsList = $('#qe-options-list');
   function renderOpts() {
     optsList.innerHTML = '';
@@ -331,6 +353,11 @@ function renderShell(item, mode, subjects, extraFieldsHtml = '') {
       <div class="qe-col-left">
         <div class="qe-section">
           <h3>Question stem</h3>
+          <p class="qe-hint">
+            Markdown + LaTeX. Inline math: <code>\\(x^2\\)</code> or <code>$x^2$</code>. Display: <code>\\[…\\]</code> or <code>$$…$$</code>.
+            Inline HTML (e.g. <code>&lt;img src&gt;</code>, <code>&lt;p&gt;</code>) is preserved as-is.
+            Live preview shows what students see.
+          </p>
           <div class="qe-stem-split">
             <textarea id="qe-stem" rows="6" placeholder="Markdown + LaTeX. Use $x^2$ inline or $$\\int$$ block."></textarea>
             <div class="qe-preview" id="qe-stem-preview"></div>
@@ -480,6 +507,8 @@ function buildStyles() {
     @media (max-width: 900px) { .qe-grid { grid-template-columns: 1fr; } }
     .qe-section { background:#fff; border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:14px; margin-bottom:14px; }
     .qe-section h3 { font-family: 'Lora', serif; font-size: .98rem; margin: 0 0 10px; font-weight:600; color: var(--ink, #111); }
+    .qe-hint { margin: 0 0 10px; font-size: 12px; color: var(--ink-3, #888); line-height: 1.5; }
+    .qe-hint code { background: var(--paper, #f5f5f5); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
     .qe-stem-split { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
     @media (max-width: 700px) { .qe-stem-split { grid-template-columns: 1fr; } }
     .qe-stem-split textarea { width:100%; min-height: 110px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size:12.5px; padding:10px; border:1px solid var(--border, #e5e7eb); border-radius:8px; resize: vertical; }
@@ -550,9 +579,11 @@ function normalizeItem(src, mode) {
 }
 
 function finalizePayload(item, mode) {
+  const stemTrim = String(item.stem || '').trim();
   const out = {
     type:            item.type,
-    stem:            String(item.stem || '').trim(),
+    stem:            stemTrim,
+    stemHtml:        stemTrim,
     marks:           Number(item.marks) || 1,
     difficulty:      item.difficulty || 'medium',
     difficultyStars: item.difficultyStars || null,
@@ -574,6 +605,10 @@ function finalizePayload(item, mode) {
   }
   if (item.type === 'mcq') {
     out.options    = (item.options || []).map(s => String(s || '').trim());
+    // Mirror rich source into *Html fields so runner + row preview
+    // stay consistent regardless of whether content arrived from
+    // an import (HTML + LaTeX) or a fresh HQ author (markdown).
+    out.optionsHtml = out.options.slice();
     out.correctIdx = Number(item.correctIdx) || 0;
     out.correctAnswer  = null;
     out.tolerance      = null;
