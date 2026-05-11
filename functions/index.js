@@ -417,6 +417,320 @@ function inferUnitCode(testId) {
   return parts.slice(2, -1).join("_");
 }
 
+// ═══════════════════════════════════════════════════════════════
+// GAMIFICATION (Students Hub, 2026-05-11)
+// ═══════════════════════════════════════════════════════════════
+// Three triggers + one daily schedule:
+//   5. awardChapterTestPoints   — on chapter_test_attempts write
+//   6. awardEaseSessionPoints   — on ease_sessions write
+//   7. rebuildLeaderboards      — scheduled hourly, regenerates
+//                                 school_leaderboards/{board} aggregates
+//   8. resetLeaderboardWindows  — scheduled daily, resets weekly + monthly
+//                                 buckets on student_points
+//
+// Writes are constrained to student_points/{uid} and
+// school_leaderboards/{board}. Both collections are RULE-LOCKED for
+// client writes — only admin SDK (these functions) can write.
+//
+// Schema host: docs/FIRESTORE_SCHEMA.md §20.
+// Award rules table also documented there.
+// ═══════════════════════════════════════════════════════════════
+
+const POINTS = {
+  CHAPTER_BASE: 50,
+  CHAPTER_FIRST_ATTEMPT_BONUS: 25,
+  CHAPTER_PERFECT_BONUS: 50,           // 100% score
+  EASE_BASE: 100,
+  EASE_GROWTH_POSITIVE_BONUS: 25,      // growthVsPrev >= 0
+  EASE_GROWTH_STRONG_BONUS: 50,        // growthVsPrev >= 5
+  STREAK_MILESTONE_7:   100,
+  STREAK_MILESTONE_30:  250,
+};
+
+function levelXpRequired(level) {
+  return 100 + (level - 1) * 50;
+}
+function computeLevelFromTotalXp(totalXp) {
+  let level = 1;
+  let remaining = totalXp;
+  while (level < 100) {
+    const req = levelXpRequired(level);
+    if (remaining < req) return { level, xpInLevel: remaining, xpRequired: req, progress: Math.round((remaining/req)*100) };
+    remaining -= req;
+    level++;
+  }
+  return { level: 100, xpInLevel: 0, xpRequired: levelXpRequired(100), progress: 100 };
+}
+
+// Build the denormalised identity payload from a students/{uid} doc.
+async function loadStudentIdentity(studentUid) {
+  const snap = await db.collection("students").doc(studentUid).get();
+  if (!snap.exists) return null;
+  const s = snap.data();
+  return {
+    studentUid,
+    displayName:  s.displayName || (s.email ? s.email.split("@")[0] : "Student"),
+    photoURL:     s.photoURL || null,
+    schoolId:     s.schoolId || null,
+    schoolName:   s.school || null,
+    classId:      s.classId || null,
+    className:    s.className || null,
+    gradeLevel:   s.gradeLevel || null,
+  };
+}
+
+// Award points + recompute level / streak. Always merges; safe to re-run.
+// reason: short slug for audit (used to skip duplicate awards if needed).
+async function awardPoints(studentUid, points, opts = {}) {
+  if (!studentUid || !points) return;
+  const ref = db.collection("student_points").doc(studentUid);
+  const identity = await loadStudentIdentity(studentUid);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const cur  = snap.exists ? snap.data() : {};
+    const totalPoints   = (cur.totalPoints   || 0) + points;
+    const weeklyPoints  = (cur.weeklyPoints  || 0) + points;
+    const monthlyPoints = (cur.monthlyPoints || 0) + points;
+
+    // Level is derived from totalPoints (1 point = 1 XP).
+    const lvl = computeLevelFromTotalXp(totalPoints);
+
+    // Streak: bump if a new calendar day since lastDayISO.
+    const today = new Date().toISOString().slice(0, 10);
+    const prevDay = cur.streak?.lastDayISO;
+    let streak = cur.streak || { current: 0, longest: 0, lastDayISO: null };
+    if (prevDay !== today) {
+      // Was the last day exactly yesterday?
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const currentStreak = (prevDay === yesterday) ? (streak.current || 0) + 1 : 1;
+      streak = {
+        current: currentStreak,
+        longest: Math.max(currentStreak, streak.longest || 0),
+        lastDayISO: today,
+      };
+    }
+
+    const update = {
+      ...identity,
+      totalPoints, weeklyPoints, monthlyPoints,
+      level: lvl.level, levelXp: lvl.xpInLevel, levelXpRequired: lvl.xpRequired, levelProgress: lvl.progress,
+      streak,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Activity counters (opt-in via opts.counter)
+    if (opts.counter === "chapter")        update.chapterTestsCompleted = admin.firestore.FieldValue.increment(1);
+    if (opts.counter === "ease")           update.easeSessionsCompleted = admin.firestore.FieldValue.increment(1);
+    if (opts.counter === "chapter_perfect") update.perfectScores       = admin.firestore.FieldValue.increment(1);
+
+    if (!snap.exists) {
+      update.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    tx.set(ref, update, { merge: true });
+  });
+}
+
+// ───────────────────────────────────────────────────────────────
+// 5. awardChapterTestPoints — on chapter_test_attempts write
+//    Fires when an attempt status flips to 'scored' (or 'submitted').
+//    Idempotent: we look at the pre→post transition. Re-runs on the
+//    same scored doc are no-ops because the transition was prior→after.
+// ───────────────────────────────────────────────────────────────
+exports.awardChapterTestPoints = onDocumentWritten(
+  { document: "chapter_test_attempts/{attemptId}", region: "asia-southeast1" },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+    if (!after) return;
+
+    const SCORED = new Set(["scored", "submitted", "flagged"]);
+    const wasScored = before && SCORED.has(before.status);
+    const isScored  = SCORED.has(after.status);
+    if (!isScored || wasScored) return;     // only fire on transition INTO scored
+
+    const studentUid = after.studentUid;
+    if (!studentUid) return;
+
+    const scorePct = Number(after.rawScorePct || 0);
+    let points = POINTS.CHAPTER_BASE;
+    points += Math.round(scorePct * 0.5);
+
+    // First attempt bonus — count submissions for this (student, test) pair.
+    if (after.testId) {
+      const dup = await db.collection("chapter_test_attempts")
+        .where("studentUid", "==", studentUid)
+        .where("testId", "==", after.testId)
+        .where("status", "in", ["scored", "submitted", "flagged"])
+        .get();
+      if (dup.size <= 1) points += POINTS.CHAPTER_FIRST_ATTEMPT_BONUS;
+    }
+
+    const isPerfect = scorePct >= 100;
+    if (isPerfect) points += POINTS.CHAPTER_PERFECT_BONUS;
+
+    await awardPoints(studentUid, points, {
+      counter: isPerfect ? "chapter_perfect" : "chapter",
+    });
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
+// 6. awardEaseSessionPoints — on ease_sessions write
+//    Fires on transition INTO 'submitted'. Looks up the matching
+//    ease_growth doc to derive growthVsPrev for the bonus.
+// ───────────────────────────────────────────────────────────────
+exports.awardEaseSessionPoints = onDocumentWritten(
+  { document: "ease_sessions/{sessionId}", region: "asia-southeast1" },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+    if (!after) return;
+
+    const wasSubmitted = before && before.status === "submitted";
+    const isSubmitted  = after.status === "submitted";
+    if (!isSubmitted || wasSubmitted) return;
+
+    const studentUid = after.studentUid;
+    if (!studentUid) return;
+
+    let points = POINTS.EASE_BASE;
+    try {
+      const growthRef = db.collection("ease_growth").doc(`${studentUid}_${after.subjectId}`);
+      const gSnap = await growthRef.get();
+      if (gSnap.exists) {
+        const windows = gSnap.data().windows || [];
+        const lastWindow = windows[windows.length - 1];
+        if (lastWindow && lastWindow.growthVsPrev != null) {
+          const g = lastWindow.growthVsPrev;
+          if (g >= 5) points += POINTS.EASE_GROWTH_STRONG_BONUS;
+          else if (g >= 0) points += POINTS.EASE_GROWTH_POSITIVE_BONUS;
+        }
+      }
+    } catch (e) { /* no growth doc yet — first window */ }
+
+    await awardPoints(studentUid, points, { counter: "ease" });
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
+// 7. rebuildLeaderboards — hourly schedule
+//    Re-generates top-100 inline aggregates for every
+//    (scope, scopeId, period) tuple in active use. Stored at
+//    school_leaderboards/{scope}_{scopeId}_{period}.
+//
+//    Heuristic: walks all student_points docs, groups by scope key,
+//    sorts by period field, writes top 100. For network scope, single
+//    pass over the whole collection. For partner-school scopes, groups
+//    by schoolId. Class + grade groups likewise.
+// ───────────────────────────────────────────────────────────────
+exports.rebuildLeaderboards = onSchedule(
+  { schedule: "every 60 minutes", timeZone: "Asia/Jakarta", region: "asia-southeast1" },
+  async () => {
+    const all = await db.collection("student_points").get();
+    if (all.empty) {
+      console.log("[rebuildLeaderboards] no student_points yet — skip");
+      return;
+    }
+    const rows = all.docs.map(d => ({ id: d.id, ...d.data() }));
+    const periods = ["weekly", "monthly", "alltime"];
+    const periodField = {
+      weekly:  "weeklyPoints",
+      monthly: "monthlyPoints",
+      alltime: "totalPoints",
+    };
+
+    const batch = db.batch();
+    const seen = new Set();
+
+    function writeBoard(scope, scopeId, period, list) {
+      if (!list.length) return;
+      const sorted = [...list].sort((a, b) =>
+        (b[periodField[period]] || 0) - (a[periodField[period]] || 0)
+      );
+      const entries = sorted.slice(0, 100).map((r, i) => ({
+        rank: i + 1,
+        studentUid: r.studentUid || r.id,
+        displayName: r.displayName || "Student",
+        photoURL: r.photoURL || null,
+        schoolId: r.schoolId || null,
+        schoolName: r.schoolName || null,
+        classId: r.classId || null,
+        className: r.className || null,
+        gradeLevel: r.gradeLevel || null,
+        totalPoints: r.totalPoints || 0,
+        weeklyPoints: r.weeklyPoints || 0,
+        monthlyPoints: r.monthlyPoints || 0,
+        level: r.level || 1,
+      }));
+      const id = `${scope}_${scopeId}_${period}`;
+      if (seen.has(id)) return;
+      seen.add(id);
+      batch.set(db.collection("school_leaderboards").doc(id), {
+        scope, scopeId, period, entries,
+        computedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Group by class, grade-within-school, school, and network-wide
+    const byClass = {};
+    const byGrade = {};   // key = `${schoolId}|${gradeLevel}`
+    const bySchool = {};
+    rows.forEach(r => {
+      if (r.classId)   (byClass[r.classId]   ||= []).push(r);
+      if (r.schoolId && r.gradeLevel != null) {
+        const k = `${r.schoolId}|${r.gradeLevel}`;
+        (byGrade[k] ||= []).push(r);
+      }
+      if (r.schoolId)  (bySchool[r.schoolId] ||= []).push(r);
+    });
+
+    periods.forEach(p => {
+      Object.entries(byClass).forEach(([id, list])  => writeBoard("class", id, p, list));
+      Object.entries(byGrade).forEach(([k, list])   => writeBoard("grade", k, p, list));
+      Object.entries(bySchool).forEach(([id, list]) => writeBoard("school", id, p, list));
+      writeBoard("network", "all", p, rows);
+    });
+
+    await batch.commit();
+    console.log(`[rebuildLeaderboards] wrote ${seen.size} boards across ${rows.length} students`);
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
+// 8. resetLeaderboardWindows — daily 00:05 Asia/Jakarta
+//    Mondays reset weeklyPoints to 0.
+//    First-of-month resets monthlyPoints to 0.
+//    totalPoints is never reset.
+// ───────────────────────────────────────────────────────────────
+exports.resetLeaderboardWindows = onSchedule(
+  { schedule: "5 0 * * *", timeZone: "Asia/Jakarta", region: "asia-southeast1" },
+  async () => {
+    const now = new Date();
+    const dayOfWeek = now.toLocaleString("en-GB", { weekday: "short", timeZone: "Asia/Jakarta" });
+    const dayOfMonth = Number(now.toLocaleString("en-GB", { day: "numeric", timeZone: "Asia/Jakarta" }));
+    const resetWeekly  = dayOfWeek === "Mon";
+    const resetMonthly = dayOfMonth === 1;
+
+    if (!resetWeekly && !resetMonthly) {
+      console.log("[resetLeaderboardWindows] no reset today");
+      return;
+    }
+
+    const all = await db.collection("student_points").get();
+    const batch = db.batch();
+    const stamp = admin.firestore.FieldValue.serverTimestamp();
+    all.docs.forEach(d => {
+      const upd = { updatedAt: stamp };
+      if (resetWeekly)  { upd.weeklyPoints  = 0; upd.lastWeeklyResetAt  = stamp; }
+      if (resetMonthly) { upd.monthlyPoints = 0; upd.lastMonthlyResetAt = stamp; }
+      batch.set(d.ref, upd, { merge: true });
+    });
+    await batch.commit();
+    console.log(`[resetLeaderboardWindows] reset ${all.size} docs (weekly=${resetWeekly} monthly=${resetMonthly})`);
+  }
+);
+
 // ───────────────────────────────────────────────────────────────
 // HELPERS
 // ───────────────────────────────────────────────────────────────

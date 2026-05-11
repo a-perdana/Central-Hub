@@ -519,6 +519,26 @@ service cloud.firestore {
                                (isSignedIn() && resource.data.studentUid == request.auth.uid);
     }
 
+    // ── Gamification (Students Hub, 2026-05-11) ────────────────
+    // student_points + school_leaderboards are CLOUD-FUNCTION-ONLY writes.
+    // Students cannot self-award; client write paths are blocked at the
+    // rule level. Admin SDK (Cloud Functions) bypasses rules entirely.
+    //
+    // Read scope is intentionally permissive so any active student can
+    // browse leaderboards across all 4 scopes (class / grade / school /
+    // network). Fields surfaced are minimal — see FIRESTORE_SCHEMA §20.
+    match /student_points/{uid} {
+      allow get:    if isAuthorized() || isActiveStudent();
+      allow list:   if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if false;   // Cloud Function (admin SDK) only
+    }
+
+    match /school_leaderboards/{boardId} {
+      allow get:    if isAuthorized() || isActiveStudent();
+      allow list:   if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if false;   // Cloud Function (admin SDK) only
+    }
+
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();
