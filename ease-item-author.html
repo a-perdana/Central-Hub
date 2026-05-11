@@ -138,13 +138,16 @@
     .type-numeric { background: #ecfeff; color: #0891b2; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; }
     .type-short { background: #fef3c7; color: #92400e; }
 
-    /* Source pill (latihan / hq) */
-    .src-pill { font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 5px; text-transform: uppercase; letter-spacing: .04em; }
-    .src-latihan { background: var(--paper); color: var(--ink-3); border: 1px solid var(--border); }
-    .src-hq      { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+    /* Calibrated badge — appended to stem cell when pilotPhase === false. */
+    .cal-badge {
+      display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600;
+      color: #047857; background: #ecfdf5; border: 1px solid #6ee7b7;
+      padding: 1px 6px; border-radius: 99px; vertical-align: 1px;
+    }
 
-    /* Calibrated check — replaces 'pilot' rozet */
-    .cal-check { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #dcfce7; color: #166534; font-size: 12px; font-weight: 700; }
+    /* Stem cell padding for breathing room */
+    .td-stem { padding-left: 16px !important; }
+    .th-stem { padding-left: 16px !important; }
 
     /* Modal */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 40px 20px; }
@@ -188,10 +191,11 @@
     <div class="stat-row" id="statRow" style="margin-top:18px"></div>
 
     <div class="toolbar">
+      <input id="fSearch" type="search" placeholder="Search stem on this page…" title="Stem search filters the current page. Narrow first by subject / difficulty / type for a focused result set.">
       <select id="fSubject"><option value="">All subjects</option><option value="math">Math</option><option value="english">English</option><option value="science">Science</option></select>
       <select id="fDifficulty"><option value="">All difficulties</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
       <select id="fType"><option value="">All types</option><option value="mcq">MCQ</option><option value="numeric">Numeric</option><option value="short">Short</option></select>
-      <input id="fSearch" type="search" placeholder="Search by stem (this page only)…" title="Stem search filters the current page. Narrow first by subject / difficulty / type for a focused result set.">
+      <select id="fSource"><option value="">All sources</option><option value="latihan">Latihan</option><option value="hq">HQ-authored</option></select>
       <span style="margin-left:auto"></span>
       <button id="newItemBtn" class="btn-primary">+ New EASE item</button>
     </div>
@@ -271,6 +275,7 @@
     document.getElementById('fSubject').addEventListener('change', resetAndReload);
     document.getElementById('fDifficulty').addEventListener('change', resetAndReload);
     document.getElementById('fType').addEventListener('change', resetAndReload);
+    document.getElementById('fSource').addEventListener('change', resetAndReload);
     // Search is client-side WITHIN the current page (cheap). Putting
     // a full-bank text search behind getDocs would need a build-time
     // index — out of scope here. Tooltip hints at the scope.
@@ -281,18 +286,21 @@
       const subj = document.getElementById('fSubject').value;
       const diff = document.getElementById('fDifficulty').value;
       const type = document.getElementById('fType').value;
-      return [subj, diff, type].join('|');
+      const src  = document.getElementById('fSource').value;
+      return [subj, diff, type, src].join('|');
     }
 
     function buildBaseQuery() {
       const subj = document.getElementById('fSubject').value;
       const diff = document.getElementById('fDifficulty').value;
       const type = document.getElementById('fType').value;
+      const src  = document.getElementById('fSource').value;
       const col = collection(window.db, 'ease_items');
       const constraints = [];
       if (subj) constraints.push(where('subjectId', '==', subj));
       if (diff) constraints.push(where('difficulty', '==', diff));
       if (type) constraints.push(where('type', '==', type));
+      if (src)  constraints.push(where('source', '==', src));
       // Stable sort by createdAt desc when present, falling back to
       // doc-id ordering for old docs without createdAt.
       constraints.push(orderBy('createdAt', 'desc'));
@@ -340,11 +348,14 @@
     function renderStats() {
       const s = statTotals || { total: '—', math: '—', english: '—', science: '—', easy: '—', medium: '—', hard: '—' };
       const filterPill = totalCount != null && (totalCount !== s.total)
-        ? `<span style="margin-left:8px;font-size:11px;font-weight:600;color:var(--accent-dk);background:var(--accent-2);padding:2px 8px;border-radius:99px;vertical-align:3px">filter ${totalCount}</span>` : '';
+        ? `<span style="font-size:11px;font-weight:600;color:var(--accent-dk);background:var(--accent-2);padding:2px 8px;border-radius:99px;">filter ${totalCount.toLocaleString()}</span>` : '';
       document.getElementById('statRow').innerHTML = `
         <div class="stat-card stat-card-wide">
-          <div class="stat-num">${s.total}${filterPill}</div>
-          <div class="stat-lbl">Total items in bank</div>
+          <div class="stat-lbl" style="margin:0 0 4px">Total in bank</div>
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <div class="stat-num">${s.total}</div>
+            ${filterPill}
+          </div>
         </div>
         <div class="stat-card">
           <div class="stat-lbl" style="margin:0 0 6px">By subject</div>
@@ -375,11 +386,13 @@
         const subj = document.getElementById('fSubject').value;
         const diff = document.getElementById('fDifficulty').value;
         const type = document.getElementById('fType').value;
+        const src  = document.getElementById('fSource').value;
         const col = collection(window.db, 'ease_items');
         const constraints = [];
         if (subj) constraints.push(where('subjectId', '==', subj));
         if (diff) constraints.push(where('difficulty', '==', diff));
         if (type) constraints.push(where('type', '==', type));
+        if (src)  constraints.push(where('source', '==', src));
         const c = await getCountFromServer(query(col, ...constraints));
         totalCount = c.data().count;
         renderStats();
@@ -424,11 +437,19 @@
 
       const box = document.getElementById('itemsBox');
       if (visible.length === 0) {
-        box.innerHTML = `<div class="empty"><div class="empty-title">No items</div>${
-          search
-            ? 'No match on this page. Searching is page-scoped — clear the search to browse all results, or narrow by subject/difficulty/type first.'
-            : 'Click + New EASE item to author one.'
-        }</div>`;
+        const hasFilter = !!(document.getElementById('fSubject').value
+          || document.getElementById('fDifficulty').value
+          || document.getElementById('fType').value
+          || document.getElementById('fSource').value);
+        let msg;
+        if (search) {
+          msg = 'No match on this page. Stem search is page-scoped — narrow by subject / difficulty / type first, or clear the search.';
+        } else if (hasFilter) {
+          msg = 'No items match these filters. Try clearing one.';
+        } else {
+          msg = 'No items in the bank yet. Use + New EASE item or run the latihan.id importer.';
+        }
+        box.innerHTML = `<div class="empty"><div class="empty-title">Nothing to show</div>${msg}</div>`;
         renderPager();
         return;
       }
@@ -440,18 +461,16 @@
         <table class="items">
           <colgroup>
             <col class="col-code"><col class="col-subject"><col class="col-difficulty">
-            <col class="col-type"><col class="col-stem"><col class="col-source">
-            <col class="col-actions">
+            <col class="col-type"><col class="col-stem"><col class="col-actions">
           </colgroup>
-          <thead><tr><th>Code</th><th>Subject</th><th>Difficulty</th><th>Type</th><th>Stem</th><th>Source</th><th></th></tr></thead>
+          <thead><tr><th>Code</th><th>Subject</th><th>Difficulty</th><th>Type</th><th class="th-stem">Stem</th><th></th></tr></thead>
           <tbody>${visible.map(it => `
             <tr>
               <td><span class="col-code-text">${escHtml(itemCode(it))}</span></td>
               <td>${subjectPill(it.subjectId)}</td>
               <td><span class="pill pill-${escAttr(it.difficulty)}">${escHtml(it.difficulty)}</span></td>
               <td>${typeIcon(it.type)}</td>
-              <td><div class="stem-cell">${stemPreviewHtml(it)}</div></td>
-              <td>${sourcePill(it)}</td>
+              <td class="td-stem"><div class="stem-cell">${stemPreviewHtml(it)}</div>${calBadge(it)}</td>
               <td style="text-align:right">
                 <div class="row-actions">
                   <button class="icon-btn" data-act="view" data-id="${escAttr(it.id)}" title="Preview" aria-label="Preview">${SVG_VIEW}</button>
@@ -488,14 +507,14 @@
       const t = map[type] || { ch: '?', label: type || 'unknown' };
       return `<span class="type-icon type-${escAttr(type || '')}" title="${escAttr(t.label)}">${escHtml(t.ch)}</span>`;
     }
-    // Source pill — latihan vs hq. If imported item has a calibrated
-    // flag (pilotPhase===false), prefer the calibrated check.
-    function sourcePill(it) {
+    // Calibrated badge — only rendered when the item has been
+    // calibrated (pilotPhase === false). Pilot is the default and
+    // carries no badge.
+    function calBadge(it) {
       if (it.pilotPhase === false) {
-        return '<span class="cal-check" title="Calibrated">✓</span>';
+        return '<span class="cal-badge" title="Calibrated">✓ calibrated</span>';
       }
-      const src = it.source === 'latihan' ? 'latihan' : 'hq';
-      return `<span class="src-pill src-${src}" title="Source: ${src}">${src}</span>`;
+      return '';
     }
 
     // Item code for the first column. Imported items expose the
