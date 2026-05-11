@@ -1,493 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings — Central Hub</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%237c3aed'/><text x='50' y='62' text-anchor='middle' font-size='34' font-family='DM Sans, sans-serif' font-weight='700' fill='%23fff'>C</text></svg>">
-
-<script src="firebase-config.js"></script>
-<script type="module" src="auth-guard.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EASE Bank Browser — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%236c5ce7'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    :root { --accent: #059669; --accent-dk: #047857; --accent-2: #ecfdf5; }
+    .hero { background: linear-gradient(140deg, #042f2e 0%, #064e3b 50%, #059669 100%); padding: 32px 40px; color: #fff; }
+    .hero-inner { max-width: 1400px; margin: 0 auto; }
+    .hero h1 { font-family: 'Lora', serif; font-size: 1.7rem; }
+    .hero p { color: rgba(255,255,255,.7); font-size: .88rem; max-width: 700px; }
 
+    .page-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 32px 80px; }
+    .access-warn { padding: 14px 18px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 10px; margin-bottom: 18px; font-size: 13px; }
 
-<style>
-  :root {
-    --accent:    #7c3aed;
-    --accent-dk: #6d28d9;
-    --accent-2:  #f5f3ff;
-  }
+    .layout { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
-  /* ── Settings layout ─────────────────────────────────────────── */
-  /* Navbar is position:sticky/relative in CH (not fixed) so no body padding-top needed */
-  .settings-wrap {
-    display: flex;
-    min-height: calc(100vh - 56px);
-    background: #f5f4f0;
-  }
+    /* Lessons sidebar */
+    .lesson-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; max-height: calc(100vh - 220px); overflow-y: auto; position: sticky; top: 12px; }
+    .lesson-panel h3 { font-family: 'Lora', serif; font-size: 1rem; margin-bottom: 10px; }
+    .lesson-filter { width: 100%; padding: 7px 10px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; }
+    .level-group { margin-top: 10px; }
+    .level-group-label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; padding: 0 4px; }
+    .lesson-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; gap: 8px; }
+    .lesson-item:hover { background: var(--paper); }
+    .lesson-item.is-active { background: var(--accent-2); color: var(--accent-dk); font-weight: 600; }
+    .lesson-item-code { font-size: 10px; color: var(--ink-3); font-family: monospace; }
 
-  .settings-sidebar {
-    width: 220px;
-    flex-shrink: 0;
-    background: #ffffff;
-    border-right: 1px solid #e8e6e0;
-    padding: 28px 12px;
-  }
-  .settings-sidebar-title {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: #a8a49c;
-    padding: 0 10px;
-    margin-bottom: 10px;
-  }
-  .settings-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 9px 12px;
-    border-radius: 9px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px;
-    font-weight: 500;
-    color: #5a5568;
-    cursor: pointer;
-    border: none;
-    background: transparent;
-    width: 100%;
-    text-align: left;
-    transition: background .15s, color .15s;
-    margin-bottom: 2px;
-  }
-  .settings-nav-item svg {
-    width: 16px; height: 16px; flex-shrink: 0;
-    color: #a8a49c; transition: color .15s;
-  }
-  .settings-nav-item:hover {
-    background: #f5f4f0;
-    color: #1a1a2e;
-  }
-  .settings-nav-item:hover svg { color: var(--accent); }
-  .settings-nav-item.active {
-    background: rgba(124, 58, 237, 0.10);
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .settings-nav-item.active svg { color: var(--accent); }
+    /* Main */
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .filters select, .filters input { padding: 8px 12px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .btn-primary { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { padding: 7px 14px; background: #fff; color: var(--ink); border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
 
-  .settings-progress-card {
-    margin: 0 10px 20px;
-    padding: 12px 14px;
-    background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(124,58,237,0.04));
-    border: 1px solid rgba(124,58,237,0.18);
-    border-radius: 12px;
-  }
-  .settings-progress-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--accent);
-    margin-bottom: 8px;
-  }
-  .settings-progress-bar-wrap {
-    background: rgba(124,58,237,0.15);
-    border-radius: 99px;
-    height: 6px;
-    margin-bottom: 5px;
-    overflow: hidden;
-  }
-  .settings-progress-bar {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), #a78bfa);
-    border-radius: 99px;
-    transition: width .5s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-  .settings-progress-pct {
-    font-size: 11px;
-    color: #8b80c8;
-    font-weight: 500;
-  }
+    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .stat-num { font-family: 'Lora', serif; font-size: 1.5rem; line-height: 1; }
+    .stat-lbl { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
 
-  .settings-content { flex: 1; min-width: 0; }
-  .settings-content-inner { padding: 36px 40px 80px; max-width: 740px; }
+    .question-list { display: flex; flex-direction: column; gap: 12px; }
+    .q-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .q-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .q-code { font-family: monospace; font-size: 11px; color: var(--ink-3); }
+    .pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+    .pill-mcq { background: #ede9fe; color: #6c5ce7; }
+    .pill-cmcq { background: #fce7f3; color: #be185d; }
+    .pill-short { background: #fef3c7; color: #92400e; }
+    .pill-essay { background: #dbeafe; color: #1e40af; }
+    .pill-checklist { background: #d1fae5; color: #047857; }
+    .pill-speaking { background: #fee2e2; color: #b91c1c; }
+    .pill-level-1 { background: #dcfce7; color: #166534; }
+    .pill-level-2 { background: #fef3c7; color: #92400e; }
+    .pill-level-3 { background: #fee2e2; color: #b91c1c; }
+    .pill-bonus { background: #fde68a; color: #78350f; }
+    .pill-grade { background: var(--paper); color: var(--ink-2); border: 1px solid var(--border); }
+    .pill-cog { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+    .pill-pct { background: var(--paper); color: var(--ink-2); font-family: monospace; }
 
-  .settings-panel { display: none; }
-  .settings-panel.active { display: block; }
+    .q-content { font-size: 14px; line-height: 1.55; color: var(--ink); }
+    .q-content img { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; }
+    .q-content p { margin: 6px 0; }
+    .q-answers { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+    .q-ans { padding: 7px 11px; border: 1px solid var(--border); border-radius: 7px; display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; }
+    .q-ans.is-correct { background: #ecfdf5; border-color: #6ee7b7; }
+    .q-ans .ans-letter { font-weight: 700; font-family: monospace; min-width: 22px; }
+    .q-ans .ans-content { flex: 1; }
+    .q-ans .ans-correct-tag { font-size: 11px; color: #047857; font-weight: 600; }
+    .q-key { margin-top: 10px; font-size: 13px; }
+    .q-key b { color: var(--ink-2); }
+    .q-expl { margin-top: 10px; padding: 10px 12px; background: var(--paper); border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+    .q-expl b { color: var(--ink); }
+    .q-expl-toggle { font-size: 12px; color: var(--accent-dk); cursor: pointer; user-select: none; }
 
-  .settings-section-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #1a1a2e;
-    margin-bottom: 4px;
-    font-family: 'DM Sans', sans-serif;
-  }
-  .settings-section-sub {
-    font-size: 13.5px;
-    color: #8b8b9e;
-    margin-bottom: 28px;
-    line-height: 1.5;
-  }
+    .pagination { display: flex; gap: 6px; justify-content: center; margin-top: 18px; align-items: center; }
+    .pagination button { padding: 6px 12px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); background: #fff; border-radius: 7px; cursor: pointer; }
+    .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+    .pagination .page-info { font-size: 13px; color: var(--ink-2); padding: 0 8px; }
 
-  .settings-card {
-    background: #ffffff;
-    border: 1px solid #e8e6e0;
-    border-radius: 16px;
-    padding: 24px 26px;
-    margin-bottom: 16px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-  }
-  .settings-card-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.1px;
-    text-transform: uppercase;
-    color: #a8a49c;
-    margin-bottom: 14px;
-  }
-
-  /* Profile photo uploader */
-  .photo-uploader {
-    display: flex;
-    align-items: center;
-    gap: 22px;
-  }
-  .photo-preview {
-    width: 88px;
-    height: 88px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), #0891b2);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Lora', serif;
-    font-size: 30px;
-    font-weight: 600;
-    background-size: cover;
-    background-position: center;
-    flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.18);
-  }
-  .photo-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .photo-action-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .photo-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: #fafaf8;
-    border: 1.5px solid #e0ddd6;
-    border-radius: 8px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    color: #1a1a2e;
-    cursor: pointer;
-    transition: all .15s;
-  }
-  .photo-btn:hover { background: #f3f0e8; border-color: var(--accent); color: var(--accent); }
-  .photo-btn.danger { color: #dc2626; }
-  .photo-btn.danger:hover { background: rgba(220,38,38,0.06); border-color: rgba(220,38,38,0.4); color: #dc2626; }
-  .photo-hint {
-    font-size: 12px;
-    color: #8b8b9e;
-  }
-
-  .settings-input {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1.5px solid #e0ddd6;
-    border-radius: 10px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    color: #1a1a2e;
-    background: #fafaf8;
-    outline: none;
-    transition: border-color .15s, box-shadow .15s;
-    box-sizing: border-box;
-  }
-  .settings-input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
-    background: #fff;
-  }
-  .settings-input::placeholder { color: #b8b4ac; }
-  .settings-input:disabled {
-    background: #f0efeb;
-    color: #a8a49c;
-    cursor: not-allowed;
-  }
-  .settings-input-label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    color: #5a5568;
-    margin-bottom: 6px;
-  }
-  .settings-input-wrap { margin-bottom: 16px; }
-  .settings-input-wrap:last-child { margin-bottom: 0; }
-
-  .settings-textarea {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1.5px solid #e0ddd6;
-    border-radius: 10px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    color: #1a1a2e;
-    background: #fafaf8;
-    outline: none;
-    resize: vertical;
-    min-height: 80px;
-    transition: border-color .15s, box-shadow .15s;
-    box-sizing: border-box;
-  }
-  .settings-textarea:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
-    background: #fff;
-  }
-  .settings-textarea::placeholder { color: #b8b4ac; }
-  .settings-char-count {
-    font-size: 11px;
-    color: #a8a49c;
-    text-align: right;
-    margin-top: 4px;
-  }
-
-  .settings-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 16px;
-  }
-  .settings-row .settings-input-wrap { margin-bottom: 0; }
-
-  .settings-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 10px 22px;
-    background: var(--accent);
-    border: none;
-    border-radius: 10px;
-    color: #fff;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all .2s;
-    margin-top: 4px;
-  }
-  .settings-save-btn:hover:not(:disabled) {
-    filter: brightness(1.08);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(124,58,237,0.35);
-  }
-  .settings-save-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-  .settings-save-btn svg { width: 15px; height: 15px; }
-
-  .settings-msg {
-    font-size: 12.5px;
-    margin-top: 10px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    display: none;
-    line-height: 1.4;
-  }
-  .settings-msg.ok   { display:block; background:rgba(5,150,105,.1); color:#059669; border:1px solid rgba(5,150,105,.2); }
-  .settings-msg.err  { display:block; background:rgba(220,38,38,.08); color:#dc2626; border:1px solid rgba(220,38,38,.18); }
-
-  #settingsToast {
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
-    z-index: 9999;
-    padding: 11px 18px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    font-family: 'DM Sans', sans-serif;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.13);
-    opacity: 0;
-    transform: translateY(10px);
-    transition: opacity .22s, transform .22s;
-    pointer-events: none;
-  }
-  #settingsToast.show { opacity: 1; transform: translateY(0); }
-  #settingsToast.ok  { background:#059669; color:#fff; }
-  #settingsToast.err { background:#dc2626; color:#fff; }
-
-  /* Read-only chips for Specialty & Roles panel */
-  .readonly-chip-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    background: #fafaf8;
-    border: 1.5px solid #e0ddd6;
-    border-radius: 10px;
-    margin-bottom: 10px;
-  }
-  .readonly-chip-row:last-child { margin-bottom: 0; }
-  .readonly-chip-icon {
-    width: 18px; height: 18px; flex-shrink: 0;
-    color: var(--accent);
-  }
-  .readonly-chip-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    color: #a8a49c;
-    min-width: 92px;
-  }
-  .readonly-chip-value {
-    flex: 1;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: #1a1a2e;
-  }
-  .readonly-chip-value.empty { color: #b8b4ac; font-weight: 400; font-style: italic; }
-  .pill-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .pill-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 11px;
-    border-radius: 99px;
-    font-size: 12px;
-    font-weight: 600;
-    background: rgba(124,58,237,0.10);
-    color: var(--accent);
-    border: 1px solid rgba(124,58,237,0.25);
-  }
-  .pill-chip.subject {
-    background: rgba(8,145,178,0.10);
-    color: #0891b2;
-    border-color: rgba(8,145,178,0.25);
-  }
-
-  /* Password collapse */
-  .pw-toggle {
-    font-size: 13px;
-    color: #8b8b9e;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: color .15s;
-    user-select: none;
-    margin-bottom: 12px;
-  }
-  .pw-toggle:hover { color: var(--accent); }
-  .pw-fields { display: none; }
-  .pw-fields.open { display: block; }
-
-  /* Notification toggles */
-  .notif-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 0;
-    border-bottom: 1px solid #f0efeb;
-  }
-  .notif-row:last-child { border-bottom: none; }
-  .notif-row-info { flex: 1; min-width: 0; }
-  .notif-row-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #1a1a2e;
-    margin-bottom: 2px;
-  }
-  .notif-row-sub {
-    font-size: 12px;
-    color: #a8a49c;
-  }
-  .toggle-switch {
-    position: relative;
-    width: 42px;
-    height: 24px;
-    flex-shrink: 0;
-    margin-left: 16px;
-  }
-  .toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
-  }
-  .toggle-track {
-    position: absolute;
-    inset: 0;
-    background: #ddd;
-    border-radius: 99px;
-    cursor: pointer;
-    transition: background .2s;
-  }
-  .toggle-track::after {
-    content: '';
-    position: absolute;
-    width: 18px; height: 18px;
-    left: 3px; top: 3px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform .2s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  }
-  .toggle-switch input:checked + .toggle-track { background: var(--accent); }
-  .toggle-switch input:checked + .toggle-track::after { transform: translateX(18px); }
-
-  /* Mobile tabs */
-  .settings-mobile-tabs {
-    display: none;
-    background: #fff;
-    border-bottom: 1px solid #e8e6e0;
-    overflow-x: auto;
-    padding: 0 16px;
-    gap: 0;
-    scrollbar-width: none;
-  }
-  .settings-mobile-tabs::-webkit-scrollbar { display: none; }
-  .settings-mobile-tab {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 13px 16px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    color: #a8a49c;
-    border: none;
-    background: none;
-    cursor: pointer;
-    white-space: nowrap;
-    border-bottom: 2px solid transparent;
-    transition: color .15s, border-color .15s;
-  }
-  .settings-mobile-tab svg { width: 14px; height: 14px; }
-  .settings-mobile-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-
-  @media (max-width: 768px) {
-    .settings-sidebar { display: none; }
-    .settings-mobile-tabs { display: flex; }
-    .settings-content-inner { padding: 20px 16px 60px; max-width: none; }
-  }
-</style>
+    .empty { text-align: center; padding: 60px 20px; color: var(--ink-3); }
+    .empty-title { font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+    .loading { padding: 30px; text-align: center; color: var(--ink-3); font-size: 13px; }
+    .err { padding: 14px 18px; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 10px; font-size: 13px; }
+  </style>
 </head>
 <body>
-<style>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <style>
   .btn-my-tasks {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.82rem;
@@ -3350,594 +2955,365 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 </script>
 
 
-<div class="settings-wrap">
-  <aside class="settings-sidebar">
-    <div class="settings-progress-card" id="sProgressCard" style="display:none;">
-      <div class="settings-progress-label">Profile Completeness</div>
-      <div class="settings-progress-bar-wrap">
-        <div class="settings-progress-bar" id="sProgressBar" style="width:0%"></div>
-      </div>
-      <div class="settings-progress-pct" id="sProgressPct">0% complete</div>
+  <header class="hero">
+    <div class="hero-inner">
+      <div style="font-size:.7rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.45); margin-bottom:8px;">External Question Bank</div>
+      <h1>EASE Bank Browser — latihan.id</h1>
+      <p>Live read-only window into the latihan.id question archive. 49 lessons across SD / SMP / SMA / A-LEVEL; 12k+ Y7–Y9 items eligible for EASE Growth import. Bearer token stays server-side; this page goes through the <code>easeBankProxy</code> Cloud Function.</p>
     </div>
+  </header>
 
-    <div class="settings-sidebar-title">Account</div>
-    <button class="settings-nav-item active" data-panel="personal">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      Personal Info
-    </button>
-    <button class="settings-nav-item" data-panel="specialty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
-      Specialty &amp; Roles
-    </button>
-    <button class="settings-nav-item" data-panel="account">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      Account &amp; Security
-    </button>
-    <button class="settings-nav-item" data-panel="notifications">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Notifications
-    </button>
-  </aside>
+  <main class="page-wrap">
+    <a href="index" style="font-size:.86rem; color:var(--ink-3); text-decoration:none;">← Back to Central Hub</a>
+    <div id="accessWarn" class="access-warn" hidden style="margin-top:14px"></div>
 
-  <div class="settings-mobile-tabs" id="sMobileTabs">
-    <button class="settings-mobile-tab active" data-panel="personal">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      Personal
-    </button>
-    <button class="settings-mobile-tab" data-panel="specialty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
-      Specialty
-    </button>
-    <button class="settings-mobile-tab" data-panel="account">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      Account
-    </button>
-    <button class="settings-mobile-tab" data-panel="notifications">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Notifs
-    </button>
-  </div>
+    <div class="layout" style="margin-top:18px">
+      <!-- Lessons sidebar -->
+      <aside class="lesson-panel">
+        <h3>Lessons</h3>
+        <input id="lessonFilter" class="lesson-filter" type="text" placeholder="Filter lessons…">
+        <div id="lessonList" class="loading">Loading…</div>
+      </aside>
 
-  <main class="settings-content">
-  <div class="settings-content-inner">
-
-    <!-- Personal Info -->
-    <div class="settings-panel active" id="sPanel-personal">
-      <div class="settings-section-title">Personal Info</div>
-      <div class="settings-section-sub">Your name, photo, and contact information visible across CentralHub.</div>
-
-      <div class="settings-card">
-        <div class="settings-card-label">Profile Photo</div>
-        <div class="photo-uploader">
-          <div class="photo-preview" id="sPhotoPreview"></div>
-          <div class="photo-actions">
-            <div class="photo-action-row">
-              <input type="file" id="sPhotoInput" accept="image/png,image/jpeg,image/webp" style="display:none;">
-              <button type="button" class="photo-btn" id="sPhotoUploadBtn">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Upload photo
-              </button>
-              <button type="button" class="photo-btn danger" id="sPhotoRemoveBtn" style="display:none;">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
-                Remove
-              </button>
-            </div>
-            <div class="photo-hint">PNG, JPG or WebP · max 5 MB</div>
-            <div class="settings-msg" id="sPhotoMsg"></div>
-          </div>
+      <!-- Main viewer -->
+      <section>
+        <div id="lessonHeader" style="margin-bottom:10px; font-size:13px; color:var(--ink-3);">
+          Select a lesson on the left to browse questions.
         </div>
-      </div>
 
-      <div class="settings-card">
-        <div class="settings-card-label">Name &amp; Identity</div>
-        <div class="settings-input-wrap">
-          <label class="settings-input-label" for="sDisplayName">Full name <span style="color:#dc2626">*</span></label>
-          <input type="text" class="settings-input" id="sDisplayName" placeholder="Your full name">
+        <div class="filters" id="filters" hidden>
+          <select id="gradeFilter">
+            <option value="">All grades (client filter)</option>
+          </select>
+          <select id="typeFilter">
+            <option value="">All question types</option>
+            <option>Multiple Choice</option>
+            <option>Complex Multiple Choice</option>
+            <option>Short Answer</option>
+            <option>Essay</option>
+            <option>Checklist</option>
+            <option>Speaking</option>
+          </select>
+          <select id="yearFilter">
+            <option value="">All academic years</option>
+          </select>
+          <select id="perPage">
+            <option value="10">10 / page</option>
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+            <option value="100">100 / page</option>
+          </select>
+          <button class="btn-primary" id="applyBtn">Apply</button>
+          <button class="btn-secondary" id="resetBtn">Reset</button>
         </div>
-        <div class="settings-input-wrap">
-          <label class="settings-input-label" for="sTitle">Title / Position</label>
-          <input type="text" class="settings-input" id="sTitle" placeholder="e.g. Director of Secondary Schools, Math Specialist">
-        </div>
-        <div class="settings-input-wrap">
-          <label class="settings-input-label" for="sBio">Bio / Tagline</label>
-          <textarea class="settings-textarea" id="sBio" placeholder="e.g. HQ Math Specialist supporting Cambridge programmes across the network…" maxlength="200"></textarea>
-          <div class="settings-char-count"><span id="sBioCount">0</span>/200</div>
-        </div>
-      </div>
 
-      <div class="settings-card">
-        <div class="settings-card-label">Contact</div>
-        <div class="settings-row">
-          <div class="settings-input-wrap">
-            <label class="settings-input-label" for="sPhone">Phone number</label>
-            <input type="tel" class="settings-input" id="sPhone" placeholder="+62 xxx xxx xxxx">
-          </div>
-          <div class="settings-input-wrap">
-            <label class="settings-input-label" for="sLinkedin">LinkedIn profile</label>
-            <input type="url" class="settings-input" id="sLinkedin" placeholder="https://linkedin.com/in/username">
-          </div>
-        </div>
-      </div>
+        <div class="stat-row" id="statRow" hidden></div>
 
-      <div>
-        <button class="settings-save-btn" id="sPersonalBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Save Personal Info
-        </button>
-        <div class="settings-msg" id="sPersonalMsg"></div>
-      </div>
+        <div id="content"></div>
+      </section>
     </div>
-
-    <!-- Specialty & Roles -->
-    <div class="settings-panel" id="sPanel-specialty">
-      <div class="settings-section-title">Specialty &amp; Roles</div>
-      <div class="settings-section-sub">Your CentralHub role, sub-roles, and subject specialties. Managed by central_admin.</div>
-
-      <div class="settings-card">
-        <div class="settings-card-label">Your access</div>
-
-        <div class="readonly-chip-row">
-          <svg class="readonly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><circle cx="12" cy="12" r="10"/></svg>
-          <div class="readonly-chip-label">Role</div>
-          <div class="readonly-chip-value" id="sRoRole">—</div>
-        </div>
-
-        <div class="readonly-chip-row">
-          <svg class="readonly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <div class="readonly-chip-label">Sub-roles</div>
-          <div class="readonly-chip-value pill-chips" id="sRoSubRoles">—</div>
-        </div>
-
-        <div class="readonly-chip-row">
-          <svg class="readonly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-          <div class="readonly-chip-label">Subjects</div>
-          <div class="readonly-chip-value pill-chips" id="sRoSubjects">—</div>
-        </div>
-
-        <div style="font-size:12.5px;color:#a8a49c;margin-top:14px;line-height:1.5;">
-          To request changes to your role, sub-roles or subject assignments, contact a central_admin to edit your record from <a href="console" style="color:var(--accent);text-decoration:none;font-weight:600">/console</a>.
-        </div>
-      </div>
-    </div>
-
-    <!-- Account & Security -->
-    <div class="settings-panel" id="sPanel-account">
-      <div class="settings-section-title">Account &amp; Security</div>
-      <div class="settings-section-sub">Your login credentials.</div>
-
-      <div class="settings-card">
-        <div class="settings-card-label">Email</div>
-        <div class="settings-input-wrap">
-          <label class="settings-input-label">Email address</label>
-          <input type="email" class="settings-input" id="sEmail" disabled>
-        </div>
-      </div>
-
-      <div class="settings-card" id="sPwCard" style="display:none;">
-        <div class="settings-card-label">Password</div>
-        <div class="pw-toggle" id="sPwToggle">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="6 9 12 15 18 9"/></svg>
-          Change password
-        </div>
-        <div class="pw-fields" id="sPwFields">
-          <div class="settings-input-wrap">
-            <label class="settings-input-label" for="sPwCurrent">Current password</label>
-            <input type="password" class="settings-input" id="sPwCurrent" placeholder="Enter current password">
-          </div>
-          <div class="settings-input-wrap">
-            <label class="settings-input-label" for="sPwNew">New password</label>
-            <input type="password" class="settings-input" id="sPwNew" placeholder="Minimum 6 characters">
-          </div>
-          <div class="settings-input-wrap">
-            <label class="settings-input-label" for="sPwConfirm">Confirm new password</label>
-            <input type="password" class="settings-input" id="sPwConfirm" placeholder="Repeat new password">
-          </div>
-          <button class="settings-save-btn" id="sPwBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            Update Password
-          </button>
-          <div class="settings-msg" id="sPwMsg"></div>
-        </div>
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-card-label">Session</div>
-        <button id="sSignOutBtn" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:rgba(220,38,38,0.08);border:1.5px solid rgba(220,38,38,0.2);border-radius:10px;color:#dc2626;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .15s;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign Out
-        </button>
-      </div>
-    </div>
-
-    <!-- Notifications -->
-    <div class="settings-panel" id="sPanel-notifications">
-      <div class="settings-section-title">Notifications</div>
-      <div class="settings-section-sub">Choose which updates you'd like to receive on Central Hub.</div>
-
-      <div class="settings-card">
-        <div class="settings-card-label">In-App Notifications</div>
-        <div class="notif-row">
-          <div class="notif-row-info">
-            <div class="notif-row-title">New Announcements</div>
-            <div class="notif-row-sub">Get notified when a new announcement is posted.</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="sNotifAnnouncements" checked>
-            <div class="toggle-track"></div>
-          </label>
-        </div>
-        <div class="notif-row">
-          <div class="notif-row-info">
-            <div class="notif-row-title">Message Board</div>
-            <div class="notif-row-sub">Show badge when new topics are posted.</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="sNotifMessages" checked>
-            <div class="toggle-track"></div>
-          </label>
-        </div>
-        <div class="notif-row">
-          <div class="notif-row-info">
-            <div class="notif-row-title">Calendar Reminders</div>
-            <div class="notif-row-sub">Alerts for upcoming events on the academic + Cambridge calendar.</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="sNotifCalendar" checked>
-            <div class="toggle-track"></div>
-          </label>
-        </div>
-        <div class="notif-row">
-          <div class="notif-row-info">
-            <div class="notif-row-title">Feedback &amp; Surveys</div>
-            <div class="notif-row-sub">Notifications for new survey responses and feedback submissions.</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="sNotifFeedback" checked>
-            <div class="toggle-track"></div>
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <button class="settings-save-btn" id="sNotifBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Save Preferences
-        </button>
-        <div class="settings-msg" id="sNotifMsg"></div>
-      </div>
-    </div>
-
-  </div>
   </main>
-</div>
 
-<script type="module">
-import { signOut, updatePassword, updateProfile, EmailAuthProvider, reauthenticateWithCredential }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, setDoc }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+  <script type="module">
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 
-const SUBJECT_LABELS = {
-  math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
-  physics: 'Physics', science: 'Science', english: 'English',
-  bahasa: 'Bahasa', religion: 'Religion',
-};
-const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
+    let allLessons = [];
+    let activeLesson = null;
+    let currentPage = 1;
+    let lastTotal = 0;
 
-function calcProgress(p) {
-  let score = 0;
-  if (p.displayName?.trim())                                 score += 25;
-  if (p.title?.trim())                                       score += 15;
-  if (p.bio?.trim())                                         score += 15;
-  if (p.phone?.trim())                                       score += 15;
-  if (p.linkedin_url?.trim())                                score += 10;
-  if (p.photoURL)                                            score += 20;
-  return Math.min(score, 100);
-}
-function renderProgress(p) {
-  const pct = calcProgress(p);
-  const bar  = document.getElementById('sProgressBar');
-  const pctEl = document.getElementById('sProgressPct');
-  const card = document.getElementById('sProgressCard');
-  if (bar) bar.style.width = pct + '%';
-  if (pctEl) pctEl.textContent = pct + '% complete';
-  if (card) card.style.display = '';
-}
+    const $ = (id) => document.getElementById(id);
 
-function switchPanel(panelKey) {
-  document.querySelectorAll('.settings-nav-item').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.panel === panelKey);
-  });
-  document.querySelectorAll('.settings-mobile-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.panel === panelKey);
-  });
-  document.querySelectorAll('.settings-panel').forEach(panel => {
-    panel.classList.toggle('active', panel.id === 'sPanel-' + panelKey);
-  });
-}
-document.querySelectorAll('.settings-nav-item, .settings-mobile-tab').forEach(btn => {
-  btn.addEventListener('click', () => switchPanel(btn.dataset.panel));
-});
-const hashPanel = window.location.hash.replace('#', '');
-if (['personal','specialty','account','notifications'].includes(hashPanel)) {
-  switchPanel(hashPanel);
-}
-
-document.getElementById('sBio').addEventListener('input', function() {
-  document.getElementById('sBioCount').textContent = this.value.length;
-});
-
-document.getElementById('sPwToggle').addEventListener('click', function() {
-  const fields = document.getElementById('sPwFields');
-  const open = fields.classList.toggle('open');
-  const icon = this.querySelector('svg');
-  if (icon) icon.style.transform = open ? 'rotate(180deg)' : '';
-  this.lastChild.textContent = open ? ' Hide password change' : ' Change password';
-});
-
-let _toastTimer = null;
-function showToast(text, type = 'ok') {
-  const el = document.getElementById('settingsToast');
-  if (!el) return;
-  clearTimeout(_toastTimer);
-  el.textContent = text;
-  el.className = type;
-  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
-  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
-}
-function showMsg(id, text, type) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className = 'settings-msg ' + type;
-  if (type === 'ok') setTimeout(() => { el.className = 'settings-msg'; }, 3000);
-}
-
-// Wait for auth-guard to finish, then wire everything up.
-function ready(fn) {
-  if (window.currentUser && window.userProfile) { fn(); return; }
-  document.addEventListener('authReady', fn, { once: true });
-}
-
-ready(async () => {
-  const user    = window.currentUser;
-  const profile = window.userProfile;
-  const db      = window.db;
-  const auth    = window.auth;
-  const storage = window.storage;
-
-  renderProgress(profile);
-
-  // Specialty & Roles
-  const isAdmin = profile.role_centralhub === 'central_admin';
-  document.getElementById('sRoRole').textContent = isAdmin ? 'Central Admin' : 'Central User';
-
-  const subRolesEl = document.getElementById('sRoSubRoles');
-  const subRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
-  subRolesEl.innerHTML = '';
-  if (!subRoles.length) {
-    subRolesEl.textContent = 'None assigned';
-    subRolesEl.classList.add('empty');
-  } else {
-    subRoles.forEach(key => {
-      const chip = document.createElement('span');
-      chip.className = 'pill-chip';
-      chip.textContent = SUB_ROLE_LABELS[key] || key;
-      subRolesEl.appendChild(chip);
-    });
-  }
-
-  const subjectsEl = document.getElementById('sRoSubjects');
-  const subjects = Array.isArray(profile.ch_subjects) ? profile.ch_subjects : [];
-  subjectsEl.innerHTML = '';
-  if (!subjects.length) {
-    subjectsEl.textContent = isAdmin || subRoles.includes('director')
-      ? 'All subjects (admin/director bypass)'
-      : 'None — request from central_admin';
-    subjectsEl.classList.add('empty');
-  } else {
-    subjects.forEach(key => {
-      const chip = document.createElement('span');
-      chip.className = 'pill-chip subject';
-      chip.textContent = SUBJECT_LABELS[key] || key;
-      subjectsEl.appendChild(chip);
-    });
-  }
-
-  // Personal Info inputs
-  document.getElementById('sDisplayName').value = profile.displayName || '';
-  document.getElementById('sTitle').value       = profile.title || '';
-  document.getElementById('sBio').value         = profile.bio || '';
-  document.getElementById('sBioCount').textContent = (profile.bio || '').length;
-  document.getElementById('sPhone').value       = profile.phone || '';
-  document.getElementById('sLinkedin').value    = profile.linkedin_url || '';
-
-  // Profile photo render + upload
-  const photoPreviewEl = document.getElementById('sPhotoPreview');
-  const photoRemoveBtn = document.getElementById('sPhotoRemoveBtn');
-  function renderPhotoPreview(url, fallbackName) {
-    if (url) {
-      photoPreviewEl.style.backgroundImage = `url("${url}")`;
-      photoPreviewEl.textContent = '';
-      photoRemoveBtn.style.display = '';
-    } else {
-      photoPreviewEl.style.backgroundImage = '';
-      const initial = (fallbackName || user.email || '?').trim().charAt(0).toUpperCase();
-      photoPreviewEl.textContent = initial;
-      photoRemoveBtn.style.display = 'none';
+    function escapeHtml(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+      );
     }
-  }
-  renderPhotoPreview(profile.photoURL || user.photoURL || '', profile.displayName);
 
-  document.getElementById('sPhotoUploadBtn').addEventListener('click', () => {
-    document.getElementById('sPhotoInput').click();
-  });
-  document.getElementById('sPhotoInput').addEventListener('change', async (ev) => {
-    const file = ev.target.files && ev.target.files[0];
-    if (!file) return;
-    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
-      showMsg('sPhotoMsg', 'Please pick a PNG, JPG or WebP image.', 'err');
-      ev.target.value = '';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      showMsg('sPhotoMsg', 'Image is larger than 5 MB.', 'err');
-      ev.target.value = '';
-      return;
-    }
-    showMsg('sPhotoMsg', 'Uploading…', 'ok');
-    try {
-      // Mirror the legacy auth-guard modal upload path so the existing
-      // Storage rule for users/{uid}/avatar still applies.
-      const sRef = storageRef(storage, `users/${user.uid}/avatar`);
-      const snap = await uploadBytes(sRef, file, { contentType: file.type });
-      const url = await getDownloadURL(snap.ref);
-      await setDoc(doc(db, 'users', user.uid), { photoURL: url }, { merge: true });
-      try { await updateProfile(user, { photoURL: url }); } catch { /* non-fatal */ }
-      window.userProfile = { ...window.userProfile, photoURL: url };
-      renderPhotoPreview(url, profile.displayName);
-      showMsg('sPhotoMsg', 'Photo updated ✓', 'ok');
-      renderProgress(window.userProfile);
-    } catch (e) {
-      console.warn('photo upload failed', e);
-      showMsg('sPhotoMsg', 'Upload failed. Try again.', 'err');
-    } finally {
-      ev.target.value = '';
-    }
-  });
-  document.getElementById('sPhotoRemoveBtn').addEventListener('click', async () => {
-    if (!window.userProfile?.photoURL) return;
-    showMsg('sPhotoMsg', 'Removing…', 'ok');
-    try {
-      try { await deleteObject(storageRef(storage, `users/${user.uid}/avatar`)); }
-      catch (e) { console.warn('photo delete (storage) failed', e); }
-      await setDoc(doc(db, 'users', user.uid), { photoURL: '' }, { merge: true });
-      try { await updateProfile(user, { photoURL: '' }); } catch { /* non-fatal */ }
-      window.userProfile = { ...window.userProfile, photoURL: '' };
-      renderPhotoPreview('', profile.displayName);
-      showMsg('sPhotoMsg', 'Photo removed ✓', 'ok');
-      renderProgress(window.userProfile);
-    } catch (e) {
-      showMsg('sPhotoMsg', 'Failed to remove. Try again.', 'err');
-    }
-  });
-
-  document.getElementById('sPersonalBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('sPersonalBtn');
-    const displayName = document.getElementById('sDisplayName').value.trim();
-    const title       = document.getElementById('sTitle').value.trim();
-    const bio         = document.getElementById('sBio').value.trim();
-    const phone       = document.getElementById('sPhone').value.trim();
-    const linkedinRaw = document.getElementById('sLinkedin').value.trim();
-
-    if (!displayName) { showMsg('sPersonalMsg', 'Full name is required.', 'err'); return; }
-
-    let linkedin_url = '';
-    if (linkedinRaw) {
-      const candidate = /^https?:\/\//i.test(linkedinRaw) ? linkedinRaw : 'https://' + linkedinRaw;
-      try {
-        const u = new URL(candidate);
-        if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) {
-          showMsg('sPersonalMsg', 'LinkedIn URL must be on linkedin.com.', 'err');
-          return;
+    // Allowlist sanitizer for upstream HTML — keep <p>, <span>, <img>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <table>, <tr>, <td>, <th>
+    function sanitizeHtml(html) {
+      if (!html) return "";
+      const tpl = document.createElement("template");
+      tpl.innerHTML = String(html);
+      const ALLOWED = new Set(["P","SPAN","IMG","BR","STRONG","EM","B","I","U","UL","OL","LI","TABLE","TR","TD","TH","TBODY","THEAD","SUP","SUB","DIV"]);
+      const ALLOWED_ATTRS = { IMG: new Set(["src","alt","width","height"]), "*": new Set([]) };
+      function walk(node) {
+        for (const child of [...node.childNodes]) {
+          if (child.nodeType === 1) {
+            if (!ALLOWED.has(child.tagName)) {
+              const text = document.createTextNode(child.textContent || "");
+              child.replaceWith(text);
+              continue;
+            }
+            const allowedAttrs = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS["*"];
+            for (const attr of [...child.attributes]) {
+              if (!allowedAttrs.has(attr.name)) child.removeAttribute(attr.name);
+            }
+            if (child.tagName === "IMG") {
+              const src = child.getAttribute("src") || "";
+              if (!/^https?:\/\//i.test(src)) child.removeAttribute("src");
+            }
+            walk(child);
+          }
         }
-        linkedin_url = u.toString();
-      } catch {
-        showMsg('sPersonalMsg', 'LinkedIn URL is not valid.', 'err');
+      }
+      walk(tpl.content);
+      return tpl.innerHTML;
+    }
+
+    function pillForType(label) {
+      const map = {
+        "Multiple Choice": "pill-mcq",
+        "Complex Multiple Choice": "pill-cmcq",
+        "Short Answer": "pill-short",
+        "Essay": "pill-essay",
+        "Checklist": "pill-checklist",
+        "Speaking": "pill-speaking",
+      };
+      return map[label] || "pill-mcq";
+    }
+
+    window.addEventListener("authReady", async () => {
+      const profile = window.userProfile;
+      const isAdmin = profile?.role_centralhub === "central_admin";
+      const subRoles = profile?.ch_sub_roles || [];
+      const allowed = isAdmin || subRoles.includes("director") || subRoles.includes("coordinator");
+      if (!allowed) {
+        $("accessWarn").hidden = false;
+        $("accessWarn").textContent = "Requires central_admin, director, or coordinator.";
         return;
       }
-    }
 
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        displayName, title, bio, phone, linkedin_url,
-      }, { merge: true });
-      if (user.displayName !== displayName) {
-        try { await updateProfile(user, { displayName }); } catch { /* non-fatal */ }
+      const functions = getFunctions(window.firebaseApp, "asia-southeast1");
+      const proxy = httpsCallable(functions, "easeBankProxy");
+
+      async function call(path, query) {
+        try {
+          const res = await proxy({ path, query: query || {} });
+          return res.data;
+        } catch (err) {
+          throw new Error(err?.message || "Proxy call failed");
+        }
       }
-      window.userProfile = { ...window.userProfile, displayName, title, bio, phone, linkedin_url };
-      renderProgress(window.userProfile);
-      showMsg('sPersonalMsg', 'Personal info saved ✓', 'ok');
-    } catch (e) {
-      console.warn('personal save failed', e);
-      showMsg('sPersonalMsg', 'Failed to save. Try again.', 'err');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Personal Info';
-    }
-  });
 
-  // Account & Security
-  document.getElementById('sEmail').value = user.email || '';
+      // Load lessons
+      try {
+        const data = await call("/ease/lessons");
+        allLessons = data.lessons || [];
+        renderLessons();
+      } catch (err) {
+        $("lessonList").innerHTML = `<div class="err">${escapeHtml(err.message)}</div>`;
+        return;
+      }
 
-  const isPasswordUser = user.providerData.some(p => p.providerId === 'password');
-  if (isPasswordUser) document.getElementById('sPwCard').style.display = '';
+      $("lessonFilter").addEventListener("input", renderLessons);
+      $("applyBtn").addEventListener("click", () => { currentPage = 1; loadQuestions(); });
+      $("resetBtn").addEventListener("click", () => {
+        $("gradeFilter").value = "";
+        $("typeFilter").value = "";
+        $("yearFilter").value = "";
+        $("perPage").value = "25";
+        currentPage = 1;
+        loadQuestions();
+      });
 
-  document.getElementById('sPwBtn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('sPwBtn');
-    const current = document.getElementById('sPwCurrent').value;
-    const newPw    = document.getElementById('sPwNew').value;
-    const confirm  = document.getElementById('sPwConfirm').value;
-    if (!current) { showMsg('sPwMsg', 'Enter your current password.', 'err'); return; }
-    if (newPw.length < 6) { showMsg('sPwMsg', 'New password must be at least 6 characters.', 'err'); return; }
-    if (newPw !== confirm) { showMsg('sPwMsg', 'Passwords do not match.', 'err'); return; }
-    btn.disabled = true; btn.textContent = 'Updating…';
-    try {
-      const credential = EmailAuthProvider.credential(user.email, current);
-      await reauthenticateWithCredential(user, credential);
-      await updatePassword(user, newPw);
-      document.getElementById('sPwCurrent').value = '';
-      document.getElementById('sPwNew').value = '';
-      document.getElementById('sPwConfirm').value = '';
-      document.getElementById('sPwFields').classList.remove('open');
-      showMsg('sPwMsg', 'Password updated ✓', 'ok');
-    } catch (e) {
-      const msg = e.code === 'auth/wrong-password' ? 'Current password is incorrect.' : 'Failed to update. Try again.';
-      showMsg('sPwMsg', msg, 'err');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Update Password';
-    }
-  });
+      function renderLessons() {
+        const q = $("lessonFilter").value.toLowerCase();
+        const filtered = allLessons.filter((l) =>
+          !q ||
+          (l.name || "").toLowerCase().includes(q) ||
+          (l.code || "").toLowerCase().includes(q) ||
+          (l.level || "").toLowerCase().includes(q)
+        );
+        const byLevel = {};
+        for (const l of filtered) {
+          const key = l.level || "(none)";
+          (byLevel[key] = byLevel[key] || []).push(l);
+        }
+        const order = ["SD", "SMP", "SMA", "A-LEVEL", "(none)"];
+        const seen = new Set();
+        const blocks = [];
+        for (const k of order) {
+          if (byLevel[k]) { blocks.push([k, byLevel[k]]); seen.add(k); }
+        }
+        for (const k of Object.keys(byLevel)) {
+          if (!seen.has(k)) blocks.push([k, byLevel[k]]);
+        }
+        const html = blocks.map(([level, items]) => {
+          items.sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+          return `
+            <div class="level-group">
+              <div class="level-group-label">${escapeHtml(level)} · ${items.length}</div>
+              ${items.map((l) => `
+                <div class="lesson-item ${activeLesson?.id === l.id ? "is-active" : ""}" data-id="${l.id}">
+                  <span>${escapeHtml(l.name)}</span>
+                  <span class="lesson-item-code">${escapeHtml(l.code || "")}</span>
+                </div>
+              `).join("")}
+            </div>
+          `;
+        }).join("");
+        $("lessonList").innerHTML = html || `<div class="empty">No matches</div>`;
+        $("lessonList").querySelectorAll(".lesson-item").forEach((el) => {
+          el.addEventListener("click", () => selectLesson(Number(el.dataset.id)));
+        });
+      }
 
-  document.getElementById('sSignOutBtn').addEventListener('click', async () => {
-    await signOut(auth);
-    window.location.href = 'login';
-  });
+      async function selectLesson(id) {
+        activeLesson = allLessons.find((l) => l.id === id) || null;
+        currentPage = 1;
+        renderLessons();
+        $("filters").hidden = false;
+        $("lessonHeader").innerHTML = `<b>${escapeHtml(activeLesson.name)}</b> · <span style="font-family:monospace;font-size:12px;color:var(--ink-3)">${escapeHtml(activeLesson.code)}</span> · ${escapeHtml(activeLesson.level || "")}`;
+        await loadQuestions();
+      }
 
-  // Notifications
-  const prefs = profile.notification_prefs || {};
-  if (prefs.announcements !== false) document.getElementById('sNotifAnnouncements').checked = true;
-  if (prefs.messages      !== false) document.getElementById('sNotifMessages').checked = true;
-  if (prefs.calendar      !== false) document.getElementById('sNotifCalendar').checked = true;
-  if (prefs.feedback      !== false) document.getElementById('sNotifFeedback').checked = true;
+      async function loadQuestions() {
+        if (!activeLesson) return;
+        $("content").innerHTML = `<div class="loading">Loading questions…</div>`;
+        const grade = $("gradeFilter").value;
+        const type = $("typeFilter").value;
+        const year = $("yearFilter").value;
+        const perPage = Number($("perPage").value) || 25;
+        const query = {
+          lesson_code: activeLesson.code,
+          per_page: perPage,
+          page: currentPage,
+        };
+        if (type) query.question_types = [type];
+        if (year) query.years = [year];
 
-  document.getElementById('sNotifBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('sNotifBtn');
-    const notification_prefs = {
-      announcements: document.getElementById('sNotifAnnouncements').checked,
-      messages:      document.getElementById('sNotifMessages').checked,
-      calendar:      document.getElementById('sNotifCalendar').checked,
-      feedback:      document.getElementById('sNotifFeedback').checked,
-    };
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      await setDoc(doc(db, 'users', user.uid), { notification_prefs }, { merge: true });
-      window.userProfile = { ...window.userProfile, notification_prefs };
-      showMsg('sNotifMsg', 'Preferences saved ✓', 'ok');
-    } catch (e) {
-      showMsg('sNotifMsg', 'Failed to save. Try again.', 'err');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Preferences';
-    }
-  });
-});
-</script>
-<div id="settingsToast"></div>
+        let data;
+        try {
+          data = await call("/ease/questions", query);
+        } catch (err) {
+          $("content").innerHTML = `<div class="err">${escapeHtml(err.message)}</div>`;
+          return;
+        }
+
+        // Client-side grade filter (upstream grades[] returns 0 — see CLAUDE.md investigation)
+        let items = data.data || [];
+        if (grade) items = items.filter((it) => String(it.grades || "").split(/[,\s]+/).includes(grade));
+
+        lastTotal = data.total || items.length;
+        renderStats(data, items.length);
+        populateGradeOptions(data.data || []);
+        renderQuestions(items, data);
+      }
+
+      function populateGradeOptions(items) {
+        const present = new Set();
+        for (const it of items) {
+          for (const g of String(it.grades || "").split(/[,\s]+/)) {
+            if (g) present.add(g);
+          }
+        }
+        const sel = $("gradeFilter");
+        const current = sel.value;
+        const opts = ["", ...[...present].sort()];
+        sel.innerHTML = opts.map((g) => `<option value="${g}">${g ? "Grade " + g : "All grades (client filter)"}</option>`).join("");
+        sel.value = current;
+
+        // Years are unknown without a separate endpoint — derive from samples
+        const yearSel = $("yearFilter");
+        if (!yearSel.dataset.populated) {
+          const guess = ["2023/2024", "2024/2025", "2025/2026", "2026/2027"];
+          yearSel.innerHTML = `<option value="">All academic years</option>` + guess.map((y) => `<option>${y}</option>`).join("");
+          yearSel.dataset.populated = "1";
+        }
+      }
+
+      function renderStats(data, shownCount) {
+        $("statRow").hidden = false;
+        $("statRow").innerHTML = `
+          <div class="stat-card"><div class="stat-num">${data.total ?? "—"}</div><div class="stat-lbl">Total in bank</div></div>
+          <div class="stat-card"><div class="stat-num">${data.current_page ?? 1}/${data.last_page ?? 1}</div><div class="stat-lbl">Page</div></div>
+          <div class="stat-card"><div class="stat-num">${data.per_page ?? "—"}</div><div class="stat-lbl">Per page</div></div>
+          <div class="stat-card"><div class="stat-num">${shownCount}</div><div class="stat-lbl">Shown (after filters)</div></div>
+        `;
+      }
+
+      function renderQuestions(items, data) {
+        if (!items.length) {
+          $("content").innerHTML = `<div class="empty"><div class="empty-title">No questions</div>Try clearing filters or another page.</div>`;
+          renderPagination(data);
+          return;
+        }
+        const cards = items.map((q) => {
+          const typePill = pillForType(q.type_label);
+          const levelClass = `pill-level-${q.level || 1}`;
+          const gradesStr = q.grades ? `Grade ${escapeHtml(q.grades)}` : "";
+          const ans = (q.answers || []).map((a) => `
+            <div class="q-ans ${a.is_correct ? "is-correct" : ""}">
+              <span class="ans-letter">${escapeHtml(a.letter || "•")}</span>
+              <span class="ans-content">${sanitizeHtml(a.content || "")}</span>
+              ${a.is_correct ? '<span class="ans-correct-tag">✓ correct</span>' : ""}
+            </div>
+          `).join("");
+          const keyDisplay = q.is_bonus ? "BONUS"
+            : (q.answer_key === null || q.answer_key === undefined)
+              ? '<i style="color:var(--ink-3)">null (manual grading)</i>'
+              : escapeHtml(String(q.answer_key));
+          const pct = (q.correct_percentage != null) ? `${q.correct_percentage}%` : "—";
+          return `
+            <div class="q-card">
+              <div class="q-head">
+                <span class="q-code">#${q.id} · ${escapeHtml(q.code || "")}</span>
+                <span class="pill ${typePill}">${escapeHtml(q.type_label)}</span>
+                <span class="pill ${levelClass}">Level ${q.level ?? "?"}</span>
+                ${gradesStr ? `<span class="pill pill-grade">${gradesStr}</span>` : ""}
+                ${q.cognitive ? `<span class="pill pill-cog">${escapeHtml(q.cognitive)}</span>` : ""}
+                ${q.is_bonus ? `<span class="pill pill-bonus">BONUS</span>` : ""}
+                <span class="pill pill-pct">p = ${pct}</span>
+              </div>
+              <div class="q-content">${sanitizeHtml(q.content || "")}</div>
+              ${ans ? `<div class="q-answers">${ans}</div>` : ""}
+              <div class="q-key"><b>Answer key:</b> ${keyDisplay}</div>
+              ${q.explanation ? `
+                <div class="q-expl-toggle" data-toggle>▸ Show explanation</div>
+                <div class="q-expl" hidden><b>Explanation:</b><br>${sanitizeHtml(q.explanation)}</div>
+              ` : ""}
+            </div>
+          `;
+        }).join("");
+        $("content").innerHTML = `<div class="question-list">${cards}</div>`;
+        $("content").querySelectorAll("[data-toggle]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const ex = el.nextElementSibling;
+            const shown = !ex.hidden;
+            ex.hidden = shown;
+            el.textContent = shown ? "▸ Show explanation" : "▾ Hide explanation";
+          });
+        });
+        renderPagination(data);
+      }
+
+      function renderPagination(data) {
+        const last = data.last_page || 1;
+        const cur = data.current_page || 1;
+        const wrap = document.createElement("div");
+        wrap.className = "pagination";
+        wrap.innerHTML = `
+          <button data-act="first" ${cur <= 1 ? "disabled" : ""}>« First</button>
+          <button data-act="prev" ${cur <= 1 ? "disabled" : ""}>‹ Prev</button>
+          <span class="page-info">Page ${cur} of ${last}</span>
+          <button data-act="next" ${cur >= last ? "disabled" : ""}>Next ›</button>
+          <button data-act="last" ${cur >= last ? "disabled" : ""}>Last »</button>
+        `;
+        $("content").appendChild(wrap);
+        wrap.querySelectorAll("button").forEach((b) => {
+          b.addEventListener("click", () => {
+            const act = b.dataset.act;
+            if (act === "first") currentPage = 1;
+            else if (act === "prev") currentPage = Math.max(1, cur - 1);
+            else if (act === "next") currentPage = Math.min(last, cur + 1);
+            else if (act === "last") currentPage = last;
+            loadQuestions();
+          });
+        });
+      }
+    });
+  </script>
 <script src="cambridge-crossref.js" defer></script>
 </body>
 </html>

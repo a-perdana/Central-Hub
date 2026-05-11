@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EASE Bank Browser — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%236c5ce7'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    :root { --accent: #059669; --accent-dk: #047857; --accent-2: #ecfdf5; }
+    .hero { background: linear-gradient(140deg, #042f2e 0%, #064e3b 50%, #059669 100%); padding: 32px 40px; color: #fff; }
+    .hero-inner { max-width: 1400px; margin: 0 auto; }
+    .hero h1 { font-family: 'Lora', serif; font-size: 1.7rem; }
+    .hero p { color: rgba(255,255,255,.7); font-size: .88rem; max-width: 700px; }
+
+    .page-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 32px 80px; }
+    .access-warn { padding: 14px 18px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 10px; margin-bottom: 18px; font-size: 13px; }
+
+    .layout { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+    /* Lessons sidebar */
+    .lesson-panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; max-height: calc(100vh - 220px); overflow-y: auto; position: sticky; top: 12px; }
+    .lesson-panel h3 { font-family: 'Lora', serif; font-size: 1rem; margin-bottom: 10px; }
+    .lesson-filter { width: 100%; padding: 7px 10px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; }
+    .level-group { margin-top: 10px; }
+    .level-group-label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; padding: 0 4px; }
+    .lesson-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; gap: 8px; }
+    .lesson-item:hover { background: var(--paper); }
+    .lesson-item.is-active { background: var(--accent-2); color: var(--accent-dk); font-weight: 600; }
+    .lesson-item-code { font-size: 10px; color: var(--ink-3); font-family: monospace; }
+
+    /* Main */
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .filters select, .filters input { padding: 8px 12px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .btn-primary { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { padding: 7px 14px; background: #fff; color: var(--ink); border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
+
+    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .stat-num { font-family: 'Lora', serif; font-size: 1.5rem; line-height: 1; }
+    .stat-lbl { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
+
+    .question-list { display: flex; flex-direction: column; gap: 12px; }
+    .q-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .q-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .q-code { font-family: monospace; font-size: 11px; color: var(--ink-3); }
+    .pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+    .pill-mcq { background: #ede9fe; color: #6c5ce7; }
+    .pill-cmcq { background: #fce7f3; color: #be185d; }
+    .pill-short { background: #fef3c7; color: #92400e; }
+    .pill-essay { background: #dbeafe; color: #1e40af; }
+    .pill-checklist { background: #d1fae5; color: #047857; }
+    .pill-speaking { background: #fee2e2; color: #b91c1c; }
+    .pill-level-1 { background: #dcfce7; color: #166534; }
+    .pill-level-2 { background: #fef3c7; color: #92400e; }
+    .pill-level-3 { background: #fee2e2; color: #b91c1c; }
+    .pill-bonus { background: #fde68a; color: #78350f; }
+    .pill-grade { background: var(--paper); color: var(--ink-2); border: 1px solid var(--border); }
+    .pill-cog { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+    .pill-pct { background: var(--paper); color: var(--ink-2); font-family: monospace; }
+
+    .q-content { font-size: 14px; line-height: 1.55; color: var(--ink); }
+    .q-content img { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; }
+    .q-content p { margin: 6px 0; }
+    .q-answers { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+    .q-ans { padding: 7px 11px; border: 1px solid var(--border); border-radius: 7px; display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; }
+    .q-ans.is-correct { background: #ecfdf5; border-color: #6ee7b7; }
+    .q-ans .ans-letter { font-weight: 700; font-family: monospace; min-width: 22px; }
+    .q-ans .ans-content { flex: 1; }
+    .q-ans .ans-correct-tag { font-size: 11px; color: #047857; font-weight: 600; }
+    .q-key { margin-top: 10px; font-size: 13px; }
+    .q-key b { color: var(--ink-2); }
+    .q-expl { margin-top: 10px; padding: 10px 12px; background: var(--paper); border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+    .q-expl b { color: var(--ink); }
+    .q-expl-toggle { font-size: 12px; color: var(--accent-dk); cursor: pointer; user-select: none; }
+
+    .pagination { display: flex; gap: 6px; justify-content: center; margin-top: 18px; align-items: center; }
+    .pagination button { padding: 6px 12px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); background: #fff; border-radius: 7px; cursor: pointer; }
+    .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+    .pagination .page-info { font-size: 13px; color: var(--ink-2); padding: 0 8px; }
+
+    .empty { text-align: center; padding: 60px 20px; color: var(--ink-3); }
+    .empty-title { font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+    .loading { padding: 30px; text-align: center; color: var(--ink-3); font-size: 13px; }
+    .err { padding: 14px 18px; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div style="font-size:.7rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.45); margin-bottom:8px;">External Question Bank</div>
+      <h1>EASE Bank Browser — latihan.id</h1>
+      <p>Live read-only window into the latihan.id question archive. 49 lessons across SD / SMP / SMA / A-LEVEL; 12k+ Y7–Y9 items eligible for EASE Growth import. Bearer token stays server-side; this page goes through the <code>easeBankProxy</code> Cloud Function.</p>
+    </div>
+  </header>
+
+  <main class="page-wrap">
+    <a href="index" style="font-size:.86rem; color:var(--ink-3); text-decoration:none;">← Back to Central Hub</a>
+    <div id="accessWarn" class="access-warn" hidden style="margin-top:14px"></div>
+
+    <div class="layout" style="margin-top:18px">
+      <!-- Lessons sidebar -->
+      <aside class="lesson-panel">
+        <h3>Lessons</h3>
+        <input id="lessonFilter" class="lesson-filter" type="text" placeholder="Filter lessons…">
+        <div id="lessonList" class="loading">Loading…</div>
+      </aside>
+
+      <!-- Main viewer -->
+      <section>
+        <div id="lessonHeader" style="margin-bottom:10px; font-size:13px; color:var(--ink-3);">
+          Select a lesson on the left to browse questions.
+        </div>
+
+        <div class="filters" id="filters" hidden>
+          <select id="gradeFilter">
+            <option value="">All grades (client filter)</option>
+          </select>
+          <select id="typeFilter">
+            <option value="">All question types</option>
+            <option>Multiple Choice</option>
+            <option>Complex Multiple Choice</option>
+            <option>Short Answer</option>
+            <option>Essay</option>
+            <option>Checklist</option>
+            <option>Speaking</option>
+          </select>
+          <select id="yearFilter">
+            <option value="">All academic years</option>
+          </select>
+          <select id="perPage">
+            <option value="10">10 / page</option>
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+            <option value="100">100 / page</option>
+          </select>
+          <button class="btn-primary" id="applyBtn">Apply</button>
+          <button class="btn-secondary" id="resetBtn">Reset</button>
+        </div>
+
+        <div class="stat-row" id="statRow" hidden></div>
+
+        <div id="content"></div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module">
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
+
+    let allLessons = [];
+    let activeLesson = null;
+    let currentPage = 1;
+    let lastTotal = 0;
+
+    const $ = (id) => document.getElementById(id);
+
+    function escapeHtml(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+      );
+    }
+
+    // Allowlist sanitizer for upstream HTML — keep <p>, <span>, <img>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <table>, <tr>, <td>, <th>
+    function sanitizeHtml(html) {
+      if (!html) return "";
+      const tpl = document.createElement("template");
+      tpl.innerHTML = String(html);
+      const ALLOWED = new Set(["P","SPAN","IMG","BR","STRONG","EM","B","I","U","UL","OL","LI","TABLE","TR","TD","TH","TBODY","THEAD","SUP","SUB","DIV"]);
+      const ALLOWED_ATTRS = { IMG: new Set(["src","alt","width","height"]), "*": new Set([]) };
+      function walk(node) {
+        for (const child of [...node.childNodes]) {
+          if (child.nodeType === 1) {
+            if (!ALLOWED.has(child.tagName)) {
+              const text = document.createTextNode(child.textContent || "");
+              child.replaceWith(text);
+              continue;
+            }
+            const allowedAttrs = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS["*"];
+            for (const attr of [...child.attributes]) {
+              if (!allowedAttrs.has(attr.name)) child.removeAttribute(attr.name);
+            }
+            if (child.tagName === "IMG") {
+              const src = child.getAttribute("src") || "";
+              if (!/^https?:\/\//i.test(src)) child.removeAttribute("src");
+            }
+            walk(child);
+          }
+        }
+      }
+      walk(tpl.content);
+      return tpl.innerHTML;
+    }
+
+    function pillForType(label) {
+      const map = {
+        "Multiple Choice": "pill-mcq",
+        "Complex Multiple Choice": "pill-cmcq",
+        "Short Answer": "pill-short",
+        "Essay": "pill-essay",
+        "Checklist": "pill-checklist",
+        "Speaking": "pill-speaking",
+      };
+      return map[label] || "pill-mcq";
+    }
+
+    window.addEventListener("authReady", async () => {
+      const profile = window.userProfile;
+      const isAdmin = profile?.role_centralhub === "central_admin";
+      const subRoles = profile?.ch_sub_roles || [];
+      const allowed = isAdmin || subRoles.includes("director") || subRoles.includes("coordinator");
+      if (!allowed) {
+        $("accessWarn").hidden = false;
+        $("accessWarn").textContent = "Requires central_admin, director, or coordinator.";
+        return;
+      }
+
+      const functions = getFunctions(window.firebaseApp, "asia-southeast1");
+      const proxy = httpsCallable(functions, "easeBankProxy");
+
+      async function call(path, query) {
+        try {
+          const res = await proxy({ path, query: query || {} });
+          return res.data;
+        } catch (err) {
+          throw new Error(err?.message || "Proxy call failed");
+        }
+      }
+
+      // Load lessons
+      try {
+        const data = await call("/ease/lessons");
+        allLessons = data.lessons || [];
+        renderLessons();
+      } catch (err) {
+        $("lessonList").innerHTML = `<div class="err">${escapeHtml(err.message)}</div>`;
+        return;
+      }
+
+      $("lessonFilter").addEventListener("input", renderLessons);
+      $("applyBtn").addEventListener("click", () => { currentPage = 1; loadQuestions(); });
+      $("resetBtn").addEventListener("click", () => {
+        $("gradeFilter").value = "";
+        $("typeFilter").value = "";
+        $("yearFilter").value = "";
+        $("perPage").value = "25";
+        currentPage = 1;
+        loadQuestions();
+      });
+
+      function renderLessons() {
+        const q = $("lessonFilter").value.toLowerCase();
+        const filtered = allLessons.filter((l) =>
+          !q ||
+          (l.name || "").toLowerCase().includes(q) ||
+          (l.code || "").toLowerCase().includes(q) ||
+          (l.level || "").toLowerCase().includes(q)
+        );
+        const byLevel = {};
+        for (const l of filtered) {
+          const key = l.level || "(none)";
+          (byLevel[key] = byLevel[key] || []).push(l);
+        }
+        const order = ["SD", "SMP", "SMA", "A-LEVEL", "(none)"];
+        const seen = new Set();
+        const blocks = [];
+        for (const k of order) {
+          if (byLevel[k]) { blocks.push([k, byLevel[k]]); seen.add(k); }
+        }
+        for (const k of Object.keys(byLevel)) {
+          if (!seen.has(k)) blocks.push([k, byLevel[k]]);
+        }
+        const html = blocks.map(([level, items]) => {
+          items.sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+          return `
+            <div class="level-group">
+              <div class="level-group-label">${escapeHtml(level)} · ${items.length}</div>
+              ${items.map((l) => `
+                <div class="lesson-item ${activeLesson?.id === l.id ? "is-active" : ""}" data-id="${l.id}">
+                  <span>${escapeHtml(l.name)}</span>
+                  <span class="lesson-item-code">${escapeHtml(l.code || "")}</span>
+                </div>
+              `).join("")}
+            </div>
+          `;
+        }).join("");
+        $("lessonList").innerHTML = html || `<div class="empty">No matches</div>`;
+        $("lessonList").querySelectorAll(".lesson-item").forEach((el) => {
+          el.addEventListener("click", () => selectLesson(Number(el.dataset.id)));
+        });
+      }
+
+      async function selectLesson(id) {
+        activeLesson = allLessons.find((l) => l.id === id) || null;
+        currentPage = 1;
+        renderLessons();
+        $("filters").hidden = false;
+        $("lessonHeader").innerHTML = `<b>${escapeHtml(activeLesson.name)}</b> · <span style="font-family:monospace;font-size:12px;color:var(--ink-3)">${escapeHtml(activeLesson.code)}</span> · ${escapeHtml(activeLesson.level || "")}`;
+        await loadQuestions();
+      }
+
+      async function loadQuestions() {
+        if (!activeLesson) return;
+        $("content").innerHTML = `<div class="loading">Loading questions…</div>`;
+        const grade = $("gradeFilter").value;
+        const type = $("typeFilter").value;
+        const year = $("yearFilter").value;
+        const perPage = Number($("perPage").value) || 25;
+        const query = {
+          lesson_code: activeLesson.code,
+          per_page: perPage,
+          page: currentPage,
+        };
+        if (type) query.question_types = [type];
+        if (year) query.years = [year];
+
+        let data;
+        try {
+          data = await call("/ease/questions", query);
+        } catch (err) {
+          $("content").innerHTML = `<div class="err">${escapeHtml(err.message)}</div>`;
+          return;
+        }
+
+        // Client-side grade filter (upstream grades[] returns 0 — see CLAUDE.md investigation)
+        let items = data.data || [];
+        if (grade) items = items.filter((it) => String(it.grades || "").split(/[,\s]+/).includes(grade));
+
+        lastTotal = data.total || items.length;
+        renderStats(data, items.length);
+        populateGradeOptions(data.data || []);
+        renderQuestions(items, data);
+      }
+
+      function populateGradeOptions(items) {
+        const present = new Set();
+        for (const it of items) {
+          for (const g of String(it.grades || "").split(/[,\s]+/)) {
+            if (g) present.add(g);
+          }
+        }
+        const sel = $("gradeFilter");
+        const current = sel.value;
+        const opts = ["", ...[...present].sort()];
+        sel.innerHTML = opts.map((g) => `<option value="${g}">${g ? "Grade " + g : "All grades (client filter)"}</option>`).join("");
+        sel.value = current;
+
+        // Years are unknown without a separate endpoint — derive from samples
+        const yearSel = $("yearFilter");
+        if (!yearSel.dataset.populated) {
+          const guess = ["2023/2024", "2024/2025", "2025/2026", "2026/2027"];
+          yearSel.innerHTML = `<option value="">All academic years</option>` + guess.map((y) => `<option>${y}</option>`).join("");
+          yearSel.dataset.populated = "1";
+        }
+      }
+
+      function renderStats(data, shownCount) {
+        $("statRow").hidden = false;
+        $("statRow").innerHTML = `
+          <div class="stat-card"><div class="stat-num">${data.total ?? "—"}</div><div class="stat-lbl">Total in bank</div></div>
+          <div class="stat-card"><div class="stat-num">${data.current_page ?? 1}/${data.last_page ?? 1}</div><div class="stat-lbl">Page</div></div>
+          <div class="stat-card"><div class="stat-num">${data.per_page ?? "—"}</div><div class="stat-lbl">Per page</div></div>
+          <div class="stat-card"><div class="stat-num">${shownCount}</div><div class="stat-lbl">Shown (after filters)</div></div>
+        `;
+      }
+
+      function renderQuestions(items, data) {
+        if (!items.length) {
+          $("content").innerHTML = `<div class="empty"><div class="empty-title">No questions</div>Try clearing filters or another page.</div>`;
+          renderPagination(data);
+          return;
+        }
+        const cards = items.map((q) => {
+          const typePill = pillForType(q.type_label);
+          const levelClass = `pill-level-${q.level || 1}`;
+          const gradesStr = q.grades ? `Grade ${escapeHtml(q.grades)}` : "";
+          const ans = (q.answers || []).map((a) => `
+            <div class="q-ans ${a.is_correct ? "is-correct" : ""}">
+              <span class="ans-letter">${escapeHtml(a.letter || "•")}</span>
+              <span class="ans-content">${sanitizeHtml(a.content || "")}</span>
+              ${a.is_correct ? '<span class="ans-correct-tag">✓ correct</span>' : ""}
+            </div>
+          `).join("");
+          const keyDisplay = q.is_bonus ? "BONUS"
+            : (q.answer_key === null || q.answer_key === undefined)
+              ? '<i style="color:var(--ink-3)">null (manual grading)</i>'
+              : escapeHtml(String(q.answer_key));
+          const pct = (q.correct_percentage != null) ? `${q.correct_percentage}%` : "—";
+          return `
+            <div class="q-card">
+              <div class="q-head">
+                <span class="q-code">#${q.id} · ${escapeHtml(q.code || "")}</span>
+                <span class="pill ${typePill}">${escapeHtml(q.type_label)}</span>
+                <span class="pill ${levelClass}">Level ${q.level ?? "?"}</span>
+                ${gradesStr ? `<span class="pill pill-grade">${gradesStr}</span>` : ""}
+                ${q.cognitive ? `<span class="pill pill-cog">${escapeHtml(q.cognitive)}</span>` : ""}
+                ${q.is_bonus ? `<span class="pill pill-bonus">BONUS</span>` : ""}
+                <span class="pill pill-pct">p = ${pct}</span>
+              </div>
+              <div class="q-content">${sanitizeHtml(q.content || "")}</div>
+              ${ans ? `<div class="q-answers">${ans}</div>` : ""}
+              <div class="q-key"><b>Answer key:</b> ${keyDisplay}</div>
+              ${q.explanation ? `
+                <div class="q-expl-toggle" data-toggle>▸ Show explanation</div>
+                <div class="q-expl" hidden><b>Explanation:</b><br>${sanitizeHtml(q.explanation)}</div>
+              ` : ""}
+            </div>
+          `;
+        }).join("");
+        $("content").innerHTML = `<div class="question-list">${cards}</div>`;
+        $("content").querySelectorAll("[data-toggle]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const ex = el.nextElementSibling;
+            const shown = !ex.hidden;
+            ex.hidden = shown;
+            el.textContent = shown ? "▸ Show explanation" : "▾ Hide explanation";
+          });
+        });
+        renderPagination(data);
+      }
+
+      function renderPagination(data) {
+        const last = data.last_page || 1;
+        const cur = data.current_page || 1;
+        const wrap = document.createElement("div");
+        wrap.className = "pagination";
+        wrap.innerHTML = `
+          <button data-act="first" ${cur <= 1 ? "disabled" : ""}>« First</button>
+          <button data-act="prev" ${cur <= 1 ? "disabled" : ""}>‹ Prev</button>
+          <span class="page-info">Page ${cur} of ${last}</span>
+          <button data-act="next" ${cur >= last ? "disabled" : ""}>Next ›</button>
+          <button data-act="last" ${cur >= last ? "disabled" : ""}>Last »</button>
+        `;
+        $("content").appendChild(wrap);
+        wrap.querySelectorAll("button").forEach((b) => {
+          b.addEventListener("click", () => {
+            const act = b.dataset.act;
+            if (act === "first") currentPage = 1;
+            else if (act === "prev") currentPage = Math.max(1, cur - 1);
+            else if (act === "next") currentPage = Math.min(last, cur + 1);
+            else if (act === "last") currentPage = last;
+            loadQuestions();
+          });
+        });
+      }
+    });
+  </script>
+</body>
+</html>

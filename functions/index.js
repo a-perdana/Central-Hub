@@ -12,6 +12,12 @@
  *                                         threshold-gated cohort visibility, no
  *                                         respondent uid in any output.
  *
+ * EASE Bank Proxy (2026-05-11):
+ *   N. easeBankProxy                    — httpsCallable proxy to latihan.id
+ *                                         question-bank API. Bearer token in
+ *                                         Secret Manager (LATIHAN_API_TOKEN);
+ *                                         CH admin / director / coordinator only.
+ *
  * Deploy:
  *   cd "Central Hub/functions" && npm install
  *   cd ..
@@ -22,6 +28,8 @@
 
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule }        = require("firebase-functions/v2/scheduler");
+const { onCall, HttpsError }= require("firebase-functions/v2/https");
+const { defineSecret }      = require("firebase-functions/params");
 const { setGlobalOptions }  = require("firebase-functions/v2");
 const admin                 = require("firebase-admin");
 
@@ -728,6 +736,99 @@ exports.resetLeaderboardWindows = onSchedule(
     });
     await batch.commit();
     console.log(`[resetLeaderboardWindows] reset ${all.size} docs (weekly=${resetWeekly} monthly=${resetMonthly})`);
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
+// EASE BANK PROXY — easeBankProxy
+//   Server-side proxy to the external latihan.id question bank
+//   API. Keeps the bearer token off the client; restricts callers
+//   to authenticated CH admins / directors / coordinators.
+//
+//   Token stored in Secret Manager as LATIHAN_API_TOKEN. Set via:
+//     firebase functions:secrets:set LATIHAN_API_TOKEN --project centralhub-8727b
+//   then paste the bearer (no "Bearer " prefix — raw token).
+//
+//   Client usage (CH page):
+//     const fn = httpsCallable(getFunctions(app, 'asia-southeast1'),
+//                              'easeBankProxy');
+//     const { data } = await fn({ path: '/ease/lessons' });
+//     // or: fn({ path: '/ease/questions',
+//     //          query: { lesson_code: 'EASE-SMP-MAT', per_page: 25 } });
+//
+//   Allow-listed paths only — proxy never forwards arbitrary URLs.
+// ───────────────────────────────────────────────────────────────
+const LATIHAN_BASE = "https://latihan.id/api/eduversal";
+const LATIHAN_ALLOWED_PATHS = new Set(["/ease/lessons", "/ease/questions"]);
+const latihanApiToken = defineSecret("LATIHAN_API_TOKEN");
+
+exports.easeBankProxy = onCall(
+  {
+    region: "asia-southeast1",
+    secrets: [latihanApiToken],
+    cors: true,
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const uid = request.auth.uid;
+    const userSnap = await db.collection("users").doc(uid).get();
+    const u = userSnap.exists ? userSnap.data() : null;
+    const isAdmin = u?.role_centralhub === "central_admin";
+    const subRoles = Array.isArray(u?.ch_sub_roles) ? u.ch_sub_roles : [];
+    const allowed = isAdmin
+      || subRoles.includes("director")
+      || subRoles.includes("coordinator");
+    if (!allowed) {
+      throw new HttpsError("permission-denied",
+        "Requires CH admin / director / coordinator.");
+    }
+
+    const path = String(request.data?.path || "");
+    if (!LATIHAN_ALLOWED_PATHS.has(path)) {
+      throw new HttpsError("invalid-argument",
+        `Path not allowed: ${path}`);
+    }
+
+    const query = request.data?.query || {};
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) {
+      if (v == null || v === "") continue;
+      if (Array.isArray(v)) {
+        for (const item of v) params.append(`${k}[]`, String(item));
+      } else {
+        params.append(k, String(v));
+      }
+    }
+    const qs = params.toString();
+    const url = `${LATIHAN_BASE}${path}${qs ? "?" + qs : ""}`;
+
+    const token = latihanApiToken.value();
+    if (!token) {
+      throw new HttpsError("failed-precondition",
+        "LATIHAN_API_TOKEN secret not set.");
+    }
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": token,
+        "Accept": "application/json",
+      },
+    });
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); }
+    catch { body = { raw: text }; }
+
+    if (!res.ok) {
+      throw new HttpsError("internal",
+        `Upstream ${res.status}`, { status: res.status, body });
+    }
+    return body;
   }
 );
 

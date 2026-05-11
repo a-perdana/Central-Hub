@@ -330,6 +330,7 @@ const htmlFiles = [
   "chapter-test-author.html",
   "ease-item-author.html",
   "ease-window-admin.html",
+  "ease-bank-browser.html",
   "question-bank.html",
   "page-access.html",
   "rules-viewer.html",
