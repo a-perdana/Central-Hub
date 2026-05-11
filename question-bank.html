@@ -80,6 +80,28 @@
     .qb-actions-cell .btn-danger:hover { background:#fee2e2; }
 
     .qb-empty { padding:50px 30px; text-align:center; color: var(--ink-3, #888); }
+    .qb-loading { padding:50px 30px; text-align:center; color: var(--ink-3, #888); font-size:13px; }
+
+    /* Pagination footer */
+    .qb-pager {
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      margin-top:18px;
+    }
+    .qb-pager .btn-page {
+      padding:7px 14px; background:#fff; color: var(--ink, #111);
+      border:1px solid var(--border, #e5e7eb); border-radius:8px;
+      font:inherit; font-size:13px; cursor:pointer;
+    }
+    .qb-pager .btn-page:disabled { opacity:.45; cursor:not-allowed; }
+    .qb-pager .btn-page:not(:disabled):hover { background:#f3f4f6; }
+    .qb-pager .pager-info {
+      font-size:12.5px; color: var(--ink-3, #777); padding: 0 8px;
+    }
+    .qb-pager .pager-info .filter-pill {
+      display:inline-block; margin-left:8px; padding:2px 8px; border-radius:99px;
+      background: var(--accent-2, #ede9fe); color: var(--accent-dk, #5a4ed1);
+      font-size:11px; font-weight:600;
+    }
 
     /* Editor modal */
     .qe-modal-overlay {
@@ -195,8 +217,11 @@
         </thead>
         <tbody id="qbRows"></tbody>
       </table>
+      <div id="qbLoading" class="qb-loading" style="display:none">Loading…</div>
       <div id="qbEmpty" class="qb-empty" style="display:none">No items match the current filters.</div>
     </div>
+
+    <div id="qbPager" class="qb-pager"></div>
   </main>
 
   <!-- Editor modal -->
@@ -214,8 +239,9 @@
 
   <script type="module">
     import {
-      collection, query, where, orderBy, onSnapshot, doc, getDoc,
-      addDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, getDocs
+      collection, query, where, orderBy, doc, getDoc, getDocs,
+      getCountFromServer, limit, startAfter,
+      addDoc, setDoc, updateDoc, deleteDoc, serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { mountQuestionEditor } from './partials/question-editor.js';
 
@@ -231,9 +257,24 @@
     ];
     const SUBJECTS_EASE = SUBJECTS.filter(s => ['math','english','science'].includes(s.id));
 
-    let items = [];
-    let unsub = null;
+    // ──────────────────────────────────────────────────────────────
+    // Cursor-paginated, server-side. Realtime onSnapshot stream
+    // dropped because chapter_test_items + ease_items together carry
+    // ~5.6k+ docs after the latihan.id import and were re-downloaded
+    // on every page open. Banks are near-static (HQ edits one item at
+    // a time) so a lazy cursor pager + count() is sufficient.
+    // ──────────────────────────────────────────────────────────────
+    const PAGE_SIZE = 25;
     let currentBank = 'chapter_test_items';
+    let pageItems = [];           // current rendered page
+    let pageCursors = [null];     // pageCursors[N] = startAfter snap for page N
+    let pageIndex = 0;
+    let lastVisible = null;       // QueryDocumentSnapshot for next-page startAfter
+    let totalCount = null;        // filtered result total
+    let bankTotalCount = null;    // unfiltered bank total (for stat card)
+    let inFlight = false;
+    let statTotals = null;        // { total, published, draft, archived }
+    let statsInFlight = false;
 
     document.addEventListener('authReady', () => {
       const profile = window.userProfile || {};
@@ -250,8 +291,10 @@
 
       document.body.style.display = '';
       initFilters();
-      subscribe();
       wireUI();
+      // First paint: stats (counts) + first page.
+      loadStats();
+      loadFirstPage();
     });
 
     function initFilters() {
@@ -261,16 +304,6 @@
       const sel = document.getElementById('fSubject');
       sel.innerHTML = '<option value="">All</option>' +
         list.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
-    }
-
-    function subscribe() {
-      if (unsub) unsub();
-      const col = collection(window.db, currentBank);
-      unsub = onSnapshot(col, snap => {
-        items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderStats();
-        renderRows();
-      });
     }
 
     function getFilters() {
@@ -283,47 +316,173 @@
       };
     }
 
-    function filtered() {
+    function buildBaseQuery() {
       const f = getFilters();
-      return items.filter(it => {
-        if (f.subject && it.subjectId !== f.subject) return false;
-        if (f.stage   && String(it.stage) !== f.stage) return false;
-        if (f.type    && it.type !== f.type) return false;
-        if (f.diff    && it.difficulty !== f.diff) return false;
-        if (f.status  && it.status !== f.status) return false;
-        return true;
-      });
+      const col = collection(window.db, currentBank);
+      const constraints = [];
+      if (f.subject) constraints.push(where('subjectId', '==', f.subject));
+      if (f.stage)   constraints.push(where('stage', '==', Number(f.stage)));
+      if (f.type)    constraints.push(where('type', '==', f.type));
+      if (f.diff)    constraints.push(where('difficulty', '==', f.diff));
+      if (f.status)  constraints.push(where('status', '==', f.status));
+      // Sort by createdAt desc — Firestore drops docs missing the field,
+      // so legacy items without createdAt won't appear in paginated
+      // results. The latihan-imported items DO carry createdAt.
+      constraints.push(orderBy('createdAt', 'desc'));
+      return query(col, ...constraints);
+    }
+
+    function buildFilteredConstraints() {
+      const f = getFilters();
+      const constraints = [];
+      if (f.subject) constraints.push(where('subjectId', '==', f.subject));
+      if (f.stage)   constraints.push(where('stage', '==', Number(f.stage)));
+      if (f.type)    constraints.push(where('type', '==', f.type));
+      if (f.diff)    constraints.push(where('difficulty', '==', f.diff));
+      if (f.status)  constraints.push(where('status', '==', f.status));
+      return constraints;
+    }
+
+    async function loadStats() {
+      if (statsInFlight) return;
+      statsInFlight = true;
+      try {
+        const col = collection(window.db, currentBank);
+        const [totalSnap, pubSnap, draftSnap, archSnap] = await Promise.all([
+          getCountFromServer(col),
+          getCountFromServer(query(col, where('status', '==', 'published'))),
+          getCountFromServer(query(col, where('status', '==', 'draft'))),
+          getCountFromServer(query(col, where('status', '==', 'archived'))),
+        ]);
+        statTotals = {
+          total: totalSnap.data().count,
+          published: pubSnap.data().count,
+          draft: draftSnap.data().count,
+          archived: archSnap.data().count,
+        };
+        bankTotalCount = statTotals.total;
+        renderStats();
+      } catch (e) {
+        console.warn('[question-bank] count() failed', e);
+      } finally {
+        statsInFlight = false;
+      }
     }
 
     function renderStats() {
-      const total = items.length;
-      const published = items.filter(i => i.status === 'published').length;
-      const drafts    = items.filter(i => i.status === 'draft').length;
-      const archived  = items.filter(i => i.status === 'archived').length;
+      const s = statTotals || { total: '—', published: '—', draft: '—', archived: '—' };
       document.getElementById('qbStats').innerHTML = `
-        <div class="qb-stat"><div class="qb-stat-num">${total}</div><div class="qb-stat-lbl">Total</div></div>
-        <div class="qb-stat"><div class="qb-stat-num">${published}</div><div class="qb-stat-lbl">Published</div></div>
-        <div class="qb-stat"><div class="qb-stat-num">${drafts}</div><div class="qb-stat-lbl">Draft</div></div>
-        <div class="qb-stat"><div class="qb-stat-num">${archived}</div><div class="qb-stat-lbl">Archived</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${s.total}</div><div class="qb-stat-lbl">Total</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${s.published}</div><div class="qb-stat-lbl">Published</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${s.draft}</div><div class="qb-stat-lbl">Draft</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${s.archived}</div><div class="qb-stat-lbl">Archived</div></div>
       `;
     }
 
-    function renderRows() {
-      const rows = filtered();
+    async function loadFirstPage() {
+      pageIndex = 0;
+      pageCursors = [null];
+      lastVisible = null;
+      // Filtered total for the pager — one count() per filter change.
+      try {
+        const col = collection(window.db, currentBank);
+        const c = await getCountFromServer(query(col, ...buildFilteredConstraints()));
+        totalCount = c.data().count;
+      } catch (e) {
+        totalCount = null;
+      }
+      await loadPage(0);
+    }
+
+    async function loadPage(target) {
+      if (inFlight) return;
+      inFlight = true;
       const tbody = document.getElementById('qbRows');
       const empty = document.getElementById('qbEmpty');
-      if (rows.length === 0) {
+      const loading = document.getElementById('qbLoading');
+      tbody.innerHTML = '';
+      empty.style.display = 'none';
+      loading.style.display = '';
+      try {
+        let q = buildBaseQuery();
+        const cursor = pageCursors[target];
+        if (cursor) q = query(q, startAfter(cursor), limit(PAGE_SIZE));
+        else        q = query(q, limit(PAGE_SIZE));
+        const snap = await getDocs(q);
+        pageItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        lastVisible = snap.docs[snap.docs.length - 1] || null;
+        if (lastVisible && pageItems.length === PAGE_SIZE) {
+          pageCursors[target + 1] = lastVisible;
+        }
+        pageIndex = target;
+        renderRows();
+      } catch (e) {
+        console.error('[question-bank] loadPage failed', e);
         tbody.innerHTML = '';
         empty.style.display = '';
+        empty.innerHTML = `Query failed. ${escape(e.message || '')}<br><br>This usually means a Firestore composite index is missing — check the browser console for an auto-generated index URL.`;
+      } finally {
+        loading.style.display = 'none';
+        inFlight = false;
+      }
+    }
+
+    function renderRows() {
+      const tbody = document.getElementById('qbRows');
+      const empty = document.getElementById('qbEmpty');
+      if (pageItems.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = '';
+        empty.textContent = totalCount === 0
+          ? 'No items match the current filters.'
+          : 'No more items.';
+        renderPager();
         return;
       }
       empty.style.display = 'none';
-      tbody.innerHTML = rows.map(rowHtml).join('');
+      tbody.innerHTML = pageItems.map(rowHtml).join('');
       Array.from(tbody.querySelectorAll('[data-edit]')).forEach(b => b.addEventListener('click', () => openEditor(b.dataset.edit)));
       Array.from(tbody.querySelectorAll('[data-arch]')).forEach(b => b.addEventListener('click', () => archiveItem(b.dataset.arch)));
       Array.from(tbody.querySelectorAll('[data-unarch]')).forEach(b => b.addEventListener('click', () => unarchiveItem(b.dataset.unarch)));
-      Array.from(tbody.querySelectorAll('[data-del]')).forEach(b => b.addEventListener('click', () => deleteItem(b.dataset.del)));
+      Array.from(tbody.querySelectorAll('[data-del]')).forEach(b => b.addEventListener('click', () => deleteItem(b.dataset.del, b)));
       Array.from(tbody.querySelectorAll('[data-pub]')).forEach(b => b.addEventListener('click', () => publishItem(b.dataset.pub)));
+      renderPager();
+    }
+
+    function renderPager() {
+      const wrap = document.getElementById('qbPager');
+      const lastPage = totalCount != null ? Math.max(0, Math.ceil(totalCount / PAGE_SIZE) - 1) : null;
+      const from = totalCount === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
+      const to = totalCount != null
+        ? Math.min((pageIndex + 1) * PAGE_SIZE, totalCount)
+        : (pageIndex * PAGE_SIZE + pageItems.length);
+      const filterPill = (totalCount != null && bankTotalCount != null && totalCount !== bankTotalCount)
+        ? `<span class="filter-pill">filtered ${totalCount.toLocaleString()}</span>` : '';
+      wrap.innerHTML = `
+        <button class="btn-page" id="pagePrev" ${pageIndex === 0 ? 'disabled' : ''}>‹ Prev</button>
+        <span class="pager-info">
+          ${totalCount != null
+            ? `${from}–${to} of ${totalCount.toLocaleString()}${lastPage != null ? ` · page ${pageIndex + 1}/${lastPage + 1}` : ''}`
+            : `page ${pageIndex + 1}`}
+          ${filterPill}
+        </span>
+        <button class="btn-page" id="pageNext" ${
+          totalCount != null
+            ? (pageIndex >= lastPage ? 'disabled' : '')
+            : (pageItems.length < PAGE_SIZE ? 'disabled' : '')
+        }>Next ›</button>
+      `;
+      const prev = document.getElementById('pagePrev');
+      const next = document.getElementById('pageNext');
+      if (prev) prev.addEventListener('click', () => loadPage(Math.max(0, pageIndex - 1)));
+      if (next) next.addEventListener('click', () => loadPage(pageIndex + 1));
+    }
+
+    function resetAndReload() {
+      pageCursors = [null];
+      pageIndex = 0;
+      lastVisible = null;
+      loadFirstPage();
     }
 
     function rowHtml(it) {
@@ -378,9 +537,12 @@
             currentBank = document.getElementById('fBank').value;
             populateSubjects(currentBank === 'ease_items' ? SUBJECTS_EASE : SUBJECTS);
             document.getElementById('fSubject').value = '';
-            subscribe();
+            // Stats depend on the bank — re-fetch unfiltered counts too.
+            loadStats();
+            resetAndReload();
           } else {
-            renderRows();
+            // Filter change — same bank, fresh first page + filtered count.
+            resetAndReload();
           }
         });
       });
@@ -401,7 +563,15 @@
       mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
       document.getElementById('editorModal').classList.add('is-open');
 
-      const initial = itemId ? items.find(i => i.id === itemId) : null;
+      // Editing pulls from the current page (already in memory) when present;
+      // falls back to a single getDoc for items off-page (e.g. after a refresh).
+      let initial = itemId ? pageItems.find(i => i.id === itemId) : null;
+      if (itemId && !initial) {
+        try {
+          const snap = await getDoc(doc(window.db, currentBank, itemId));
+          if (snap.exists()) initial = { id: snap.id, ...snap.data() };
+        } catch (e) { console.warn('[question-bank] getDoc fallback failed', e); }
+      }
       const mode = currentBank === 'ease_items' ? 'ease' : 'chapter_test';
 
       activeEditor = await mountQuestionEditor(mount, {
@@ -432,6 +602,9 @@
         await updateDoc(doc(window.db, currentBank, itemId), payload);
         toast('Item updated');
       }
+      // Onsnapshot stream is gone — refresh stats + current page manually.
+      loadStats();
+      resetAndReload();
     }
 
     async function publishItem(itemId) {
@@ -440,6 +613,8 @@
         updatedAt: serverTimestamp(),
       });
       toast('Published');
+      loadStats();
+      await loadPage(pageIndex);
     }
 
     async function archiveItem(itemId) {
@@ -448,6 +623,8 @@
         updatedAt: serverTimestamp(),
       });
       toast('Archived');
+      loadStats();
+      await loadPage(pageIndex);
     }
 
     async function unarchiveItem(itemId) {
@@ -456,14 +633,15 @@
         updatedAt: serverTimestamp(),
       });
       toast('Moved to draft');
+      loadStats();
+      await loadPage(pageIndex);
     }
 
-    async function deleteItem(itemId) {
-      const it = items.find(i => i.id === itemId);
+    async function deleteItem(itemId, btn) {
+      const it = pageItems.find(i => i.id === itemId);
       if (it && Array.isArray(it.usedInTestIds) && it.usedInTestIds.length > 0) {
         toast('Cannot delete — item is in use'); return;
       }
-      const btn = event.currentTarget;
       if (!btn.dataset.confirming) {
         btn.dataset.confirming = '1';
         btn.textContent = 'Click again to confirm';
@@ -472,6 +650,8 @@
       }
       await deleteDoc(doc(window.db, currentBank, itemId));
       toast('Deleted');
+      loadStats();
+      resetAndReload();
     }
 
     function toast(msg) {
