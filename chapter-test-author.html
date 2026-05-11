@@ -120,6 +120,67 @@
     .item-row-num { font-weight: 600; color: var(--accent); }
     .item-row-stem { font-size: 13.5px; color: var(--ink); margin-bottom: 4px; }
     .item-row-meta { font-size: 11.5px; color: var(--ink-3); }
+    .item-source-pill {
+      display: inline-block; padding: 1px 8px; border-radius: 99px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+      background: #ede9fe; color: #5b21b6; margin-left: 6px;
+      vertical-align: 1px;
+    }
+    .item-source-pill.new {
+      background: #fefce8; color: #854d0e;
+    }
+
+    /* Bank picker — modal-in-modal, sits above #itemModal */
+    #bankPickerModal { z-index: 110; padding: 24px 16px; }
+    #bankPickerModal .modal { width: min(960px, 100%); max-width: 960px; max-height: calc(100vh - 48px); display: flex; flex-direction: column; padding: 0; }
+    #bankPickerModal .bp-head { padding: 18px 22px 12px; border-bottom: 1px solid var(--border); }
+    #bankPickerModal .bp-head h2 { font-family: 'Lora', serif; font-size: 1.2rem; margin: 0 0 4px; }
+    #bankPickerModal .bp-head p  { font-size: 12.5px; color: var(--ink-3); margin: 0; }
+    #bankPickerModal .bp-filters {
+      display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 22px;
+      border-bottom: 1px solid var(--border); align-items: center;
+    }
+    #bankPickerModal .bp-filters select,
+    #bankPickerModal .bp-filters input[type="search"] {
+      font-family: 'DM Sans', sans-serif; font-size: 12.5px;
+      padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+      background: #fff;
+    }
+    #bankPickerModal .bp-filters input[type="search"] { flex: 1; min-width: 180px; }
+    #bankPickerModal .bp-list { flex: 1; overflow-y: auto; padding: 4px 22px; }
+    #bankPickerModal .bp-row {
+      display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    #bankPickerModal .bp-row:last-child { border-bottom: none; }
+    #bankPickerModal .bp-row input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+    #bankPickerModal .bp-row-body { flex: 1; min-width: 0; }
+    #bankPickerModal .bp-row-stem {
+      font-size: 13px; color: var(--ink); margin-bottom: 4px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    #bankPickerModal .bp-row-meta { font-size: 11px; color: var(--ink-3); display: flex; gap: 6px; flex-wrap: wrap; }
+    #bankPickerModal .bp-row-meta .pill {
+      padding: 1px 7px; border-radius: 99px; font-weight: 600; background: #f3f4f6; color: #374151;
+    }
+    #bankPickerModal .bp-row-meta .pill.easy   { background: #dcfce7; color: #166534; }
+    #bankPickerModal .bp-row-meta .pill.medium { background: #fef3c7; color: #92400e; }
+    #bankPickerModal .bp-row-meta .pill.hard   { background: #fee2e2; color: #b91c1c; }
+    #bankPickerModal .bp-row-meta .pill.used   { background: #ede9fe; color: #5b21b6; }
+    #bankPickerModal .bp-empty  { padding: 36px 22px; text-align: center; font-size: 13px; color: var(--ink-3); }
+    #bankPickerModal .bp-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 22px; border-top: 1px solid var(--border);
+      background: #fafaf8;
+    }
+    #bankPickerModal .bp-pager { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-3); }
+    #bankPickerModal .bp-pager button {
+      padding: 4px 10px; border: 1px solid var(--border); background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px;
+    }
+    #bankPickerModal .bp-pager button:disabled { opacity: .4; cursor: not-allowed; }
+    #bankPickerModal .bp-actions { display: flex; gap: 8px; align-items: center; }
+    #bankPickerModal .bp-selected-count { font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
 
     .empty { text-align: center; padding: 50px 20px; color: var(--ink-3); }
     .empty-title { font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
@@ -231,7 +292,10 @@
 
         <h3 style="font-family:'Lora',serif; font-size:1rem; margin:18px 0 10px;">Items</h3>
         <div id="itemsList"></div>
-        <button class="btn-secondary" id="addItemBtn" type="button">+ Add item</button>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button class="btn-secondary" id="addItemBtn"    type="button">+ Add item</button>
+          <button class="btn-secondary" id="browseBankBtn" type="button">+ Browse bank</button>
+        </div>
       </div>
 
       <div class="modal-actions">
@@ -250,12 +314,58 @@
     </div>
   </div>
 
+  <!-- Bank picker — browse + multi-select existing chapter_test_items into the current test -->
+  <div id="bankPickerModal" class="modal-overlay" role="dialog" aria-hidden="true" aria-labelledby="bpTitle">
+    <div class="modal">
+      <div class="bp-head">
+        <h2 id="bpTitle">Browse Chapter Test Item Bank</h2>
+        <p>Pick existing items to add to this test. Items already attached are tagged "used" and disabled. Edits go through Question Bank — same doc, every test that references it picks up the change.</p>
+      </div>
+      <div class="bp-filters">
+        <select id="bpSubject"><option value="">All my subjects</option></select>
+        <select id="bpStage">
+          <option value="">All years</option>
+          <option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
+        </select>
+        <select id="bpType">
+          <option value="">All types</option>
+          <option value="mcq">MCQ</option>
+          <option value="numeric">Numeric</option>
+          <option value="short">Short</option>
+        </select>
+        <select id="bpDiff">
+          <option value="">All difficulties</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <input id="bpSearch" type="search" placeholder="Search stem…">
+      </div>
+      <div class="bp-list" id="bpList">
+        <div class="bp-empty">Loading…</div>
+      </div>
+      <div class="bp-foot">
+        <div class="bp-pager">
+          <button id="bpPrev" type="button" disabled>‹ Prev</button>
+          <span id="bpPagerInfo">—</span>
+          <button id="bpNext" type="button" disabled>Next ›</button>
+        </div>
+        <div class="bp-actions">
+          <span class="bp-selected-count" id="bpSelCount">0 selected</span>
+          <button class="btn-secondary" id="bpCancel" type="button">Cancel</button>
+          <button class="btn-primary"   id="bpAdd"    type="button" disabled>Add selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script type="module">
     import {
       collection, query, where, onSnapshot, doc, addDoc, updateDoc, deleteDoc,
-      setDoc, getDoc, getDocs, serverTimestamp, orderBy, arrayUnion, arrayRemove
+      setDoc, getDoc, getDocs, serverTimestamp, orderBy, arrayUnion, arrayRemove,
+      limit, startAfter
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { mountQuestionEditor } from './partials/question-editor.js';
 
@@ -425,7 +535,18 @@
           );
           workingItems = fetched
             .filter(s => s.exists())
-            .map(s => ({ id: s.id, ...s.data() }));
+            .map(s => {
+              const data = s.data();
+              // Tag as bank-sourced when the item is referenced by another
+              // test (or by 0 — orphaned bank items reached via the picker
+              // also count). This drives the row UI: shared items render
+              // "Edit in bank ↗" and a "bank" pill rather than inline-edit,
+              // so authors don't accidentally rewrite a question another
+              // test is depending on.
+              const usedBy = Array.isArray(data.usedInTestIds) ? data.usedInTestIds : [];
+              const sharedWithOthers = usedBy.some(tid => tid !== testId);
+              return { id: s.id, ...data, bankSourced: sharedWithOthers };
+            });
         } else {
           const its = await getDocs(query(collection(window.db, 'chapter_tests', testId, 'items'), orderBy('seq', 'asc')));
           workingItems = its.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -450,22 +571,38 @@
     function renderItems() {
       const box = document.getElementById('itemsList');
       if (workingItems.length === 0) {
-        box.innerHTML = `<div style="font-size:13px; color:var(--ink-3); padding:14px; text-align:center;">No items yet. Click <strong>+ Add item</strong>.</div>`;
+        box.innerHTML = `<div style="font-size:13px; color:var(--ink-3); padding:14px; text-align:center;">No items yet. Click <strong>+ Add item</strong> to author one, or <strong>+ Browse bank</strong> to attach existing items.</div>`;
         return;
       }
-      box.innerHTML = workingItems.map((it, i) => `
+      box.innerHTML = workingItems.map((it, i) => {
+        // Items that came from the bank carry an .id from the moment they
+        // were attached. Inline new ones get an id only at saveTest() time.
+        // We use the .bankSourced flag (set by the picker) to distinguish
+        // "loaded into this test from the bank, edits belong upstream" from
+        // "freshly created here, still safe to edit inline".
+        const fromBank = !!it.bankSourced;
+        const sourcePill = fromBank
+          ? `<span class="item-source-pill" title="Shared item from the Chapter Test Item Bank. Edits live there and propagate to every test that uses this item.">bank</span>`
+          : (it.id
+              ? `<span class="item-source-pill" title="Authored in this test. Once saved, the item lives in the bank and can be reused by other tests.">authored here</span>`
+              : `<span class="item-source-pill new" title="New, unsaved. Will be added to the bank on save.">new</span>`);
+        const editBtn = fromBank
+          ? `<a class="btn-secondary" href="question-bank?focus=${encodeURIComponent(it.id)}" target="_blank" rel="noopener" title="Edit in Question Bank — affects every test using this item">Edit in bank ↗</a>`
+          : `<button class="btn-secondary" data-act="ed" data-i="${i}">Edit</button>`;
+        return `
         <div class="item-row">
           <div class="item-row-head">
-            <span class="item-row-num">Q${i+1}</span>
+            <span class="item-row-num">Q${i+1}${sourcePill}</span>
             <div style="display:flex; gap:6px;">
-              <button class="btn-secondary" data-act="ed" data-i="${i}">Edit</button>
-              <button class="btn-danger"    data-act="rm" data-i="${i}">Remove</button>
+              ${editBtn}
+              <button class="btn-danger" data-act="rm" data-i="${i}">Remove</button>
             </div>
           </div>
           <div class="item-row-stem">${escHtml(it.stem || '(no stem)')}</div>
           <div class="item-row-meta">${escHtml(it.type)} · ${escHtml(it.difficulty || '?')} · ${(it.marks || 1)} mark${(it.marks||1)===1?'':'s'}</div>
         </div>
-      `).join('');
+        `;
+      }).join('');
       box.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', () => {
           const i = Number(b.dataset.i);
@@ -476,6 +613,196 @@
     }
 
     document.getElementById('addItemBtn').addEventListener('click', () => openItemModal(-1));
+    document.getElementById('browseBankBtn').addEventListener('click', () => openBankPicker());
+
+    // ────────────────────────────────────────────────────────────────
+    // BANK PICKER — browse + multi-select existing chapter_test_items
+    // into the current test. Page-paginated (no filtered count() to avoid
+    // an extra round-trip per filter change; pager just checks if a page
+    // came back full to decide whether to enable Next).
+    // ────────────────────────────────────────────────────────────────
+    const BP_PAGE_SIZE = 25;
+    const bpState = {
+      cursors: [null],     // bpState.cursors[N] = startAfter snapshot for page N
+      pageItems: [],       // current rendered page (with snap refs)
+      pageIndex: 0,
+      lastSnap: null,
+      selected: new Map(), // itemId → minimal item object captured for add-to-test
+    };
+
+    function openBankPicker() {
+      // Pre-seed filters from the test envelope so authors see relevant
+      // candidates immediately rather than the whole bank.
+      const subj  = document.getElementById('fSubject').value || '';
+      const stage = document.getElementById('fStage').value   || '';
+      const bpSubject = document.getElementById('bpSubject');
+      // Subject options come from mySubjects (CH subject-specialty scope).
+      bpSubject.innerHTML = '<option value="">All my subjects</option>' +
+        mySubjects.map(s => `<option value="${s}" ${s === subj ? 'selected' : ''}>${escHtml(SUBJ_LABEL[s] || s)}</option>`).join('');
+      document.getElementById('bpStage').value = stage;
+      document.getElementById('bpType').value  = '';
+      document.getElementById('bpDiff').value  = '';
+      document.getElementById('bpSearch').value = '';
+      bpState.selected.clear();
+      bpState.cursors = [null];
+      bpState.pageIndex = 0;
+      bpState.lastSnap = null;
+      updateBpSelCount();
+      document.getElementById('bankPickerModal').classList.add('is-open');
+      loadBpPage(0);
+    }
+    function closeBankPicker() {
+      document.getElementById('bankPickerModal').classList.remove('is-open');
+    }
+
+    function buildBpQuery() {
+      const subj  = document.getElementById('bpSubject').value;
+      const stage = document.getElementById('bpStage').value;
+      const type  = document.getElementById('bpType').value;
+      const diff  = document.getElementById('bpDiff').value;
+      const col = collection(window.db, 'chapter_test_items');
+      const constraints = [];
+      if (subj)  constraints.push(where('subjectId', '==', subj));
+      if (stage) constraints.push(where('stage', '==', Number(stage)));
+      if (type)  constraints.push(where('type', '==', type));
+      if (diff)  constraints.push(where('difficulty', '==', diff));
+      // Sort by createdAt desc — docs missing the field are silently
+      // dropped, but every chapter_test_items doc written through
+      // saveTest() or question-bank does set createdAt at addDoc time.
+      constraints.push(orderBy('createdAt', 'desc'));
+      return query(col, ...constraints);
+    }
+
+    async function loadBpPage(target) {
+      const list = document.getElementById('bpList');
+      list.innerHTML = '<div class="bp-empty">Loading…</div>';
+      try {
+        let q = buildBpQuery();
+        const cursor = bpState.cursors[target];
+        q = cursor ? query(q, startAfter(cursor), limit(BP_PAGE_SIZE)) : query(q, limit(BP_PAGE_SIZE));
+        const snap = await getDocs(q);
+        bpState.pageItems = snap.docs.map(d => ({ id: d.id, snap: d, ...d.data() }));
+        bpState.lastSnap = snap.docs[snap.docs.length - 1] || null;
+        if (bpState.lastSnap && bpState.pageItems.length === BP_PAGE_SIZE) {
+          bpState.cursors[target + 1] = bpState.lastSnap;
+        }
+        bpState.pageIndex = target;
+        renderBpRows();
+        // Filter-aware search is page-scoped (same compromise as question-bank).
+        applyBpSearch();
+      } catch (e) {
+        console.error('[bank-picker] loadBpPage failed', e);
+        list.innerHTML = `<div class="bp-empty">Query failed. ${escHtml(e.message || '')}<br><br>Usually a missing Firestore composite index — check the browser console for an auto-generated index URL.</div>`;
+      }
+    }
+
+    function renderBpRows() {
+      const list = document.getElementById('bpList');
+      if (bpState.pageItems.length === 0) {
+        list.innerHTML = '<div class="bp-empty">No items match the current filters.</div>';
+        document.getElementById('bpPagerInfo').textContent = 'page 1';
+        document.getElementById('bpPrev').disabled = true;
+        document.getElementById('bpNext').disabled = true;
+        return;
+      }
+      // IDs already in the current test (workingItems) are shown disabled.
+      const alreadyIn = new Set(workingItems.map(it => it.id).filter(Boolean));
+      list.innerHTML = bpState.pageItems.map(it => {
+        const inUse = alreadyIn.has(it.id);
+        const usedCount = Array.isArray(it.usedInTestIds) ? it.usedInTestIds.length : 0;
+        const isSelected = bpState.selected.has(it.id);
+        return `
+        <div class="bp-row" data-id="${escAttr(it.id)}">
+          <input type="checkbox" data-pick="${escAttr(it.id)}" ${inUse ? 'disabled checked' : (isSelected ? 'checked' : '')}>
+          <div class="bp-row-body">
+            <div class="bp-row-stem">${escHtml((it.stem || '(no stem)').slice(0, 240))}</div>
+            <div class="bp-row-meta">
+              <span class="pill">${escHtml(SUBJ_LABEL[it.subjectId] || it.subjectId || '—')}</span>
+              <span class="pill">Y${escHtml(it.stage || '—')}</span>
+              <span class="pill ${escAttr(it.difficulty)}">${escHtml(it.difficulty || '?')}</span>
+              <span class="pill">${escHtml(it.type)}</span>
+              ${it.unitCode ? `<span class="pill">${escHtml(it.unitCode)}</span>` : ''}
+              ${inUse
+                ? '<span class="pill used">already in this test</span>'
+                : (usedCount > 0 ? `<span class="pill">used in ${usedCount} test${usedCount === 1 ? '' : 's'}</span>` : '')}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      list.querySelectorAll('input[type="checkbox"][data-pick]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const id = cb.dataset.pick;
+          if (cb.disabled) return;
+          if (cb.checked) {
+            const it = bpState.pageItems.find(x => x.id === id);
+            if (it) bpState.selected.set(id, it);
+          } else {
+            bpState.selected.delete(id);
+          }
+          updateBpSelCount();
+        });
+      });
+      // Pager state.
+      const hasPrev = bpState.pageIndex > 0;
+      const hasNext = !!bpState.cursors[bpState.pageIndex + 1];
+      document.getElementById('bpPrev').disabled = !hasPrev;
+      document.getElementById('bpNext').disabled = !hasNext;
+      document.getElementById('bpPagerInfo').textContent = `page ${bpState.pageIndex + 1}`;
+    }
+
+    function applyBpSearch() {
+      const q = (document.getElementById('bpSearch').value || '').trim().toLowerCase();
+      if (!q) {
+        // No filter; ensure all rows visible.
+        document.querySelectorAll('#bpList .bp-row').forEach(r => r.style.display = '');
+        return;
+      }
+      document.querySelectorAll('#bpList .bp-row').forEach(r => {
+        const stem = (r.querySelector('.bp-row-stem')?.textContent || '').toLowerCase();
+        r.style.display = stem.includes(q) ? '' : 'none';
+      });
+    }
+
+    function updateBpSelCount() {
+      const n = bpState.selected.size;
+      document.getElementById('bpSelCount').textContent = `${n} selected`;
+      document.getElementById('bpAdd').disabled = n === 0;
+    }
+
+    function commitBpSelection() {
+      // Append selected bank items to workingItems, tagged bankSourced=true
+      // so renderItems shows the "bank" pill + "Edit in bank ↗" affordance.
+      // saveTest() already handles items with an .id correctly (update path
+      // + arrayUnion on usedInTestIds), so nothing else needs to change.
+      const seen = new Set(workingItems.map(it => it.id).filter(Boolean));
+      let added = 0;
+      bpState.selected.forEach((it, id) => {
+        if (seen.has(id)) return;
+        // Strip the snap reference — we only need the plain data + id.
+        const { snap, ...rest } = it;
+        workingItems.push({ ...rest, bankSourced: true });
+        added++;
+      });
+      bpState.selected.clear();
+      closeBankPicker();
+      renderItems();
+      if (added > 0) toast(`Added ${added} item${added === 1 ? '' : 's'} from the bank.`);
+    }
+
+    // Wire picker controls (one-time at module load — picker DOM stays mounted).
+    document.getElementById('bpCancel').addEventListener('click', closeBankPicker);
+    document.getElementById('bpAdd').addEventListener('click', commitBpSelection);
+    document.getElementById('bpPrev').addEventListener('click', () => loadBpPage(Math.max(0, bpState.pageIndex - 1)));
+    document.getElementById('bpNext').addEventListener('click', () => loadBpPage(bpState.pageIndex + 1));
+    ['bpSubject', 'bpStage', 'bpType', 'bpDiff'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        // Filter change → reset pagination + reload.
+        bpState.cursors = [null];
+        bpState.pageIndex = 0;
+        loadBpPage(0);
+      });
+    });
+    document.getElementById('bpSearch').addEventListener('input', applyBpSearch);
 
     // Item editor: mount shared rich editor (markdown + LaTeX + Cambridge metadata).
     // Working item lives in memory until the parent test is saved; new items get
@@ -552,6 +879,20 @@
         // items are self-describing inside the bank.
         const orderedItemIds = [];
         for (const it of workingItems) {
+          // Bank-sourced items: never rewrite the upstream content. The
+          // item already lives in chapter_test_items with its own
+          // subjectId/stage/unitCode/status/etc. — overwriting from the
+          // current test's envelope would silently move a shared item
+          // into this test's metadata and break the other tests using
+          // it. Only ensure the reverse index records this test.
+          if (it.bankSourced && it.id) {
+            await updateDoc(doc(window.db, 'chapter_test_items', it.id), {
+              usedInTestIds: arrayUnion(testId),
+              updatedAt:     serverTimestamp(),
+            });
+            orderedItemIds.push(it.id);
+            continue;
+          }
           const itemPayload = {
             type:            it.type,
             stem:            it.stem || '',
