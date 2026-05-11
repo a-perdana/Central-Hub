@@ -195,7 +195,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 
 **Curriculum:** `igcse-syllabus`, `as-alevel-syllabus`, `primary-checkpoint-syllabus`, `secondary-checkpoint-syllabus`, `curriculum-map`, `national-alignment` (Cambridge ↔ KM), `igcse-{math,biology,chemistry,physics}-pacing` (IGCSE), `checkpoint-{math,english,science}-pacing` (Lower Secondary, also has Progression Grid tab), `as-alevel-{math,biology,chemistry,physics}-pacing`, `teaching-progress` (real-time across all 11 subjects)
 
-**Operations:** `appraisals`, `school-appraisals`, `teacher-appraisals`, `ease-system`, `assessment-management`, `assessments`, `activities` (kanban), `school-visits`, `kpi-admin`, `reports`
+**Operations:** `appraisals`, `school-appraisals`, `teacher-appraisals`, `activities` (kanban), `school-visits`, `kpi-admin`, `reports`. **Legacy / retired:** `ease-system` (4-cycle handbook, kept as historical reference — superseded 2026-05-11 by EASE Growth + chapter tests); `assessments` (retired landing-page stub, redirects to `index`). **Moved to Curriculum:** `assessment-management` → "Pacing Assessments" (lives under Curriculum > Pacing Assessments since 2026-05-11).
 
 **Survey + Certificates:** `surveys`, `survey-console`, `certificates`, `certificate-verify` (no auth guard)
 
