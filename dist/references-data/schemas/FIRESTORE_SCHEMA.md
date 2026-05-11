@@ -757,6 +757,18 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 
 ---
 
+#### `chapter_mastery/{studentUid}_{subjectId}_{unitCode}`
+**PK:** Composite `{studentUid}_{subjectId}_{unitCode}`, sanitised lowercase.
+**Fields:** `studentUid →students.uid`, `subjectId`, `unitCode`, `testId →chapter_tests.id`, `testTitle` (denormalised), `schoolId →partner_schools.id`, `classId`, `className`, `latestAttemptId →chapter_test_attempts.id`, `scorePct`, `passed`, `masteryLevel` (`'emerging' | 'developing' | 'secure' | 'exceeding'`), `attemptsCount`, `firstAttemptAt`, `lastAttemptAt`, `updatedAt`.
+**Writers:** **Cloud Function `onChapterAttemptWritten` only.** No client-side write path — keeps the aggregate canonical. Admin SDK bypasses rules. Triggered on every `chapter_test_attempts` write whose post-status is `'scored' | 'submitted' | 'flagged'`.
+**Read:** owner (student) · same-school staff (admin, AH leadership, TH teachers) · admin.
+**Notes:**
+- Denormalised aggregate so pacing dashboards + `class-assessment` heatmap can read mastery without re-scanning attempts.
+- Same student retaking a chapter overwrites the prior result (`attemptsCount` increments, `latestAttemptId` flips). Past attempts remain in `chapter_test_attempts` for audit.
+- Mastery band thresholds match `class-assessment.html` UI: <40 emerging, 40-60 developing, 60-80 secure, >80 exceeding.
+
+---
+
 #### `ease_items/{itemId}`
 **PK:** Auto-id.
 **Fields:** `subjectId` (`'math' | 'english' | 'science'`), `strandCode` (e.g. `'algebra'`, `'reading'`, `'cell-biology'`), `difficulty` (`'easy' | 'medium' | 'hard'`), `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short), `explanation`, `cambridgeStandardRefs[]`, `stage_min` (Year 7..), `stage_max` (Year 12), `pilotPhase` (`true` while uncalibrated — Phase 2/3), `seenCount`, `correctRate`, `authorUid`, `createdAt`, `updatedAt`.

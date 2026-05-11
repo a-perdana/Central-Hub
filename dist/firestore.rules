@@ -410,6 +410,24 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- chapter_mastery ------------------------------------
+    // Denormalised aggregate written by Cloud Function
+    // onChapterAttemptWritten. One doc per (student, subject, unit)
+    // holds the latest score + mastery band so pacing dashboards +
+    // class-assessment heatmaps can read mastery without scanning
+    // attempts. Doc id pattern: {studentUid}_{subjectId}_{unitCode},
+    // sanitised lowercase.
+    //
+    // Read: owner (student) · same-school staff · admin.
+    // Write: Cloud Function only (admin SDK bypasses rules). No
+    // client-side write path — keeps the aggregate canonical.
+    match /chapter_mastery/{masteryId} {
+      allow get: if isAuthorized() ||
+                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow list: if isAuthorized();
+      allow create, update, delete: if isAdmin();
+    }
+
     // -- EASE Growth (Phase 2 adaptive cross-grade engine) ---
     // Math/English/Science only, 3 windows/year (Fall/Winter/Spring).
     // Network-uniform — every partner school's students draw from the

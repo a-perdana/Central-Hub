@@ -329,6 +329,95 @@ function round2(n) {
 }
 
 // ───────────────────────────────────────────────────────────────
+// 5. CHAPTER MASTERY AGGREGATE — onChapterAttemptWritten
+//    On every chapter_test_attempts write where status flips into
+//    'scored' / 'submitted' / 'flagged' (i.e. a real result exists),
+//    recompute chapter_mastery/{studentUid}_{subjectId}_{unitCode}.
+//
+//    The aggregate doc holds the LATEST attempt's score so pacing
+//    dashboards + class-assessment heatmaps can read mastery
+//    without re-scanning attempts. Same student retaking a chapter
+//    overwrites the prior result (attemptsCount increments).
+//
+//    Doc id pattern: {studentUid}_{subjectId}_{unitCode}.
+//    Sanitised to firestore-safe slug (lowercase, non-alphanumeric → -).
+// ───────────────────────────────────────────────────────────────
+const MASTERY_STATUSES = new Set(["scored", "submitted", "flagged"]);
+
+exports.onChapterAttemptWritten = onDocumentWritten(
+  {
+    document: "chapter_test_attempts/{attemptId}",
+    region: "asia-southeast1",
+  },
+  async (event) => {
+    const after = event.data?.after?.data();
+    if (!after) return; // delete
+    if (!MASTERY_STATUSES.has(after.status)) return; // still in_progress / draft / cancelled
+
+    const beforeStatus = event.data?.before?.data()?.status;
+    if (MASTERY_STATUSES.has(beforeStatus) && beforeStatus === after.status &&
+        event.data?.before?.data()?.rawScorePct === after.rawScorePct) {
+      return; // no score change → nothing to recompute
+    }
+
+    const studentUid = after.studentUid;
+    const testId     = after.testId || "";
+    const subjectId  = (testId.split("_")[0] || "unknown").toLowerCase();
+    const unitCode   = inferUnitCode(testId) || "unknown";
+    if (!studentUid) return;
+
+    const masteryId = slug(`${studentUid}_${subjectId}_${unitCode}`);
+    const ref = db.collection("chapter_mastery").doc(masteryId);
+    const prior = (await ref.get()).data() || {};
+
+    const rawScorePct = typeof after.rawScorePct === "number" ? after.rawScorePct : null;
+    const passed      = after.passed === true;
+    const masteryLevel = bandFor(rawScorePct);
+
+    const payload = {
+      studentUid,
+      subjectId,
+      unitCode,
+      testId,
+      testTitle: after.testTitle || null,
+      schoolId: after.schoolId || null,
+      classId: after.classId || null,
+      className: after.className || null,
+      latestAttemptId: event.params.attemptId,
+      scorePct: rawScorePct,
+      passed,
+      masteryLevel,
+      attemptsCount: (prior.attemptsCount || 0) + 1,
+      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (!prior.firstAttemptAt) payload.firstAttemptAt = admin.firestore.FieldValue.serverTimestamp();
+
+    await ref.set(payload, { merge: true });
+    console.log(`[chapter-mastery] ${masteryId} ← ${rawScorePct}% (${masteryLevel})`);
+  }
+);
+
+function bandFor(pct) {
+  if (typeof pct !== "number") return null;
+  if (pct < 40)  return "emerging";
+  if (pct < 60)  return "developing";
+  if (pct < 80)  return "secure";
+  return "exceeding";
+}
+function slug(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9_]/g, "-");
+}
+function inferUnitCode(testId) {
+  // testId pattern: {subject}_{year}_{unitCode}_v{n}, lowercased+slugged.
+  // e.g. math_7_7ni-01_v1 → unit "7ni-01"
+  const parts = String(testId).split("_");
+  if (parts.length < 4) return null;
+  // Drop leading subject + year, drop trailing version, rejoin remainder.
+  return parts.slice(2, -1).join("_");
+}
+
+// ───────────────────────────────────────────────────────────────
 // HELPERS
 // ───────────────────────────────────────────────────────────────
 function isoWeekStart(d) {
