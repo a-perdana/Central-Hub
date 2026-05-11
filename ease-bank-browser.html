@@ -115,11 +115,10 @@
     <a href="index" style="font-size:.86rem; color:var(--ink-3); text-decoration:none;">← Back to Central Hub</a>
     <div id="accessWarn" class="access-warn" hidden style="margin-top:14px"></div>
 
-    <div class="upstream-warn" style="margin-top:14px; padding:12px 16px; background:#fef3c7; color:#78350f; border:1px solid #fcd34d; border-radius:10px; font-size:13px; line-height:1.5;">
-      <b>Heads up — upstream image bucket is dead.</b>
-      All <code>eduversal.s3.ap-southeast-1.amazonaws.com</code> URLs in latihan.id question HTML currently return <code>NoSuchBucket</code> (404).
-      Broken images show as an "Image unavailable" placeholder until the latihan.id team restores the bucket or migrates URLs.
-      Math LaTeX (<code>\(…\)</code>) is rendered via MathJax.
+    <div class="upstream-warn" style="margin-top:14px; padding:12px 16px; background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; border-radius:10px; font-size:13px; line-height:1.5;">
+      <b>About this page.</b>
+      LaTeX (<code>\(…\)</code>) is rendered via MathJax. Images served from <code>latihan.id/storage/</code> are live and load normally.
+      Older items whose URLs point at <code>eduversal.s3.ap-southeast-1.amazonaws.com</code> show an "Image unavailable" placeholder — that S3 bucket was deleted on the upstream side. Cards carrying any dead image get an <span style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:1px 6px;border-radius:99px;font-size:11px;">Image 404</span> pill so you can skip them.
     </div>
 
     <div class="layout" style="margin-top:18px">
@@ -205,6 +204,19 @@
               if (!allowedAttrs.has(attr.name)) child.removeAttribute(attr.name);
             }
             if (child.tagName === "IMG") {
+              // Upstream <img> tags carry sizing on `style` (which the
+              // attribute allowlist strips) *and* via data-width /
+              // data-height. We dropped style, so recover from data-*.
+              // Some tags only ship style, so fall back to a sensible
+              // default rather than rendering a 0×0 image.
+              const dw = child.getAttribute("data-width");
+              const dh = child.getAttribute("data-height");
+              if (!child.getAttribute("width") && dw) child.setAttribute("width", dw);
+              if (!child.getAttribute("height") && dh) child.setAttribute("height", dh);
+              // Remove the data-* attrs now that we copied them.
+              child.removeAttribute("data-width");
+              child.removeAttribute("data-height");
+
               const src = child.getAttribute("src") || "";
               if (!/^https?:\/\//i.test(src)) child.removeAttribute("src");
               // Known-dead upstream bucket → mark + provide alt so the
@@ -225,6 +237,8 @@
                     `</svg>`
                   )
                 );
+              } else {
+                child.setAttribute("loading", "lazy");
               }
             }
             walk(child);
