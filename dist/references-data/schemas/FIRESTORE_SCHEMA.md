@@ -782,12 +782,15 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 ---
 
 #### `ease_items/{itemId}`
-**PK:** Auto-id.
-**Fields:** `subjectId` (`'math' | 'english' | 'science'`), `strandCode` (e.g. `'algebra'`, `'reading'`, `'cell-biology'`), `difficulty` (`'easy' | 'medium' | 'hard'`), `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short), `explanation`, `cambridgeStandardRefs[]`, `stage_min` (Year 7..), `stage_max` (Year 12), `pilotPhase` (`true` while uncalibrated — Phase 2/3), `seenCount`, `correctRate`, `authorUid`, `createdAt`, `updatedAt`.
+**PK:** Auto-id (HQ-authored) OR `latihan_{uuid}` (imported from latihan.id — deterministic for idempotent re-import).
+**Fields:** `subjectId` (`'math' | 'english' | 'science'`), `strandCode` (e.g. `'algebra'`, `'reading'`, `'cell-biology'`), `difficulty` (`'easy' | 'medium' | 'hard'`), `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `stemHtml` (sanitised HTML — optional, set when the source ships rich content), `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short), `explanation`, `cambridgeStandardRefs[]`, `stage_min` (Year 7..), `stage_max` (Year 12), `pilotPhase` (`true` while uncalibrated — Phase 2/3), `seenCount`, `correctRate`, `cognitiveTag` (Knowing / Conceptual / Quantitative / Analysis / Interpretation / Evaluating / Applying / Understanding — from upstream `cognitive`, optional), `source` (`'hq' | 'latihan'`), `sourceId` (e.g. `latihan.id uuid` — set when `source = 'latihan'`), `sourceLessonCode` (upstream lesson code, e.g. `EASE-SMP-MAT`), `sourceP` (upstream-reported correct percentage / 100 — useful initial logit estimate), `authorUid`, `createdAt`, `updatedAt`.
 **FKs:** `authorUid → users.uid`.
-**Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `ease-item-author.html`).
+**Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `ease-item-author.html`). Imports from latihan.id run through `scripts/ease/import-latihan-bank.js` (admin SDK; bypasses rules).
 **Read:** any authorised staff; active students (current MVP reads the bank as needed).
-**Notes:** Author-assigned difficulty bands MVP. Phase 3 Cloud Function will calibrate per-item logit + discrimination from response data and fold those onto the doc, leaving `difficulty` as a bootstrap.
+**Notes:**
+- Author-assigned difficulty bands MVP. Phase 3 Cloud Function will calibrate per-item logit + discrimination from response data and fold those onto the doc, leaving `difficulty` as a bootstrap.
+- Imported items use composite doc id `latihan_{uuid}` so the importer is naturally idempotent — re-runs `set(..., { merge: true })` instead of creating duplicates. Manual author edits on imported items stick (last-write-wins on field merge).
+- `sourceP` is upstream's observed correct-rate. Phase 3 calibration will use it as a starting logit estimate (`theta ≈ -log(p / (1-p))`), then refine from our own response data.
 
 ---
 

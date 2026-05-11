@@ -98,9 +98,12 @@ function renderRich(targetEl, text) {
     targetEl.innerHTML = html;
     if (window.renderMathInElement) {
       window.renderMathInElement(targetEl, {
+        // No bare `$…$` — math word problems use $ as currency or
+        // variable name ($a, $b). KaTeX/MathJax would otherwise
+        // claim everything between two dollar signs as math, eating
+        // spaces and italicising the run. Use \(…\) for inline.
         delimiters: [
           { left: '$$', right: '$$', display: true  },
-          { left: '$',  right: '$',  display: false },
           { left: '\\(', right: '\\)', display: false },
           { left: '\\[', right: '\\]', display: true  },
         ],

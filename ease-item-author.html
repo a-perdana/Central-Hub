@@ -9,7 +9,10 @@
   <link rel="stylesheet" href="shared-styles.css">
   <script>
     window.MathJax = {
-      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]'], ['$$', '$$']] },
+      // No `$…$` inline delimiter — dollar signs appear as literal
+      // currency / variables ($a, $b) in math word problems. See
+      // ease-bank-browser.html for the past-incident note.
+      tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]'], ['$$', '$$']] },
       svg: { fontCache: 'global' },
       options: { renderActions: { addMenu: [] } },
     };
@@ -126,6 +129,24 @@
     <div class="modal" style="width: min(1100px, 100%); max-width: 1100px;">
       <h2 id="iModalTitle">New EASE item</h2>
       <div class="modal-body" id="easeEditorMount" style="padding: 18px 22px;"></div>
+    </div>
+  </div>
+
+  <!-- Preview-only modal — shows the item as a student would see it. -->
+  <div id="previewModal" class="modal-overlay" role="dialog" aria-hidden="true">
+    <div class="modal" style="width: min(760px, 100%); max-width: 760px;">
+      <h2 style="display:flex;align-items:center;gap:10px;">
+        <span>Item preview</span>
+        <span id="pvCode" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;color:var(--ink-3);font-weight:400"></span>
+        <span style="flex:1"></span>
+        <button id="pvClose" class="btn-secondary" type="button" style="font-size:13px">Close</button>
+      </h2>
+      <div class="modal-body" style="padding: 18px 22px;">
+        <div id="pvMeta" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;font-size:12px"></div>
+        <div id="pvStem" style="font-size:15px;line-height:1.55;color:var(--ink);background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;"></div>
+        <div id="pvAnswers" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <div id="pvExplain" hidden style="margin-top:14px;padding:12px 14px;background:var(--paper);border-radius:10px;font-size:13.5px;color:var(--ink-2)"></div>
+      </div>
     </div>
   </div>
 
@@ -323,14 +344,16 @@
         renderPager();
         return;
       }
+      const SVG_VIEW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
       const SVG_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
       const SVG_DEL  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
 
       box.innerHTML = `
         <table class="items">
-          <thead><tr><th>Subject</th><th>Difficulty</th><th>Type</th><th>Stem</th><th>Strand</th><th>Phase</th><th></th></tr></thead>
+          <thead><tr><th>Code</th><th>Subject</th><th>Difficulty</th><th>Type</th><th>Stem</th><th>Strand</th><th>Phase</th><th></th></tr></thead>
           <tbody>${visible.map(it => `
             <tr>
+              <td style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink-3)">${escHtml(itemCode(it))}</td>
               <td><strong>${escHtml(it.subjectId)}</strong></td>
               <td><span class="pill pill-${escAttr(it.difficulty)}">${escHtml(it.difficulty)}</span></td>
               <td><span class="pill pill-${escAttr(it.type)}">${escHtml(it.type)}</span></td>
@@ -339,6 +362,7 @@
               <td>${it.pilotPhase === false ? '<span class="pill pill-calibrated">calibrated</span>' : '<span class="pill pill-pilot">pilot</span>'}</td>
               <td style="text-align:right">
                 <div class="row-actions">
+                  <button class="icon-btn" data-act="view" data-id="${escAttr(it.id)}" title="Preview" aria-label="Preview">${SVG_VIEW}</button>
                   <button class="icon-btn" data-act="edit" data-id="${escAttr(it.id)}" title="Edit" aria-label="Edit">${SVG_EDIT}</button>
                   <button class="icon-btn icon-btn-danger" data-act="del" data-id="${escAttr(it.id)}" title="Delete" aria-label="Delete">${SVG_DEL}</button>
                 </div>
@@ -355,6 +379,17 @@
         window.MathJax.typesetPromise([box]).catch(() => {});
       }
       renderPager();
+    }
+
+    // Item code for the first column. Imported items expose the
+    // upstream short code (e.g. "CIS70") via sourceCode; HQ-authored
+    // items fall back to the first 6 chars of the auto-id.
+    function itemCode(it) {
+      if (it.sourceCode) return it.sourceCode;
+      if (it.id && it.id.startsWith('latihan_')) {
+        return it.id.slice(8, 14).toUpperCase();
+      }
+      return (it.id || '').slice(0, 6).toUpperCase() || '—';
     }
 
     // Stem preview: prefer the sanitised HTML (it carries inline
@@ -442,7 +477,119 @@
       document.getElementById('pageNext').addEventListener('click', () => loadPage(pageIndex + 1));
     }
 
+    // Read-only "student-eye" preview. Pulls fresh from Firestore so
+    // a stale list cache doesn't mislead a reviewer who just edited
+    // somewhere else.
+    async function openPreview(id) {
+      const modal = document.getElementById('previewModal');
+      modal.classList.add('is-open');
+      document.getElementById('pvCode').textContent = '';
+      document.getElementById('pvMeta').innerHTML = '<span style="color:var(--ink-3)">Loading…</span>';
+      document.getElementById('pvStem').innerHTML = '';
+      document.getElementById('pvAnswers').innerHTML = '';
+      document.getElementById('pvExplain').hidden = true;
+      try {
+        const snap = await getDoc(doc(window.db, 'ease_items', id));
+        if (!snap.exists()) {
+          document.getElementById('pvMeta').textContent = 'Item not found.';
+          return;
+        }
+        const it = { id: snap.id, ...snap.data() };
+        document.getElementById('pvCode').textContent = itemCode(it);
+        const pillBg = { easy: ['#dcfce7','#166534'], medium: ['#fef3c7','#92400e'], hard: ['#fee2e2','#b91c1c'] }[it.difficulty] || ['#f3f4f6','#374151'];
+        document.getElementById('pvMeta').innerHTML = `
+          <span style="background:#ede9fe;color:#6c5ce7;padding:3px 9px;border-radius:99px;font-weight:600">${escHtml(it.subjectId || '—')}</span>
+          <span style="background:${pillBg[0]};color:${pillBg[1]};padding:3px 9px;border-radius:99px;font-weight:600">${escHtml(it.difficulty || '—')}</span>
+          <span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">${escHtml(it.type || '—')}</span>
+          ${it.strandCode ? `<span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">${escHtml(it.strandCode)}</span>` : ''}
+          ${(it.stage_min || it.stage_max) ? `<span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">Y${escHtml(it.stage_min)}${it.stage_max && it.stage_max !== it.stage_min ? '–'+escHtml(it.stage_max) : ''}</span>` : ''}
+          ${it.cognitiveTag ? `<span style="background:#ecfdf5;color:#047857;padding:3px 9px;border-radius:99px;border:1px solid #6ee7b7">${escHtml(it.cognitiveTag)}</span>` : ''}
+        `;
+        // Stem
+        const stemHtml = it.stemHtml || it.stem || '';
+        document.getElementById('pvStem').innerHTML = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
+        // Answers
+        const ansBox = document.getElementById('pvAnswers');
+        if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length) {
+          ansBox.innerHTML = it.options.map((o, i) => {
+            const oHtml = (it.optionsHtml && it.optionsHtml[i]) ? sanitisePreviewHtml(it.optionsHtml[i]) : escHtml(o);
+            const isCorrect = i === it.correctIdx;
+            return `
+              <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:${isCorrect ? '#ecfdf5' : '#fff'};border:1px solid ${isCorrect ? '#6ee7b7' : 'var(--border)'};border-radius:10px;font-size:14px;line-height:1.5;">
+                <span style="font-weight:700;min-width:22px">${String.fromCharCode(65+i)}</span>
+                <span style="flex:1">${oHtml}</span>
+                ${isCorrect ? '<span style="font-size:11px;color:#047857;font-weight:600">✓ correct</span>' : ''}
+              </div>
+            `;
+          }).join('');
+        } else if (it.type === 'numeric' || it.type === 'short') {
+          ansBox.innerHTML = `
+            <div style="padding:10px 14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;font-size:14px;">
+              <b>Answer:</b> ${escHtml(it.correctAnswer || '—')}
+            </div>
+          `;
+        }
+        // Explanation
+        if (it.explanation) {
+          document.getElementById('pvExplain').hidden = false;
+          document.getElementById('pvExplain').innerHTML = '<b>Explanation</b><br>' + sanitisePreviewHtml(it.explanation);
+        }
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          window.MathJax.typesetPromise([modal]).catch(() => {});
+        }
+      } catch (e) {
+        document.getElementById('pvMeta').textContent = 'Preview failed: ' + (e.message || e.code);
+      }
+    }
+    // Less-strict sanitiser for the preview modal — keep tables,
+    // images, and structural tags so students see the full item.
+    function sanitisePreviewHtml(html) {
+      if (!html) return '';
+      const tpl = document.createElement('template');
+      tpl.innerHTML = String(html);
+      const ALLOWED = new Set(['P','SPAN','IMG','BR','STRONG','EM','B','I','U','UL','OL','LI','TABLE','TR','TD','TH','TBODY','THEAD','SUP','SUB','DIV']);
+      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading']), '*': new Set([]) };
+      function walk(node) {
+        for (const child of [...node.childNodes]) {
+          if (child.nodeType !== 1) continue;
+          if (!ALLOWED.has(child.tagName)) {
+            child.replaceWith(document.createTextNode(child.textContent || ''));
+            continue;
+          }
+          const okSet = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS['*'];
+          for (const attr of [...child.attributes]) {
+            if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+          }
+          if (child.tagName === 'IMG') {
+            const src = child.getAttribute('src') || '';
+            // Upstream sometimes emits relative paths like
+            // /storage/latihan/images/... — rebase to absolute.
+            if (src.startsWith('/storage/')) {
+              child.setAttribute('src', 'https://latihan.id' + src);
+            } else if (!/^https?:\/\//i.test(src)) {
+              child.removeAttribute('src');
+            }
+            child.setAttribute('loading', 'lazy');
+            child.style.maxWidth = '100%';
+            child.style.height = 'auto';
+          }
+          walk(child);
+        }
+      }
+      walk(tpl.content);
+      return tpl.innerHTML;
+    }
+    document.getElementById('pvClose').addEventListener('click', () => {
+      document.getElementById('previewModal').classList.remove('is-open');
+    });
+    document.getElementById('previewModal').addEventListener('click', (e) => {
+      if (e.target.id === 'previewModal') {
+        document.getElementById('previewModal').classList.remove('is-open');
+      }
+    });
+
     async function action(act, id) {
+      if (act === 'view') return openPreview(id);
       if (act === 'edit') return openItem(id);
       if (act === 'del') {
         if (!confirm('Delete this item?')) return;
