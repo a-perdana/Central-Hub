@@ -795,11 +795,11 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 ---
 
 #### `ease_test_windows/{windowId}`
-**PK:** Composite `{academicYear}_{window}` (e.g. `2025-2026_fall`).
-**Fields:** `academicYear`, `window` (`'fall' | 'winter' | 'spring'`), `subjects[]`, `opensAt`, `closesAt`, `description`, `status` (`'draft' | 'open' | 'closed'`), `itemCountTarget` (default 25), `seStopThreshold` (default 0.4), `createdAt`, `updatedAt`.
+**PK:** Composite `{academicYear}_{window}` (e.g. `2025-2026_term1`).
+**Fields:** `academicYear`, `window` (`'term1' | 'term2' | 'term3'`; legacy `'fall' | 'winter' | 'spring'` accepted on existing docs for back-compat), `subjects[]`, `opensAt`, `closesAt`, `description`, `status` (`'draft' | 'open' | 'closed'`), `itemCountTarget` (default 25), `seStopThreshold` (default 0.4), `createdAt`, `updatedAt`.
 **Writers:** `central_admin`.
 **Read:** any authorised staff; active students.
-**Notes:** Three windows per academic year. Students start a fresh `ease_sessions` doc per window per subject.
+**Notes:** Three windows per academic year. Students start a fresh `ease_sessions` doc per window per subject. Naming switched to Term 1/2/3 on 2026-05-12; one legacy pilot doc (`2025-2026_spring`, holding 1 session) was kept rather than migrated to avoid losing the session's `windowId` FK.
 
 ---
 
