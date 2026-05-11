@@ -330,6 +330,7 @@ const htmlFiles = [
   "chapter-test-author.html",
   "ease-item-author.html",
   "ease-window-admin.html",
+  "question-bank.html",
   "page-access.html",
   "rules-viewer.html",
   "design-system.html",
@@ -634,7 +635,7 @@ if (fs.existsSync("tokens.css")) {
 // -- Copy partials/*.js shared modules + shared partial CSS
 const partialsDistDir = path.join("dist", "partials");
 if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
-const partialsAssets = ["pacing-core.js", "syllabus-core.js", "syllabus-styles.css"];
+const partialsAssets = ["pacing-core.js", "syllabus-core.js", "syllabus-styles.css", "question-editor.js"];
 for (const fname of partialsAssets) {
   const src = path.join("partials", fname);
   if (fs.existsSync(src)) {

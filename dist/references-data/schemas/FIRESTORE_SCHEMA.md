@@ -704,19 +704,31 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 
 #### `chapter_tests/{testId}`
 **PK:** Slugged composite `{subjectId}_{stage}_{unitCode}_v{version}` (e.g. `math_7_7ni-04_v1`). Lowercased, non-alphanumeric → `-`.
-**Fields:** `subjectId`, `stage` (Year number 7..12 — field name historical, UI labels it "Year" since Eduversal partner schools are Indonesian; "Stage" terminology only relevant inside Cambridge syllabus references), `unitCode`, `unitTitle`, `version` (default 1), `description`, `durationMin` (default 30), `passThresholdPct` (default 60), `itemCount`, `totalMarks`, `status` (`'draft' | 'published' | 'archived'`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
+**Fields:** `subjectId`, `stage` (Year number 7..12 — field name historical, UI labels it "Year" since Eduversal partner schools are Indonesian; "Stage" terminology only relevant inside Cambridge syllabus references), `unitCode`, `unitTitle`, `version` (default 1), `description`, `durationMin` (default 30), `passThresholdPct` (default 60), `itemCount`, `totalMarks`, `itemIds[]` (ordered string array → `chapter_test_items.id`), `status` (`'draft' | 'published' | 'archived'`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
 **Subcollections:**
-- `chapter_tests/{testId}/items/{itemId}` — auto-id. Fields: `seq`, `type` (`'mcq' | 'numeric' | 'short'`), `stem`, `options[]` (mcq only), `correctIdx` (mcq), `correctAnswer` (numeric/short), `marks` (default 1), `difficulty` (`'easy' | 'medium' | 'hard'`), `explanation`, `createdAt`.
+- `chapter_tests/{testId}/items/{itemId}` — **DEPRECATED 2026-05-11**. Pre-migration items still live here for rollback safety; new tests write item refs into `itemIds[]` and item content into top-level `chapter_test_items`. Subcollection rule kept allow-all for reads; will be dropped once readers complete the cutover.
 
-**FKs:** `authorUid → users.uid`. The `unitCode` informally references `*_pacing` collection units but is not an enforced FK — Specialists type the code freehand.
+**FKs:** `authorUid → users.uid` · `itemIds[] → chapter_test_items.id`. The `unitCode` informally references `*_pacing` collection units but is not an enforced FK — Specialists type the code freehand.
 **Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `chapter-test-author.html`).
 **Read scope:**
 - `get`/`list` for any authorised staff (CH/AH/TH browse + scheduling).
 - `get` for **active students** when `status == 'published'` — needed by the test runner to load the test definition for an attempt the student owns.
-- Items subcollection: same scope as parent — active students read items when fetching test content for their attempt.
+- Items: see `chapter_test_items` rule (same active-student `get`/`list` scope).
 **Notes:**
 - Network-uniform: every partner school's students take the same items. Version bump (`v2`) is recommended over in-place edits once a test has live attempts.
 - Subject specialty filter is applied client-side via `ch_subjects[]`; rules don't gate on subject (kept simple — admin/coordinator can author across subjects if needed).
+
+---
+
+#### `chapter_test_items/{itemId}`
+**PK:** Auto-id (preserved across migration so existing `chapter_test_attempts.responses` keys stay valid).
+**Fields:** `subjectId`, `stage` (7..12), `unitCode`, `unitTitle`, `type` (`'mcq' | 'numeric' | 'short'`), `stem` (markdown + LaTeX), `stemImagePath` (Storage path, optional), `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short), `tolerance` (numeric — ±value, default 0 = exact), `acceptedAnswers[]` (short — synonym list), `marks` (default 1), `difficulty` (`'easy' | 'medium' | 'hard'`), `difficultyStars` (1..3, optional), `commandWord` (Cambridge command word, optional), `assessmentObjective` (`'AO1' | 'AO2' | 'AO3'`, optional), `syllabusObjective` (e.g. `'C4.1 – Define the term acid'`, optional), `cambridgeStandardRefs[]` (e.g. `['7Ni.04']`), `markScheme` (M1/A1/B1 notation, optional), `explanation`, `status` (`'draft' | 'published' | 'archived'`), `version` (default 1), `parentItemId` (→ self, set when `version > 1`), `usedInTestIds[]` (denormalised reverse index → `chapter_tests.id`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
+**FKs:** `authorUid → users.uid` · `parentItemId → chapter_test_items.id` · `usedInTestIds[] → chapter_tests.id`.
+**Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `chapter-test-author.html` + `question-bank.html`).
+**Read scope:** any authorised staff; active students read items their attempt references.
+**Notes:**
+- Top-level since 2026-05-11 — enables item reuse across tests, standalone question bank, versioning, and parallel use by EASE-style aggregators.
+- Editing a published item that has `usedInTestIds.size() > 0`: UI should bump `version`, write a new doc with `parentItemId` set, and atomically swap the id in the affected `chapter_tests.itemIds[]`. The rule does not enforce this — discipline lives in the editor.
 
 ---
 
@@ -883,6 +895,53 @@ Public teacher recruitment + structured interview scoring. Lives in Teachers Hub
 
 ---
 
+### 20. Gamification — Points, Levels, Streaks, Leaderboards (Students Hub, 2026-05-11)
+
+Mathletics-style engagement layer on top of chapter test + EASE submissions. Points are earned by completing assessments; a Cloud Function recomputes level / streak / leaderboard aggregates server-side so students cannot self-award. UI surfaces live in dashboard (preview) and `/leaderboard` (full 4-tab board).
+
+**Charter notes (rule-enforced):**
+- Students cannot self-write `student_points` or `school_leaderboards` — both are Cloud-Function-only writes. Self-read OK.
+- Network-wide leaderboard reveals first name + school name + total points only. No `emailLower`, no `lastName`, no class/grade (`schoolId` + `displayName` first-name only). Privacy by minimisation.
+- No "points purchased" path — points are purely behavioural rewards, never monetary.
+
+#### `student_points/{uid}`
+**PK:** student uid (1:1 with `students/{uid}`).
+**Fields:**
+- Identity (denormalised — for leaderboard queries without join): `studentUid →students.uid`, `displayName` (first name only when surfaced on network leaderboard), `photoURL`, `schoolId →partner_schools.id`, `schoolName`, `classId`, `className`, `gradeLevel`.
+- Totals: `totalPoints`, `weeklyPoints`, `monthlyPoints`, `lastWeeklyResetAt`, `lastMonthlyResetAt`.
+- Level: `level` (1-100), `levelXp` (XP into current level), `levelXpRequired` (XP needed for next), `levelProgress` (0-100 %).
+- Streak: `streak{current, longest, lastDay, lastDayISO}`.
+- Badges: `badges[{id, earnedAt, source}]`.
+- Activity counters: `chapterTestsCompleted`, `easeSessionsCompleted`, `perfectScores` (100% chapter tests).
+- Audit: `createdAt`, `updatedAt`, `recomputedAt`.
+**FKs:** `students.uid` (PK), `partner_schools.id`, `partner_schools/{schoolId}/classes/{classId}`.
+**Writers:** **Cloud Functions only** — `awardChapterTestPoints` (on `chapter_test_attempts` write with status flipping to `scored`) and `awardEaseSessionPoints` (on `ease_sessions` write to `submitted`). Admin SDK bypasses rules.
+**Read scope:** owner (self) · `central_admin` · same-school `teachers_admin` / `academic_admin` for own students. Leaderboard list queries (filtered by `classId` / `schoolId` / `gradeLevel`) are allowed for any active student — fields exposed are intentionally minimal (displayName, photoURL, totalPoints, level).
+**Notes:** Weekly + monthly buckets reset by daily scheduled Cloud Function `resetLeaderboardWindows` (Monday 00:00 Asia/Jakarta for weekly; first of month for monthly). Streak day rolls over at 04:00 student local time (defaulted to Asia/Jakarta in MVP). Doc may not exist for brand-new students who have not yet submitted an assessment — clients render zero-state gracefully.
+
+#### Point-award rules (informational — implemented in Cloud Function)
+| Event | Base | Bonus |
+|---|---|---|
+| Chapter test scored | **+50 pts** | +0.5 × `rawScorePct` (so 100% = +100 total); +25 if first attempt; +50 if `rawScorePct >= 100` ("perfect score" badge progress) |
+| EASE session submitted | **+100 pts** | +50 if RIT growth ≥ +5 vs prior window; +25 if growth ≥ 0 |
+| Daily login (touchOnAuthReady) | **+10 pts** | +100 milestone at 7-day streak, +250 at 30-day |
+| Badge earned | **+25 pts** | (one-time) |
+
+Level curve: `levelXpRequired(level) = 100 + (level-1) × 50`. Level 1 → 2 takes 100 XP; level 10 → 11 takes 550 XP. Capped at level 100.
+
+#### Badges (informational — IDs writable by Cloud Function)
+Stable IDs (slugs): `first_chapter_clear`, `perfect_score`, `streak_7`, `streak_30`, `ease_window_done`, `class_top_3_weekly`, `subject_champion_math`, `subject_champion_english`, `subject_champion_science`, `school_top_10_monthly`.
+
+#### `school_leaderboards/{boardId}`
+**PK:** `{scope}_{scopeId}_{period}` — e.g. `class_y8a-fatih_weekly`, `school_partner-fatih_monthly`, `network_all_alltime`. Scope ∈ `class | grade | school | network`. Period ∈ `weekly | monthly | alltime`.
+**Fields:** `scope`, `scopeId`, `period`, `entries[{rank, studentUid, displayName, schoolName, classId, totalPoints, weeklyPoints, monthlyPoints, photoURL, level, delta}]` (top 100), `computedAt`, `nextRecomputeAt`.
+**FKs:** `students.uid` (via entries[].studentUid). `partner_schools.id` (via scopeId for school-scope rows).
+**Writers:** **Cloud Function only** — `rebuildLeaderboards` scheduled run + on-demand recompute when a student's `totalPoints` crosses a threshold.
+**Read scope:** any active student. The network board reveals only `displayName` (first name) + `schoolName` + score — no class/grade/email.
+**Notes:** Stored as one doc per (scope, scopeId, period) tuple with the top 100 inline in `entries[]`. Avoids fanning out per-student rank docs. Stale within `nextRecomputeAt` window; clients show `computedAt` timestamp.
+
+---
+
 ## Indexes (composite)
 
 Single-field indexes are auto-created by Firestore. Composites must be declared in `Central Hub/firestore.indexes.json`.
@@ -1014,4 +1073,4 @@ These are **not blocking** — defer until a real reason to refactor.
 
 ---
 
-_Last sync with rules: 2026-05-03 — `Central Hub/firestore.rules`_
+_Last sync with rules: 2026-05-11 — `Central Hub/firestore.rules`_

@@ -92,41 +92,9 @@
   </main>
 
   <div id="itemModal" class="modal-overlay" role="dialog" aria-hidden="true">
-    <div class="modal">
+    <div class="modal" style="width: min(1100px, 100%); max-width: 1100px;">
       <h2 id="iModalTitle">New EASE item</h2>
-      <div class="modal-body">
-        <div class="field-grid-3">
-          <div class="field"><label>Subject</label>
-            <select id="iSubject"><option value="math">Math</option><option value="english">English</option><option value="science">Science</option></select>
-          </div>
-          <div class="field"><label>Difficulty</label>
-            <select id="iDifficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select>
-          </div>
-          <div class="field"><label>Type</label>
-            <select id="iType"><option value="mcq">MCQ</option><option value="numeric">Numeric</option><option value="short">Short</option></select>
-          </div>
-        </div>
-        <div class="field-grid-3">
-          <div class="field"><label>Strand</label>
-            <input id="iStrand" placeholder="e.g. algebra, reading, cell-biology">
-          </div>
-          <div class="field"><label>Stage min (year)</label>
-            <input id="iStageMin" type="number" min="7" max="12" value="7">
-          </div>
-          <div class="field"><label>Stage max (year)</label>
-            <input id="iStageMax" type="number" min="7" max="12" value="9">
-          </div>
-        </div>
-        <div class="field"><label>Stem</label><textarea id="iStem" rows="3" placeholder="The question text…"></textarea></div>
-        <div id="optsBox" class="field"><label>Options (mark correct)</label><div id="optsList"></div><button class="btn-secondary" id="addOptBtn" type="button" style="margin-top:6px">+ Add option</button></div>
-        <div id="numAnsBox" class="field" hidden><label>Correct numeric answer</label><input id="iNumAns" type="text" placeholder="e.g. 42"></div>
-        <div id="shortAnsBox" class="field" hidden><label>Correct text answer</label><input id="iShortAns" type="text" placeholder="Exact match (case-insensitive)"></div>
-        <div class="field"><label>Explanation (shown to student in /report)</label><textarea id="iExpl" rows="2" placeholder="Optional"></textarea></div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-secondary" id="iCancel" type="button">Cancel</button>
-        <button class="btn-primary" id="iSave" type="button">Save item</button>
-      </div>
+      <div class="modal-body" id="easeEditorMount" style="padding: 18px 22px;"></div>
     </div>
   </div>
 
@@ -136,6 +104,7 @@
     import {
       collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, getDoc, serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    import { mountQuestionEditor } from './partials/question-editor.js';
 
     let items = [];
     let unsub = null;
@@ -230,6 +199,32 @@
       }
     }
 
+    // Item editor: shared rich editor (markdown + LaTeX + Cambridge metadata)
+    // + EASE-specific extra fields (strandCode, stage_min, stage_max) injected
+    // into the metadata column via the editor's extraFieldsHtml hook.
+    let activeEditor = null;
+    let easeExtraState = { strandCode: '', stage_min: 7, stage_max: 9 };
+
+    const EASE_EXTRA_HTML = `
+      <div class="qe-section" style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <h3 style="font-family:'Lora',serif;font-size:.98rem;margin:0 0 10px;font-weight:600;">EASE adaptive scope</h3>
+        <div class="qe-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;">
+          <label style="font-size:12px;font-weight:600;color:var(--ink-2,#444);">Strand code</label>
+          <input id="easeStrand" type="text" placeholder="e.g. algebra, reading, cell-biology" style="padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font:inherit;font-size:13px;">
+        </div>
+        <div class="qe-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:12px;font-weight:600;color:var(--ink-2,#444);">Stage min</label>
+            <input id="easeStageMin" type="number" min="7" max="12" value="7" style="padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font:inherit;font-size:13px;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:12px;font-weight:600;color:var(--ink-2,#444);">Stage max</label>
+            <input id="easeStageMax" type="number" min="7" max="12" value="9" style="padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font:inherit;font-size:13px;">
+          </div>
+        </div>
+      </div>
+    `;
+
     async function openItem(id) {
       editingId = id;
       let it = { type: 'mcq', difficulty: 'medium', subjectId: 'math', strandCode: '', stem: '', options: ['', '', '', ''], correctIdx: 0, stage_min: 7, stage_max: 9 };
@@ -237,95 +232,59 @@
         const snap = await getDoc(doc(window.db, 'ease_items', id));
         if (snap.exists()) it = { id, ...snap.data() };
       }
+      easeExtraState = {
+        strandCode: it.strandCode || '',
+        stage_min:  Number(it.stage_min) || 7,
+        stage_max:  Number(it.stage_max) || 9,
+      };
       document.getElementById('iModalTitle').textContent = id ? 'Edit EASE item' : 'New EASE item';
-      document.getElementById('iSubject').value = it.subjectId || 'math';
-      document.getElementById('iDifficulty').value = it.difficulty || 'medium';
-      document.getElementById('iType').value = it.type || 'mcq';
-      document.getElementById('iStrand').value = it.strandCode || '';
-      document.getElementById('iStageMin').value = it.stage_min || 7;
-      document.getElementById('iStageMax').value = it.stage_max || 9;
-      document.getElementById('iStem').value = it.stem || '';
-      document.getElementById('iExpl').value = it.explanation || '';
-      document.getElementById('iNumAns').value = it.type === 'numeric' ? (it.correctAnswer || '') : '';
-      document.getElementById('iShortAns').value = it.type === 'short' ? (it.correctAnswer || '') : '';
-      paintTypeFields(it);
+      const mount = document.getElementById('easeEditorMount');
+      mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
       document.getElementById('itemModal').classList.add('is-open');
-    }
-    function paintTypeFields(it) {
-      const t = document.getElementById('iType').value;
-      document.getElementById('optsBox').hidden = t !== 'mcq';
-      document.getElementById('numAnsBox').hidden = t !== 'numeric';
-      document.getElementById('shortAnsBox').hidden = t !== 'short';
-      if (t === 'mcq') paintOptions(it);
-    }
-    document.getElementById('iType').addEventListener('change', () => paintTypeFields({}));
-    function paintOptions(it) {
-      const opts = (it && it.options) || ['', '', '', ''];
-      const correctIdx = (it && typeof it.correctIdx === 'number') ? it.correctIdx : 0;
-      const list = document.getElementById('optsList');
-      list.innerHTML = opts.map((o, i) => `
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-          <input type="radio" name="optC" value="${i}" ${i === correctIdx ? 'checked' : ''}>
-          <input type="text" value="${escAttr(o)}" data-opt="${i}" placeholder="Option ${String.fromCharCode(65+i)}">
-          <button class="btn-secondary" data-rmopt="${i}" type="button">×</button>
-        </div>
-      `).join('');
-      list.querySelectorAll('button[data-rmopt]').forEach(b => {
-        b.addEventListener('click', () => {
-          const cur = collectOptions();
-          cur.opts.splice(Number(b.dataset.rmopt), 1);
-          if (cur.correctIdx >= cur.opts.length) cur.correctIdx = 0;
-          paintOptions({ options: cur.opts, correctIdx: cur.correctIdx });
-        });
+
+      activeEditor = await mountQuestionEditor(mount, {
+        mode: 'ease',
+        initialItem: it,
+        extraFieldsHtml: EASE_EXTRA_HTML,
+        extraFieldsBind: (root) => {
+          const strand = root.querySelector('#easeStrand');
+          const smin   = root.querySelector('#easeStageMin');
+          const smax   = root.querySelector('#easeStageMax');
+          if (strand) {
+            strand.value = easeExtraState.strandCode || '';
+            strand.addEventListener('input', () => { easeExtraState.strandCode = strand.value; });
+          }
+          if (smin) {
+            smin.value = easeExtraState.stage_min;
+            smin.addEventListener('input', () => { easeExtraState.stage_min = Number(smin.value) || 7; });
+          }
+          if (smax) {
+            smax.value = easeExtraState.stage_max;
+            smax.addEventListener('input', () => { easeExtraState.stage_max = Number(smax.value) || 9; });
+          }
+        },
+        onSave: async (payload) => { await save(payload); closeItem(); },
+        onCancel: closeItem,
       });
     }
-    document.getElementById('addOptBtn').addEventListener('click', () => {
-      const cur = collectOptions(); cur.opts.push('');
-      paintOptions({ options: cur.opts, correctIdx: cur.correctIdx });
-    });
-    function collectOptions() {
-      const inputs = document.querySelectorAll('#optsList input[type="text"]');
-      const opts = Array.from(inputs).map(i => i.value);
-      const radio = document.querySelector('#optsList input[type="radio"]:checked');
-      return { opts, correctIdx: radio ? Number(radio.value) : 0 };
+    function closeItem() {
+      document.getElementById('itemModal').classList.remove('is-open');
+      if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
     }
-    document.getElementById('iCancel').addEventListener('click', () => document.getElementById('itemModal').classList.remove('is-open'));
-    document.getElementById('iSave').addEventListener('click', save);
 
-    async function save() {
-      const t = document.getElementById('iType').value;
-      const stem = document.getElementById('iStem').value.trim();
-      if (!stem) return toast('Stem is required.');
-      const payload = {
-        subjectId: document.getElementById('iSubject').value,
-        difficulty: document.getElementById('iDifficulty').value,
-        type: t,
-        strandCode: document.getElementById('iStrand').value.trim() || null,
-        stage_min: Number(document.getElementById('iStageMin').value),
-        stage_max: Number(document.getElementById('iStageMax').value),
-        stem,
-        explanation: document.getElementById('iExpl').value.trim() || null,
-        pilotPhase: true,
-        seenCount: 0,
-        correctRate: null,
-        authorUid: window.currentUser.uid,
-        updatedAt: serverTimestamp(),
-      };
-      if (t === 'mcq') {
-        const { opts, correctIdx } = collectOptions();
-        const cleaned = opts.filter(o => o.trim());
-        if (cleaned.length < 2) return toast('Need at least 2 options.');
-        payload.options = cleaned; payload.correctIdx = Math.min(correctIdx, cleaned.length - 1);
-      } else if (t === 'numeric') {
-        const a = document.getElementById('iNumAns').value.trim();
-        if (!a) return toast('Numeric answer required.');
-        payload.correctAnswer = a;
-      } else {
-        const a = document.getElementById('iShortAns').value.trim();
-        if (!a) return toast('Text answer required.');
-        payload.correctAnswer = a;
-      }
+    async function save(corePayload) {
       try {
+        const payload = {
+          ...corePayload,
+          strandCode: easeExtraState.strandCode.trim() || null,
+          stage_min:  easeExtraState.stage_min,
+          stage_max:  easeExtraState.stage_max,
+          pilotPhase: true,
+          seenCount:  0,
+          correctRate: null,
+          authorUid:  window.currentUser.uid,
+          updatedAt:  serverTimestamp(),
+        };
         if (editingId) {
           await updateDoc(doc(window.db, 'ease_items', editingId), payload);
         } else {
@@ -333,8 +292,10 @@
           await addDoc(collection(window.db, 'ease_items'), payload);
         }
         toast('Saved.');
-        document.getElementById('itemModal').classList.remove('is-open');
-      } catch (e) { toast('Save failed: ' + (e.message || e.code)); }
+      } catch (e) {
+        console.error('[ease-item-author] save failed:', e);
+        toast('Save failed: ' + (e.message || e.code));
+      }
     }
 
     function toast(msg) {

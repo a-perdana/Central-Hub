@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Question Bank — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><path d='M28 30h44v40H28z' fill='%236c5ce7'/><path d='M34 38h32v3H34zM34 46h26v3H34zM34 54h30v3H34zM34 62h22v3H34z' fill='%23fff'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    :root { --accent: #6c5ce7; --accent-dk: #5a4ed1; --accent-2: #ede9fe; }
+    .hero {
+      background: linear-gradient(140deg, #0d0628 0%, #1e0a4e 40%, #3b1a8a 72%, #6c5ce7 100%);
+      padding: 36px 40px; color: #fff;
+    }
+    .hero-inner { max-width: 1280px; margin: 0 auto; }
+    .hero h1 { font-family: 'Lora', serif; font-size: 1.8rem; margin-bottom: 6px; font-weight: 600; }
+    .hero p { color: rgba(255,255,255,.7); font-size: .92rem; max-width: 720px; }
+
+    .page-wrap { max-width: 1280px; margin: 0 auto; padding: 28px 32px 80px; }
+
+    .qb-toolbar {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr)) auto;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+    .qb-toolbar .field { display:flex; flex-direction:column; gap:3px; }
+    .qb-toolbar label { font-size:11px; font-weight:600; color: var(--ink-2, #555); text-transform:uppercase; letter-spacing:.04em; }
+    .qb-toolbar select, .qb-toolbar input {
+      font:inherit; font-size:13px; padding:7px 10px;
+      border:1px solid var(--border, #e5e7eb); border-radius:8px; background:#fff;
+    }
+    .qb-toolbar .btn-primary {
+      padding:8px 14px; background: var(--accent); color:#fff; border:none;
+      border-radius:8px; font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+      white-space:nowrap;
+    }
+
+    .qb-stats { display:flex; gap:14px; margin-bottom:14px; flex-wrap:wrap; }
+    .qb-stat { background:#fff; border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:10px 14px; min-width:140px; }
+    .qb-stat-num { font-size:1.4rem; font-weight:600; color: var(--accent); }
+    .qb-stat-lbl { font-size:11.5px; color: var(--ink-3, #777); text-transform:uppercase; letter-spacing:.04em; }
+
+    .qb-table-wrap { background:#fff; border:1px solid var(--border, #e5e7eb); border-radius:10px; overflow:hidden; }
+    .qb-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .qb-table th { text-align:left; padding:10px 12px; background:#fafafa; border-bottom:1px solid var(--border, #e5e7eb); font-size:11.5px; font-weight:600; color: var(--ink-2, #555); text-transform:uppercase; letter-spacing:.04em; }
+    .qb-table td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+    .qb-table tr:last-child td { border-bottom:none; }
+    .qb-table tr:hover td { background:#fafbff; }
+
+    .qb-stem-cell { max-width: 420px; line-height:1.45; }
+    .qb-stem-cell .qb-stem-text { color: var(--ink, #111); }
+    .qb-stem-cell .qb-stem-meta { font-size:11.5px; color: var(--ink-3, #888); margin-top:3px; }
+
+    .qb-badge { display:inline-block; padding:2px 7px; border-radius:99px; font-size:10.5px; font-weight:600; line-height:1.5; }
+    .b-mcq      { background:#dbeafe; color:#1e40af; }
+    .b-numeric  { background:#dcfce7; color:#166534; }
+    .b-short    { background:#fef3c7; color:#92400e; }
+    .b-easy     { background:#dcfce7; color:#166534; }
+    .b-medium   { background:#fef3c7; color:#92400e; }
+    .b-hard     { background:#fee2e2; color:#991b1b; }
+    .b-draft       { background:#fef3c7; color:#92400e; }
+    .b-published   { background:#dcfce7; color:#166534; }
+    .b-archived    { background:#f3f4f6; color:#4b5563; }
+    .b-meta { background:#ede9fe; color:#5b21b6; }
+
+    .qb-actions-cell button {
+      background:#fff; border:1px solid var(--border, #e5e7eb);
+      border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;
+      margin-right:4px;
+    }
+    .qb-actions-cell button:hover { background:#f3f4f6; }
+    .qb-actions-cell .btn-danger {
+      background:#fef2f2; color:#b91c1c; border-color:#fca5a5;
+    }
+    .qb-actions-cell .btn-danger:hover { background:#fee2e2; }
+
+    .qb-empty { padding:50px 30px; text-align:center; color: var(--ink-3, #888); }
+
+    /* Editor modal */
+    .qe-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display: none; align-items: flex-start; justify-content: center;
+      z-index: 200; padding: 30px 20px; overflow-y: auto;
+    }
+    .qe-modal-overlay.is-open { display: flex; }
+    .qe-modal-card {
+      background: #fff; border-radius: 14px;
+      width: min(1100px, 100%);
+      box-shadow: 0 18px 60px rgba(0,0,0,.25);
+      display: flex; flex-direction: column;
+    }
+    .qe-modal-head {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:18px 22px; border-bottom:1px solid var(--border, #e5e7eb);
+    }
+    .qe-modal-head h2 { font-family: 'Lora', serif; font-size:1.15rem; margin:0; }
+    .qe-modal-close {
+      background:none; border:none; font-size:22px; cursor:pointer; color: var(--ink-3, #777);
+      padding: 0 8px;
+    }
+    .qe-modal-body { padding: 18px 22px; }
+
+    .toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      background: #1f2937; color:#fff; padding:10px 18px; border-radius:8px;
+      font-size:13px; opacity:0; transition: opacity .2s; pointer-events:none;
+      z-index: 300;
+    }
+    .toast.show { opacity:1; }
+  </style>
+</head>
+<body style="display:none">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Question Bank</h1>
+      <p>Standalone bank of authored items. Powers chapter tests + EASE Growth. Filter, edit, archive, reuse across tests. Versioning preserves attempt history. Cambridge-aligned metadata: command word, assessment objective, syllabus objective.</p>
+    </div>
+  </section>
+
+  <main class="page-wrap">
+    <div class="qb-stats" id="qbStats"></div>
+
+    <div class="qb-toolbar">
+      <div class="field">
+        <label>Bank</label>
+        <select id="fBank">
+          <option value="chapter_test_items">Chapter test items</option>
+          <option value="ease_items">EASE items</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Subject</label>
+        <select id="fSubject"><option value="">All</option></select>
+      </div>
+      <div class="field">
+        <label>Year</label>
+        <select id="fStage">
+          <option value="">All</option>
+          <option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="fType">
+          <option value="">All</option>
+          <option value="mcq">MCQ</option>
+          <option value="numeric">Numeric</option>
+          <option value="short">Short</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Difficulty</label>
+        <select id="fDiff">
+          <option value="">All</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="fStatus">
+          <option value="">All</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+      <button class="btn-primary" id="btnNew" type="button">+ New item</button>
+    </div>
+
+    <div class="qb-table-wrap">
+      <table class="qb-table">
+        <thead>
+          <tr>
+            <th style="width:34px"><input type="checkbox" id="selAll"></th>
+            <th>Stem</th>
+            <th>Subject / Year / Unit</th>
+            <th>Type</th>
+            <th>Difficulty</th>
+            <th>Status</th>
+            <th>Used in</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="qbRows"></tbody>
+      </table>
+      <div id="qbEmpty" class="qb-empty" style="display:none">No items match the current filters.</div>
+    </div>
+  </main>
+
+  <!-- Editor modal -->
+  <div id="editorModal" class="qe-modal-overlay" role="dialog" aria-hidden="true">
+    <div class="qe-modal-card">
+      <div class="qe-modal-head">
+        <h2 id="editorTitle">New item</h2>
+        <button class="qe-modal-close" id="editorClose" type="button">&times;</button>
+      </div>
+      <div class="qe-modal-body" id="editorMount"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+    import {
+      collection, query, where, orderBy, onSnapshot, doc, getDoc,
+      addDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, getDocs
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    import { mountQuestionEditor } from './partials/question-editor.js';
+
+    const SUBJECTS = [
+      { id: 'math',      label: 'Mathematics' },
+      { id: 'english',   label: 'English'     },
+      { id: 'science',   label: 'Science'     },
+      { id: 'biology',   label: 'Biology'     },
+      { id: 'chemistry', label: 'Chemistry'   },
+      { id: 'physics',   label: 'Physics'     },
+      { id: 'bahasa',    label: 'Bahasa'      },
+      { id: 'religion',  label: 'Religion'    },
+    ];
+    const SUBJECTS_EASE = SUBJECTS.filter(s => ['math','english','science'].includes(s.id));
+
+    let items = [];
+    let unsub = null;
+    let currentBank = 'chapter_test_items';
+
+    document.addEventListener('authReady', () => {
+      const profile = window.userProfile || {};
+      const isAdmin = profile.role_centralhub === 'central_admin';
+      const sub = profile.ch_sub_roles || [];
+      const isAuthorized = isAdmin || sub.includes('director') || sub.includes('coordinator');
+
+      if (!isAuthorized) {
+        document.querySelector('.page-wrap').innerHTML =
+          '<div class="qb-empty">You need <code>central_admin</code>, <code>director</code>, or <code>coordinator</code> to access the Question Bank.</div>';
+        document.body.style.display = '';
+        return;
+      }
+
+      document.body.style.display = '';
+      initFilters();
+      subscribe();
+      wireUI();
+    });
+
+    function initFilters() {
+      populateSubjects(SUBJECTS);
+    }
+    function populateSubjects(list) {
+      const sel = document.getElementById('fSubject');
+      sel.innerHTML = '<option value="">All</option>' +
+        list.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    }
+
+    function subscribe() {
+      if (unsub) unsub();
+      const col = collection(window.db, currentBank);
+      unsub = onSnapshot(col, snap => {
+        items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderStats();
+        renderRows();
+      });
+    }
+
+    function getFilters() {
+      return {
+        subject: document.getElementById('fSubject').value,
+        stage:   document.getElementById('fStage').value,
+        type:    document.getElementById('fType').value,
+        diff:    document.getElementById('fDiff').value,
+        status:  document.getElementById('fStatus').value,
+      };
+    }
+
+    function filtered() {
+      const f = getFilters();
+      return items.filter(it => {
+        if (f.subject && it.subjectId !== f.subject) return false;
+        if (f.stage   && String(it.stage) !== f.stage) return false;
+        if (f.type    && it.type !== f.type) return false;
+        if (f.diff    && it.difficulty !== f.diff) return false;
+        if (f.status  && it.status !== f.status) return false;
+        return true;
+      });
+    }
+
+    function renderStats() {
+      const total = items.length;
+      const published = items.filter(i => i.status === 'published').length;
+      const drafts    = items.filter(i => i.status === 'draft').length;
+      const archived  = items.filter(i => i.status === 'archived').length;
+      document.getElementById('qbStats').innerHTML = `
+        <div class="qb-stat"><div class="qb-stat-num">${total}</div><div class="qb-stat-lbl">Total</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${published}</div><div class="qb-stat-lbl">Published</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${drafts}</div><div class="qb-stat-lbl">Draft</div></div>
+        <div class="qb-stat"><div class="qb-stat-num">${archived}</div><div class="qb-stat-lbl">Archived</div></div>
+      `;
+    }
+
+    function renderRows() {
+      const rows = filtered();
+      const tbody = document.getElementById('qbRows');
+      const empty = document.getElementById('qbEmpty');
+      if (rows.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      tbody.innerHTML = rows.map(rowHtml).join('');
+      Array.from(tbody.querySelectorAll('[data-edit]')).forEach(b => b.addEventListener('click', () => openEditor(b.dataset.edit)));
+      Array.from(tbody.querySelectorAll('[data-arch]')).forEach(b => b.addEventListener('click', () => archiveItem(b.dataset.arch)));
+      Array.from(tbody.querySelectorAll('[data-unarch]')).forEach(b => b.addEventListener('click', () => unarchiveItem(b.dataset.unarch)));
+      Array.from(tbody.querySelectorAll('[data-del]')).forEach(b => b.addEventListener('click', () => deleteItem(b.dataset.del)));
+      Array.from(tbody.querySelectorAll('[data-pub]')).forEach(b => b.addEventListener('click', () => publishItem(b.dataset.pub)));
+    }
+
+    function rowHtml(it) {
+      const subjectLabel = SUBJECTS.find(s => s.id === it.subjectId)?.label || it.subjectId || '—';
+      const stem = (it.stem || '').slice(0, 160).replace(/\n/g, ' ');
+      const unit = it.unitCode ? `${it.unitCode}${it.unitTitle ? ' · ' + it.unitTitle : ''}` : '';
+      const usedIn = Array.isArray(it.usedInTestIds) ? it.usedInTestIds.length : 0;
+      const cw = it.commandWord ? `<span class="qb-badge b-meta">${escape(it.commandWord)}</span>` : '';
+      const ao = it.assessmentObjective ? `<span class="qb-badge b-meta">${escape(it.assessmentObjective)}</span>` : '';
+      const inUseGuard = (it.status === 'published' && usedIn > 0)
+        ? `<button data-arch="${it.id}" title="Archive (item is in ${usedIn} test${usedIn === 1 ? '' : 's'}; new tests will not pull it)">Archive</button>`
+        : (it.status === 'archived'
+            ? `<button data-unarch="${it.id}">Unarchive</button>`
+            : `<button data-arch="${it.id}">Archive</button>`);
+      const pubBtn = it.status === 'draft'
+        ? `<button data-pub="${it.id}" title="Publish">Publish</button>`
+        : '';
+      const delBtn = usedIn > 0
+        ? ''
+        : `<button class="btn-danger" data-del="${it.id}">Delete</button>`;
+      return `
+        <tr>
+          <td><input type="checkbox" data-sel="${it.id}"></td>
+          <td class="qb-stem-cell">
+            <div class="qb-stem-text">${escape(stem) || '<em>Empty stem</em>'}</div>
+            <div class="qb-stem-meta">${cw} ${ao} ${(it.cambridgeStandardRefs || []).map(r => `<span class="qb-badge b-meta">${escape(r)}</span>`).join(' ')}</div>
+          </td>
+          <td>
+            ${escape(subjectLabel)}<br>
+            <span style="font-size:11.5px;color:var(--ink-3,#888)">Year ${escape(String(it.stage || '—'))} ${unit ? ' · ' + escape(unit) : ''}</span>
+          </td>
+          <td><span class="qb-badge b-${it.type}">${escape(it.type || '—')}</span></td>
+          <td><span class="qb-badge b-${it.difficulty}">${escape(it.difficulty || '—')}</span></td>
+          <td><span class="qb-badge b-${it.status}">${escape(it.status || 'draft')}</span></td>
+          <td>${usedIn === 0 ? '—' : `<strong>${usedIn}</strong> test${usedIn === 1 ? '' : 's'}`}</td>
+          <td class="qb-actions-cell">
+            <button data-edit="${it.id}">Edit</button>
+            ${pubBtn}
+            ${inUseGuard}
+            ${delBtn}
+          </td>
+        </tr>
+      `;
+    }
+
+    function escape(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function wireUI() {
+      ['fBank','fSubject','fStage','fType','fDiff','fStatus'].forEach(id => {
+        document.getElementById(id).addEventListener('change', () => {
+          if (id === 'fBank') {
+            currentBank = document.getElementById('fBank').value;
+            populateSubjects(currentBank === 'ease_items' ? SUBJECTS_EASE : SUBJECTS);
+            document.getElementById('fSubject').value = '';
+            subscribe();
+          } else {
+            renderRows();
+          }
+        });
+      });
+      document.getElementById('btnNew').addEventListener('click', () => openEditor(null));
+      document.getElementById('editorClose').addEventListener('click', closeEditor);
+      document.getElementById('selAll').addEventListener('change', (e) => {
+        document.querySelectorAll('[data-sel]').forEach(cb => cb.checked = e.target.checked);
+      });
+    }
+
+    let activeEditor = null;
+    let editingId = null;
+
+    async function openEditor(itemId) {
+      editingId = itemId;
+      document.getElementById('editorTitle').textContent = itemId ? 'Edit item' : 'New item';
+      const mount = document.getElementById('editorMount');
+      mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
+      document.getElementById('editorModal').classList.add('is-open');
+
+      const initial = itemId ? items.find(i => i.id === itemId) : null;
+      const mode = currentBank === 'ease_items' ? 'ease' : 'chapter_test';
+
+      activeEditor = await mountQuestionEditor(mount, {
+        mode,
+        initialItem: initial,
+        subjects: mode === 'ease' ? SUBJECTS_EASE : SUBJECTS,
+        onSave:   async (payload) => { await saveItem(itemId, payload); closeEditor(); },
+        onCancel: () => closeEditor(),
+      });
+    }
+
+    function closeEditor() {
+      document.getElementById('editorModal').classList.remove('is-open');
+      if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
+      editingId = null;
+    }
+
+    async function saveItem(itemId, payload) {
+      const uid = window.currentUser?.uid || null;
+      payload.authorUid = payload.authorUid || uid;
+      payload.updatedAt = serverTimestamp();
+      if (!itemId) {
+        payload.createdAt = serverTimestamp();
+        payload.usedInTestIds = payload.usedInTestIds || [];
+        await addDoc(collection(window.db, currentBank), payload);
+        toast('Item created');
+      } else {
+        await updateDoc(doc(window.db, currentBank, itemId), payload);
+        toast('Item updated');
+      }
+    }
+
+    async function publishItem(itemId) {
+      await updateDoc(doc(window.db, currentBank, itemId), {
+        status: 'published',
+        updatedAt: serverTimestamp(),
+      });
+      toast('Published');
+    }
+
+    async function archiveItem(itemId) {
+      await updateDoc(doc(window.db, currentBank, itemId), {
+        status: 'archived',
+        updatedAt: serverTimestamp(),
+      });
+      toast('Archived');
+    }
+
+    async function unarchiveItem(itemId) {
+      await updateDoc(doc(window.db, currentBank, itemId), {
+        status: 'draft',
+        updatedAt: serverTimestamp(),
+      });
+      toast('Moved to draft');
+    }
+
+    async function deleteItem(itemId) {
+      const it = items.find(i => i.id === itemId);
+      if (it && Array.isArray(it.usedInTestIds) && it.usedInTestIds.length > 0) {
+        toast('Cannot delete — item is in use'); return;
+      }
+      const btn = event.currentTarget;
+      if (!btn.dataset.confirming) {
+        btn.dataset.confirming = '1';
+        btn.textContent = 'Click again to confirm';
+        setTimeout(() => { btn.dataset.confirming = ''; btn.textContent = 'Delete'; }, 3000);
+        return;
+      }
+      await deleteDoc(doc(window.db, currentBank, itemId));
+      toast('Deleted');
+    }
+
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1800);
+    }
+  </script>
+</body>
+</html>

@@ -329,11 +329,31 @@ service cloud.firestore {
       allow list: if isAuthorized();
       allow create, update, delete: if isAdmin() || isCHCoordinator();
 
+      // DEPRECATED subcollection (2026-05-11 migration). New items live in
+      // top-level chapter_test_items; chapter_tests.itemIds[] holds refs.
+      // Block kept for read-fallback during migration window — drop in next sprint.
       match /items/{itemId} {
         allow get: if isAuthorized() || isActiveStudent();
         allow list: if isAuthorized() || isActiveStudent();
         allow create, update, delete: if isAdmin() || isCHCoordinator();
       }
+    }
+
+    // -- chapter_test_items (TOP-LEVEL, 2026-05-11) ----------
+    // Standalone bank of chapter test items. A chapter_tests doc
+    // references items via its itemIds[] field. An item can appear in
+    // multiple tests (reuse) and survives test deletion.
+    //
+    // - Read: any authorised staff. Active students read items referenced
+    //   by a published chapter_tests they are taking (UI loads via
+    //   `documentId() in itemIds` query — rule does not need to validate
+    //   the join, since student-side reads are bounded by attempt doc).
+    // - Write: central_admin OR CH coordinator. Same gate as authoring UI.
+    // - Versioning: editing an in-use item should bump version + write a
+    //   new doc; the rule does not enforce this — UI does.
+    match /chapter_test_items/{itemId} {
+      allow get, list: if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if isAdmin() || isCHCoordinator();
     }
 
     // -- scheduled_sessions ----------------------------------
@@ -517,6 +537,26 @@ service cloud.firestore {
                         && request.resource.data.studentUid == request.auth.uid);
       allow update, delete: if isAdmin() ||
                                (isSignedIn() && resource.data.studentUid == request.auth.uid);
+    }
+
+    // ── Gamification (Students Hub, 2026-05-11) ────────────────
+    // student_points + school_leaderboards are CLOUD-FUNCTION-ONLY writes.
+    // Students cannot self-award; client write paths are blocked at the
+    // rule level. Admin SDK (Cloud Functions) bypasses rules entirely.
+    //
+    // Read scope is intentionally permissive so any active student can
+    // browse leaderboards across all 4 scopes (class / grade / school /
+    // network). Fields surfaced are minimal — see FIRESTORE_SCHEMA §20.
+    match /student_points/{uid} {
+      allow get:    if isAuthorized() || isActiveStudent();
+      allow list:   if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if false;   // Cloud Function (admin SDK) only
+    }
+
+    match /school_leaderboards/{boardId} {
+      allow get:    if isAuthorized() || isActiveStudent();
+      allow list:   if isAuthorized() || isActiveStudent();
+      allow create, update, delete: if false;   // Cloud Function (admin SDK) only
     }
 
     // -- announcements ---------------------------------------
