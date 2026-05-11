@@ -425,6 +425,226 @@ function inferUnitCode(testId) {
   return parts.slice(2, -1).join("_");
 }
 
+// ───────────────────────────────────────────────────────────────
+// 5b. EASE ITEM EXPOSURE + CORRECT-RATE — onEaseResponseCreated
+//     On every ease_responses write, server-side increments the
+//     parent ease_items doc's seenCount, recomputes correctRate as
+//     a running average, and writes a server-validated mirror of
+//     theta_after / se_after onto the parent session doc.
+//
+//     Rule of thumb (Phase 3): client-side adaptive engine emits
+//     "what I think theta is now"; this function emits "what the
+//     server believes after seeing the response trail". Pacing /
+//     class-assessment / growth dashboards read the server values
+//     only — client values stay on the session for resume only.
+//
+//     Server-side scoring re-validates `isCorrect` against the
+//     parent ease_items definition, since the client computed it.
+//     A mismatch sets a `serverCorrectionApplied` flag on the
+//     response doc (response is immutable for the student but
+//     admin-writable; this is the admin SDK path).
+// ───────────────────────────────────────────────────────────────
+exports.onEaseResponseCreated = onDocumentWritten(
+  {
+    document: "ease_responses/{responseId}",
+    region: "asia-southeast1",
+  },
+  async (event) => {
+    const after = event.data?.after?.data();
+    if (!after) return;            // delete — not handled
+    if (event.data?.before?.exists) return; // updates — ignore (responses are immutable)
+    const { sessionId, studentUid, itemId, answerGiven, isCorrect, theta_after, se_after, seq } = after;
+    if (!sessionId || !itemId) return;
+
+    // 1. Re-grade against the item definition. Disagreement is rare
+    //    but possible if the client UI bug or a clock skew flipped a
+    //    flag. Server is authoritative.
+    let serverIsCorrect = !!isCorrect;
+    let serverCorrectionApplied = false;
+    try {
+      const itemSnap = await db.collection("ease_items").doc(itemId).get();
+      if (itemSnap.exists) {
+        const it = itemSnap.data();
+        const computed = recomputeIsCorrect(it, answerGiven);
+        if (computed !== null && computed !== !!isCorrect) {
+          serverIsCorrect = computed;
+          serverCorrectionApplied = true;
+        }
+      }
+    } catch (err) {
+      console.warn(`[ease-server-grade] ${event.params.responseId}: regrade failed`, err.message);
+    }
+
+    // 2. Update parent ease_items: bump seenCount + running correctRate.
+    //    correctRate = (rate*n + 1*is_correct) / (n+1). Stored as 0..1.
+    try {
+      const itRef = db.collection("ease_items").doc(itemId);
+      await db.runTransaction(async (tx) => {
+        const cur = await tx.get(itRef);
+        if (!cur.exists) return;
+        const d = cur.data();
+        const n   = d.seenCount || 0;
+        const r   = typeof d.correctRate === "number" ? d.correctRate : null;
+        const nNew = n + 1;
+        const rNew = r === null
+          ? (serverIsCorrect ? 1 : 0)
+          : (r * n + (serverIsCorrect ? 1 : 0)) / nNew;
+        tx.update(itRef, {
+          seenCount: nNew,
+          correctRate: rNew,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (err) {
+      console.warn(`[ease-server-grade] item update failed ${itemId}`, err.message);
+    }
+
+    // 3. Mirror theta_after / se_after into the parent session doc
+    //    under server-prefixed fields. The client field stays as-is
+    //    (it's the resume source). Pacing + growth dashboards read
+    //    `serverTheta` / `serverSE` only.
+    try {
+      const sRef = db.collection("ease_sessions").doc(sessionId);
+      await sRef.update({
+        serverTheta: typeof theta_after === "number" ? theta_after : null,
+        serverSE: typeof se_after === "number" ? se_after : null,
+        serverItemsAnswered: typeof seq === "number" ? seq : null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn(`[ease-server-grade] session update failed ${sessionId}`, err.message);
+    }
+
+    // 4. Apply server correction back onto the response doc if needed.
+    //    Response docs are client-immutable but admin-writable per the rule.
+    if (serverCorrectionApplied) {
+      try {
+        await db.collection("ease_responses").doc(event.params.responseId).update({
+          serverIsCorrect,
+          serverCorrectionApplied: true,
+          serverCorrectionAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(`[ease-server-grade] correction applied to ${event.params.responseId} (student=${studentUid}, item=${itemId})`);
+      } catch (err) {
+        console.warn(`[ease-server-grade] correction write failed`, err.message);
+      }
+    }
+  }
+);
+
+function recomputeIsCorrect(item, answerGiven) {
+  if (!item || !item.type) return null;
+  if (item.type === "mcq") {
+    if (typeof item.correctIdx !== "number") return null;
+    return Number(answerGiven) === Number(item.correctIdx);
+  }
+  if (item.type === "numeric") {
+    const a = String(answerGiven ?? "").trim();
+    const c = String(item.correctAnswer ?? "").trim();
+    const an = Number(a), cn = Number(c);
+    return (!isNaN(an) && !isNaN(cn)) ? an === cn : a.toLowerCase() === c.toLowerCase();
+  }
+  if (item.type === "short") {
+    const a = String(answerGiven ?? "").trim().toLowerCase();
+    const c = String(item.correctAnswer ?? "").trim().toLowerCase();
+    if (a === c) return true;
+    // Synonym list — populated by the new question editor.
+    if (Array.isArray(item.acceptedAnswers)) {
+      return item.acceptedAnswers.some(s => String(s).trim().toLowerCase() === a);
+    }
+    return false;
+  }
+  return null;
+}
+
+// ───────────────────────────────────────────────────────────────
+// 5c. EASE ITEM CALIBRATION — calibrateEaseItems (scheduled, weekly)
+//     Every Sunday 03:00 Jakarta. Walks ease_responses for items
+//     with ≥ MIN_CALIBRATION_RESPONSES responses and computes a
+//     calibrated logit (b) and a crude discrimination proxy (a)
+//     from accumulated response data. Flips pilotPhase to false
+//     once an item has enough data; updates ease_items.calibratedLogit
+//     and .discrimination.
+//
+//     Method (lightweight, Rasch-1PL bootstrap):
+//       p_correct = correctRate
+//       logit(p) = ln(p / (1-p))    [clamped to avoid ±Inf]
+//       b ≈ θ̄_seen − logit(p)
+//     Where θ̄_seen is the mean theta_after across all responses on
+//     this item (i.e. the population that has actually seen it).
+//     This is a coarse first pass — Phase 3.5 will replace it with
+//     a proper joint MLE once the response volume justifies it.
+//
+//     Adaptive engine (ease-test.html) keeps falling back to the
+//     bootstrap DIFF_LOGIT until pilotPhase flips to false; once
+//     flipped, the engine should prefer `calibratedLogit` for that
+//     item (FOLLOWUP — engine code switch lives in the SH client).
+// ───────────────────────────────────────────────────────────────
+const MIN_CALIBRATION_RESPONSES = 30;
+
+exports.calibrateEaseItems = onSchedule(
+  {
+    schedule: "0 3 * * 0",          // Sundays 03:00
+    timeZone: "Asia/Jakarta",
+    region: "asia-southeast1",
+  },
+  async () => {
+    const itemsSnap = await db.collection("ease_items")
+      .where("seenCount", ">=", MIN_CALIBRATION_RESPONSES)
+      .get();
+    console.log(`[ease-calibrate] ${itemsSnap.size} item(s) above threshold`);
+
+    let calibrated = 0;
+    for (const itDoc of itemsSnap.docs) {
+      const it = itDoc.data();
+      const p  = typeof it.correctRate === "number" ? it.correctRate : null;
+      if (p === null || p <= 0 || p >= 1) continue; // ceiling / floor — can't fit
+      const pClamped = Math.max(0.02, Math.min(0.98, p));
+      const logitP = Math.log(pClamped / (1 - pClamped));
+
+      // θ̄ across all responses on this item. Cap query to 1000 — beyond that,
+      // the rolling correctRate already smooths things out.
+      const respSnap = await db.collection("ease_responses")
+        .where("itemId", "==", itDoc.id)
+        .limit(1000)
+        .get();
+      if (respSnap.empty) continue;
+      let sum = 0, n = 0;
+      respSnap.forEach(r => {
+        const t = r.data().theta_after;
+        if (typeof t === "number") { sum += t; n++; }
+      });
+      if (n === 0) continue;
+      const thetaMean = sum / n;
+      const calibratedLogit = thetaMean - logitP;
+
+      // Discrimination proxy: variance-of-theta-around-flip approximation.
+      // Items where correctRate transitions sharply at a given θ are more
+      // discriminating; we approximate by computing the SD of theta for
+      // responders and inverting (smaller SD → tighter cut → higher a).
+      // Clamp to [0.5, 2.5] so a single weird item can't tank engine ranking.
+      let sqSum = 0;
+      respSnap.forEach(r => {
+        const t = r.data().theta_after;
+        if (typeof t === "number") { sqSum += (t - thetaMean) ** 2; }
+      });
+      const sd = Math.sqrt(sqSum / Math.max(1, n));
+      const discrimination = Math.max(0.5, Math.min(2.5, sd > 0 ? 1 / sd : 1.0));
+
+      await itDoc.ref.update({
+        calibratedLogit,
+        discrimination,
+        pilotPhase: false,
+        calibratedAt: admin.firestore.FieldValue.serverTimestamp(),
+        calibrationResponseCount: n,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      calibrated++;
+    }
+    console.log(`[ease-calibrate] ${calibrated} item(s) calibrated this run.`);
+  }
+);
+
 // ═══════════════════════════════════════════════════════════════
 // GAMIFICATION (Students Hub, 2026-05-11)
 // ═══════════════════════════════════════════════════════════════
