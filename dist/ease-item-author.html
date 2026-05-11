@@ -2944,12 +2944,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <select id="fSubject"><option value="">All subjects</option><option value="math">Math</option><option value="english">English</option><option value="science">Science</option></select>
       <select id="fDifficulty"><option value="">All difficulties</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
       <select id="fType"><option value="">All types</option><option value="mcq">MCQ</option><option value="numeric">Numeric</option><option value="short">Short</option></select>
-      <input id="fSearch" placeholder="Search by stem…">
+      <input id="fSearch" placeholder="Search by stem (this page only)…" title="Stem search filters the current page. Narrow first by subject / difficulty / type for a focused result set.">
       <span style="margin-left:auto"></span>
       <button id="newItemBtn" class="btn-primary">+ New EASE item</button>
     </div>
 
     <div id="itemsBox"></div>
+    <div id="pager" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;"></div>
   </main>
 
   <div id="itemModal" class="modal-overlay" role="dialog" aria-hidden="true">
@@ -2963,13 +2964,30 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
   <script type="module">
     import {
-      collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, getDoc, serverTimestamp
+      collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs,
+      getCountFromServer, query, where, orderBy, limit, startAfter,
+      serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { mountQuestionEditor } from './partials/question-editor.js';
 
-    let items = [];
-    let unsub = null;
+    // ──────────────────────────────────────────────────────────────
+    // Pagination state — server-side, cursor based. Realtime stream
+    // dropped 2026-05-11: ease_items reached ~5.6k docs after the
+    // latihan.id import, and onSnapshot(collection) was downloading
+    // every doc on every author session. The bank is near-static
+    // (HQ edits one item at a time) so a Refresh button is plenty.
+    // ──────────────────────────────────────────────────────────────
+    const PAGE_SIZE = 25;
     let editingId = null;
+    let pageItems = [];          // current rendered page
+    let pageCursors = [null];    // pageCursors[N] = startAfter snap for page N (page 0 = no cursor)
+    let pageIndex = 0;
+    let lastVisible = null;      // QueryDocumentSnapshot for next-page startAfter
+    let totalCount = 0;          // result-set total (under current filters)
+    let inFlight = false;        // single-flight guard
+    let lastQuerySig = '';       // signature so we can detect filter changes
+    let statTotals = null;       // cached `{ total, math, english, science, easy, medium, hard }`
+    let statsInFlight = false;
 
     document.addEventListener('authReady', () => {
       const profile = window.userProfile || {};
@@ -2980,60 +2998,166 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         document.getElementById('accessWarn').textContent = 'EASE item authoring restricted to central_admin / director / coordinator.';
         return;
       }
-      subscribe();
+      // Initial paint: stats (one-shot) + first page.
+      loadStats();
+      loadFirstPage();
     });
 
-    function subscribe() {
-      if (unsub) unsub();
-      unsub = onSnapshot(collection(window.db, 'ease_items'),
-        snap => { items = snap.docs.map(d => ({ id: d.id, ...d.data() })); render(); },
-        err => console.error('[ease-item-author] subscribe error', err)
-      );
-    }
-
-    document.getElementById('fSubject').addEventListener('change', render);
-    document.getElementById('fDifficulty').addEventListener('change', render);
-    document.getElementById('fType').addEventListener('change', render);
-    document.getElementById('fSearch').addEventListener('input', render);
+    document.getElementById('fSubject').addEventListener('change', resetAndReload);
+    document.getElementById('fDifficulty').addEventListener('change', resetAndReload);
+    document.getElementById('fType').addEventListener('change', resetAndReload);
+    // Search is client-side WITHIN the current page (cheap). Putting
+    // a full-bank text search behind getDocs would need a build-time
+    // index — out of scope here. Tooltip hints at the scope.
+    document.getElementById('fSearch').addEventListener('input', renderPage);
     document.getElementById('newItemBtn').addEventListener('click', () => openItem(null));
 
-    function render() {
+    function buildQuerySig() {
       const subj = document.getElementById('fSubject').value;
       const diff = document.getElementById('fDifficulty').value;
       const type = document.getElementById('fType').value;
-      const search = (document.getElementById('fSearch').value || '').trim().toLowerCase();
-      const filtered = items.filter(it => {
-        if (subj && it.subjectId !== subj) return false;
-        if (diff && it.difficulty !== diff) return false;
-        if (type && it.type !== type) return false;
-        if (search && !(it.stem || '').toLowerCase().includes(search)) return false;
-        return true;
-      }).sort((a, b) => (a.subjectId || '').localeCompare(b.subjectId || '') || (a.difficulty || '').localeCompare(b.difficulty || ''));
+      return [subj, diff, type].join('|');
+    }
 
-      const counts = { math: 0, english: 0, science: 0, easy: 0, medium: 0, hard: 0 };
-      items.forEach(i => {
-        if (counts[i.subjectId] != null) counts[i.subjectId]++;
-        if (counts[i.difficulty] != null) counts[i.difficulty]++;
-      });
+    function buildBaseQuery() {
+      const subj = document.getElementById('fSubject').value;
+      const diff = document.getElementById('fDifficulty').value;
+      const type = document.getElementById('fType').value;
+      const col = collection(window.db, 'ease_items');
+      const constraints = [];
+      if (subj) constraints.push(where('subjectId', '==', subj));
+      if (diff) constraints.push(where('difficulty', '==', diff));
+      if (type) constraints.push(where('type', '==', type));
+      // Stable sort by createdAt desc when present, falling back to
+      // doc-id ordering for old docs without createdAt.
+      constraints.push(orderBy('createdAt', 'desc'));
+      return query(col, ...constraints);
+    }
+
+    function resetAndReload() {
+      pageCursors = [null];
+      pageIndex = 0;
+      lastVisible = null;
+      // Stat totals depend on filter chips — re-fetch.
+      loadStats();
+      loadFirstPage();
+    }
+
+    async function loadStats() {
+      if (statsInFlight) return;
+      statsInFlight = true;
+      try {
+        // Top-level counts (always shown). Each count() is one
+        // billed read regardless of underlying doc count.
+        const subjects = ['math', 'english', 'science'];
+        const diffs = ['easy', 'medium', 'hard'];
+        const col = collection(window.db, 'ease_items');
+        const [totalSnap, ...rest] = await Promise.all([
+          getCountFromServer(col),
+          ...subjects.map(s => getCountFromServer(query(col, where('subjectId', '==', s)))),
+          ...diffs.map(d => getCountFromServer(query(col, where('difficulty', '==', d)))),
+        ]);
+        const subjCounts = rest.slice(0, 3).map(s => s.data().count);
+        const diffCounts = rest.slice(3, 6).map(s => s.data().count);
+        statTotals = {
+          total: totalSnap.data().count,
+          math: subjCounts[0], english: subjCounts[1], science: subjCounts[2],
+          easy: diffCounts[0], medium: diffCounts[1], hard: diffCounts[2],
+        };
+        renderStats();
+      } catch (e) {
+        console.warn('[ease-item-author] count() failed', e);
+      } finally {
+        statsInFlight = false;
+      }
+    }
+
+    function renderStats() {
+      const s = statTotals || { total: '—', math: '—', english: '—', science: '—', easy: '—', medium: '—', hard: '—' };
+      const filterMatch = totalCount != null && (totalCount !== s.total)
+        ? ` <span style="color:var(--ink-3);font-size:11px;font-weight:400">(filter: ${totalCount})</span>` : '';
       document.getElementById('statRow').innerHTML = `
-        <div class="stat-card"><div class="stat-num">${items.length}</div><div class="stat-lbl">Total items</div></div>
-        <div class="stat-card"><div class="stat-num">${counts.math}</div><div class="stat-lbl">Math</div></div>
-        <div class="stat-card"><div class="stat-num">${counts.english}</div><div class="stat-lbl">English</div></div>
-        <div class="stat-card"><div class="stat-num">${counts.science}</div><div class="stat-lbl">Science</div></div>
-        <div class="stat-card"><div class="stat-num" style="color:#16a34a">${counts.easy}</div><div class="stat-lbl">Easy</div></div>
-        <div class="stat-card"><div class="stat-num" style="color:#92400e">${counts.medium}</div><div class="stat-lbl">Medium</div></div>
-        <div class="stat-card"><div class="stat-num" style="color:#b91c1c">${counts.hard}</div><div class="stat-lbl">Hard</div></div>
+        <div class="stat-card"><div class="stat-num">${s.total}${filterMatch}</div><div class="stat-lbl">Total items</div></div>
+        <div class="stat-card"><div class="stat-num">${s.math}</div><div class="stat-lbl">Math</div></div>
+        <div class="stat-card"><div class="stat-num">${s.english}</div><div class="stat-lbl">English</div></div>
+        <div class="stat-card"><div class="stat-num">${s.science}</div><div class="stat-lbl">Science</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:#16a34a">${s.easy}</div><div class="stat-lbl">Easy</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:#92400e">${s.medium}</div><div class="stat-lbl">Medium</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:#b91c1c">${s.hard}</div><div class="stat-lbl">Hard</div></div>
       `;
+    }
+
+    async function loadFirstPage() {
+      lastQuerySig = buildQuerySig();
+      pageIndex = 0;
+      pageCursors = [null];
+      lastVisible = null;
+      // Also fetch the filtered total so the pager has a "Page x of y"
+      try {
+        const subj = document.getElementById('fSubject').value;
+        const diff = document.getElementById('fDifficulty').value;
+        const type = document.getElementById('fType').value;
+        const col = collection(window.db, 'ease_items');
+        const constraints = [];
+        if (subj) constraints.push(where('subjectId', '==', subj));
+        if (diff) constraints.push(where('difficulty', '==', diff));
+        if (type) constraints.push(where('type', '==', type));
+        const c = await getCountFromServer(query(col, ...constraints));
+        totalCount = c.data().count;
+        renderStats();
+      } catch (e) {
+        totalCount = null;
+      }
+      await loadPage(0);
+    }
+
+    async function loadPage(target) {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        let q = buildBaseQuery();
+        const cursor = pageCursors[target];
+        if (cursor) q = query(q, startAfter(cursor), limit(PAGE_SIZE));
+        else q = query(q, limit(PAGE_SIZE));
+        const snap = await getDocs(q);
+        pageItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        lastVisible = snap.docs[snap.docs.length - 1] || null;
+        // Remember cursor for the *next* page if we got a full page.
+        if (lastVisible && pageItems.length === PAGE_SIZE) {
+          pageCursors[target + 1] = lastVisible;
+        }
+        pageIndex = target;
+        renderPage();
+      } catch (e) {
+        console.error('[ease-item-author] loadPage failed', e);
+        document.getElementById('itemsBox').innerHTML =
+          `<div class="empty"><div class="empty-title">Query failed</div>${escHtml(e.message || 'unknown error')}<br><br>This usually means a Firestore composite index is missing. Open the browser console and follow the suggested index URL.</div>`;
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function renderPage() {
+      // Client-side stem search WITHIN the loaded page only.
+      const search = (document.getElementById('fSearch').value || '').trim().toLowerCase();
+      const visible = !search
+        ? pageItems
+        : pageItems.filter(it => (it.stem || '').toLowerCase().includes(search));
 
       const box = document.getElementById('itemsBox');
-      if (filtered.length === 0) {
-        box.innerHTML = '<div class="empty"><div class="empty-title">No items</div>Click + New EASE item to author one.</div>';
+      if (visible.length === 0) {
+        box.innerHTML = `<div class="empty"><div class="empty-title">No items</div>${
+          search
+            ? 'No match on this page. Searching is page-scoped — clear the search to browse all results, or narrow by subject/difficulty/type first.'
+            : 'Click + New EASE item to author one.'
+        }</div>`;
+        renderPager();
         return;
       }
       box.innerHTML = `
         <table class="items">
           <thead><tr><th>Subject</th><th>Difficulty</th><th>Type</th><th>Stem</th><th>Strand</th><th>Phase</th><th></th></tr></thead>
-          <tbody>${filtered.map(it => `
+          <tbody>${visible.map(it => `
             <tr>
               <td><strong>${escHtml(it.subjectId)}</strong></td>
               <td><span class="pill pill-${escAttr(it.difficulty)}">${escHtml(it.difficulty)}</span></td>
@@ -3049,13 +3173,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       box.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', () => action(b.dataset.act, b.dataset.id));
       });
+      renderPager();
+    }
+
+    function renderPager() {
+      const lastPage = totalCount != null ? Math.max(0, Math.ceil(totalCount / PAGE_SIZE) - 1) : null;
+      const from = totalCount === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
+      const to = Math.min((pageIndex + 1) * PAGE_SIZE, totalCount ?? (pageIndex * PAGE_SIZE + pageItems.length));
+      const wrap = document.getElementById('pager');
+      if (!wrap) return;
+      wrap.innerHTML = `
+        <button class="btn-secondary" id="pagePrev" ${pageIndex === 0 ? 'disabled' : ''}>‹ Prev</button>
+        <span style="font-size:13px;color:var(--ink-3);padding:0 10px">
+          ${totalCount != null
+            ? `${from}–${to} of ${totalCount}${lastPage != null ? ` · page ${pageIndex + 1}/${lastPage + 1}` : ''}`
+            : `page ${pageIndex + 1}`}
+        </span>
+        <button class="btn-secondary" id="pageNext" ${
+          totalCount != null
+            ? (pageIndex >= lastPage ? 'disabled' : '')
+            : (pageItems.length < PAGE_SIZE ? 'disabled' : '')
+        }>Next ›</button>
+      `;
+      document.getElementById('pagePrev').addEventListener('click', () => loadPage(Math.max(0, pageIndex - 1)));
+      document.getElementById('pageNext').addEventListener('click', () => loadPage(pageIndex + 1));
     }
 
     async function action(act, id) {
       if (act === 'edit') return openItem(id);
       if (act === 'del') {
         if (!confirm('Delete this item?')) return;
-        try { await deleteDoc(doc(window.db, 'ease_items', id)); toast('Deleted.'); }
+        try {
+          await deleteDoc(doc(window.db, 'ease_items', id));
+          toast('Deleted.');
+          // Stats are stale by 1 doc; bank size > 1k makes this
+          // hard to notice. Refresh current page so the row vanishes.
+          await loadPage(pageIndex);
+          loadStats(); // refresh totals in the background
+        }
         catch (e) { toast('Failed: ' + (e.message || e.code)); }
       }
     }
@@ -3148,10 +3303,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         };
         if (editingId) {
           await updateDoc(doc(window.db, 'ease_items', editingId), payload);
+          await loadPage(pageIndex); // refresh row in place
         } else {
           payload.createdAt = serverTimestamp();
           await addDoc(collection(window.db, 'ease_items'), payload);
+          await loadFirstPage(); // new item lands at the top (createdAt desc)
         }
+        loadStats(); // refresh totals in the background
         toast('Saved.');
       } catch (e) {
         console.error('[ease-item-author] save failed:', e);
