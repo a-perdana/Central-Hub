@@ -87,9 +87,74 @@ function renderPager(containerId, currentPage, totalItems, onGo) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
+// Inject a one-off style block for the obj-code chip's <a> form so
+// each pacing template doesn't have to learn about the deep-link.
+// The base .obj-code rule (background/colour/border) is defined per
+// template; here we only override the anchor-specific defaults
+// (underline / inherited blue) so the chip still renders as a chip.
+(function ensureChipLinkStyle() {
+  if (document.getElementById('pacing-chip-link-style')) return;
+  const s = document.createElement('style');
+  s.id = 'pacing-chip-link-style';
+  s.textContent = `
+    a.obj-code.obj-code-link {
+      text-decoration: none;
+      cursor: pointer;
+      transition: background .12s ease, border-color .12s ease, transform .06s ease;
+    }
+    a.obj-code.obj-code-link:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(29, 78, 216, .18);
+    }
+    a.obj-code.obj-code-link:active { transform: translateY(0); }
+    a.obj-code.obj-code-link::before {
+      content: '\\1f517';
+      font-size: .55rem; margin-right: 3px; opacity: .55;
+      vertical-align: middle;
+    }
+  `;
+  document.head.appendChild(s);
+})();
+
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function safeUrl(u) { return /^https?:\/\//i.test(u||'') ? u : '#'; }
 function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// PACING_CONFIG.subjectKey values vary across templates (igcse_math,
+// asalevel_biology, checkpoint_science, etc.); map each to the bank's
+// canonical subjectId so the deep-link query lands correctly.
+const BANK_SUBJECT_MAP = {
+  igcse_math:        'math',
+  igcse_biology:     'biology',
+  igcse_chemistry:   'chemistry',
+  igcse_physics:     'physics',
+  asalevel_math:     'math',
+  asalevel_biology:  'biology',
+  asalevel_chemistry:'chemistry',
+  asalevel_physics:  'physics',
+  checkpoint_math:   'math',
+  checkpoint_english:'english',
+  checkpoint_science:'science',
+};
+function bankSubjectFor(pacingSubjectKey) {
+  return BANK_SUBJECT_MAP[pacingSubjectKey] || pacingSubjectKey || '';
+}
+
+// Build a syllabus-code chip that doubles as a deep-link into
+// /question-bank pre-filtered on (subject, ref). Click bubbles
+// through to the parent inline-codes-wrap only when the admin
+// edit handler explicitly fires — the <a> itself stops the
+// propagation so a chip click never opens the inline editor.
+// Hover surfaces the verbatim Cambridge title via data-tip.
+function renderChipLink(code) {
+  const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === code)?.[1];
+  const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
+  const subj = bankSubjectFor(SUBJECT_KEY);
+  const href = `question-bank?subject=${encodeURIComponent(subj)}&ref=${encodeURIComponent(code)}`;
+  const tipAttr = tip ? ` data-tip="${escHtml(tip)}"` : '';
+  const title = `View bank items for ${code}${tip ? ' — ' + tip : ''}`;
+  return `<a class="obj-code obj-code-link" href="${escHtml(href)}" title="${escHtml(title)}"${tipAttr} onclick="event.stopPropagation()">${escHtml(code)}</a>`;
+}
 
 let toastTimer;
 function showToast(msg) {
@@ -316,11 +381,8 @@ window.activateCodesInput = function(wrapEl, ci, ti) {
     const codes = Array.isArray(topic.syllabusRefs) && topic.syllabusRefs.length
       ? topic.syllabusRefs
       : _parseObjCodes(objective);
-    wrapEl.innerHTML = codes.map(c => {
-      const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
-      const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
-      return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
-    }).join('') + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
+    wrapEl.innerHTML = codes.map(c => renderChipLink(c)).join('')
+      + (codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">+ codes</span>` : '');
   }
 
   inp.addEventListener('blur', () => {
@@ -519,11 +581,7 @@ function renderChapters() {
                 </td>
                 <td>
                   <div class="inline-codes-wrap" ${isAdmin ? `onclick="activateCodesInput(this,${ci},${ti})" title="Click to edit codes"` : ''}>
-                    ${codes.map(c => {
-                      const entry = Object.entries(syllabusIndex).find(([docId, d]) => (d.code || docId.split('_').slice(1).join('_')) === c)?.[1];
-                      const tip = entry ? `${entry.tier ? '[' + entry.tier + '] ' : ''}${entry.title || ''}` : '';
-                      return `<span class="obj-code"${tip ? ` data-tip="${escHtml(tip)}"` : ''}>${escHtml(c)}</span>`;
-                    }).join('')}
+                    ${codes.map(c => renderChipLink(c)).join('')}
                     ${codes.length === 0 ? `<span style="font-size:.65rem;color:var(--border)">${isAdmin ? '+ codes' : '—'}</span>` : ''}
                   </div>
                 </td>

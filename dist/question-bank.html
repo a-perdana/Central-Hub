@@ -3566,7 +3566,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     let canDelete = false;
     let canAuthor = false;
 
-    document.addEventListener('authReady', () => {
+    document.addEventListener('authReady', async () => {
       const profile = window.userProfile || {};
       const isAdmin = profile.role_centralhub === 'central_admin';
       const sub = profile.ch_sub_roles || [];
@@ -3579,9 +3579,55 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       canAuthor = isAdmin || sub.includes('coordinator');
       if (!canDelete) document.body.classList.add('no-delete');
       if (!canAuthor) document.body.classList.add('no-author');
+      // Apply URL-param filters from a pacing deep-link
+      // (?subject=biology&ref=1.1) BEFORE the first page load so the
+      // query goes out already narrowed — no flash of unfiltered data.
+      await applyUrlFilters();
       loadStats();
       loadFirstPage();
     });
+
+    // Deep-link entry from pacing pages: /question-bank?subject=biology&ref=1.1
+    // Optional params: stage, difficulty, type, status — anything in
+    // the filter bar. ref alone is meaningless without subject (a
+    // bare "1.1" matches refs across both math + biology pacing
+    // trees), so we require subject before applying ref.
+    async function applyUrlFilters() {
+      const params = new URLSearchParams(window.location.search);
+      const setIfValid = (id, value) => {
+        if (value == null || value === '') return false;
+        const sel = document.getElementById(id);
+        if (!sel) return false;
+        if (![...sel.options].some(o => o.value === String(value))) return false;
+        sel.value = String(value);
+        return true;
+      };
+      const gotSubject = setIfValid('fSubject', params.get('subject'));
+      setIfValid('fStage',      params.get('stage'));
+      setIfValid('fDifficulty', params.get('difficulty'));
+      setIfValid('fType',       params.get('type'));
+      setIfValid('fStatus',     params.get('status'));
+      // Refresh the ref dropdown for the chosen subject FIRST so the
+      // ref param has a valid option to land on. If the subject is
+      // missing or unknown, we still call populateRefFilter so the
+      // dropdown is in its correct initial state.
+      await populateRefFilter();
+      const refParam = params.get('ref');
+      if (gotSubject && refParam) {
+        const sel = document.getElementById('fRef');
+        if (![...sel.options].some(o => o.value === refParam)) {
+          // Pacing seeded a ref we don't recognise (legacy code, or
+          // mapping table out of date). Inject as a one-off option
+          // so the filter still applies — the empty-state will tell
+          // HQ if no items match.
+          const opt = document.createElement('option');
+          opt.value = refParam;
+          opt.textContent = `${refParam} (from URL)`;
+          sel.appendChild(opt);
+        }
+        sel.value = refParam;
+      }
+    }
 
     ['fSubject','fDifficulty','fStage','fType','fStatus','fRef'].forEach(id => {
       document.getElementById(id).addEventListener('change', resetAndReload);
@@ -3749,9 +3795,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // Try to restore the previous selection if still valid.
       if (cur && opts.some(o => o.value === cur)) sel.value = cur;
     }
-    // Kick off once after auth-ready so the dropdown is in its
-    // correct initial state.
-    document.addEventListener('authReady', () => { populateRefFilter(); }, { once: true });
+    // Initial populate happens inside applyUrlFilters() during the
+    // main authReady handler — no separate kickoff needed.
 
     function resetAndReload() {
       pageCursors = [null];
