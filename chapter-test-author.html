@@ -446,12 +446,29 @@
             </select>
           </div>
         </div>
+        <!-- Linked banner — visible when stagedPacingRef is set. -->
         <div id="pacingRefBanner" hidden style="background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12.5px; color:var(--ink-2); display:flex; align-items:center; gap:10px;">
           <div style="flex:1; min-width:0;">
             <div style="font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent-dk); margin-bottom:2px;">Linked to pacing chapter</div>
             <div id="pacingRefLabel" style="color:var(--ink); font-weight:600;"></div>
           </div>
           <button type="button" class="btn-secondary" id="unlinkPacingBtn" style="flex-shrink:0;">Unlink</button>
+        </div>
+
+        <!-- Linker — visible when stagedPacingRef is null. Lets the author
+             bind an unlinked (or freshly unlinked) test to a pacing chapter
+             without leaving the modal. -->
+        <div id="pacingLinkerBox" hidden style="background:#fafaf8; border:1px dashed var(--border); border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12.5px;">
+          <div style="font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); margin-bottom:6px;">Link to pacing chapter (optional)</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <select id="linkerPacing" style="flex:1; min-width:160px; padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-family:inherit; font-size:12.5px; background:#fff;">
+              <option value="">Pacing collection…</option>
+            </select>
+            <select id="linkerChapter" style="flex:2; min-width:200px; padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-family:inherit; font-size:12.5px; background:#fff;" disabled>
+              <option value="">Chapter…</option>
+            </select>
+            <button type="button" class="btn-secondary" id="linkerApplyBtn" disabled>Link</button>
+          </div>
         </div>
         <div class="field">
           <label>Unit code (e.g. <code>7Ni.04</code>, <code>C1.6</code>)</label>
@@ -688,6 +705,15 @@
         stagedPacingRef = null;
         renderPacingRefBanner();
       });
+      document.getElementById('linkerPacing').addEventListener('change', onLinkerPacingChange);
+      document.getElementById('linkerChapter').addEventListener('change', onLinkerChapterChange);
+      document.getElementById('linkerApplyBtn').addEventListener('click', onLinkerApply);
+      // When the author changes Subject inside the modal, re-filter the
+      // linker's pacing options so they don't see Math pacings while
+      // editing an English test.
+      document.getElementById('fSubject').addEventListener('change', () => {
+        if (!stagedPacingRef) populateLinkerPacingOptions();
+      });
 
       subscribe();
     });
@@ -797,11 +823,136 @@
 
     function renderPacingRefBanner() {
       const banner = document.getElementById('pacingRefBanner');
-      if (!stagedPacingRef) { banner.hidden = true; return; }
-      const cfg = PACING_MAP[`${stagedPacingRef.collection}/${stagedPacingRef.docId}`] || {};
-      document.getElementById('pacingRefLabel').textContent =
-        `${cfg.label || stagedPacingRef.collection}${stagedPacingRef.year ? ' · ' + stagedPacingRef.year : ''} · ${stagedPacingRef.chapterTitle || stagedPacingRef.chapterId}`;
-      banner.hidden = false;
+      const linker = document.getElementById('pacingLinkerBox');
+      if (stagedPacingRef) {
+        const cfg = PACING_MAP[`${stagedPacingRef.collection}/${stagedPacingRef.docId}`] || {};
+        document.getElementById('pacingRefLabel').textContent =
+          `${cfg.label || stagedPacingRef.collection}${stagedPacingRef.year ? ' · ' + stagedPacingRef.year : ''} · ${stagedPacingRef.chapterTitle || stagedPacingRef.chapterId}`;
+        banner.hidden = false;
+        linker.hidden = true;
+      } else {
+        banner.hidden = true;
+        linker.hidden = false;
+        // Pre-filter linker's pacing options to those whose subjectId
+        // matches the current test envelope (e.g. Math test → only
+        // checkpoint_math / IGCSE math / AS-A math). Author can still
+        // pick "show all" by clearing the filter via dropdown change.
+        populateLinkerPacingOptions();
+      }
+    }
+
+    // ── Modal linker — bind unlinked tests to a pacing chapter from
+    //    inside the edit modal. Two chained dropdowns + Apply. ──────
+    let linkerChaptersCache = [];
+
+    function populateLinkerPacingOptions() {
+      const sel = document.getElementById('linkerPacing');
+      const currentSubject = document.getElementById('fSubject').value;
+      // Build option list grouped by level; auto-select if there's exactly
+      // one pacing collection that matches the current subject.
+      const groups = [
+        ['Checkpoint (Y7-8)', [
+          'checkpoint_math_pacing/year7-8',
+          'checkpoint_english_pacing/year7-8',
+          'checkpoint_science_pacing/year7-8',
+        ]],
+        ['IGCSE (Y9-10)', [
+          'math_pacing/year9-10',
+          'biology_pacing/year9-10',
+          'chemistry_pacing/year9-10',
+          'physics_pacing/year9-10',
+        ]],
+        ['AS/A-Level (Y11-12)', [
+          'asalevel_math_pacing/year11-12',
+          'asalevel_biology_pacing/year11-12',
+          'asalevel_chemistry_pacing/year11-12',
+          'asalevel_physics_pacing/year11-12',
+        ]],
+      ];
+      let html = '<option value="">Pacing collection…</option>';
+      for (const [groupLabel, keys] of groups) {
+        const items = keys
+          .filter(k => {
+            const cfg = PACING_MAP[k] || {};
+            // Checkpoint Science accepts any of bio/chem/phys/science specialists.
+            if (k === 'checkpoint_science_pacing/year7-8') {
+              return ['science', 'biology', 'chemistry', 'physics'].includes(currentSubject) || !currentSubject;
+            }
+            return !currentSubject || cfg.subjectId === currentSubject;
+          })
+          .map(k => `<option value="${escAttr(k)}">${escHtml(PACING_MAP[k].label)}</option>`)
+          .join('');
+        if (items) html += `<optgroup label="${escHtml(groupLabel)}">${items}</optgroup>`;
+      }
+      sel.innerHTML = html;
+      // Reset chapter dropdown + Apply button.
+      const chSel = document.getElementById('linkerChapter');
+      chSel.innerHTML = '<option value="">Chapter…</option>';
+      chSel.disabled = true;
+      document.getElementById('linkerApplyBtn').disabled = true;
+      linkerChaptersCache = [];
+    }
+
+    async function onLinkerPacingChange() {
+      const key = document.getElementById('linkerPacing').value;
+      const chSel = document.getElementById('linkerChapter');
+      const applyBtn = document.getElementById('linkerApplyBtn');
+      chSel.innerHTML = '<option value="">Loading chapters…</option>';
+      chSel.disabled = true;
+      applyBtn.disabled = true;
+      linkerChaptersCache = [];
+      if (!key) {
+        chSel.innerHTML = '<option value="">Chapter…</option>';
+        return;
+      }
+      try {
+        const [col, docId] = key.split('/');
+        const snap = await getDoc(doc(window.db, col, docId));
+        const data = snap.exists() ? (snap.data() || {}) : {};
+        linkerChaptersCache = Array.isArray(data.chapters) ? data.chapters : [];
+        chSel.innerHTML = '<option value="">Chapter…</option>' +
+          linkerChaptersCache.map(c =>
+            `<option value="${escAttr(c.id)}">${escHtml(c.chapter || '(untitled)')}</option>`
+          ).join('');
+        chSel.disabled = linkerChaptersCache.length === 0;
+      } catch (e) {
+        console.error('[linker] load chapters failed:', e);
+        chSel.innerHTML = '<option value="">Could not load</option>';
+      }
+    }
+
+    function onLinkerChapterChange() {
+      document.getElementById('linkerApplyBtn').disabled =
+        !document.getElementById('linkerChapter').value;
+    }
+
+    function onLinkerApply() {
+      const key = document.getElementById('linkerPacing').value;
+      const chId = document.getElementById('linkerChapter').value;
+      if (!key || !chId) return;
+      const [col, docId] = key.split('/');
+      const ch = linkerChaptersCache.find(c => c.id === chId);
+      if (!ch) return;
+      stagedPacingRef = {
+        collection:   col,
+        docId:        docId,
+        chapterId:    ch.id,
+        chapterTitle: ch.chapter || '',
+        year:         ch.year || null,
+      };
+      // Also push subject/stage/title onto the form if they're still blank
+      // — convenience only, author can override before save.
+      const cfg = PACING_MAP[key] || {};
+      if (!document.getElementById('fSubject').value && cfg.subjectId) {
+        document.getElementById('fSubject').value = cfg.subjectId;
+      }
+      const yearMatch = String(ch.year || '').match(/\d+/);
+      if (yearMatch) document.getElementById('fStage').value = yearMatch[0];
+      if (!document.getElementById('fUnitTitle').value) {
+        document.getElementById('fUnitTitle').value = ch.chapter || '';
+      }
+      renderPacingRefBanner();
+      toast('Linked. Save the test to persist.');
     }
 
     function subscribe() {
