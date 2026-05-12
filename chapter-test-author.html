@@ -1158,6 +1158,9 @@
       const dd    = document.getElementById('fUnitCodeDropdown');
       dd.classList.remove('is-open');
       unitCodeOptionsCache = [];
+      // Drop any previously stashed topic — the chapter (and therefore the
+      // mapping code → topic) just changed.
+      delete input.dataset.pickedTopic;
 
       // No staged pacing link → free-text mode.
       if (!stagedPacingRef || !stagedPacingRef.collection || !stagedPacingRef.docId) {
@@ -1218,6 +1221,14 @@
           ? 'Click to pick a syllabus ref from this chapter…'
           : 'No syllabus refs on this chapter — type a code';
         input.readOnly = unitCodeOptionsCache.length > 0;
+        // If the existing input value matches a known code, stash its topic
+        // so a subsequent "+ Add item" pre-fills syllabusObjective without
+        // requiring the author to re-pick.
+        const current = (input.value || '').trim();
+        if (current) {
+          const match = unitCodeOptionsCache.find(o => o.code === current);
+          if (match) input.dataset.pickedTopic = match.topic || '';
+        }
       } catch (e) {
         console.error('[unit-code-picker] load failed', e);
         input.readOnly = false;
@@ -1244,7 +1255,13 @@
         `).join('');
       dd.querySelectorAll('.uc-dd-item').forEach(el => {
         el.addEventListener('click', () => {
-          document.getElementById('fUnitCode').value = el.dataset.code || '';
+          const input = document.getElementById('fUnitCode');
+          input.value = el.dataset.code || '';
+          // Stash the topic label for envCtx — openItemModal feeds this into
+          // the new-item editor as the syllabusObjective placeholder so HQ
+          // doesn't retype "1.1 Plant cells" each time.
+          const opt = unitCodeOptionsCache.find(o => o.code === el.dataset.code);
+          input.dataset.pickedTopic = opt ? (opt.topic || '') : '';
           dd.classList.remove('is-open');
         });
       });
@@ -2068,16 +2085,36 @@
     async function openItemModal(idx) {
       editingItemIdx = idx;
       // Inherit test envelope context for new items so unitCode/stage/subject
-      // come pre-filled.
+      // come pre-filled. Cambridge metadata also pre-seeded for NEW items —
+      // pickedTopic comes from the unit-code picker (topic label of the
+      // chosen syllabusRef) and feeds syllabusObjective; cambridgeStandardRefs
+      // gets the picked code so the chip stays in sync with the envelope.
+      const unitCodeInput = document.getElementById('fUnitCode');
+      const unitCode  = unitCodeInput.value.trim();
+      const pickedTopic = (unitCodeInput.dataset.pickedTopic || '').trim();
       const envCtx = {
         subjectId: document.getElementById('fSubject').value || 'math',
         stage:     Number(document.getElementById('fStage').value) || 7,
-        unitCode:  document.getElementById('fUnitCode').value.trim(),
+        unitCode,
         unitTitle: document.getElementById('fUnitTitle').value.trim(),
       };
       const seed = idx >= 0
         ? { ...envCtx, ...workingItems[idx] }
-        : { ...envCtx, type: 'mcq', options: ['', '', '', ''], correctIdx: 0, marks: 1, difficulty: 'medium' };
+        : {
+            ...envCtx,
+            type: 'mcq',
+            options: ['', '', '', ''],
+            correctIdx: 0,
+            marks: 1,
+            difficulty: 'medium',
+            // Pre-fill from the envelope so the author doesn't retype.
+            // Edits inside the editor still win — these are placeholders, not
+            // locks.
+            cambridgeStandardRefs: unitCode ? [unitCode] : [],
+            syllabusObjective: pickedTopic
+              ? (unitCode ? `${unitCode} – ${pickedTopic}` : pickedTopic)
+              : null,
+          };
       document.getElementById('itemModalTitle').textContent = idx >= 0 ? `Edit Q${idx+1}` : 'New item';
       const mount = document.getElementById('itemEditorMount');
       mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
