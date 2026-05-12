@@ -1323,13 +1323,42 @@
     // if isAdmin()`); this gate is the human-in-the-loop layer.
     // ──────────────────────────────────────────────────────────────
     let pendingDeleteIds = [];
+    let pendingDeleteSnapshots = []; // per-id `{ subjectId, difficulty, type, source, sourceCode, sourceLessonCode, stage_min, stage_max, stemPreview }` for the audit log. Captured at modal-open time from `pageItems`; ids not in the current page fall back to a Firestore get inside commit.
     let deleteStage = 1;
     let cooldownTimer = null;
+
+    // Pull a minimal audit-friendly snapshot from a loaded item. Stem
+    // is truncated to 200 chars — enough to identify what was lost
+    // without ballooning the audit doc.
+    function snapshotForAudit(it) {
+      const stemRaw = (it.stem || '').toString();
+      return {
+        id: it.id,
+        subjectId: it.subjectId || null,
+        difficulty: it.difficulty || null,
+        type: it.type || null,
+        source: it.source || null,
+        sourceCode: it.sourceCode || null,
+        sourceLessonCode: it.sourceLessonCode || null,
+        stage_min: typeof it.stage_min === 'number' ? it.stage_min : null,
+        stage_max: typeof it.stage_max === 'number' ? it.stage_max : null,
+        stemPreview: stemRaw.length > 200 ? stemRaw.slice(0, 200) + '…' : stemRaw,
+      };
+    }
 
     function openDeleteModal(ids) {
       if (!Array.isArray(ids) || !ids.length) return;
       if (!canDelete) { toast('Delete is restricted to central_admin.'); return; }
       pendingDeleteIds = ids.slice();
+      // Capture snapshots from the loaded page now — the row may
+      // disappear from the DOM after commit, but the audit needs the
+      // pre-state. Any id we can't resolve from pageItems will be
+      // fetched at commit time so the audit doc still carries metadata.
+      const byId = new Map(pageItems.map(it => [it.id, it]));
+      pendingDeleteSnapshots = pendingDeleteIds.map(id => {
+        const it = byId.get(id);
+        return it ? snapshotForAudit(it) : { id, _needsFetch: true };
+      });
       deleteStage = 1;
       const modal = document.getElementById('bulkDeleteModal');
       // Item counts everywhere the markup names them.
@@ -1438,6 +1467,7 @@
       document.getElementById('bulkDeleteModal').classList.remove('is-open');
       if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
       pendingDeleteIds = [];
+      pendingDeleteSnapshots = [];
     }
     document.getElementById('bulkDeleteCancel').addEventListener('click', closeDeleteModal);
     document.getElementById('bulkDeleteModal').addEventListener('click', (e) => {
@@ -1449,24 +1479,64 @@
       }
     });
 
-    // Final commit.
+    // Final commit. Every chunk writes ONE audit doc inside the same
+    // writeBatch as its deletes — atomic by construction, so the
+    // audit trail can never be missing for a delete that landed.
     document.getElementById('bulkDeleteGo').addEventListener('click', async () => {
       const ids = pendingDeleteIds.slice();
+      const snaps = pendingDeleteSnapshots.slice();
       if (!ids.length) return;
       if (!canDelete) { toast('Delete is restricted to central_admin.'); return; }
       const goBtn = document.getElementById('bulkDeleteGo');
       goBtn.disabled = true;
       goBtn.textContent = 'Deleting…';
       try {
-        // Firestore writeBatch caps at 500 operations per commit —
-        // chunk so callers selecting a full 25-row page (well under
-        // the limit) don't need a special case, but a future "select
-        // all across pages" feature still works.
+        // Resolve any ids whose snapshot is missing (i.e. not in the
+        // current page — single-row delete from a stale memory state).
+        // Sequential getDoc keeps it simple; pendingDeleteIds is
+        // bounded by the page size for the bulk path and by 1 for
+        // the row path, so this is at most a handful of reads.
+        for (let i = 0; i < snaps.length; i++) {
+          if (snaps[i]._needsFetch) {
+            try {
+              const s = await getDoc(doc(window.db, 'ease_items', ids[i]));
+              snaps[i] = s.exists()
+                ? snapshotForAudit({ id: ids[i], ...s.data() })
+                : { id: ids[i], _missing: true };
+            } catch {
+              snaps[i] = { id: ids[i], _fetchFailed: true };
+            }
+          }
+        }
+        // Firestore writeBatch caps at 500 operations per commit. We
+        // chunk at 400 deletes + 1 audit doc = 401 ops per batch,
+        // well under the ceiling. Future "select all across pages"
+        // feature still works without revisiting this loop.
         const CHUNK = 400;
+        const chunkTotal = Math.ceil(ids.length / CHUNK);
+        const actor = window.currentUser;
+        const profile = window.userProfile || {};
         for (let i = 0; i < ids.length; i += CHUNK) {
           const batch = writeBatch(window.db);
-          ids.slice(i, i + CHUNK).forEach(id => {
+          const chunkIds = ids.slice(i, i + CHUNK);
+          const chunkSnaps = snaps.slice(i, i + CHUNK);
+          chunkIds.forEach(id => {
             batch.delete(doc(window.db, 'ease_items', id));
+          });
+          // Audit doc — auto-id so reads list chronologically by
+          // doc id (newer ULIDs sort last; we order client-side by
+          // `at` anyway). Same batch ⇒ atomic with the deletes.
+          const auditRef = doc(collection(window.db, 'ease_items_audit'));
+          batch.set(auditRef, {
+            action: chunkIds.length === 1 ? 'delete' : 'bulk_delete',
+            actorUid: actor.uid,
+            actorEmail: actor.email || null,
+            actorRole: profile.role_centralhub || null,
+            at: serverTimestamp(),
+            itemIds: chunkIds,
+            itemSnapshots: chunkSnaps,
+            chunkIndex: Math.floor(i / CHUNK),
+            chunkTotal,
           });
           await batch.commit();
         }

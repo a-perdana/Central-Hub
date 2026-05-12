@@ -486,6 +486,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Audit trail for destructive ease_items operations. Append-only
+    // — once a row lands, it cannot be edited or removed (even by
+    // central_admin). Written client-side as part of the same
+    // writeBatch as the deletion, so the audit record can't go
+    // missing if the delete commits. Pins actorUid to auth.uid +
+    // action to a known enum at create time so a malformed payload
+    // can't enter the log.
+    match /ease_items_audit/{auditId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.actorUid == request.auth.uid
+                    && request.resource.data.action in ['delete', 'bulk_delete', 'restore', 'create', 'update'];
+      allow update, delete: if false;
+    }
+
     match /ease_test_windows/{windowId} {
       allow get, list: if isAuthorized() || isActiveStudent();
       allow create, update, delete: if isAdmin();
