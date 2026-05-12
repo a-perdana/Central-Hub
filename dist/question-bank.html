@@ -239,6 +239,9 @@
     .meta-chip-ao   { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
     .meta-chip-syl  { background: #f0fdfa; color: #115e59; border-color: #99f6e4; }
     .meta-chip-ref  { background: #f5f3ff; color: #6c5ce7; border-color: #ddd6fe; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px; }
+    button.meta-chip-ref-clickable { cursor: pointer; font: inherit; font-size: 9.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; transition: background .12s ease, border-color .12s ease, color .12s ease; }
+    button.meta-chip-ref-clickable:hover { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+    button.meta-chip-ref-clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .meta-chip-used { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
     .meta-chip-ver  { background: #fff; color: var(--ink-3); }
     .meta-chip-unit { background: #fff; color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px; }
@@ -3337,6 +3340,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       </select>
       <select id="fType"><option value="">All types</option><option value="mcq">MCQ</option><option value="numeric">Numeric</option><option value="short">Short</option></select>
       <select id="fStatus"><option value="">All statuses</option><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select>
+      <select id="fRef" title="Cambridge syllabus reference — matches against cambridgeStandardRefs[]">
+        <option value="">All refs</option>
+      </select>
       <span style="margin-left:auto"></span>
       <button id="newItemBtn" class="btn-primary">+ New item</button>
     </div>
@@ -3577,9 +3583,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       loadFirstPage();
     });
 
-    ['fSubject','fDifficulty','fStage','fType','fStatus'].forEach(id => {
+    ['fSubject','fDifficulty','fStage','fType','fStatus','fRef'].forEach(id => {
       document.getElementById(id).addEventListener('change', resetAndReload);
     });
+    // Repopulate the ref dropdown whenever subject changes so the
+    // option list narrows to the relevant syllabus tree.
+    document.getElementById('fSubject').addEventListener('change', populateRefFilter);
 
     // Search debounce — bank-wide via searchTokens array-contains.
     let searchMode = false;
@@ -3635,6 +3644,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const stage = document.getElementById('fStage').value;
       const type = document.getElementById('fType').value;
       const status = document.getElementById('fStatus').value;
+      const ref  = document.getElementById('fRef').value;
       const col = collection(window.db, BANK);
       const constraints = [];
       if (subj)   constraints.push(where('subjectId', '==', subj));
@@ -3642,9 +3652,106 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       if (stage)  constraints.push(where('stage', '==', Number(stage)));
       if (type)   constraints.push(where('type', '==', type));
       if (status) constraints.push(where('status', '==', status));
+      if (ref)    constraints.push(where('cambridgeStandardRefs', 'array-contains', ref));
       constraints.push(orderBy('createdAt', 'desc'));
       return query(col, ...constraints);
     }
+
+    // Cambridge ref filter dropdown — populated from biology_pacing
+    // when the subject filter is Biology, similar pacing docs for
+    // other subjects once they ship. Refs are subject-scoped, so the
+    // dropdown is empty (and the filter disabled) until the user
+    // narrows to a known subject. Cache so we don't refetch on every
+    // subject change.
+    const PACING_REF_DOCS = {
+      biology: { coll: 'biology_pacing', doc: 'year9-10' },
+      // math/english/chemistry/physics pacing docs follow the same
+      // shape — add entries as their items land in the bank.
+    };
+    const refDropdownCache = new Map();   // subjectId → [{ value, label }]
+    async function populateRefFilter() {
+      const sel = document.getElementById('fRef');
+      const subj = document.getElementById('fSubject').value;
+      const cur = sel.value;
+      // Reset to default state.
+      sel.innerHTML = '<option value="">All refs</option>';
+      if (!subj) { sel.disabled = false; return; }
+      const cfg = PACING_REF_DOCS[subj];
+      if (!cfg) {
+        sel.innerHTML = `<option value="">No refs (${subj} pacing not seeded)</option>`;
+        sel.disabled = true;
+        return;
+      }
+      sel.disabled = false;
+      let opts = refDropdownCache.get(subj);
+      if (!opts) {
+        try {
+          const snap = await getDoc(doc(window.db, cfg.coll, cfg.doc));
+          if (!snap.exists()) {
+            sel.innerHTML = `<option value="">No refs (${cfg.coll}/${cfg.doc} not found)</option>`;
+            return;
+          }
+          const chapters = snap.data().chapters || [];
+          opts = [];
+          chapters.forEach((ch, i) => {
+            const chTitle = ch.chapter || `Chapter ${i + 1}`;
+            // Per-chapter group label — option list shows topic refs
+            // with their topic name so the chooser is human-readable.
+            (ch.topics || []).forEach(t => {
+              (t.syllabusRefs || []).forEach(r => {
+                opts.push({
+                  value: r,
+                  label: `${r} — ${t.topic || chTitle}`,
+                  chapterIndex: i + 1,
+                });
+              });
+            });
+          });
+          // De-dup (some refs repeat across multiple topics in the
+          // same chapter; keep the first occurrence's label).
+          const seen = new Set();
+          opts = opts.filter(o => {
+            if (seen.has(o.value)) return false;
+            seen.add(o.value);
+            return true;
+          });
+          // Natural-sort by ref code ("2.10" after "2.2").
+          opts.sort((a, b) => {
+            const ap = String(a.value).split('.').map(n => Number(n) || 0);
+            const bp = String(b.value).split('.').map(n => Number(n) || 0);
+            for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+              if ((ap[i] || 0) !== (bp[i] || 0)) return (ap[i] || 0) - (bp[i] || 0);
+            }
+            return 0;
+          });
+          refDropdownCache.set(subj, opts);
+        } catch (e) {
+          console.warn('[question-bank] ref filter load failed', e);
+          sel.innerHTML = '<option value="">Refs unavailable</option>';
+          return;
+        }
+      }
+      const frag = document.createDocumentFragment();
+      let lastChapter = null;
+      opts.forEach(o => {
+        if (o.chapterIndex !== lastChapter) {
+          const og = document.createElement('optgroup');
+          og.label = `Ch ${o.chapterIndex}`;
+          frag.appendChild(og);
+          lastChapter = o.chapterIndex;
+        }
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.label;
+        frag.lastChild.appendChild(opt);
+      });
+      sel.appendChild(frag);
+      // Try to restore the previous selection if still valid.
+      if (cur && opts.some(o => o.value === cur)) sel.value = cur;
+    }
+    // Kick off once after auth-ready so the dropdown is in its
+    // correct initial state.
+    document.addEventListener('authReady', () => { populateRefFilter(); }, { once: true });
 
     function resetAndReload() {
       pageCursors = [null];
@@ -3852,9 +3959,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const clearBtn = document.getElementById('clearFilters');
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-          ['fSubject', 'fDifficulty', 'fStage', 'fType', 'fStatus'].forEach(id => {
+          ['fSubject', 'fDifficulty', 'fStage', 'fType', 'fStatus', 'fRef'].forEach(id => {
             document.getElementById(id).value = '';
           });
+          // Re-populate ref dropdown so options reflect the cleared
+          // subject filter (it goes back to disabled / "no refs").
+          populateRefFilter();
           document.getElementById('fSearch').value = '';
           resetAndReload();
         });
@@ -3871,6 +3981,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         const stage = document.getElementById('fStage').value;
         const type = document.getElementById('fType').value;
         const status = document.getElementById('fStatus').value;
+        const ref  = document.getElementById('fRef').value;
         const col = collection(window.db, BANK);
         const constraints = [];
         if (subj)   constraints.push(where('subjectId', '==', subj));
@@ -3878,6 +3989,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         if (stage)  constraints.push(where('stage', '==', Number(stage)));
         if (type)   constraints.push(where('type', '==', type));
         if (status) constraints.push(where('status', '==', status));
+        if (ref)    constraints.push(where('cambridgeStandardRefs', 'array-contains', ref));
         const c = await getCountFromServer(query(col, ...constraints));
         totalCount = c.data().count;
         renderStats();
@@ -4039,6 +4151,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       box.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', () => action(b.dataset.act, b.dataset.id));
       });
+      // Cambridge-ref chip clicks → apply ref as fRef filter (and
+      // narrow subject if the chip's row has a known subject).
+      box.querySelectorAll('button.meta-chip-ref-clickable[data-ref]').forEach(b => {
+        b.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const ref = b.dataset.ref;
+          if (!ref) return;
+          // Pull subject from the parent row so the ref filter
+          // is unambiguous (refs like "1.1" exist in both math
+          // and biology pacing trees — without subject context
+          // the dropdown can't show the right option).
+          const tr = b.closest('tr');
+          const subj = tr ? tr.getAttribute('data-subject-id') : '';
+          if (subj && document.getElementById('fSubject').value !== subj) {
+            document.getElementById('fSubject').value = subj;
+            await populateRefFilter();
+          }
+          const sel = document.getElementById('fRef');
+          // Make sure the option exists before assigning (cache might
+          // not be hydrated yet for this subject).
+          if (![...sel.options].some(o => o.value === ref)) {
+            // Insert as a one-off so the value sticks even before
+            // populateRefFilter resolves.
+            const opt = document.createElement('option');
+            opt.value = ref;
+            opt.textContent = ref;
+            sel.appendChild(opt);
+          }
+          sel.value = ref;
+          resetAndReload();
+        });
+      });
       box.querySelectorAll('input.row-check').forEach(cb => {
         cb.addEventListener('change', () => {
           const id = cb.dataset.id;
@@ -4101,12 +4245,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         const unitLabel = it.unitTitle ? `${it.unitCode} · ${it.unitTitle}` : it.unitCode;
         chips.push(`<span class="meta-chip meta-chip-unit" title="Unit">${escHtml(unitLabel)}</span>`);
       }
-      // Show first Cambridge ref only — the strip is meant to skim,
-      // not enumerate. Preview modal shows the full list.
+      // Cambridge standard refs — render every ref as its own
+      // clickable chip up to 4, then collapse the tail into a "+N"
+      // pill (still clickable, jumps to the next ref). Clicking a
+      // chip applies it as the fRef filter. The auto-tagger writes
+      // these from `biology_pacing/year9-10` etc, so the chip value
+      // matches the filter option value byte-for-byte.
       const refs = Array.isArray(it.cambridgeStandardRefs) ? it.cambridgeStandardRefs : [];
       if (refs.length > 0) {
-        const more = refs.length > 1 ? ` +${refs.length - 1}` : '';
-        chips.push(`<span class="meta-chip meta-chip-ref" title="Cambridge standard refs">${escHtml(refs[0])}${more}</span>`);
+        const head = refs.slice(0, 4);
+        head.forEach(r => {
+          chips.push(`<button type="button" class="meta-chip meta-chip-ref meta-chip-ref-clickable" data-ref="${escAttr(r)}" title="Filter to Cambridge ref ${escAttr(r)}">${escHtml(r)}</button>`);
+        });
+        if (refs.length > 4) {
+          chips.push(`<button type="button" class="meta-chip meta-chip-ref meta-chip-ref-clickable" data-ref="${escAttr(refs[4])}" title="+${refs.length - 4} more: ${escAttr(refs.slice(4).join(', '))}">+${refs.length - 4}</button>`);
+        }
       }
       if (it.syllabusObjective) {
         const so = String(it.syllabusObjective);
