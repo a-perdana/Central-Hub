@@ -125,10 +125,10 @@
     .icon-btn svg { width: 14px; height: 14px; }
     .icon-btn.icon-btn-danger:hover { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
 
-    /* Stem cell: 2-line clamp + uniform height. */
+    /* Stem cell: 4-line clamp — fewer rows per page so each row breathes. */
     .stem-cell {
-      line-height: 1.4; font-size: 13px;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      line-height: 1.45; font-size: 13px;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
       overflow: hidden; text-overflow: ellipsis;
     }
     .stem-cell p, .stem-cell span, .stem-cell strong, .stem-cell b { margin: 0; display: inline; font-weight: inherit; }
@@ -402,6 +402,12 @@
     .meta-chip-image-dead { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
     .meta-chip-source    { background: #fff; color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px; }
     .meta-chip-seen      { background: #ecfeff; color: #0e7490; border-color: #a5f3fc; }
+    .meta-chip-year      { background: #fafafa; color: var(--ink-2); border-color: var(--border); font-variant-numeric: tabular-nums; }
+    .meta-chip-p         { background: #fefce8; color: #92400e; border-color: #fde68a; font-variant-numeric: tabular-nums; }
+    .meta-chip-p-easy    { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .meta-chip-p-hard    { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+    .meta-chip-cts       { background: #f5f3ff; color: #6c5ce7; border-color: #ddd6fe; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px; }
+    .meta-chip-type-tag  { background: #fff; color: var(--ink-3); border-style: dashed; }
 
     /* Stem cell padding for breathing room */
     .td-stem { padding-left: 16px !important; }
@@ -3625,7 +3631,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // every doc on every author session. The bank is near-static
     // (HQ edits one item at a time) so a Refresh button is plenty.
     // ──────────────────────────────────────────────────────────────
-    const PAGE_SIZE = 25;
+    const PAGE_SIZE = 8;
     let editingId = null;
     let pageItems = [];          // current rendered page
     let pageCursors = [null];    // pageCursors[N] = startAfter snap for page N (page 0 = no cursor)
@@ -4281,11 +4287,33 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     //  - calibrated badge (replaces the old standalone cal-badge)
     function metaStrip(it) {
       const chips = [];
+      // Year range — Y7, Y7–9, Y10–12. Cheap targeting hint; saves a
+      // preview-modal open just to see the grade band.
+      const smin = typeof it.stage_min === 'number' ? it.stage_min : null;
+      const smax = typeof it.stage_max === 'number' ? it.stage_max : null;
+      if (smin != null || smax != null) {
+        const lo = smin != null ? smin : smax;
+        const hi = smax != null ? smax : smin;
+        const label = (lo === hi) ? `Y${lo}` : `Y${lo}–${hi}`;
+        chips.push(`<span class="meta-chip meta-chip-year" title="Target grade range">${escHtml(label)}</span>`);
+      }
       if (it.cognitiveTag) {
         chips.push(`<span class="meta-chip meta-chip-cognitive" title="Cognitive tag">${escHtml(it.cognitiveTag)}</span>`);
       }
       if (it.strandCode && it.strandCode !== 'imported') {
         chips.push(`<span class="meta-chip meta-chip-strand" title="Strand">${escHtml(it.strandCode)}</span>`);
+      }
+      // Cambridge standard refs (HQ-tagged or import-tagged). Cap at 2
+      // to keep the strip compact; "+N" overflow chip surfaces the rest.
+      const refs = Array.isArray(it.cambridgeStandardRefs) ? it.cambridgeStandardRefs.filter(Boolean) : [];
+      if (refs.length) {
+        const shown = refs.slice(0, 2);
+        shown.forEach(r => {
+          chips.push(`<span class="meta-chip meta-chip-cts" title="Cambridge standard ref">${escHtml(r)}</span>`);
+        });
+        if (refs.length > shown.length) {
+          chips.push(`<span class="meta-chip meta-chip-cts" title="${refs.length - shown.length} more refs">+${refs.length - shown.length}</span>`);
+        }
       }
       // Image indicator. stemHtml carries the rich source; we just
       // check for an <img> tag substring — cheap and good-enough since
@@ -4306,11 +4334,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // Live calibration vitals. seenCount lights up once
       // onEaseResponseCreated has started flowing; correctRate is the
       // p-value (0..1). Hidden until the item has ≥1 response.
-      if (typeof it.seenCount === 'number' && it.seenCount > 0) {
+      const hasLiveStats = typeof it.seenCount === 'number' && it.seenCount > 0;
+      if (hasLiveStats) {
         const cr = typeof it.correctRate === 'number'
           ? ` · ${Math.round(it.correctRate * 100)}%`
           : '';
         chips.push(`<span class="meta-chip meta-chip-seen" title="Live response stats">${it.seenCount} seen${cr}</span>`);
+      } else if (typeof it.sourceP === 'number') {
+        // Upstream p-value from latihan — free pre-calibration signal
+        // (correct_percentage / 100). Easy items skew high, hard low.
+        // Suppressed once we have our own response data.
+        const pct = Math.round(it.sourceP * 100);
+        const band = pct >= 70 ? 'meta-chip-p-easy' : (pct <= 35 ? 'meta-chip-p-hard' : 'meta-chip-p');
+        chips.push(`<span class="meta-chip ${band}" title="Upstream success rate (Latihan)">${pct}% src</span>`);
       }
       // Calibrated badge — promoted from a standalone right-side
       // badge into the strip so all maturity signals sit together.
