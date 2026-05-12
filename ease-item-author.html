@@ -158,10 +158,11 @@
     /* Hovered chip dims the other segments so the visual link is clear. */
     .stat-card.is-hovering-chip .stat-bar-seg:not(.is-hover) { opacity: .35; }
 
-    /* Items table — uniform 64px rows, zebra striping, hover highlight. */
+    /* Items table — uniform 84px rows (stem + metadata strip), zebra
+       striping, hover highlight. */
     table.items { width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 12px; border-collapse: separate; border-spacing: 0; overflow: hidden; table-layout: fixed; }
     table.items th { padding: 10px 12px; text-align: left; font-size: 10.5px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; background: var(--paper); border-bottom: 1px solid var(--border); }
-    table.items td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; height: 64px; box-sizing: border-box; }
+    table.items td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; height: 84px; box-sizing: border-box; }
     table.items tr:last-child td { border-bottom: none; }
     table.items tbody tr { transition: background .1s ease; }
     table.items tbody tr:nth-child(even) { background: #fafafa; }
@@ -205,10 +206,33 @@
 
     /* Calibrated badge — appended to stem cell when pilotPhase === false. */
     .cal-badge {
-      display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 10px; font-weight: 600;
       color: #047857; background: #ecfdf5; border: 1px solid #6ee7b7;
-      padding: 1px 6px; border-radius: 99px; vertical-align: 1px;
+      padding: 1px 6px; border-radius: 99px;
     }
+    /* Metadata strip — sits under the 2-line stem clamp. Surfaces
+       cognitive tag, source provenance, image presence, live response
+       stats, and the calibrated badge so HQ can scan an item's
+       maturity without opening the preview modal. */
+    .meta-strip {
+      display: flex; gap: 5px; align-items: center; flex-wrap: wrap;
+      margin-top: 4px; font-size: 10px; line-height: 1;
+      color: var(--ink-3);
+    }
+    .meta-chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 6px; border-radius: 99px;
+      background: var(--paper); border: 1px solid var(--border);
+      color: var(--ink-2); font-weight: 500;
+    }
+    .meta-chip svg { width: 9px; height: 9px; flex-shrink: 0; }
+    .meta-chip-cognitive { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    .meta-chip-strand    { background: #f0fdfa; color: #115e59; border-color: #99f6e4; }
+    .meta-chip-image     { background: #fff; color: var(--ink-3); }
+    .meta-chip-image-dead { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
+    .meta-chip-source    { background: #fff; color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px; }
+    .meta-chip-seen      { background: #ecfeff; color: #0e7490; border-color: #a5f3fc; }
 
     /* Stem cell padding for breathing room */
     .td-stem { padding-left: 16px !important; }
@@ -722,7 +746,7 @@
               <td>${subjectPill(it.subjectId)}</td>
               <td><span class="pill pill-${escAttr(it.difficulty)}">${escHtml(it.difficulty)}</span></td>
               <td>${typeIcon(it.type)}</td>
-              <td class="td-stem"><div class="stem-cell">${stemPreviewHtml(it)}</div>${calBadge(it)}</td>
+              <td class="td-stem"><div class="stem-cell">${stemPreviewHtml(it)}</div>${metaStrip(it)}</td>
               <td style="text-align:right">
                 <div class="row-actions">
                   <button class="icon-btn" data-act="view" data-id="${escAttr(it.id)}" title="Preview" aria-label="Preview">${SVG_VIEW}</button>
@@ -759,14 +783,54 @@
       const t = map[type] || { ch: '?', label: type || 'unknown' };
       return `<span class="type-icon type-${escAttr(type || '')}" title="${escAttr(t.label)}">${escHtml(t.ch)}</span>`;
     }
-    // Calibrated badge — only rendered when the item has been
-    // calibrated (pilotPhase === false). Pilot is the default and
-    // carries no badge.
-    function calBadge(it) {
-      if (it.pilotPhase === false) {
-        return '<span class="cal-badge" title="Calibrated">✓ calibrated</span>';
+    // Metadata strip — small inline chips under the stem preview.
+    // Surfaces what would otherwise force a preview-modal open:
+    //  - cognitive tag (Bloom-style, set by latihan upstream)
+    //  - strand code (algebra / cell-biology / …)
+    //  - upstream provenance for imported items (`lesson` short code)
+    //  - image presence (and a red "dead" variant if hasDeadImage)
+    //  - live response stats once calibration data is flowing
+    //  - calibrated badge (replaces the old standalone cal-badge)
+    function metaStrip(it) {
+      const chips = [];
+      if (it.cognitiveTag) {
+        chips.push(`<span class="meta-chip meta-chip-cognitive" title="Cognitive tag">${escHtml(it.cognitiveTag)}</span>`);
       }
-      return '';
+      if (it.strandCode && it.strandCode !== 'imported') {
+        chips.push(`<span class="meta-chip meta-chip-strand" title="Strand">${escHtml(it.strandCode)}</span>`);
+      }
+      // Image indicator. stemHtml carries the rich source; we just
+      // check for an <img> tag substring — cheap and good-enough since
+      // sanitiser uses lower-case tag names.
+      const hasImg = it.stemHtml && /<img\b/i.test(it.stemHtml);
+      if (hasImg) {
+        const dead = it.hasDeadImage;
+        const cls = dead ? 'meta-chip-image meta-chip-image-dead' : 'meta-chip-image';
+        const title = dead ? 'Image is on the dead eduversal S3 bucket' : 'Item carries an image';
+        const ico = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+        chips.push(`<span class="meta-chip ${cls}" title="${title}">${ico}${dead ? '404' : 'img'}</span>`);
+      }
+      // Source provenance for imported items — small mono lesson code
+      // so HQ can spot patterns across the bank.
+      if (it.source === 'latihan' && it.sourceLessonCode) {
+        chips.push(`<span class="meta-chip meta-chip-source" title="Latihan lesson">${escHtml(it.sourceLessonCode)}</span>`);
+      }
+      // Live calibration vitals. seenCount lights up once
+      // onEaseResponseCreated has started flowing; correctRate is the
+      // p-value (0..1). Hidden until the item has ≥1 response.
+      if (typeof it.seenCount === 'number' && it.seenCount > 0) {
+        const cr = typeof it.correctRate === 'number'
+          ? ` · ${Math.round(it.correctRate * 100)}%`
+          : '';
+        chips.push(`<span class="meta-chip meta-chip-seen" title="Live response stats">${it.seenCount} seen${cr}</span>`);
+      }
+      // Calibrated badge — promoted from a standalone right-side
+      // badge into the strip so all maturity signals sit together.
+      if (it.pilotPhase === false) {
+        chips.push('<span class="cal-badge" title="Calibrated logit replaces the pilot band">✓ calibrated</span>');
+      }
+      if (!chips.length) return '';
+      return `<div class="meta-strip">${chips.join('')}</div>`;
     }
 
     // Item code for the first column. Imported items expose the
