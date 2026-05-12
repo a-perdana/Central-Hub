@@ -83,8 +83,9 @@
     .pv-option .pv-content p { margin: 0; }
     .pv-option .pv-content ul, .pv-option .pv-content ol { margin: 4px 0; padding-left: 22px; }
 
-    .stat-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; margin-bottom: 18px; }
-    @media (max-width: 760px) { .stat-row { grid-template-columns: 1fr; } }
+    .stat-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.1fr; gap: 10px; margin-bottom: 18px; }
+    @media (max-width: 1080px) { .stat-row { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px)  { .stat-row { grid-template-columns: 1fr; } }
     .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
     .stat-num { font-family: 'Lora', serif; font-size: 1.5rem; line-height: 1; }
     .stat-lbl { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; margin-top: 4px; font-weight: 600; }
@@ -324,18 +325,27 @@
         // billed read regardless of underlying doc count.
         const subjects = ['math', 'english', 'science'];
         const diffs = ['easy', 'medium', 'hard'];
+        // Year breakdown counts items by their lowest grade target
+        // (`stage_min`). Single-grade imports land in exactly one year;
+        // multi-grade items (e.g. HQ default stage 7-9) attribute to
+        // the earliest. SMP pilot = Y7-9; SMA bucket folds Y10-12.
+        const years = [7, 8, 9, 10, 11, 12];
         const col = collection(window.db, 'ease_items');
         const [totalSnap, ...rest] = await Promise.all([
           getCountFromServer(col),
           ...subjects.map(s => getCountFromServer(query(col, where('subjectId', '==', s)))),
           ...diffs.map(d => getCountFromServer(query(col, where('difficulty', '==', d)))),
+          ...years.map(y => getCountFromServer(query(col, where('stage_min', '==', y)))),
         ]);
         const subjCounts = rest.slice(0, 3).map(s => s.data().count);
         const diffCounts = rest.slice(3, 6).map(s => s.data().count);
+        const yearCounts = rest.slice(6, 12).map(s => s.data().count);
         statTotals = {
           total: totalSnap.data().count,
           math: subjCounts[0], english: subjCounts[1], science: subjCounts[2],
           easy: diffCounts[0], medium: diffCounts[1], hard: diffCounts[2],
+          y7: yearCounts[0], y8: yearCounts[1], y9: yearCounts[2],
+          y10: yearCounts[3], y11: yearCounts[4], y12: yearCounts[5],
         };
         renderStats();
       } catch (e) {
@@ -346,9 +356,19 @@
     }
 
     function renderStats() {
-      const s = statTotals || { total: '—', math: '—', english: '—', science: '—', easy: '—', medium: '—', hard: '—' };
+      const s = statTotals || {
+        total: '—', math: '—', english: '—', science: '—',
+        easy: '—', medium: '—', hard: '—',
+        y7: '—', y8: '—', y9: '—', y10: '—', y11: '—', y12: '—',
+      };
       const filterPill = totalCount != null && (totalCount !== s.total)
         ? `<span style="font-size:11px;font-weight:600;color:var(--accent-dk);background:var(--accent-2);padding:2px 8px;border-radius:99px;">filter ${totalCount.toLocaleString()}</span>` : '';
+      // SMA bucket (Y10-12) — fold into one mini-count to keep the
+      // card compact. Pilot is Y7-9 so SMA is usually 0 today.
+      const smaCount = ['y10','y11','y12']
+        .map(k => Number(s[k]) || 0)
+        .reduce((a, b) => a + b, 0);
+      const smaDisplay = (typeof s.y10 === 'number') ? smaCount : '—';
       document.getElementById('statRow').innerHTML = `
         <div class="stat-card stat-card-wide">
           <div class="stat-lbl" style="margin:0 0 4px">Total in bank</div>
@@ -371,6 +391,15 @@
             <span><span class="stat-num-sm" style="color:#047857">${s.easy}</span><span class="stat-mini-tag">easy</span></span>
             <span><span class="stat-num-sm" style="color:#854d0e">${s.medium}</span><span class="stat-mini-tag">med</span></span>
             <span><span class="stat-num-sm" style="color:#be185d">${s.hard}</span><span class="stat-mini-tag">hard</span></span>
+          </div>
+        </div>
+        <div class="stat-card" title="Counted by lowest target grade (stage_min). Multi-grade items attribute to the earliest year.">
+          <div class="stat-lbl" style="margin:0 0 6px">By year</div>
+          <div class="stat-mini">
+            <span><span class="stat-num-sm" style="color:#0e7490">${s.y7}</span><span class="stat-mini-tag">y7</span></span>
+            <span><span class="stat-num-sm" style="color:#0e7490">${s.y8}</span><span class="stat-mini-tag">y8</span></span>
+            <span><span class="stat-num-sm" style="color:#0e7490">${s.y9}</span><span class="stat-mini-tag">y9</span></span>
+            <span><span class="stat-num-sm" style="color:var(--ink-3)">${smaDisplay}</span><span class="stat-mini-tag">y10-12</span></span>
           </div>
         </div>
       `;
