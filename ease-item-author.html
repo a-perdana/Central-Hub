@@ -309,6 +309,15 @@
       <input id="fSearch" type="search" placeholder="Search stem on this page…" title="Stem search filters the current page. Narrow first by subject / difficulty / type for a focused result set.">
       <select id="fSubject"><option value="">All subjects</option><option value="math">Math</option><option value="english">English</option><option value="science">Science</option></select>
       <select id="fDifficulty"><option value="">All difficulties</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
+      <select id="fYear" title="Filtered by lowest target grade (stage_min)">
+        <option value="">All years</option>
+        <option value="7">Year 7</option>
+        <option value="8">Year 8</option>
+        <option value="9">Year 9</option>
+        <option value="10">Year 10</option>
+        <option value="11">Year 11</option>
+        <option value="12">Year 12</option>
+      </select>
       <select id="fType"><option value="">All types</option><option value="mcq">MCQ</option><option value="numeric">Numeric</option><option value="short">Short</option></select>
       <select id="fSource"><option value="">All sources</option><option value="latihan">Latihan</option><option value="hq">HQ-authored</option></select>
       <span style="margin-left:auto"></span>
@@ -389,6 +398,7 @@
 
     document.getElementById('fSubject').addEventListener('change', resetAndReload);
     document.getElementById('fDifficulty').addEventListener('change', resetAndReload);
+    document.getElementById('fYear').addEventListener('change', resetAndReload);
     document.getElementById('fType').addEventListener('change', resetAndReload);
     document.getElementById('fSource').addEventListener('change', resetAndReload);
     // Search is client-side WITHIN the current page (cheap). Putting
@@ -400,20 +410,23 @@
     function buildQuerySig() {
       const subj = document.getElementById('fSubject').value;
       const diff = document.getElementById('fDifficulty').value;
+      const year = document.getElementById('fYear').value;
       const type = document.getElementById('fType').value;
       const src  = document.getElementById('fSource').value;
-      return [subj, diff, type, src].join('|');
+      return [subj, diff, year, type, src].join('|');
     }
 
     function buildBaseQuery() {
       const subj = document.getElementById('fSubject').value;
       const diff = document.getElementById('fDifficulty').value;
+      const year = document.getElementById('fYear').value;
       const type = document.getElementById('fType').value;
       const src  = document.getElementById('fSource').value;
       const col = collection(window.db, 'ease_items');
       const constraints = [];
       if (subj) constraints.push(where('subjectId', '==', subj));
       if (diff) constraints.push(where('difficulty', '==', diff));
+      if (year) constraints.push(where('stage_min', '==', Number(year)));
       if (type) constraints.push(where('type', '==', type));
       if (src)  constraints.push(where('source', '==', src));
       // Stable sort by createdAt desc when present, falling back to
@@ -525,12 +538,14 @@
       // the corresponding select is set.
       const curSubj = document.getElementById('fSubject').value;
       const curDiff = document.getElementById('fDifficulty').value;
+      const curYear = document.getElementById('fYear').value;
       // chip(filter, value, count, tag, color) → clickable button HTML.
       // Inert variant when filter is null (e.g. year SMA bucket).
       const chip = (filter, value, count, tag, color, isInert = false) => {
         const active = !isInert && (
           (filter === 'subject' && curSubj === value) ||
-          (filter === 'difficulty' && curDiff === value)
+          (filter === 'difficulty' && curDiff === value) ||
+          (filter === 'year' && curYear === String(value))
         );
         const cls = `stat-chip${isInert ? ' is-inert' : ''}${active ? ' is-active' : ''}`;
         const attrs = isInert
@@ -601,10 +616,10 @@
         <div class="stat-card" data-card="year" title="Counted by lowest target grade (stage_min). Multi-grade items attribute to the earliest year.">
           <div class="stat-lbl" style="margin:0 0 6px">By year</div>
           <div class="stat-mini">
-            ${chip(null, null, s.y7,        'y7',     '#0891b2', true)}
-            ${chip(null, null, s.y8,        'y8',     '#0e7490', true)}
-            ${chip(null, null, s.y9,        'y9',     '#155e75', true)}
-            ${chip(null, null, smaDisplay,  'y10-12', '#94a3b8', true)}
+            ${chip('year', 7, s.y7,       'y7',     '#0891b2')}
+            ${chip('year', 8, s.y8,       'y8',     '#0e7490')}
+            ${chip('year', 9, s.y9,       'y9',     '#155e75')}
+            ${chip(null, null, smaDisplay, 'y10-12', '#94a3b8', true)}
           </div>
           ${yearBar}
         </div>
@@ -614,7 +629,7 @@
         btn.addEventListener('click', () => {
           const f = btn.dataset.filter;
           const v = btn.dataset.value;
-          const select = { subject: 'fSubject', difficulty: 'fDifficulty' }[f];
+          const select = { subject: 'fSubject', difficulty: 'fDifficulty', year: 'fYear' }[f];
           if (!select) return;
           const el = document.getElementById(select);
           // Toggle: if already active, clear; otherwise set.
@@ -643,7 +658,7 @@
       const clearBtn = document.getElementById('clearFilters');
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-          ['fSubject', 'fDifficulty', 'fType', 'fSource'].forEach(id => {
+          ['fSubject', 'fDifficulty', 'fYear', 'fType', 'fSource'].forEach(id => {
             document.getElementById(id).value = '';
           });
           document.getElementById('fSearch').value = '';
@@ -661,12 +676,14 @@
       try {
         const subj = document.getElementById('fSubject').value;
         const diff = document.getElementById('fDifficulty').value;
+        const year = document.getElementById('fYear').value;
         const type = document.getElementById('fType').value;
         const src  = document.getElementById('fSource').value;
         const col = collection(window.db, 'ease_items');
         const constraints = [];
         if (subj) constraints.push(where('subjectId', '==', subj));
         if (diff) constraints.push(where('difficulty', '==', diff));
+        if (year) constraints.push(where('stage_min', '==', Number(year)));
         if (type) constraints.push(where('type', '==', type));
         if (src)  constraints.push(where('source', '==', src));
         const c = await getCountFromServer(query(col, ...constraints));
@@ -715,6 +732,7 @@
       if (visible.length === 0) {
         const hasFilter = !!(document.getElementById('fSubject').value
           || document.getElementById('fDifficulty').value
+          || document.getElementById('fYear').value
           || document.getElementById('fType').value
           || document.getElementById('fSource').value);
         let msg;
