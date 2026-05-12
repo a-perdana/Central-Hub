@@ -237,11 +237,23 @@
     window.__notesWidgetBooted = true;
 
     function ready(cb) {
-      if (window.db && window.currentUser) cb();
-      else window.addEventListener('authReady', cb, { once: true });
+      if (window.db && window.currentUser) { cb(); return; }
+      // auth-guard.js dispatches `authReady` on `document` (NOT window).
+      // Listen on both to be safe.
+      const fire = () => { document.removeEventListener('authReady', fire); window.removeEventListener('authReady', fire); cb(); };
+      document.addEventListener('authReady', fire, { once: true });
+      window.addEventListener('authReady', fire, { once: true });
+      // Fallback: poll for window.db in case the event fired before this script ran.
+      let waited = 0;
+      const poll = setInterval(() => {
+        waited += 250;
+        if (window.db && window.currentUser) { clearInterval(poll); fire(); }
+        else if (waited > 8000) { clearInterval(poll); console.warn('[notes] auth never became ready'); }
+      }, 250);
     }
 
     ready(async () => {
+      console.log('[notes] booting');
       const {
         collection, query, where, orderBy, limit,
         addDoc, updateDoc, deleteDoc, doc,
@@ -431,7 +443,18 @@
       );
 
       let firstSnap = true;
+      const stuckTimer = setTimeout(() => {
+        if (firstSnap) {
+          console.warn('[notes] no snapshot in 6s — index likely still building or query rejected');
+          grid.innerHTML = '';
+          const e = document.createElement('div');
+          e.className = 'notes-widget-empty';
+          e.innerHTML = '<strong>Still loading…</strong>The Firestore index may still be building (1–5 min after first deploy). Try refreshing in a minute.';
+          grid.appendChild(e);
+        }
+      }, 6000);
       onSnapshot(q, (snap) => {
+        clearTimeout(stuckTimer);
         // Preserve focus across re-renders so typing isn't interrupted.
         const focused = document.activeElement;
         const focusedId = focused?.closest?.('.note-card')?.dataset?.id;
