@@ -706,7 +706,6 @@
       </div>
       <div class="bp-filters">
         <input type="hidden" id="bpSubject" value="">
-        <input type="hidden" id="bpStage" value="">
         <select id="bpType">
           <option value="">All types</option>
           <option value="mcq">MCQ</option>
@@ -1625,12 +1624,12 @@
       // Pre-seed filters from the test envelope so authors see relevant
       // candidates immediately rather than the whole bank.
       const subj  = document.getElementById('fSubject').value || '';
-      const stage = document.getElementById('fStage').value   || '';
       const code  = (document.getElementById('fUnitCode').value || '').trim();
-      // Subject + stage come from the parent test envelope (fSubject / fStage);
-      // they're hidden inputs in the picker, not user-editable filters.
+      // Subject comes from the parent test envelope (fSubject); kept as a
+      // hidden input in the picker, not user-editable. Stage is no longer
+      // a filter — the syllabus ref pill already pins items into Cambridge
+      // hierarchy and grade is implied.
       document.getElementById('bpSubject').value = subj;
-      document.getElementById('bpStage').value = stage;
       document.getElementById('bpType').value  = '';
       document.getElementById('bpDiff').value  = '';
       document.getElementById('bpDiscipline').value = '';
@@ -1663,21 +1662,24 @@
 
     function buildBpQuery() {
       const subj  = document.getElementById('bpSubject').value;
-      const stage = document.getElementById('bpStage').value;
       const type  = document.getElementById('bpType').value;
       const diff  = document.getElementById('bpDiff').value;
       const disc  = document.getElementById('bpDiscipline').value;
       const constraints = [];
 
+      // Stage / grade is intentionally NOT a filter: the syllabus ref pill
+      // (cambridgeStandardRefs array-contains) already pins items to a
+      // specific point in the Cambridge hierarchy, which implies grade.
+      // Adding stage on top forced an extra composite index and silently
+      // hid Y9-tagged items from a Y8 test whose chapter references shared
+      // standards. Subject + syllabus ref is the right scoping primitive.
+
       if (bpState.mode === 'latihan') {
         // ease_items — only Latihan-sourced (skip 36 HQ-authored docs); type
-        // filtered to mcq/short (auto-graders we support). Stage matched via
-        // stage_min == stage (an item's stage_min is the lowest grade Latihan
-        // tagged it with; close enough for chapter-test scoping).
+        // filtered to mcq/short (auto-graders we support).
         const col = collection(window.db, 'ease_items');
         constraints.push(where('source', '==', 'latihan'));
         if (subj)  constraints.push(where('subjectId', '==', subj));
-        if (stage) constraints.push(where('stage_min', '==', Number(stage)));
         if (type && type !== 'numeric') constraints.push(where('type', '==', type));
         if (diff)  constraints.push(where('difficulty', '==', diff));
         if (disc && (subj === 'science' || !subj)) {
@@ -1692,7 +1694,6 @@
 
       const col = collection(window.db, 'chapter_test_items');
       if (subj)  constraints.push(where('subjectId', '==', subj));
-      if (stage) constraints.push(where('stage', '==', Number(stage)));
       if (type)  constraints.push(where('type', '==', type));
       if (diff)  constraints.push(where('difficulty', '==', diff));
       if (bpState.unitCodeFilter) {
