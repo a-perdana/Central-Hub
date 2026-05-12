@@ -175,26 +175,66 @@
     .test-card-stats { display: flex; gap: 10px; font-size: 12px; color: var(--ink-2); margin-bottom: 12px; }
     .test-card-actions { display: flex; gap: 6px; }
 
-    /* List view — compact single-column rows.
-       Same .test-card markup, alternate layout via parent class.    */
+    /* List view — compact 2-line rows.
+       Row 1: title (with optional linked pill) + actions on the right.
+       Row 2: subject · year · code · items · min · status badge.
+       Same .test-card markup, alternate layout via parent class.
+
+       Hover tints the row with the subject's accent colour so a long
+       scrollable list stays scannable. Uses --card-accent (set inline
+       on every card) blended into white via color-mix.   */
     .test-list { display: flex; flex-direction: column; gap: 6px; }
     .test-list .test-card {
       display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.1fr) minmax(0, 0.9fr) auto;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      grid-template-areas:
+        "title   actions"
+        "details actions";
       align-items: center;
-      gap: 14px;
+      column-gap: 14px;
+      row-gap: 2px;
       padding: 10px 14px 10px 18px;
+      transition: background-color .12s, box-shadow .15s;
     }
-    .test-list .test-card-title  { margin: 0; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .test-list .test-card-meta   { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .test-list .test-card-stats  { margin: 0; flex-wrap: wrap; }
-    .test-list .test-card-actions { margin: 0; }
-    @media (max-width: 720px) {
+    .test-list .test-card:hover {
+      background: color-mix(in srgb, var(--card-accent, var(--subj-default)) 8%, #fff);
+    }
+    .test-list .test-card-title {
+      grid-area: title;
+      margin: 0; font-size: 0.95rem; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .test-list .test-card-details {
+      grid-area: details;
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 6px 10px; font-size: 12px; color: var(--ink-3);
+      min-width: 0;
+    }
+    .test-list .test-card-details .dot { color: var(--ink-3); opacity: .5; }
+    .test-list .test-card-actions {
+      grid-area: actions;
+      margin: 0; display: inline-flex; gap: 4px;
+    }
+    @media (max-width: 540px) {
       .test-list .test-card {
         grid-template-columns: 1fr;
-        gap: 6px;
+        grid-template-areas: "title" "details" "actions";
       }
+      .test-list .test-card-actions { justify-self: end; }
     }
+
+    /* Icon-only action buttons used in list rows. Tooltip via title attr. */
+    .btn-icon {
+      width: 30px; height: 30px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); background: #fff;
+      border-radius: 6px; color: var(--ink-2); cursor: pointer;
+      padding: 0; transition: background .12s, color .12s, border-color .12s;
+    }
+    .btn-icon:hover { background: #f3f4f6; color: var(--ink); }
+    .btn-icon.is-danger:hover { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+    .btn-icon svg { width: 15px; height: 15px; }
 
     /* View toggle pill */
     .view-toggle {
@@ -640,13 +680,13 @@
           <input id="searchBox" placeholder="Search by title…">
           <span style="margin-left:auto"></span>
           <div class="view-toggle" id="viewToggle" role="group" aria-label="View mode">
-            <button type="button" data-view="gallery" class="is-active" title="Gallery view" aria-label="Gallery view">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
-              <span>Gallery</span>
-            </button>
-            <button type="button" data-view="list" title="List view" aria-label="List view">
+            <button type="button" data-view="list" class="is-active" title="List view" aria-label="List view">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>
               <span>List</span>
+            </button>
+            <button type="button" data-view="gallery" title="Gallery view" aria-label="Gallery view">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
+              <span>Gallery</span>
             </button>
           </div>
           <button id="newTestBtn" class="btn-primary">+ New chapter test</button>
@@ -911,7 +951,11 @@
     // change so the user never sees an empty mid-range page.
     const VIEW_LS_KEY  = 'cta:viewMode';
     const PSIZE_LS_KEY = 'cta:pageSize';
-    let viewMode = (localStorage.getItem(VIEW_LS_KEY) === 'list') ? 'list' : 'gallery';
+    // Default is list — galleries hide the second-line status badge behind
+    // a wider tile and the test list itself isn't visual / image-heavy
+    // enough to justify a tile grid as the primary mode.
+    const _savedView = localStorage.getItem(VIEW_LS_KEY);
+    let viewMode = (_savedView === 'gallery') ? 'gallery' : 'list';
     let pageSize = Number(localStorage.getItem(PSIZE_LS_KEY)) || 12;
     if (![12, 24, 48, 96].includes(pageSize)) pageSize = 12;
     let pageIndex = 0;
@@ -1484,21 +1528,72 @@
       const start = pageIndex * pageSize;
       const visible = filtered.slice(start, start + pageSize);
 
+      // Inline SVG icons — only the list view uses them; gallery keeps
+      // text buttons for the cleaner card look.
+      const ICONS = {
+        edit:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/><path d="M10 4l2 2"/></svg>',
+        archive:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="3" rx="0.5"/><path d="M3 6v7h10V6"/><path d="M6.5 8.5h3"/></svg>',
+        unarch: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="3" rx="0.5"/><path d="M3 6v7h10V6"/><path d="M8 11.5V8M6 9.5l2-2 2 2"/></svg>',
+        del:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4.5h10"/><path d="M5 4.5V3a1 1 0 011-1h4a1 1 0 011 1v1.5"/><path d="M4.5 4.5l.7 8.2a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8.2"/></svg>',
+      };
+
+      const actionButton = (t) => {
+        if (t.status === 'published') {
+          return `<button class="btn-icon" data-act="archive" data-id="${escAttr(t.id)}" title="Archive" aria-label="Archive">${ICONS.archive}</button>`;
+        }
+        if (t.status === 'archived') {
+          return `<button class="btn-icon" data-act="unarchive" data-id="${escAttr(t.id)}" title="Unarchive" aria-label="Unarchive">${ICONS.unarch}</button>`;
+        }
+        return `<button class="btn-icon is-danger" data-act="delete" data-id="${escAttr(t.id)}" title="Delete" aria-label="Delete">${ICONS.del}</button>`;
+      };
+
       grid.innerHTML = visible.map(t => {
         const linkedPill = t.pacingRef
           ? `<span class="item-source-pill" title="Linked to pacing chapter: ${escAttr(t.pacingRef.chapterTitle || t.pacingRef.chapterId)}">linked</span>`
           : '';
-        const accent = SUBJ_COLOR[t.subjectId] || '#6b7280';
+        const accent     = SUBJ_COLOR[t.subjectId] || '#6b7280';
+        const subjLabel  = escHtml(SUBJ_LABEL[t.subjectId] || t.subjectId);
+        const stage      = escHtml(t.stage || '?');
+        const code       = escHtml(t.unitCode || '');
+        const items      = (t.itemCount || 0);
+        const dur        = escHtml(t.durationMin || 30);
+        const statusKey  = t.status || 'draft';
+        const statusBadge = `<span class="badge badge-${escAttr(statusKey)}">${escHtml(statusKey)}</span>`;
+
+        if (viewMode === 'list') {
+          // 2-line layout — title (row 1) + everything else (row 2, includes
+          // the status badge so it's always visible without horizontal scroll).
+          return `
+          <div class="test-card" style="--card-accent:${accent}">
+            <div class="test-card-title">${escHtml(t.unitTitle || '(untitled)')}${linkedPill}</div>
+            <div class="test-card-details">
+              <span>${subjLabel} · Year ${stage}${code ? ' · ' + code : ''}</span>
+              <span class="dot">·</span>
+              <span>${items} items</span>
+              <span class="dot">·</span>
+              <span>${dur} min</span>
+              <span class="dot">·</span>
+              ${statusBadge}
+            </div>
+            <div class="test-card-actions">
+              <button class="btn-icon" data-act="edit" data-id="${escAttr(t.id)}" title="Edit" aria-label="Edit">${ICONS.edit}</button>
+              ${actionButton(t)}
+            </div>
+          </div>
+          `;
+        }
+
+        // Gallery — original card layout (status badge stays in the stats row).
         return `
         <div class="test-card" style="--card-accent:${accent}">
           <div class="test-card-title">${escHtml(t.unitTitle || '(untitled)')}${linkedPill}</div>
-          <div class="test-card-meta">${escHtml(SUBJ_LABEL[t.subjectId] || t.subjectId)} · Year ${escHtml(t.stage || '?')} · ${escHtml(t.unitCode || '')}</div>
+          <div class="test-card-meta">${subjLabel} · Year ${stage} · ${code}</div>
           <div class="test-card-stats">
-            <span>${(t.itemCount || 0)} items</span>
+            <span>${items} items</span>
             <span>·</span>
-            <span>${escHtml(t.durationMin || 30)} min</span>
+            <span>${dur} min</span>
             <span>·</span>
-            <span class="badge badge-${escAttr(t.status || 'draft')}">${escHtml(t.status || 'draft')}</span>
+            ${statusBadge}
           </div>
           <div class="test-card-actions">
             <button class="btn-secondary" data-act="edit"    data-id="${escAttr(t.id)}">Edit</button>
@@ -1610,12 +1705,12 @@
         render();
       });
     });
-    // Reflect persisted view on first paint (HTML default is gallery).
-    if (viewMode === 'list') {
-      document.querySelectorAll('#viewToggle button[data-view]').forEach(b => {
-        b.classList.toggle('is-active', b.dataset.view === 'list');
-      });
-    }
+    // Reflect persisted view on first paint. HTML default is list, but if
+    // the user previously chose gallery and it survived in localStorage,
+    // resync the toggle pill before render() runs.
+    document.querySelectorAll('#viewToggle button[data-view]').forEach(b => {
+      b.classList.toggle('is-active', b.dataset.view === viewMode);
+    });
 
     // Page-size selector — also resets to page 1 since the page slice shifts.
     const pageSizeSel = document.getElementById('testPageSize');
