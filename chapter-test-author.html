@@ -175,6 +175,62 @@
     .test-card-stats { display: flex; gap: 10px; font-size: 12px; color: var(--ink-2); margin-bottom: 12px; }
     .test-card-actions { display: flex; gap: 6px; }
 
+    /* List view — compact single-column rows.
+       Same .test-card markup, alternate layout via parent class.    */
+    .test-list { display: flex; flex-direction: column; gap: 6px; }
+    .test-list .test-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.1fr) minmax(0, 0.9fr) auto;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 14px 10px 18px;
+    }
+    .test-list .test-card-title  { margin: 0; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .test-list .test-card-meta   { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .test-list .test-card-stats  { margin: 0; flex-wrap: wrap; }
+    .test-list .test-card-actions { margin: 0; }
+    @media (max-width: 720px) {
+      .test-list .test-card {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+
+    /* View toggle pill */
+    .view-toggle {
+      display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; background: #fff;
+    }
+    .view-toggle button {
+      border: none; background: transparent; padding: 6px 10px;
+      font-size: 12px; color: var(--ink-2); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .view-toggle button.is-active { background: var(--accent, #6c5ce7); color: #fff; }
+    .view-toggle button:not(.is-active):hover { background: #f3f4f6; }
+    .view-toggle svg { width: 14px; height: 14px; }
+
+    /* Pagination bar */
+    .test-pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-top: 14px; flex-wrap: wrap;
+    }
+    .test-pagination-info { font-size: 12px; color: var(--ink-3); }
+    .test-pagination-buttons { display: inline-flex; gap: 4px; align-items: center; }
+    .test-pagination-buttons button {
+      min-width: 30px; padding: 5px 9px; border: 1px solid var(--border);
+      background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px;
+      color: var(--ink-2);
+    }
+    .test-pagination-buttons button:hover:not(:disabled) { background: #f3f4f6; }
+    .test-pagination-buttons button.is-active { background: var(--accent, #6c5ce7); color: #fff; border-color: var(--accent, #6c5ce7); }
+    .test-pagination-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .test-pagination select {
+      padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 12px; background: #fff;
+    }
+    .test-pagination-ellipsis { padding: 0 4px; color: var(--ink-3); font-size: 12px; }
+
     .badge {
       display: inline-block; padding: 2px 8px; border-radius: 99px;
       font-size: 11px; font-weight: 600;
@@ -580,10 +636,33 @@
           </select>
           <input id="searchBox" placeholder="Search by title…">
           <span style="margin-left:auto"></span>
+          <div class="view-toggle" id="viewToggle" role="group" aria-label="View mode">
+            <button type="button" data-view="gallery" class="is-active" title="Gallery view" aria-label="Gallery view">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
+              <span>Gallery</span>
+            </button>
+            <button type="button" data-view="list" title="List view" aria-label="List view">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>
+              <span>List</span>
+            </button>
+          </div>
           <button id="newTestBtn" class="btn-primary">+ New chapter test</button>
         </div>
 
         <div id="testGrid" class="test-grid"></div>
+        <div id="testPagination" class="test-pagination" hidden>
+          <div class="test-pagination-info" id="testPaginationInfo"></div>
+          <div class="test-pagination-buttons" id="testPaginationButtons"></div>
+          <div>
+            <label style="font-size:12px; color:var(--ink-3); margin-right:6px;">Per page</label>
+            <select id="testPageSize">
+              <option value="12">12</option>
+              <option value="24">24</option>
+              <option value="48">48</option>
+              <option value="96">96</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   </main>
@@ -824,6 +903,16 @@
     let editingItemIdx = -1;
     let mySubjects = []; // ch_subjects[] from profile
 
+    // View / pagination state — persisted to localStorage so the author's
+    // preferred density survives reloads. Page resets to 0 on any filter
+    // change so the user never sees an empty mid-range page.
+    const VIEW_LS_KEY  = 'cta:viewMode';
+    const PSIZE_LS_KEY = 'cta:pageSize';
+    let viewMode = (localStorage.getItem(VIEW_LS_KEY) === 'list') ? 'list' : 'gallery';
+    let pageSize = Number(localStorage.getItem(PSIZE_LS_KEY)) || 12;
+    if (![12, 24, 48, 96].includes(pageSize)) pageSize = 12;
+    let pageIndex = 0;
+
     // ── Pacing browser state ──────────────────────────────────────
     // Maps the pacing picker value (`{collection}/{docId}`) to the test
     // envelope defaults so "+ Add test for this chapter" can pre-fill
@@ -992,6 +1081,9 @@
 
     function setSelectedChapter(chId) {
       selectedChapterId = chId || '';
+      // Chapter filter is just another scope-narrower, so reset to page 1
+      // for the same reason as filterSubject / filterStatus / search.
+      pageIndex = 0;
       // Re-render sidebar to update active state, and the grid to apply filter.
       renderPacingChapters();
       updateSelectedChapterBar();
@@ -1347,14 +1439,32 @@
       if (pacingChapters.length > 0) renderPacingChapters();
 
       const grid = document.getElementById('testGrid');
+      const pager = document.getElementById('testPagination');
+
+      // Apply view-mode class on the container so the same .test-card markup
+      // can lay out as gallery cards OR compact list rows.
+      grid.classList.toggle('test-grid', viewMode === 'gallery');
+      grid.classList.toggle('test-list', viewMode === 'list');
+
       if (filtered.length === 0) {
         const emptyMsg = selectedChapterId
           ? `<div class="empty-title">No tests for this chapter yet</div>Click "+ Add test for this chapter" above to create one.`
           : `<div class="empty-title">No chapter tests yet</div>Create your first chapter test for a Cambridge unit you teach.`;
         grid.innerHTML = `<div class="empty" style="grid-column:1/-1">${emptyMsg}</div>`;
+        pager.hidden = true;
         return;
       }
-      grid.innerHTML = filtered.map(t => {
+
+      // Clamp pageIndex against the current filtered set — if the user just
+      // narrowed the filter and the previous page no longer exists, drop to
+      // the last valid page rather than rendering nothing.
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (pageIndex >= totalPages) pageIndex = totalPages - 1;
+      if (pageIndex < 0) pageIndex = 0;
+      const start = pageIndex * pageSize;
+      const visible = filtered.slice(start, start + pageSize);
+
+      grid.innerHTML = visible.map(t => {
         const linkedPill = t.pacingRef
           ? `<span class="item-source-pill" title="Linked to pacing chapter: ${escAttr(t.pacingRef.chapterTitle || t.pacingRef.chapterId)}">linked</span>`
           : '';
@@ -1385,6 +1495,55 @@
       grid.querySelectorAll('button[data-act]').forEach(btn => {
         btn.addEventListener('click', () => action(btn.dataset.act, btn.dataset.id));
       });
+
+      renderPagination(filtered.length, totalPages);
+    }
+
+    function renderPagination(totalItems, totalPages) {
+      const pager = document.getElementById('testPagination');
+      const info  = document.getElementById('testPaginationInfo');
+      const btns  = document.getElementById('testPaginationButtons');
+
+      // Hide the bar entirely when one page is enough.
+      if (totalPages <= 1) {
+        pager.hidden = true;
+        info.textContent = '';
+        btns.innerHTML = '';
+        return;
+      }
+      pager.hidden = false;
+
+      const fromN = pageIndex * pageSize + 1;
+      const toN   = Math.min(totalItems, (pageIndex + 1) * pageSize);
+      info.textContent = `${fromN}–${toN} of ${totalItems}`;
+
+      // Windowed pager: always show first + last; surround current with ±1.
+      // Insert ellipsis where the window doesn't touch the endpoints.
+      const pagesToShow = new Set([0, totalPages - 1, pageIndex - 1, pageIndex, pageIndex + 1]);
+      const sorted = [...pagesToShow].filter(p => p >= 0 && p < totalPages).sort((a, b) => a - b);
+
+      const parts = [];
+      parts.push(`<button data-page="prev" ${pageIndex === 0 ? 'disabled' : ''}>‹</button>`);
+      let prev = -1;
+      for (const p of sorted) {
+        if (prev !== -1 && p - prev > 1) parts.push(`<span class="test-pagination-ellipsis">…</span>`);
+        parts.push(`<button data-page="${p}" class="${p === pageIndex ? 'is-active' : ''}">${p + 1}</button>`);
+        prev = p;
+      }
+      parts.push(`<button data-page="next" ${pageIndex === totalPages - 1 ? 'disabled' : ''}>›</button>`);
+      btns.innerHTML = parts.join('');
+
+      btns.querySelectorAll('button[data-page]').forEach(b => {
+        b.addEventListener('click', () => {
+          const v = b.dataset.page;
+          if (v === 'prev') pageIndex = Math.max(0, pageIndex - 1);
+          else if (v === 'next') pageIndex = Math.min(totalPages - 1, pageIndex + 1);
+          else pageIndex = Number(v);
+          render();
+          // Scroll the grid into view so the user sees the new page top.
+          document.getElementById('testGrid').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
     }
 
     async function action(act, testId) {
@@ -1411,9 +1570,42 @@
     }
 
     document.getElementById('newTestBtn').addEventListener('click', () => openTestModal(null));
-    document.getElementById('filterSubject').addEventListener('change', render);
-    document.getElementById('filterStatus').addEventListener('change', render);
-    document.getElementById('searchBox').addEventListener('input', render);
+    // Filter changes always drop back to page 1 — otherwise a narrowed filter
+    // can leave the user on an empty mid-range page until they notice.
+    const resetAndRender = () => { pageIndex = 0; render(); };
+    document.getElementById('filterSubject').addEventListener('change', resetAndRender);
+    document.getElementById('filterStatus').addEventListener('change', resetAndRender);
+    document.getElementById('searchBox').addEventListener('input', resetAndRender);
+
+    // View toggle — gallery <-> list. Persists to localStorage.
+    document.querySelectorAll('#viewToggle button[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.view;
+        if (next === viewMode) return;
+        viewMode = next;
+        localStorage.setItem(VIEW_LS_KEY, viewMode);
+        document.querySelectorAll('#viewToggle button[data-view]').forEach(b => {
+          b.classList.toggle('is-active', b.dataset.view === viewMode);
+        });
+        render();
+      });
+    });
+    // Reflect persisted view on first paint (HTML default is gallery).
+    if (viewMode === 'list') {
+      document.querySelectorAll('#viewToggle button[data-view]').forEach(b => {
+        b.classList.toggle('is-active', b.dataset.view === 'list');
+      });
+    }
+
+    // Page-size selector — also resets to page 1 since the page slice shifts.
+    const pageSizeSel = document.getElementById('testPageSize');
+    pageSizeSel.value = String(pageSize);
+    pageSizeSel.addEventListener('change', () => {
+      pageSize = Number(pageSizeSel.value) || 12;
+      localStorage.setItem(PSIZE_LS_KEY, String(pageSize));
+      pageIndex = 0;
+      render();
+    });
 
     async function openTestModal(testId, prefill = null) {
       editingTestId = testId;
