@@ -337,6 +337,7 @@ const htmlFiles = [
   "ease-window-admin.html",
   "ease-bank-browser.html",
   "question-bank.html",
+  "diagrams.html",
   "page-access.html",
   "rules-viewer.html",
   "design-system.html",
