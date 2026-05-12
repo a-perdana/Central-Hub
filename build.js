@@ -338,6 +338,7 @@ const htmlFiles = [
   "ease-bank-browser.html",
   "question-bank.html",
   "practice-bank-admin.html",
+  "practice-assessment-author.html",
   "diagrams.html",
   "page-access.html",
   "rules-viewer.html",

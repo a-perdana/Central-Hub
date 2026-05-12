@@ -431,6 +431,45 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // -- practice_assessments (2026-05-12) -------------------
+    // HQ-composed bundles of practice_questions items, intended for
+    // Students Hub tournaments / leaderboards / daily-challenge
+    // gamification. itemIds[] reference practice_questions (no
+    // cloning — practice_questions is reuse-safe). NEVER feeds
+    // chapter_mastery or ease_growth (formal assessment boundary
+    // — see CLAUDE.md Common Mistake #33).
+    //
+    // - Read: any authorised CH/AH/TH user OR active student when
+    //   status == 'published' (so SH gamification surfaces can list
+    //   them without granting unauth read).
+    // - Create/update: admin OR CH coordinator/director.
+    // - Delete: admin only.
+    match /practice_assessments/{assessmentId} {
+      allow get: if isAuthorized()
+                 || (isActiveStudent() && resource.data.status == 'published');
+      allow list: if isAuthorized()
+                  || isActiveStudent();
+      allow create, update: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+    }
+
+    // Append-only audit log for practiceBankAiSuggest Cloud
+    // Function calls. Lets HQ inspect AI cost + which intents are
+    // useful. Cloud Function writes; clients read for HQ audit UI.
+    match /practice_ai_audit/{auditId} {
+      allow get, list: if isAdmin();
+      allow create: if false; // Cloud Function only (admin SDK)
+      allow update, delete: if false;
+    }
+
+    // AI suggestion cache. 24h soft-TTL. Cache key embeds a
+    // fingerprint of the candidate-pool ids so a new import or
+    // archive automatically invalidates downstream cached suggestions.
+    // Client never reads/writes — Cloud Function only.
+    match /ai_suggestion_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
     // -- scheduled_sessions ----------------------------------
     // A teacher schedules a published chapter_test for one of their
     // classes. Each session writes N draft chapter_test_attempts (one

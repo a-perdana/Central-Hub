@@ -482,6 +482,58 @@
       getCountFromServer, query, where, orderBy, limit, startAfter,
       serverTimestamp, writeBatch
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    import { getStorage, ref as storageRef, getDownloadURL }
+      from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+
+    // ──────────────────────────────────────────────────────────────
+    // Image URL resolver. Practice-bank stem + option images live
+    // at storage paths like `practice-diagrams/math/{filename}`. The
+    // raw https://storage.googleapis.com/{bucket}/{path} download URL
+    // form doesn't work because the bucket isn't public — we need
+    // signed-in download URLs via Firebase Storage SDK so the storage
+    // rule `auth != null` gate is satisfied. Same pattern as
+    // /question-bank and /diagrams. Cache by storagePath so repaints
+    // don't re-call getDownloadURL.
+    // ──────────────────────────────────────────────────────────────
+    const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+    const urlCache = new Map();
+    let _pqStorage = null;
+    function pqStorage() {
+      if (!_pqStorage) _pqStorage = getStorage(window.firebaseApp);
+      return _pqStorage;
+    }
+    function resolveImageUrl(path) {
+      if (!path) return Promise.resolve(null);
+      if (urlCache.has(path)) return urlCache.get(path);
+      const p = getDownloadURL(storageRef(pqStorage(), path)).catch(e => {
+        console.warn('[practice-bank-admin] getDownloadURL failed for', path, e.code || e.message);
+        urlCache.delete(path);
+        return null;
+      });
+      urlCache.set(path, p);
+      return p;
+    }
+    function hydrateImages(root = document) {
+      root.querySelectorAll('img[data-storage-path]').forEach(img => {
+        const p = img.getAttribute('data-storage-path');
+        if (img.dataset.hydrated === '1') return;
+        if (!p) {
+          // Doc was imported before its storage file was copied — the
+          // importer emitted `data-storage-missing="1"`. Show a small
+          // placeholder + the alt text the markdown carried.
+          img.dataset.hydrated = '1';
+          img.alt = img.alt || 'image unavailable';
+          img.title = 'Image source missing in CH bucket — re-run the copy script.';
+          img.style.opacity = '0.4';
+          return;
+        }
+        img.dataset.hydrated = '1';
+        resolveImageUrl(p).then(url => {
+          if (url) img.src = url;
+          else { img.style.opacity = '0.4'; img.title = 'Image could not be loaded.'; }
+        });
+      });
+    }
 
     // ──────────────────────────────────────────────────────────────
     // Bank locked to practice_questions. Separate from chapter_test_items
@@ -1018,7 +1070,7 @@
         chips.push(`<span class="meta-chip meta-chip-src" title="Source file: ${escAttr(sf)}">${escHtml(trimmed)}</span>`);
       }
       if (it.hasDiagram) {
-        if (it.diagramCopyFailed || !it.diagramUrl) {
+        if (it.diagramCopyFailed || !it.diagramStoragePath) {
           chips.push(`<span class="meta-chip meta-chip-diag-missing" title="Diagram copy failed — gamification flow will skip this item">📷 image missing</span>`);
         } else {
           chips.push(`<span class="meta-chip meta-chip-diag" title="Diagram attached">📷 diagram</span>`);
@@ -1298,17 +1350,20 @@
         ${it.assessmentObjective ? `<span style="background:#fef3c7;color:#92400e;padding:3px 9px;border-radius:99px;border:1px solid #fcd34d">${escHtml(it.assessmentObjective)}</span>` : ''}
         ${(it.cambridgeStandardRefs || []).map(r => `<span style="background:#f5f3ff;color:#6c5ce7;padding:3px 9px;border-radius:99px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px">${escHtml(r)}</span>`).join('')}
       `;
-      // Diagram — render direct from URL. practice_questions diagram
-      // shape is FLAT (no chapter_test_diagrams join).
+      // Diagram — addressed by storage path; the real URL is resolved
+      // at render time via Firebase Storage SDK getDownloadURL so the
+      // storage rule (signed-in read) is honoured. Legacy `diagramUrl`
+      // field is ignored; docs imported before 2026-05-12 still have
+      // it but it points at a non-public bucket URL that 403s.
       const diagSlot = document.getElementById('pvDiagram');
-      if (it.hasDiagram && it.diagramUrl) {
+      if (it.hasDiagram && it.diagramStoragePath) {
         diagSlot.innerHTML = `
           <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff;text-align:center">
-            <img src="${escAttr(it.diagramUrl)}" alt="diagram" style="max-width:100%;height:auto;border-radius:6px">
+            <img data-storage-path="${escAttr(it.diagramStoragePath)}" alt="diagram" src="${TRANSPARENT_PIXEL}" style="max-width:100%;height:auto;border-radius:6px">
           </div>
         `;
       } else if (it.hasDiagram) {
-        diagSlot.innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">⚠ This item has a diagram but the image URL is missing${it.diagramCopyFailed ? ' (copy failed during import)' : ''}. Gamification flow will skip it.</div>`;
+        diagSlot.innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">⚠ This item has a diagram but no storage path is recorded${it.diagramCopyFailed ? ' (copy failed during import)' : ''}. Gamification flow will skip it.</div>`;
       } else {
         diagSlot.innerHTML = '';
       }
@@ -1317,6 +1372,11 @@
       document.getElementById('pvStem').innerHTML = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
       // Answers
       renderPreviewAnswers(it);
+      // Resolve every data-storage-path image inside the modal to a
+      // real signed-in download URL. Diagram + option images flow
+      // through the same path. Done AFTER the answers are rendered so
+      // the option <img>s exist.
+      hydrateImages(modal);
       // Explanation / markScheme — only revealed after click.
       const ex = document.getElementById('pvExplain');
       if ((it.markScheme || it.explanation) && pvReveal) {
@@ -1385,7 +1445,11 @@
       const tpl = document.createElement('template');
       tpl.innerHTML = String(html);
       const ALLOWED = new Set(['P','SPAN','IMG','BR','STRONG','EM','B','I','U','UL','OL','LI','TABLE','TR','TD','TH','TBODY','THEAD','SUP','SUB','DIV']);
-      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading']), '*': new Set([]) };
+      // IMG also keeps data-storage-path / data-storage-missing so the
+      // hydrateImages() pass can swap src to a real download URL after
+      // sanitisation. src is allowed but must be http(s) or the inline
+      // transparent-pixel placeholder the importer emitted.
+      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading','data-storage-path','data-storage-missing']), '*': new Set([]) };
       function walk(node) {
         for (const child of [...node.childNodes]) {
           if (child.nodeType !== 1) continue;
@@ -1399,7 +1463,12 @@
           }
           if (child.tagName === 'IMG') {
             const src = child.getAttribute('src') || '';
-            if (!/^https?:\/\//i.test(src)) child.removeAttribute('src');
+            // Allow http(s) and the inline transparent-pixel placeholder
+            // (data:image/gif;base64,…). Anything else (javascript:, etc)
+            // is stripped — hydrateImages will fill it in later.
+            if (!/^https?:\/\//i.test(src) && !src.startsWith('data:image/')) {
+              child.removeAttribute('src');
+            }
             child.setAttribute('loading', 'lazy');
             child.style.maxWidth = '100%';
             child.style.height = 'auto';
@@ -1469,6 +1538,7 @@
       mount.innerHTML = renderEditorHtml(it);
       wireEditor(mount, it);
       itemModal.classList.add('is-open');
+      hydrateImages(mount);
       if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([mount]).catch(() => {});
       }
@@ -1531,16 +1601,17 @@
       ).join('');
 
       // Diagram block — read-only display only. No upload UI here (out
-      // of scope per task brief).
+      // of scope per task brief). Image addressed by storage path;
+      // hydrateImages() resolves a signed download URL after render.
       let diagramBlock = '';
       if (it.hasDiagram) {
-        if (it.diagramUrl) {
+        if (it.diagramStoragePath) {
           diagramBlock = `
             <div class="qe-diag-block">
-              <img src="${escAttr(it.diagramUrl)}" alt="diagram">
+              <img data-storage-path="${escAttr(it.diagramStoragePath)}" alt="diagram" src="${TRANSPARENT_PIXEL}">
               <div class="qe-diag-meta">
                 <div style="font-weight:600;color:var(--ink-2);font-size:12.5px;margin-bottom:6px">Diagram attached</div>
-                <div style="margin-bottom:4px">Storage path: <code>${escHtml(it.diagramStoragePath || '(none)')}</code></div>
+                <div style="margin-bottom:4px">Storage path: <code>${escHtml(it.diagramStoragePath)}</code></div>
                 <div style="margin-bottom:4px">Upstream URL: <code>${escHtml(it.diagramOriginalUrl || '(none)')}</code></div>
                 ${it.diagramCopyFailed ? `<div style="margin-top:6px;padding:4px 8px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;font-size:11px;display:inline-block">⚠ Copy failed — gamification flow skips this item</div>` : ''}
                 <div style="margin-top:8px;font-size:11px;color:var(--ink-3);font-style:italic">Diagram edits (upload / replace / remove) not supported here yet.</div>
@@ -1550,9 +1621,8 @@
           diagramBlock = `
             <div class="qe-diag-block">
               <div class="qe-diag-meta">
-                <div style="font-weight:600;color:#b91c1c;font-size:12.5px;margin-bottom:6px">⚠ hasDiagram is true but diagramUrl is missing</div>
+                <div style="font-weight:600;color:#b91c1c;font-size:12.5px;margin-bottom:6px">⚠ hasDiagram is true but diagramStoragePath is missing</div>
                 <div style="margin-bottom:4px">Upstream URL: <code>${escHtml(it.diagramOriginalUrl || '(none)')}</code></div>
-                <div style="margin-bottom:4px">Storage path: <code>${escHtml(it.diagramStoragePath || '(none)')}</code></div>
                 ${it.diagramCopyFailed ? `<div style="margin-top:6px;padding:4px 8px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;font-size:11px;display:inline-block">Copy failed during import</div>` : ''}
               </div>
             </div>`;
@@ -1663,11 +1733,13 @@
           editingItem = { ...editingItem, ...draft };
           mount.innerHTML = renderEditorHtml(editingItem);
           wireEditor(mount, editingItem);
+          hydrateImages(mount);
         } else if (typeEl.value === 'mcq' && mount.querySelector('#qeCorrectShort')) {
           const draft = readEditorPayload(mount);
           editingItem = { ...editingItem, ...draft };
           mount.innerHTML = renderEditorHtml(editingItem);
           wireEditor(mount, editingItem);
+          hydrateImages(mount);
         }
       };
       typeEl.addEventListener('change', updateTypeVisibility);

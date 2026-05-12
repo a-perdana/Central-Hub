@@ -1052,6 +1052,94 @@ Curriculum-adjacent question bank kept **separate from** `chapter_test_items` (w
 
 ---
 
+### 22. Practice Assessments (HQ-composed bundles of practice items + AI-assisted authoring, 2026-05-12)
+
+Practice items (§21) get composed into reusable **assessments** here. Distinct from `chapter_tests` (formal network-uniform tests fed into `chapter_mastery`) and `ease_sessions` (per-student adaptive runs fed into `ease_growth`). Practice assessments are the source pool for Students Hub tournaments / leaderboards / daily-challenge gamification — they NEVER write to `chapter_mastery` or `ease_growth`. Reuse via `itemIds[]` references (no cloning — `practice_questions` is already reuse-safe).
+
+Three collections + one Cloud Function:
+
+#### `practice_assessments/{assessmentId}`
+**PK:** Auto-id (firestore default).
+**Fields:**
+- `title` (string, required)
+- `description` (string)
+- `subjectId` (string, `'math' | 'english' | 'science'`)
+- `mode` (string, `'practice' | 'tournament' | 'daily_challenge'`)
+- `itemIds[]` (array of `practice_questions.id`)
+- `itemCount` (number — denormalised `itemIds.length` for filter queries)
+- `difficultyMix` (map — `{ easy: number, medium: number, hard: number }` denormalised counts)
+- `topicGroups[]` (array — denormalised union of selected items' `topicGroup` for filter queries)
+- `cambridgeStage` (number `7..12 | null`)
+- `timeLimitSec` (number — soft client-side timer; SH tournament engine reads this)
+- `status` (string, `'draft' | 'published' | 'archived'`)
+- `aiAssisted` (boolean — true if any items came from a `practiceBankAiSuggest` call during authoring)
+- `aiSuggestionIds[]` (array of `practice_ai_audit.id` for this assessment — author trail)
+- `createdBy → users.uid`
+- `createdAt`, `updatedAt`, `publishedAt` (timestamp | null)
+
+**FKs:** `createdBy → users.uid` · each `itemIds[i] → practice_questions.id`.
+**Writers:** `central_admin` OR CH `coordinator` / `director`.
+**Read:** authorised CH/AH/TH users OR `isActiveStudent()` when `status == 'published'`.
+**Delete:** `central_admin` only.
+**Notes:** Items referenced by id — never cloned. Deleting an underlying `practice_questions` doc orphans the reference (client-side filter at read time skips missing docs); this is acceptable because practice items follow a soft-delete pattern (`status: 'archived'`) by convention. `aiAssisted` lets the SH analytics tab segment "AI-composed vs hand-picked" performance.
+
+#### `practice_ai_audit/{auditId}`
+**PK:** Auto-id.
+**Fields:**
+- `actorUid → users.uid`
+- `actorEmail`
+- `actorRole` (`'central_admin' | 'coordinator' | 'director'`)
+- `assessmentId → practice_assessments.id | null` (null if the call happened before the draft was saved)
+- `subjectId`
+- `intent` (string — free-text prompt from the user)
+- `params` (map — structured filters: `targetCount`, `difficultyMix`, `topicGroups[]`, `cambridgeStage`)
+- `candidatePoolSize` (number — how many items matched the hard filter before being sent to the model)
+- `candidateIdsSentToModel[]` (capped at 100 — exactly what was sent)
+- `returnedIds[]` (model's ranked output)
+- `rationale[]` (string per returned id, model's 1-line justification)
+- `model` (string — e.g. `'claude-sonnet-4-6'`)
+- `tokenUsage` (map — `{ input, output, total }`)
+- `latencyMs` (number)
+- `cacheHit` (boolean)
+- `error` (string | null)
+- `at` (serverTimestamp)
+
+**Writers:** Cloud Function only (server-side append).
+**Read:** `central_admin`.
+**Notes:** Append-only (no update / no delete via rules). Lets HQ audit AI cost + model behaviour + which intents produce useful suggestions. Drives future fine-tuning decisions.
+
+#### `ai_suggestion_cache/{cacheId}`
+**PK:** Deterministic — `sha256(subjectId + targetCount + difficultyMix + topicGroups + cambridgeStage + intent + model + candidatePoolFingerprint).slice(0, 40)`. `candidatePoolFingerprint` = sha256 of the sorted candidate id list (so a cache hit is invalidated automatically when the candidate pool changes — e.g. a new item gets imported or an item gets archived).
+**Fields:**
+- `returnedIds[]`
+- `rationale[]`
+- `model`
+- `tokenUsage` (map — original call cost; replayed hits are zero-cost)
+- `createdAt` (serverTimestamp)
+- `expiresAt` (timestamp — `createdAt + 24h`; client filters expired entries, eventual TTL policy via Firestore TTL field)
+
+**Writers / Read:** Cloud Function only (rule denies all client access).
+**Notes:** 24h soft TTL. The candidate-pool fingerprint is the key invariant — without it, an item archive/import would silently leak stale suggestions for up to 24h.
+
+#### Cloud Function: `practiceBankAiSuggest` (asia-southeast1, callable)
+**Auth gate:** `request.auth` exists AND profile has `role_centralhub == 'central_admin'` OR `'director' ∈ ch_sub_roles[]` OR `'coordinator' ∈ ch_sub_roles[]`. Coordinators additionally constrained to subjects in their `ch_subjects[]`.
+**Secret:** `ANTHROPIC_API_KEY` (Secret Manager).
+**Default model:** `claude-sonnet-4-6` (cost-effective for ranking; Opus is overkill for metadata ranking).
+**Flow:**
+1. Validate args (`subjectId`, `targetCount: 1..50`, `difficultyMix`, optional `topicGroups[]` / `cambridgeStage` / `intent`).
+2. Query `practice_questions where subjectId==X and status=='active'` (+ optional stage / topicGroup hard filters). Cap candidate pool at 100 (most-recent-imported first).
+3. Compute cache fingerprint. If `ai_suggestion_cache/{fp}` exists AND `expiresAt > now`, return cached `returnedIds[]` + write a `practice_ai_audit` row with `cacheHit: true`.
+4. Otherwise: send candidate metadata only (`{id, topic, topicGroup, difficulty, commandWord, stemPreview}` where `stemPreview = stem.slice(0, 200)`) to Anthropic with a structured prompt asking for ranked ids + rationale. Never send full HTML, image URLs, or correct answers.
+5. Persist `ai_suggestion_cache/{fp}` + write `practice_ai_audit` row with `cacheHit: false` + full token usage.
+6. Return `{ returnedIds[], rationale[], cacheHit, auditId }` to the caller.
+
+**Failure modes:** Anthropic 429 / 5xx → log + audit row with `error` field + throw to client; client retries with backoff. Empty candidate pool → return empty list with no LLM call.
+
+**FKs:** see individual collections above.
+**Auth gate (client-side caveat):** the caller must already hold a valid sub-role at the time of the call; client UI hides the "AI Suggest" tab when not entitled, but server gate is the source of truth.
+
+---
+
 ## Indexes (composite)
 
 Single-field indexes are auto-created by Firestore. Composites must be declared in `Central Hub/firestore.indexes.json`.
@@ -1089,6 +1177,9 @@ Single-field indexes are auto-created by Firestore. Composites must be declared 
 | `mentor_certifications` | `uid ASC, active ASC` | fast certification check at assignment time |
 | `mentor_certifications` | `validUntil ASC, active ASC` | expiry sweeper cron |
 | `induction_journal_aggregates` | `programId ASC, isoWeek DESC` | HQ journal-engagement dashboard |
+| `practice_assessments` | `subjectId ASC, status ASC, updatedAt DESC` | `practice-assessment-author.html` left-rail list (filter by subject + status, recent first) |
+| `practice_assessments` | `status ASC, mode ASC, publishedAt DESC` | future SH tournament/leaderboard pickers (published practice/tournament/daily-challenge by recency) |
+| `practice_ai_audit` | `actorUid ASC, at DESC` | HQ "my AI calls" audit pane |
 
 All indexes are tracked in `Central Hub/firestore.indexes.json` and deployed via `firebase deploy --only firestore:indexes`. The local file is the **single source of truth** — `firebase deploy --force` will delete any index not present in the local file.
 
