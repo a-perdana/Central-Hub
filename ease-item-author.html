@@ -120,8 +120,29 @@
     .stat-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
     .stat-num { font-family: 'Lora', serif; font-size: 1.5rem; line-height: 1; }
     .stat-lbl { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; margin-top: 4px; font-weight: 600; }
-    .stat-mini { display: flex; gap: 18px; align-items: baseline; }
-    .stat-mini > span { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+    .stat-mini { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; }
+    /* Interactive filter chip — clickable mini-stat that drives the
+       toolbar select + reloads the page. Inert (non-button) variant
+       falls back to plain inline-flex for things we can't filter on
+       (e.g. year SMA bucket). */
+    .stat-chip {
+      display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px;
+      padding: 6px 10px 7px; border-radius: 8px;
+      background: transparent; border: 1px solid transparent;
+      font: inherit; color: inherit; cursor: pointer;
+      transition: background .12s ease, border-color .12s ease, transform .08s ease;
+      text-align: left;
+    }
+    .stat-chip:hover { background: var(--paper); border-color: var(--border); }
+    .stat-chip:active { transform: translateY(1px); }
+    .stat-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .stat-chip.is-active {
+      background: var(--accent-2); border-color: #ddd6fe;
+      box-shadow: inset 0 0 0 1px rgba(108,92,231,.15);
+    }
+    .stat-chip.is-active .stat-mini-tag { color: var(--accent-dk); }
+    .stat-chip.is-inert { cursor: default; }
+    .stat-chip.is-inert:hover { background: transparent; border-color: transparent; }
     .stat-num-sm { font-family: 'DM Sans', sans-serif; font-feature-settings: 'tnum'; font-size: 1.05rem; font-weight: 600; line-height: 1; }
     .stat-mini-tag { font-family: 'DM Sans', sans-serif; font-size: 9.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
 
@@ -452,7 +473,9 @@
         y7: '—', y8: '—', y9: '—', y10: '—', y11: '—', y12: '—',
       };
       // SMA bucket (Y10-12) — fold into one mini-count to keep the
-      // card compact. Pilot is Y7-9 so SMA is usually 0 today.
+      // card compact. Pilot is Y7-9 so SMA is usually 0 today. The
+      // chip is inert (no aggregate filter on stage_min spans
+      // multiple equals values).
       const smaCount = ['y10','y11','y12']
         .map(k => Number(s[k]) || 0)
         .reduce((a, b) => a + b, 0);
@@ -461,35 +484,82 @@
       // applied. Lives above the cards now that the wide hero owns the
       // total-in-bank headline.
       const filterPill = totalCount != null && (typeof s.total === 'number') && (totalCount !== s.total)
-        ? `<div class="filter-banner">Current view: <b>${totalCount.toLocaleString()}</b> of ${s.total.toLocaleString()} items match these filters</div>` : '';
+        ? `<div class="filter-banner">Current view: <b>${totalCount.toLocaleString()}</b> of ${s.total.toLocaleString()} items match these filters · <button id="clearFilters" type="button" style="background:none;border:none;color:var(--accent-dk);font-weight:600;cursor:pointer;padding:0;font:inherit;text-decoration:underline">clear</button></div>` : '';
+      // Read live filter state so chips render with `is-active` when
+      // the corresponding select is set.
+      const curSubj = document.getElementById('fSubject').value;
+      const curDiff = document.getElementById('fDifficulty').value;
+      // chip(filter, value, count, tag, color) → clickable button HTML.
+      // Inert variant when filter is null (e.g. year SMA bucket).
+      const chip = (filter, value, count, tag, color, isInert = false) => {
+        const active = !isInert && (
+          (filter === 'subject' && curSubj === value) ||
+          (filter === 'difficulty' && curDiff === value)
+        );
+        const cls = `stat-chip${isInert ? ' is-inert' : ''}${active ? ' is-active' : ''}`;
+        const attrs = isInert
+          ? `tabindex="-1" aria-disabled="true"`
+          : `type="button" data-filter="${filter}" data-value="${value}"`;
+        const title = isInert
+          ? ''
+          : (active ? `title="Click to clear ${tag} filter"` : `title="Filter to ${tag} only"`);
+        return `<button class="${cls}" ${attrs} ${title}>
+          <span class="stat-num-sm" style="color:${color}">${count}</span>
+          <span class="stat-mini-tag">${tag}</span>
+        </button>`;
+      };
       document.getElementById('statRow').innerHTML = `
         ${filterPill}
         <div class="stat-card">
           <div class="stat-lbl" style="margin:0 0 6px">By subject</div>
           <div class="stat-mini">
-            <span><span class="stat-num-sm" style="color:#b45309">${s.math}</span><span class="stat-mini-tag">math</span></span>
-            <span><span class="stat-num-sm" style="color:#0e7490">${s.english}</span><span class="stat-mini-tag">eng</span></span>
-            <span><span class="stat-num-sm" style="color:#6c5ce7">${s.science}</span><span class="stat-mini-tag">sci</span></span>
+            ${chip('subject', 'math',    s.math,    'math', '#b45309')}
+            ${chip('subject', 'english', s.english, 'eng',  '#0e7490')}
+            ${chip('subject', 'science', s.science, 'sci',  '#6c5ce7')}
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-lbl" style="margin:0 0 6px">By difficulty</div>
           <div class="stat-mini">
-            <span><span class="stat-num-sm" style="color:#047857">${s.easy}</span><span class="stat-mini-tag">easy</span></span>
-            <span><span class="stat-num-sm" style="color:#854d0e">${s.medium}</span><span class="stat-mini-tag">med</span></span>
-            <span><span class="stat-num-sm" style="color:#be185d">${s.hard}</span><span class="stat-mini-tag">hard</span></span>
+            ${chip('difficulty', 'easy',   s.easy,   'easy', '#047857')}
+            ${chip('difficulty', 'medium', s.medium, 'med',  '#854d0e')}
+            ${chip('difficulty', 'hard',   s.hard,   'hard', '#be185d')}
           </div>
         </div>
         <div class="stat-card" title="Counted by lowest target grade (stage_min). Multi-grade items attribute to the earliest year.">
           <div class="stat-lbl" style="margin:0 0 6px">By year</div>
           <div class="stat-mini">
-            <span><span class="stat-num-sm" style="color:#0e7490">${s.y7}</span><span class="stat-mini-tag">y7</span></span>
-            <span><span class="stat-num-sm" style="color:#0e7490">${s.y8}</span><span class="stat-mini-tag">y8</span></span>
-            <span><span class="stat-num-sm" style="color:#0e7490">${s.y9}</span><span class="stat-mini-tag">y9</span></span>
-            <span><span class="stat-num-sm" style="color:var(--ink-3)">${smaDisplay}</span><span class="stat-mini-tag">y10-12</span></span>
+            ${chip(null, null, s.y7,        'y7',     '#0e7490', true)}
+            ${chip(null, null, s.y8,        'y8',     '#0e7490', true)}
+            ${chip(null, null, s.y9,        'y9',     '#0e7490', true)}
+            ${chip(null, null, smaDisplay,  'y10-12', 'var(--ink-3)', true)}
           </div>
         </div>
       `;
+      // Wire chip clicks (event delegation on statRow).
+      document.getElementById('statRow').querySelectorAll('button.stat-chip[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const f = btn.dataset.filter;
+          const v = btn.dataset.value;
+          const select = { subject: 'fSubject', difficulty: 'fDifficulty' }[f];
+          if (!select) return;
+          const el = document.getElementById(select);
+          // Toggle: if already active, clear; otherwise set.
+          el.value = (el.value === v) ? '' : v;
+          resetAndReload();
+        });
+      });
+      // "clear" link in the filter banner — drops every filter.
+      const clearBtn = document.getElementById('clearFilters');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          ['fSubject', 'fDifficulty', 'fType', 'fSource'].forEach(id => {
+            document.getElementById(id).value = '';
+          });
+          document.getElementById('fSearch').value = '';
+          resetAndReload();
+        });
+      }
     }
 
     async function loadFirstPage() {
