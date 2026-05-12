@@ -145,6 +145,18 @@
     .stat-chip.is-inert:hover { background: transparent; border-color: transparent; }
     .stat-num-sm { font-family: 'DM Sans', sans-serif; font-feature-settings: 'tnum'; font-size: 1.05rem; font-weight: 600; line-height: 1; }
     .stat-mini-tag { font-family: 'DM Sans', sans-serif; font-size: 9.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+    /* Stacked horizontal proportion bar — sits under each stat card's
+       mini-chip row, giving "share of bank" at a glance. Segments
+       carry a hover tooltip via native `title`. */
+    .stat-bar {
+      display: flex; height: 6px; margin-top: 12px;
+      background: var(--paper); border-radius: 99px; overflow: hidden;
+    }
+    .stat-bar-seg { height: 100%; min-width: 1px; transition: opacity .12s ease; }
+    .stat-card:hover .stat-bar-seg { opacity: .85; }
+    .stat-bar-seg:hover { opacity: 1 !important; }
+    /* Hovered chip dims the other segments so the visual link is clear. */
+    .stat-card.is-hovering-chip .stat-bar-seg:not(.is-hover) { opacity: .35; }
 
     /* Items table — uniform 64px rows, zebra striping, hover highlight. */
     table.items { width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 12px; border-collapse: separate; border-spacing: 0; overflow: hidden; table-layout: fixed; }
@@ -498,8 +510,8 @@
         );
         const cls = `stat-chip${isInert ? ' is-inert' : ''}${active ? ' is-active' : ''}`;
         const attrs = isInert
-          ? `tabindex="-1" aria-disabled="true"`
-          : `type="button" data-filter="${filter}" data-value="${value}"`;
+          ? `tabindex="-1" aria-disabled="true" data-seg-key="${tag}"`
+          : `type="button" data-filter="${filter}" data-value="${value}" data-seg-key="${tag}"`;
         const title = isInert
           ? ''
           : (active ? `title="Click to clear ${tag} filter"` : `title="Filter to ${tag} only"`);
@@ -508,32 +520,69 @@
           <span class="stat-mini-tag">${tag}</span>
         </button>`;
       };
+      // bar(segments, denom) → stacked proportion bar HTML. Each seg
+      // is { count, color, tag, key }; denom controls % computation.
+      // Counts unknown ('—') skip bar render — keeps initial load tidy.
+      const bar = (segments, denom) => {
+        if (!denom || typeof denom !== 'number') return '';
+        const segHtml = segments.map(({ count, color, tag, key }) => {
+          const n = Number(count) || 0;
+          if (!n) return '';
+          const pct = (n / denom) * 100;
+          return `<div class="stat-bar-seg" data-seg-key="${key}" style="width:${pct.toFixed(2)}%;background:${color}" title="${tag}: ${n.toLocaleString()} (${pct.toFixed(1)}%)"></div>`;
+        }).join('');
+        return `<div class="stat-bar">${segHtml}</div>`;
+      };
+      const subjBar = bar([
+        { count: s.math,    color: '#b45309', tag: 'math', key: 'math' },
+        { count: s.english, color: '#0e7490', tag: 'eng',  key: 'eng'  },
+        { count: s.science, color: '#6c5ce7', tag: 'sci',  key: 'sci'  },
+      ], typeof s.total === 'number' ? s.total : null);
+      const diffBar = bar([
+        { count: s.easy,   color: '#047857', tag: 'easy', key: 'easy' },
+        { count: s.medium, color: '#854d0e', tag: 'med',  key: 'med'  },
+        { count: s.hard,   color: '#be185d', tag: 'hard', key: 'hard' },
+      ], typeof s.total === 'number' ? s.total : null);
+      // Year card uses its own denominator (sum of all 6 year buckets)
+      // because pre-2026-05-11 docs may lack stage_min. Reflects "of
+      // graded-by-year items, what's the spread".
+      const yearDenom = ['y7','y8','y9','y10','y11','y12']
+        .map(k => Number(s[k]) || 0).reduce((a, b) => a + b, 0);
+      const yearBar = bar([
+        { count: s.y7, color: '#0891b2', tag: 'y7',     key: 'y7'     },
+        { count: s.y8, color: '#0e7490', tag: 'y8',     key: 'y8'     },
+        { count: s.y9, color: '#155e75', tag: 'y9',     key: 'y9'     },
+        { count: smaCount, color: '#94a3b8', tag: 'y10-12', key: 'y10-12' },
+      ], yearDenom || null);
       document.getElementById('statRow').innerHTML = `
         ${filterPill}
-        <div class="stat-card">
+        <div class="stat-card" data-card="subject">
           <div class="stat-lbl" style="margin:0 0 6px">By subject</div>
           <div class="stat-mini">
             ${chip('subject', 'math',    s.math,    'math', '#b45309')}
             ${chip('subject', 'english', s.english, 'eng',  '#0e7490')}
             ${chip('subject', 'science', s.science, 'sci',  '#6c5ce7')}
           </div>
+          ${subjBar}
         </div>
-        <div class="stat-card">
+        <div class="stat-card" data-card="difficulty">
           <div class="stat-lbl" style="margin:0 0 6px">By difficulty</div>
           <div class="stat-mini">
             ${chip('difficulty', 'easy',   s.easy,   'easy', '#047857')}
             ${chip('difficulty', 'medium', s.medium, 'med',  '#854d0e')}
             ${chip('difficulty', 'hard',   s.hard,   'hard', '#be185d')}
           </div>
+          ${diffBar}
         </div>
-        <div class="stat-card" title="Counted by lowest target grade (stage_min). Multi-grade items attribute to the earliest year.">
+        <div class="stat-card" data-card="year" title="Counted by lowest target grade (stage_min). Multi-grade items attribute to the earliest year.">
           <div class="stat-lbl" style="margin:0 0 6px">By year</div>
           <div class="stat-mini">
-            ${chip(null, null, s.y7,        'y7',     '#0e7490', true)}
+            ${chip(null, null, s.y7,        'y7',     '#0891b2', true)}
             ${chip(null, null, s.y8,        'y8',     '#0e7490', true)}
-            ${chip(null, null, s.y9,        'y9',     '#0e7490', true)}
-            ${chip(null, null, smaDisplay,  'y10-12', 'var(--ink-3)', true)}
+            ${chip(null, null, s.y9,        'y9',     '#155e75', true)}
+            ${chip(null, null, smaDisplay,  'y10-12', '#94a3b8', true)}
           </div>
+          ${yearBar}
         </div>
       `;
       // Wire chip clicks (event delegation on statRow).
@@ -547,6 +596,23 @@
           // Toggle: if already active, clear; otherwise set.
           el.value = (el.value === v) ? '' : v;
           resetAndReload();
+        });
+      });
+      // Hover-link: when a chip is hovered, dim sibling bar segments
+      // so the eye snaps to the matching colour band. Pure visual —
+      // no state, just classes toggled on enter/leave.
+      document.getElementById('statRow').querySelectorAll('.stat-chip[data-seg-key]').forEach(btn => {
+        const card = btn.closest('.stat-card');
+        if (!card) return;
+        const key = btn.dataset.segKey;
+        const matchSeg = card.querySelector(`.stat-bar-seg[data-seg-key="${key}"]`);
+        btn.addEventListener('mouseenter', () => {
+          card.classList.add('is-hovering-chip');
+          if (matchSeg) matchSeg.classList.add('is-hover');
+        });
+        btn.addEventListener('mouseleave', () => {
+          card.classList.remove('is-hovering-chip');
+          if (matchSeg) matchSeg.classList.remove('is-hover');
         });
       });
       // "clear" link in the filter banner — drops every filter.
