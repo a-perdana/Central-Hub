@@ -184,6 +184,35 @@
     #detailModal .used-in-list { font-size: 12px; color: var(--ink-3); }
     #detailModal .used-in-list code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; background: var(--paper); padding: 1px 6px; border-radius: 4px; }
 
+    /* 3-stage delete modal — admin-only confirmation gate. */
+    .danger-modal .modal { width: min(480px, 100%); }
+    .danger-modal .modal h2 { color: #b91c1c; display: flex; align-items: center; gap: 10px; }
+    .danger-modal .modal h2 svg { width: 22px; height: 22px; flex-shrink: 0; }
+    .danger-modal .modal-body p { margin: 0 0 12px; font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+    .danger-modal .modal-body p b { color: var(--ink); }
+    .danger-modal input[type="text"] { width: 100%; padding: 10px 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; letter-spacing: .04em; }
+    .danger-modal input[type="text"]:focus { outline: 2px solid #b91c1c; outline-offset: -1px; }
+    .danger-modal .modal-actions .btn-danger { background: #b91c1c; color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
+    .danger-modal .modal-actions .btn-danger:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+    .danger-modal .modal-actions .btn-danger:not(:disabled):hover { background: #991b1b; }
+    .danger-modal .stage { display: none; }
+    .danger-modal .stage.is-active { display: block; }
+    .danger-modal .stage-dots { display: flex; gap: 6px; justify-content: center; margin: 0 0 14px; }
+    .danger-modal .stage-dots .dot { width: 22px; height: 4px; border-radius: 99px; background: var(--border); transition: background .15s ease; }
+    .danger-modal .stage-dots .dot.is-passed { background: #fca5a5; }
+    .danger-modal .stage-dots .dot.is-current { background: #b91c1c; }
+    .danger-modal .ack-row {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 12px 14px; background: #fef2f2; border: 1px solid #fca5a5;
+      border-radius: 10px; margin-bottom: 10px;
+      cursor: pointer; user-select: none;
+    }
+    .danger-modal .ack-row:hover { background: #fee2e2; }
+    .danger-modal .ack-row input { margin-top: 3px; accent-color: #b91c1c; }
+    .danger-modal .ack-row .ack-text { font-size: 13px; line-height: 1.45; color: var(--ink); }
+    .danger-modal .ack-row .ack-text b { color: #991b1b; }
+    .danger-modal .cooldown-hint { font-size: 11.5px; color: var(--ink-3); text-align: right; margin: 6px 0 0; font-feature-settings: 'tnum'; }
+
     /* Non-admin gates */
     body.no-delete .diag-card-actions .icon-btn-danger,
     body.no-delete .diag-list-del { display: none !important; }
@@ -359,13 +388,73 @@
     </div>
   </div>
 
+  <!-- 3-stage delete confirmation — admin-only.
+       Mirrors the gate on /ease-item-author + /question-bank:
+       acknowledge → type-to-confirm → 3 s cooldown. -->
+  <div id="deleteModal" class="modal-overlay danger-modal" role="dialog" aria-hidden="true">
+    <div class="modal">
+      <h2>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Delete diagram?
+      </h2>
+      <div class="modal-body">
+        <div class="stage-dots">
+          <span class="dot is-current" data-dot="1"></span>
+          <span class="dot" data-dot="2"></span>
+          <span class="dot" data-dot="3"></span>
+        </div>
+
+        <div class="stage is-active" data-stage="1">
+          <p>You are about to permanently delete <b id="delDiagName">this diagram</b> from the reusable pool. Please confirm each consequence:</p>
+          <label class="ack-row">
+            <input type="checkbox" class="ack-check" data-ack="irreversible">
+            <span class="ack-text"><b>Irreversible.</b> The Storage object at <code id="delDiagPath" style="font-size:11px"></code> will be deleted. The original IGCSE Tools binary may still exist there, but the CH copy is gone.</span>
+          </label>
+          <label class="ack-row">
+            <input type="checkbox" class="ack-check" data-ack="orphans">
+            <span class="ack-text">
+              <b>Orphan chapter test items.</b> Any chapter_test_items linked to this diagram will keep their <code>diagramId</code> field pointing at a non-existent doc. The script clears those refs on commit, but if it fails mid-way the items end up with a dangling pointer.
+              <span id="delOrphanSummary" style="display:block;margin-top:6px;font-size:12px;color:#7f1d1d;font-weight:600">Counting references…</span>
+            </span>
+          </label>
+          <label class="ack-row">
+            <input type="checkbox" class="ack-check" data-ack="responsible">
+            <span class="ack-text"><b>I take responsibility.</b> Diagram deletion is logged client-side only (no audit collection for chapter_test_diagrams today). This action is attributed to my <code>central_admin</code> account.</span>
+          </label>
+        </div>
+
+        <div class="stage" data-stage="2">
+          <p>Type the phrase below exactly to continue:</p>
+          <p style="font-family:'JetBrains Mono',ui-monospace,monospace;background:var(--paper);padding:10px 14px;border-radius:8px;font-size:13.5px;color:#991b1b;text-align:center;letter-spacing:.04em">DELETE DIAGRAM</p>
+          <input id="delDiagConfirm" type="text" placeholder="Type the phrase exactly" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+
+        <div class="stage" data-stage="3">
+          <p style="margin-bottom:18px"><b>Last chance.</b> Deletion commits when you click the final button. Unlocks after a 3-second cooldown.</p>
+          <div style="padding:18px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;text-align:center">
+            <div style="font-size:11.5px;font-weight:600;color:#991b1b;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Pending deletion</div>
+            <div style="font-family:'Lora',serif;font-size:1.2rem;color:#7f1d1d" id="delDiagName2">Diagram</div>
+            <div style="font-size:11px;color:#9f1239;margin-top:4px" id="delDiagPath2"></div>
+          </div>
+          <p class="cooldown-hint" id="delDiagCooldown">Unlocks in 3s…</p>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="delDiagCancel" type="button">Cancel</button>
+        <button class="btn-secondary" id="delDiagBack" type="button" style="display:none">Back</button>
+        <button class="btn-secondary" id="delDiagNext" type="button" disabled>Next</button>
+        <button class="btn-danger" id="delDiagGo" type="button" disabled style="display:none">Delete diagram</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script type="module">
     import {
       collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs,
       getCountFromServer, query, where, orderBy, limit, startAfter,
-      serverTimestamp
+      serverTimestamp, writeBatch
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject }
       from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
@@ -500,7 +589,7 @@
       });
       document.getElementById('detailDelete').addEventListener('click', () => {
         const id = document.getElementById('detailModal').dataset.diagramId;
-        if (id) deleteDiagram(id);
+        if (id) openDeleteModal(id);
       });
       document.getElementById('fEditFile').addEventListener('change', (e) => {
         const f = e.target.files && e.target.files[0];
@@ -618,7 +707,7 @@
       // Wire actions.
       box.querySelectorAll('[data-act="open"]').forEach(el => el.addEventListener('click', () => openDetailModal(el.dataset.id)));
       box.querySelectorAll('[data-act="edit"]').forEach(el => el.addEventListener('click', (ev) => { ev.stopPropagation(); openEditModal(el.dataset.id); }));
-      box.querySelectorAll('[data-act="del"]').forEach(el => el.addEventListener('click', (ev) => { ev.stopPropagation(); deleteDiagram(el.dataset.id); }));
+      box.querySelectorAll('[data-act="del"]').forEach(el => el.addEventListener('click', (ev) => { ev.stopPropagation(); openDeleteModal(el.dataset.id); }));
       // Pager
       const lastPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
       document.getElementById('pager').innerHTML = `
@@ -796,43 +885,198 @@
       }
     }
 
-    async function deleteDiagram(id) {
+    // ──────────────────────────────────────────────────────────────
+    // Delete diagram — admin-only, 3-stage confirmation
+    //
+    // Mirrors the gate used on /ease-item-author + /question-bank
+    // bulk delete:
+    //   Stage 1: 3 ack checkboxes (irreversible / orphan refs /
+    //            accountability)
+    //   Stage 2: type DELETE DIAGRAM
+    //   Stage 3: 3-second cooldown
+    //
+    // The rule (allow delete: if isAdmin()) is the actual gate; this
+    // is the human-in-the-loop layer. canDelete + body.no-delete
+    // already hide the buttons for non-admins, so this flow only
+    // runs for central_admin in practice.
+    // ──────────────────────────────────────────────────────────────
+    let pendingDelete = null;
+    let delStage = 1;
+    let delCooldownTimer = null;
+
+    function openDeleteModal(id) {
       if (!canDelete) { toast('Delete restricted to central_admin.'); return; }
       const d = allItems.find(x => x.id === id) || filteredItems.find(x => x.id === id);
       if (!d) return;
+      pendingDelete = d;
+      delStage = 1;
+      const modal = document.getElementById('deleteModal');
+      const name = d.description || d.imageName || d.id;
+      document.getElementById('delDiagName').textContent = name;
+      document.getElementById('delDiagName2').textContent = name;
+      document.getElementById('delDiagPath').textContent = d.storagePath || '(no path)';
+      document.getElementById('delDiagPath2').textContent = d.storagePath || '';
+      // Reset every gate
+      modal.querySelectorAll('.ack-check').forEach(cb => { cb.checked = false; });
+      document.getElementById('delDiagConfirm').value = '';
+      // Orphan summary — usedInItemIds[] is already on the doc, no
+      // extra fetch needed
       const usedIn = Array.isArray(d.usedInItemIds) ? d.usedInItemIds.length : 0;
-      const warn = usedIn > 0
-        ? `This diagram is currently linked to ${usedIn} chapter test item${usedIn === 1 ? '' : 's'}. Deleting will leave those items with a broken diagramId reference. Continue?`
-        : 'Delete this diagram and its Storage object? This cannot be undone.';
-      if (!confirm(warn)) return;
+      const summary = document.getElementById('delOrphanSummary');
+      if (usedIn === 0) {
+        summary.textContent = 'No items reference this diagram — safe to delete.';
+        summary.style.color = '#065f46';
+      } else {
+        summary.innerHTML = `Will orphan: <b>${usedIn} chapter test item${usedIn === 1 ? '' : 's'}</b>. The script clears their diagramId on commit.`;
+        summary.style.color = '#991b1b';
+      }
+      showDelStage(1);
+      modal.classList.add('is-open');
+    }
+
+    function showDelStage(n) {
+      delStage = n;
+      const modal = document.getElementById('deleteModal');
+      modal.querySelectorAll('.stage').forEach(s => {
+        s.classList.toggle('is-active', Number(s.dataset.stage) === n);
+      });
+      modal.querySelectorAll('.stage-dots .dot').forEach(d => {
+        const i = Number(d.dataset.dot);
+        d.classList.toggle('is-passed', i < n);
+        d.classList.toggle('is-current', i === n);
+      });
+      const nextBtn = document.getElementById('delDiagNext');
+      const backBtn = document.getElementById('delDiagBack');
+      const goBtn   = document.getElementById('delDiagGo');
+      backBtn.style.display = n > 1 ? '' : 'none';
+      nextBtn.style.display = n < 3 ? '' : 'none';
+      goBtn.style.display   = n === 3 ? '' : 'none';
+      if (n === 1) {
+        nextBtn.disabled = !allDelAcksTicked();
+      } else if (n === 2) {
+        nextBtn.disabled = !delPhraseMatches();
+        setTimeout(() => document.getElementById('delDiagConfirm').focus(), 30);
+      } else if (n === 3) {
+        startDelCooldown();
+      }
+    }
+    function allDelAcksTicked() {
+      return Array.from(document.querySelectorAll('#deleteModal .ack-check')).every(cb => cb.checked);
+    }
+    function delPhraseMatches() {
+      return document.getElementById('delDiagConfirm').value.trim().toUpperCase() === 'DELETE DIAGRAM';
+    }
+    function startDelCooldown() {
+      const goBtn = document.getElementById('delDiagGo');
+      const hint = document.getElementById('delDiagCooldown');
+      goBtn.disabled = true;
+      goBtn.textContent = 'Delete diagram';
+      let sec = 3;
+      hint.textContent = `Unlocks in ${sec}s…`;
+      if (delCooldownTimer) clearInterval(delCooldownTimer);
+      delCooldownTimer = setInterval(() => {
+        sec -= 1;
+        if (sec <= 0) {
+          clearInterval(delCooldownTimer);
+          delCooldownTimer = null;
+          hint.textContent = 'Ready. Click Delete to commit.';
+          goBtn.disabled = false;
+        } else {
+          hint.textContent = `Unlocks in ${sec}s…`;
+        }
+      }, 1000);
+    }
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('is-open');
+      if (delCooldownTimer) { clearInterval(delCooldownTimer); delCooldownTimer = null; }
+      pendingDelete = null;
+    }
+
+    // Per-stage re-validation
+    document.querySelectorAll('#deleteModal .ack-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (delStage === 1) document.getElementById('delDiagNext').disabled = !allDelAcksTicked();
+      });
+    });
+    document.getElementById('delDiagConfirm').addEventListener('input', () => {
+      if (delStage === 2) document.getElementById('delDiagNext').disabled = !delPhraseMatches();
+    });
+    document.getElementById('delDiagNext').addEventListener('click', () => {
+      if (delStage < 3) showDelStage(delStage + 1);
+    });
+    document.getElementById('delDiagBack').addEventListener('click', () => {
+      if (delStage > 1) {
+        if (delCooldownTimer) { clearInterval(delCooldownTimer); delCooldownTimer = null; }
+        showDelStage(delStage - 1);
+      }
+    });
+    document.getElementById('delDiagCancel').addEventListener('click', closeDeleteModal);
+    document.getElementById('deleteModal').addEventListener('click', (e) => {
+      // Backdrop closes only from stages 1-2; stage 3 (cooldown) must
+      // be cancelled explicitly so a stray click can't leak through.
+      if (e.target.id === 'deleteModal' && delStage < 3) closeDeleteModal();
+    });
+
+    // Final commit — Storage object + Firestore doc + cascade clear
+    // diagramId on every referencing chapter_test_items doc.
+    document.getElementById('delDiagGo').addEventListener('click', async () => {
+      const d = pendingDelete;
+      if (!d) return;
+      if (!canDelete) { toast('Delete restricted to central_admin.'); return; }
+      const goBtn = document.getElementById('delDiagGo');
+      goBtn.disabled = true;
+      goBtn.textContent = 'Deleting…';
       try {
-        // Delete the Storage object first; if Firestore delete fails
-        // the orphaned binary is harder to find. Order matters.
+        // 1. Storage object first. Missing is OK; other errors warn
+        //    but don't block.
         if (d.storagePath) {
           try {
             await deleteObject(storageRef(storage, d.storagePath));
           } catch (storErr) {
-            // Storage object missing is OK (already cleaned up); other
-            // errors warn but don't block the Firestore delete.
             if (storErr.code !== 'storage/object-not-found') {
               console.warn('[diagrams] storage delete warning', storErr);
             }
           }
         }
-        await deleteDoc(doc(window.db, COLL, id));
-        toast('Deleted.');
+        // 2. Clear diagramId on every referencing item. Batch caps at
+        //    500 ops; 1 batch handles up to 499 items + the diagram
+        //    doc itself in the same commit.
+        const refs = Array.isArray(d.usedInItemIds) ? d.usedInItemIds : [];
+        const CHUNK = 400;
+        for (let i = 0; i < refs.length; i += CHUNK) {
+          const batch = writeBatch(window.db);
+          refs.slice(i, i + CHUNK).forEach(itemId => {
+            batch.update(doc(window.db, 'chapter_test_items', itemId), {
+              diagramId: null,
+              updatedAt: serverTimestamp(),
+            });
+          });
+          // First chunk also carries the diagram delete itself —
+          // atomic with the first slab of cascade clears.
+          if (i === 0) batch.delete(doc(window.db, COLL, d.id));
+          await batch.commit();
+        }
+        // Edge case: no usedInItemIds at all — the diagram still
+        // needs deleting.
+        if (refs.length === 0) {
+          await deleteDoc(doc(window.db, COLL, d.id));
+        }
+        closeDeleteModal();
         document.getElementById('detailModal').classList.remove('is-open');
-        // Locally drop so the UI updates without a full reload.
-        allItems = allItems.filter(x => x.id !== id);
-        filteredItems = filteredItems.filter(x => x.id !== id);
+        toast(`Deleted "${d.description || d.imageName || d.id}".`);
+        // Local UI drop
+        allItems = allItems.filter(x => x.id !== d.id);
+        filteredItems = filteredItems.filter(x => x.id !== d.id);
         renderHero();
         renderPage();
         loadStats();
       } catch (e) {
         console.error('[diagrams] delete failed', e);
         toast('Delete failed: ' + (e.message || e.code));
+        goBtn.disabled = false;
+        goBtn.textContent = 'Delete diagram';
       }
-    }
+    });
 
     function toast(msg) {
       const t = document.getElementById('toast');
