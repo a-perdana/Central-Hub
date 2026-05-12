@@ -331,7 +331,7 @@ The Careers Module lives in **Teachers Hub**. CH only hosts the rules + a few UI
 | `auth-guard.js` | Auth + role gate, profile modal mount, page-access UI gating |
 | `build.js` | Vercel build — navbar injection, shared-styles injection, cambridge-crossref injection, asset copy |
 | `shared-styles.css` | Central design system — tokens, reset, components, sidebar, profile modal CSS |
-| `partials/navbar.html` | Shared navbar HTML+CSS+JS injected via `<!-- SHARED_NAVBAR -->`. Bespoke in-place navbar editor (admin only) supporting columns + nested submenu groups + Add-Group button. Toggled via `#btnNavEdit`; writes to `nav_config/v1`. |
+| `partials/navbar.html` | **Hardcoded** navbar HTML+CSS+JS injected via `<!-- SHARED_NAVBAR -->`. The rendered menu (desktop dropdowns + mobile drawer) is literal HTML in this file — NOT generated from `nav_config/v1`. Also hosts the bespoke in-place editor (admin only, toggled via `#btnNavEdit`) which writes admin's drag-reorder + rename edits to `nav_config/v1` — but those writes only feed back into the editor's own source-of-truth + page-access lint, NOT the rendered HTML. To add/remove/reorder a real navbar link you MUST edit this file directly. See Common Mistakes #12. |
 | `calendar-fallback.js` | Static `window.CAL_DEMO_EVENTS` — update each academic year |
 | `cambridge-crossref.js` | Singleton runtime auto-wiring CTS chips into click-to-expand popovers. Build-injected. |
 | `firebase.json` | Firestore rules config (no hosting section used) |
@@ -365,7 +365,7 @@ The Careers Module lives in **Teachers Hub**. CH only hosts the rules + a few UI
 - **`staff.html` writes both `schoolId` (FK) and `school` (denormalised name).** `<select>` value = `partner_schools.id`. Don't revert to free-text. Page renders 463+ rows with pagination (25/page, windowed buttons), filters (school, role, status, **level**, **linked**), and a 7-column grid (Name / Role / School / Department / Levels chip row / Status / Linked badge). Filter changes always reset to page 1.
 - **Staff ↔ users bridge runs in `auth-guard.js`'s `applyStaffBridge()` — keep it in sync with the AH and TH copies.** First login looks up `staff` by `emailLower`; match copies fields onto `users/{uid}` + back-links via `userId` / `linkedAt` / `invited:false`; no match auto-creates a staff row keyed by deterministic SHA-1 (`sha1(emailLower).slice(0,20)`) and stamped `source:'auth-guard-autocreate'`. The rule block in `firestore.rules` allows both self-paths only when `emailLower == auth.token.email` AND `userId == auth.uid`. Tighten with care — silent breakage of new-user signup is the failure mode.
 - **`/page-access` critical-page guard** opens confirm modal at save time before narrowing visibility on admin tooling pages. central_admin bypasses; other power users (director / coordinator) get explicit acknowledgement.
-- **In-place navbar editor lives in `partials/navbar.html`** (CH only — bespoke). Writes to `nav_config/v1`. Don't fork into AH/TH — their navbars are flat and use `shared-design/nav-edit-simple.js` writing to `nav_config/{platform}`.
+- **In-place navbar editor lives in `partials/navbar.html`** (CH only — bespoke). Writes to `nav_config/v1`. Don't fork into AH/TH — their navbars are flat and use `shared-design/nav-edit-simple.js` writing to `nav_config/{platform}`. **CH navbar is hardcoded HTML — `nav_config/v1` does NOT drive rendering.** To add a new link to the rendered navbar you MUST edit the HTML in `partials/navbar.html` directly (both desktop dropdown + mobile drawer); rebuild propagates via the `<!-- SHARED_NAVBAR -->` placeholder. AH/TH behave differently — their `nav_config/{platform}` doc IS the rendering source. See Common Mistakes #12.
 - **Profile modal edits ONLY personal fields** — displayName / phone / title / photoURL. Email + role + sub-role + subjects ASLA editable from here. Role mutations only via `/console`.
 - **No sidebar on `index.html`.** Navbar dropdowns are the sole navigation surface (removed 2026-05-05). The `academics` data-nav-key still exists in navbar config + `page_access_config/academics`, but its href routes to `curriculum-map` because there is no `/academics` page; do not create one.
 
@@ -413,3 +413,17 @@ The `academics` data-nav-key is virtual (no `academics.html`). Its navbar entry 
 
 ### 11. Reserved Firestore doc IDs
 `__name__`-style (double-underscore start AND end) is reserved by Firestore — `setDoc` rejects with "Resource id is invalid because it is reserved". Use single-underscore-each-side patterns instead.
+
+### 12. CH navbar is HARDCODED HTML — `nav_config/v1` does not drive rendering
+The CH navbar (`partials/navbar.html`) is bespoke literal HTML for both desktop dropdowns and the mobile drawer. `nav_config/v1` in Firestore is **not** the rendering source — it's only used by the in-place admin editor as its own source-of-truth (drag-reorder state, section labels, hide flags) and by `page-access.html`'s slug lookup. Writing to `nav_config/v1` will NOT change what users see in the rendered menu.
+
+**To actually add / remove / reorder a navbar entry you must edit three things in `partials/navbar.html`:**
+1. The desktop dropdown HTML inside the relevant `<div class="ch-dd-panel" id="chDdPanel-...">` block (find the right `<div class="ch-dd-col">` column + section header). Use `<div class="ch-dd-divider"></div>` + `<div class="ch-dd-col-header">` to start a new section.
+2. The mobile drawer block lower in the same file — a `<div class="mob-nav-subheader">…</div>` + `<a class="mobile-nav-link" data-mob-page="…" href="…">…</a>` pair.
+3. The `groupKeys` map near the bottom (~line 1900) — add the new slug to the relevant panel's array so the dropdown trigger highlights when the page is active.
+
+Then run `node build.js` to propagate the updated `partials/navbar.html` into every `dist/*.html` via `<!-- SHARED_NAVBAR -->`. Forgetting any one of the three causes a silent partial regression: link works on desktop but not mobile, or trigger doesn't highlight on the page, etc.
+
+Past incident 2026-05-12: First attempt to add `/practice-bank-admin` to the navbar wrote a new entry to `nav_config/v1` and the rendered menu didn't change. CLAUDE.md ambiguously said "bespoke editor writes to nav_config/v1" without making clear that nav_config is editor-only — fixed here.
+
+AH/TH navbars are the opposite: their `nav_config/{platform}` doc IS the rendering source (flat shape, `shared-design/nav-edit-simple.js`). Don't carry CH's hardcoded-HTML assumption into AH/TH or vice versa.
