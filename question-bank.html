@@ -267,6 +267,62 @@
     .bulk-bar .bulk-btn-ok { background: rgba(110,231,183,.18); border-color: rgba(110,231,183,.35); }
     .bulk-bar .bulk-btn-ok:hover { background: rgba(110,231,183,.32); }
 
+    /* Diagram editor section (inside the edit modal's extra fields
+       column) + diagram picker grid (separate modal). */
+    .qe-section { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .qe-section h3 { font-family: 'Lora', serif; font-size: .98rem; margin: 0 0 10px; font-weight: 600; }
+    .qe-diagram-empty {
+      display: flex; align-items: center; justify-content: center;
+      height: 90px; border: 1px dashed var(--border); border-radius: 8px;
+      color: var(--ink-3); font-size: 12.5px; text-align: center; padding: 8px;
+    }
+    .qe-diagram-thumb {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--paper);
+    }
+    .qe-diagram-thumb img {
+      width: 110px; height: 90px; object-fit: contain;
+      background: #fff; border-radius: 6px; flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .qe-diagram-meta { flex: 1; min-width: 0; font-size: 12px; line-height: 1.4; }
+    .qe-diagram-meta .qe-diag-cat { font-size: 10px; font-weight: 600; color: var(--accent-dk); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+    .qe-diagram-meta .qe-diag-desc { color: var(--ink); margin-bottom: 4px; }
+    .qe-diagram-meta .qe-diag-topics { color: var(--ink-3); font-size: 11px; }
+    .qe-diagram-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .qe-diagram-actions button {
+      font: inherit; font-size: 12px; padding: 6px 12px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: #fff; cursor: pointer;
+    }
+    .qe-diagram-actions button:hover { background: var(--paper); }
+    .qe-diagram-actions .qe-diag-pick { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .qe-diagram-actions .qe-diag-pick:hover { background: var(--accent-dk); }
+    .qe-diagram-actions .qe-diag-remove { color: #b91c1c; }
+    .qe-diagram-actions .qe-diag-remove:hover { background: #fef2f2; border-color: #fca5a5; }
+
+    /* Diagram picker grid (separate modal) */
+    .dp-card {
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+      background: #fff; cursor: pointer;
+      transition: border-color .12s ease, transform .08s ease, box-shadow .12s ease;
+    }
+    .dp-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(108,92,231,.12); }
+    .dp-card:active { transform: translateY(1px); }
+    .dp-card.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+    .dp-card-img-wrap {
+      width: 100%; height: 100px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--paper); border-radius: 6px; overflow: hidden;
+    }
+    .dp-card-img-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .dp-card-desc { font-size: 11.5px; color: var(--ink-2); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 28px; }
+    .dp-card-meta { display: flex; gap: 4px; flex-wrap: wrap; font-size: 9.5px; color: var(--ink-3); }
+    .dp-card-meta .dp-pill { padding: 1px 5px; border-radius: 99px; background: var(--paper); border: 1px solid var(--border); }
+    .dp-card-meta .dp-pill-subj { background: #ede9fe; color: var(--accent-dk); border-color: #ddd6fe; }
+
     /* Modal */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 40px 20px; }
     .modal-overlay.is-open { display: flex; }
@@ -524,13 +580,54 @@
     </div>
   </div>
 
+  <!-- Diagram picker — opens from the edit modal when the user
+       attaches/changes the item's diagram. Grid of 24 thumbs per
+       page, filtered by subject + category + search; click selects
+       and closes. -->
+  <div id="diagramPickerModal" class="modal-overlay" role="dialog" aria-hidden="true">
+    <div class="modal" style="width: min(960px, 100%); max-width: 960px; max-height: calc(100vh - 60px);">
+      <h2 style="display:flex;align-items:center;gap:10px;">
+        <span>Choose a diagram</span>
+        <span id="dpCount" style="font-size:12px;color:var(--ink-3);font-weight:400"></span>
+        <span style="flex:1"></span>
+        <button id="dpClose" class="btn-secondary" type="button" style="font-size:13px">Close</button>
+      </h2>
+      <div class="modal-body" style="padding:14px 22px 4px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <input id="dpSearch" type="search" placeholder="Search description / topic / tag…" style="flex:1;min-width:220px;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px">
+          <select id="dpSubject" style="padding:7px 10px;font-size:12.5px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;padding-right:28px">
+            <option value="">All subjects</option>
+            <option value="math">Math</option>
+            <option value="english">English</option>
+            <option value="science">Combined Science</option>
+            <option value="physics">Physics</option>
+            <option value="chemistry">Chemistry</option>
+            <option value="biology">Biology</option>
+            <option value="bahasa">Bahasa</option>
+            <option value="religion">Religion</option>
+          </select>
+          <select id="dpCategory" style="padding:7px 10px;font-size:12.5px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;padding-right:28px">
+            <option value="">All categories</option>
+            <option value="diagram">Diagram</option>
+            <option value="graph">Graph</option>
+            <option value="photo">Photo</option>
+            <option value="table">Table</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div id="dpGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;min-height:200px;"></div>
+        <div id="dpPager" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;font-size:13px;color:var(--ink-3)"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script type="module">
     import {
       collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs,
       getCountFromServer, query, where, orderBy, limit, startAfter,
-      serverTimestamp, writeBatch
+      serverTimestamp, writeBatch, arrayUnion, arrayRemove
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { mountQuestionEditor } from './partials/question-editor.js';
 
@@ -1135,6 +1232,15 @@
       if (typeof it.version === 'number' && it.version > 1) {
         chips.push(`<span class="meta-chip meta-chip-ver" title="Item version">v${it.version}</span>`);
       }
+      // Diagram attachment indicator — either pool-linked (preferred)
+      // or legacy direct path. Distinct icon so HQ can scan which
+      // items still carry a non-pooled image (those need a diagram
+      // pool entry eventually).
+      if (it.diagramId) {
+        chips.push(`<span class="meta-chip meta-chip-ref" title="Linked to chapter_test_diagrams/${escAttr(it.diagramId)}" style="background:#ecfdf5;color:#065f46;border-color:#6ee7b7;font-family:inherit">📷 diagram</span>`);
+      } else if (it.stemImagePath) {
+        chips.push(`<span class="meta-chip" title="Direct stem image (no pool link)" style="background:#fef3c7;color:#92400e;border-color:#fcd34d">🖼 legacy image</span>`);
+      }
       if (!chips.length) return '';
       return `<div class="meta-strip">${chips.join('')}</div>`;
     }
@@ -1579,7 +1685,52 @@
           ${(it.cambridgeStandardRefs || []).map(r => `<span style="background:#f5f3ff;color:#6c5ce7;padding:3px 9px;border-radius:99px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px">${escHtml(r)}</span>`).join('')}
         `;
         const stemHtml = it.stemHtml || it.stem || '';
-        document.getElementById('pvStem').innerHTML = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
+        let stemBody = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
+        // Attach the diagram, if any. Two paths:
+        //   - it.diagramId set    → fetch chapter_test_diagrams doc, render its imageURL
+        //   - legacy stemImagePath → use stemImageBucket || CH bucket to render directly
+        // We render a placeholder first so the layout doesn't jump
+        // when the async fetch lands.
+        const diagWrap = `<div id="pvDiagram" style="margin-top:14px"></div>`;
+        document.getElementById('pvStem').innerHTML = stemBody + diagWrap;
+        if (it.diagramId) {
+          // Async hydrate — render skeleton, replace with the real
+          // image when getDoc returns.
+          document.getElementById('pvDiagram').innerHTML = '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;background:var(--paper);border-radius:8px">Loading diagram…</div>';
+          getDoc(doc(window.db, 'chapter_test_diagrams', it.diagramId)).then(dsnap => {
+            if (!dsnap.exists()) {
+              document.getElementById('pvDiagram').innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">Linked diagram <code>${escHtml(it.diagramId)}</code> not found.</div>`;
+              return;
+            }
+            const d = dsnap.data();
+            const topics = (d.topics || []).join(' · ');
+            document.getElementById('pvDiagram').innerHTML = `
+              <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+                <img src="${escAttr(d.imageURL)}" alt="${escAttr(d.description || d.imageName || 'diagram')}" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
+                ${d.description ? `<div style="margin-top:8px;font-size:12.5px;color:var(--ink-2);text-align:center">${escHtml(d.description)}</div>` : ''}
+                ${topics ? `<div style="margin-top:4px;font-size:11px;color:var(--ink-3);text-align:center">${escHtml(topics)}</div>` : ''}
+              </div>
+            `;
+          }).catch(() => {
+            document.getElementById('pvDiagram').innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px">(Diagram load failed)</div>';
+          });
+        } else if (it.stemImagePath) {
+          // Legacy direct path — render straight from Storage. Only
+          // valid for items whose binary was already moved to the CH
+          // bucket; stemImageBucket should be null after the diagram
+          // migration. If it's still set, the binary lives in the
+          // foreign bucket and we point at it explicitly.
+          const bucket = it.stemImageBucket || 'centralhub-8727b.firebasestorage.app';
+          const url = `https://storage.googleapis.com/${bucket}/${it.stemImagePath}`;
+          document.getElementById('pvDiagram').innerHTML = `
+            <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+              <img src="${escAttr(url)}" alt="diagram" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
+              <div style="margin-top:6px;font-size:10.5px;color:var(--ink-3);text-align:center">Legacy direct path · not yet pool-linked</div>
+            </div>
+          `;
+        } else {
+          document.getElementById('pvDiagram').remove();
+        }
         const ansBox = document.getElementById('pvAnswers');
         if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length) {
           ansBox.innerHTML = it.options.map((o, i) => {
@@ -1687,6 +1838,18 @@
 
     // Editor modal — shared question-editor.js with mode 'chapter_test'.
     let activeEditor = null;
+    // Editor-side diagram state — captured from the item on open,
+    // mutated by the picker, persisted on save.
+    //   diagramId:       current FK to chapter_test_diagrams (string | null)
+    //   diagramDoc:      hydrated diagram doc (so the editor can show
+    //                    the thumb without an extra read). null when
+    //                    nothing attached or when only the id is known.
+    //   originalDiagramId: what the item had when the modal opened —
+    //                    needed at save time to flip the reverse
+    //                    `usedInItemIds[]` arrayUnion/arrayRemove if
+    //                    the user changed the attachment.
+    let diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null };
+
     async function openItem(id) {
       editingId = id;
       let it = { type: 'mcq', difficulty: 'medium', subjectId: 'math', stage: 7, status: 'draft', stem: '', options: ['', '', '', ''], correctIdx: 0 };
@@ -1694,6 +1857,20 @@
         const snap = await getDoc(doc(window.db, BANK, id));
         if (snap.exists()) it = { id, ...snap.data() };
       }
+      // Diagram state init — hydrate the linked doc when known so the
+      // editor can render the thumb without flicker.
+      diagramState = {
+        diagramId: it.diagramId || null,
+        diagramDoc: null,
+        originalDiagramId: it.diagramId || null,
+      };
+      if (it.diagramId) {
+        try {
+          const dsnap = await getDoc(doc(window.db, 'chapter_test_diagrams', it.diagramId));
+          if (dsnap.exists()) diagramState.diagramDoc = { id: dsnap.id, ...dsnap.data() };
+        } catch {}
+      }
+
       document.getElementById('iModalTitle').textContent = id ? 'Edit chapter-test item' : 'New chapter-test item';
       const mount = document.getElementById('itemEditorMount');
       mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
@@ -1705,6 +1882,13 @@
       activeEditor = await mountQuestionEditor(mount, {
         mode: 'chapter_test',
         initialItem: it,
+        extraFieldsHtml: DIAGRAM_SECTION_HTML,
+        extraFieldsBind: (root) => {
+          // Initial paint + delegate buttons. The section re-renders
+          // itself on every state change so we don't have to chase
+          // the inner DOM through opening/closing the picker.
+          renderDiagramSection(root);
+        },
         onSave: async (payload) => { await save(payload); closeItem(); },
         onCancel: closeItem,
       });
@@ -1712,6 +1896,219 @@
     function closeItem() {
       document.getElementById('itemModal').classList.remove('is-open');
       if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
+      diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null };
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Diagram attachment — editor-side
+    //
+    // The chapter-test item carries `diagramId → chapter_test_diagrams.id`
+    // (FK to a reusable pool). The diagram doc keeps a reverse
+    // `usedInItemIds[]` array that the gallery + question-bank meta
+    // strip read for "in N items" badges. Both directions are kept
+    // in sync at save time inside a single writeBatch — see save().
+    // ──────────────────────────────────────────────────────────────
+    const DIAGRAM_SECTION_HTML = `
+      <div class="qe-section" id="qeDiagramSection">
+        <h3>Diagram</h3>
+        <div id="qeDiagramBody"></div>
+      </div>
+    `;
+
+    function renderDiagramSection(root) {
+      const body = root.querySelector('#qeDiagramBody');
+      if (!body) return;
+      const d = diagramState.diagramDoc;
+      if (!diagramState.diagramId) {
+        body.innerHTML = `
+          <div class="qe-diagram-empty">No diagram attached.<br>Click below to pick from the pool.</div>
+          <div class="qe-diagram-actions" style="margin-top:8px">
+            <button type="button" class="qe-diag-pick" id="qeDiagPick">+ Attach diagram</button>
+          </div>
+        `;
+      } else if (!d) {
+        // Have an id but no hydrated doc — show a minimal placeholder.
+        body.innerHTML = `
+          <div class="qe-diagram-empty">Diagram <code>${escHtml(diagramState.diagramId)}</code> attached (preview unavailable).</div>
+          <div class="qe-diagram-actions" style="margin-top:8px">
+            <button type="button" class="qe-diag-pick" id="qeDiagChange">Change</button>
+            <button type="button" class="qe-diag-remove" id="qeDiagRemove">Remove</button>
+          </div>
+        `;
+      } else {
+        const topicsLbl = (d.topics || []).slice(0, 2).join(' · ') + ((d.topics || []).length > 2 ? ` (+${d.topics.length - 2})` : '');
+        body.innerHTML = `
+          <div class="qe-diagram-thumb">
+            <img src="${escAttr(d.imageURL)}" alt="${escAttr(d.description || d.imageName || 'diagram')}">
+            <div class="qe-diagram-meta">
+              <div class="qe-diag-cat">${escHtml(d.category || 'diagram')} · ${escHtml(d.subjectId || '')}</div>
+              <div class="qe-diag-desc">${escHtml(d.description || d.imageName || 'Untitled diagram')}</div>
+              ${topicsLbl ? `<div class="qe-diag-topics">${escHtml(topicsLbl)}</div>` : ''}
+            </div>
+          </div>
+          <div class="qe-diagram-actions">
+            <button type="button" class="qe-diag-pick" id="qeDiagChange">Change diagram</button>
+            <button type="button" class="qe-diag-remove" id="qeDiagRemove">Remove</button>
+          </div>
+        `;
+      }
+      // Wire actions.
+      const pick = body.querySelector('#qeDiagPick') || body.querySelector('#qeDiagChange');
+      const remove = body.querySelector('#qeDiagRemove');
+      if (pick) pick.addEventListener('click', () => openDiagramPicker(root));
+      if (remove) remove.addEventListener('click', () => {
+        diagramState.diagramId = null;
+        diagramState.diagramDoc = null;
+        renderDiagramSection(root);
+      });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Diagram picker (separate modal). Lazy-loads chapter_test_diagrams
+    // on first open; filters client-side after that, with a
+    // debounced "load more" pager. 24 diagrams per page is plenty
+    // for visual scan; HQ narrows via subject/category/search.
+    // ──────────────────────────────────────────────────────────────
+    let dpEditorRoot = null;   // reference back to the editor root so post-pick re-renders the section
+    let dpAllItems = [];        // hydrated diagram pool (subject-filtered)
+    let dpFilteredItems = [];   // after search + category filter
+    let dpPageIdx = 0;
+    const DP_PAGE_SIZE = 24;
+    let dpInFlight = false;
+
+    async function openDiagramPicker(editorRoot) {
+      dpEditorRoot = editorRoot;
+      const modal = document.getElementById('diagramPickerModal');
+      // Default the subject filter to the item being edited — HQ
+      // almost always wants a diagram in the same subject. They can
+      // widen to "All" if needed.
+      const itemSubject = (activeEditor && activeEditor.getItem && activeEditor.getItem().subjectId) || '';
+      document.getElementById('dpSubject').value = itemSubject || '';
+      document.getElementById('dpCategory').value = '';
+      document.getElementById('dpSearch').value = '';
+      dpAllItems = [];
+      dpFilteredItems = [];
+      dpPageIdx = 0;
+      modal.classList.add('is-open');
+      await loadDiagramPool();
+    }
+
+    async function loadDiagramPool() {
+      if (dpInFlight) return;
+      dpInFlight = true;
+      const grid = document.getElementById('dpGrid');
+      grid.innerHTML = `<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--ink-3);font-size:13px">Loading diagrams…</div>`;
+      try {
+        const subj = document.getElementById('dpSubject').value;
+        const col = collection(window.db, 'chapter_test_diagrams');
+        // Subject filter is the primary narrower — bank is hundreds
+        // not thousands today so loading one subject (~448 biology)
+        // up front + client filtering is fine. If the pool grows
+        // past ~2k per subject, switch to server-paged.
+        let q;
+        if (subj) q = query(col, where('subjectId', '==', subj), orderBy('createdAt', 'desc'), limit(500));
+        else q = query(col, orderBy('createdAt', 'desc'), limit(500));
+        const snap = await getDocs(q);
+        dpAllItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        applyDiagramFilters();
+      } catch (e) {
+        console.error('[question-bank] diagram pool load failed', e);
+        grid.innerHTML = `<div style="grid-column:1/-1;padding:30px;text-align:center;color:#b91c1c;font-size:13px">Load failed: ${escHtml(e.message || e.code || 'unknown')}</div>`;
+      } finally {
+        dpInFlight = false;
+      }
+    }
+
+    function applyDiagramFilters() {
+      const cat = document.getElementById('dpCategory').value;
+      const term = document.getElementById('dpSearch').value.trim().toLowerCase();
+      dpFilteredItems = dpAllItems.filter(d => {
+        if (cat && d.category !== cat) return false;
+        if (term) {
+          const hay = [
+            d.description || '',
+            d.imageName || '',
+            ...(d.topics || []),
+            ...(d.tags || []),
+          ].join(' ').toLowerCase();
+          if (!hay.includes(term)) return false;
+        }
+        return true;
+      });
+      dpPageIdx = 0;
+      renderDiagramGrid();
+    }
+
+    function renderDiagramGrid() {
+      const grid = document.getElementById('dpGrid');
+      const total = dpFilteredItems.length;
+      document.getElementById('dpCount').textContent = total === 0 ? '' : `${total} match${total === 1 ? '' : 'es'}`;
+      const start = dpPageIdx * DP_PAGE_SIZE;
+      const end = Math.min(start + DP_PAGE_SIZE, total);
+      const slice = dpFilteredItems.slice(start, end);
+      if (total === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--ink-3);font-size:13px">No diagrams match.</div>`;
+        document.getElementById('dpPager').innerHTML = '';
+        return;
+      }
+      grid.innerHTML = slice.map(d => {
+        const desc = d.description || d.imageName || '(untitled)';
+        const topics = (d.topics || []).slice(0, 1).join('');
+        const usedIn = Array.isArray(d.usedInItemIds) ? d.usedInItemIds.length : 0;
+        return `
+          <div class="dp-card" data-diagram-id="${escAttr(d.id)}">
+            <div class="dp-card-img-wrap"><img src="${escAttr(d.imageURL)}" alt="${escAttr(desc)}" loading="lazy"></div>
+            <div class="dp-card-desc">${escHtml(desc)}</div>
+            <div class="dp-card-meta">
+              <span class="dp-pill dp-pill-subj">${escHtml(d.subjectId || '—')}</span>
+              ${d.category ? `<span class="dp-pill">${escHtml(d.category)}</span>` : ''}
+              ${usedIn > 0 ? `<span class="dp-pill" title="Used in ${usedIn} chapter test items">${usedIn} use${usedIn === 1 ? '' : 's'}</span>` : ''}
+              ${topics ? `<span class="dp-pill" title="${escAttr((d.topics || []).join(' · '))}">${escHtml(topics.length > 22 ? topics.slice(0, 22) + '…' : topics)}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+      grid.querySelectorAll('.dp-card[data-diagram-id]').forEach(card => {
+        card.addEventListener('click', () => pickDiagram(card.dataset.diagramId));
+      });
+      // Pager
+      const pager = document.getElementById('dpPager');
+      const lastPage = Math.max(0, Math.ceil(total / DP_PAGE_SIZE) - 1);
+      pager.innerHTML = `
+        <button class="btn-secondary" id="dpPrev" ${dpPageIdx === 0 ? 'disabled' : ''} style="padding:6px 12px;font-size:12.5px">‹ Prev</button>
+        <span>${start + 1}–${end} of ${total} · page ${dpPageIdx + 1}/${lastPage + 1}</span>
+        <button class="btn-secondary" id="dpNext" ${dpPageIdx >= lastPage ? 'disabled' : ''} style="padding:6px 12px;font-size:12.5px">Next ›</button>
+      `;
+      document.getElementById('dpPrev').addEventListener('click', () => { dpPageIdx = Math.max(0, dpPageIdx - 1); renderDiagramGrid(); });
+      document.getElementById('dpNext').addEventListener('click', () => { dpPageIdx = Math.min(lastPage, dpPageIdx + 1); renderDiagramGrid(); });
+    }
+
+    function pickDiagram(diagramId) {
+      const d = dpFilteredItems.find(x => x.id === diagramId) || dpAllItems.find(x => x.id === diagramId);
+      if (!d) return;
+      diagramState.diagramId = diagramId;
+      diagramState.diagramDoc = d;
+      document.getElementById('diagramPickerModal').classList.remove('is-open');
+      if (dpEditorRoot) renderDiagramSection(dpEditorRoot);
+    }
+
+    // Wire picker controls.
+    document.getElementById('dpClose').addEventListener('click', () => {
+      document.getElementById('diagramPickerModal').classList.remove('is-open');
+    });
+    document.getElementById('diagramPickerModal').addEventListener('click', (e) => {
+      if (e.target.id === 'diagramPickerModal') {
+        document.getElementById('diagramPickerModal').classList.remove('is-open');
+      }
+    });
+    document.getElementById('dpSubject').addEventListener('change', () => loadDiagramPool());
+    document.getElementById('dpCategory').addEventListener('change', () => applyDiagramFilters());
+    {
+      let t = null;
+      document.getElementById('dpSearch').addEventListener('input', () => {
+        if (t) clearTimeout(t);
+        t = setTimeout(() => applyDiagramFilters(), 180);
+      });
     }
 
     // Stop-word + token helper — mirrors the algorithm in
@@ -1752,20 +2149,69 @@
         const payload = {
           ...corePayload,
           searchTokens: buildSearchTokens(corePayload.stem),
-          authorUid:  window.currentUser.uid,
-          updatedAt:  serverTimestamp(),
+          // Diagram link — pulled from editor-side state, written
+          // alongside the item. The reverse `usedInItemIds[]` on
+          // the diagram doc is updated atomically below.
+          diagramId:    diagramState.diagramId || null,
+          authorUid:    window.currentUser.uid,
+          updatedAt:    serverTimestamp(),
         };
-        if (editingId) {
-          await updateDoc(doc(window.db, BANK, editingId), payload);
-          await loadPage(pageIndex);
-        } else {
-          payload.createdAt = serverTimestamp();
+        // Clear the cross-bucket bayrak when a diagram is linked —
+        // the binary lives in the CH bucket via the pool entry.
+        if (diagramState.diagramId) payload.stemImageBucket = null;
+
+        // Resolve the item id we'll be linking from. For a brand new
+        // item we have to addDoc first, then link.
+        let itemId = editingId;
+        if (!itemId) {
+          payload.createdAt    = serverTimestamp();
           payload.usedInTestIds = payload.usedInTestIds || [];
-          payload.status = payload.status || 'draft';
-          payload.version = payload.version || 1;
-          await addDoc(collection(window.db, BANK), payload);
-          await loadFirstPage();
+          payload.status       = payload.status || 'draft';
+          payload.version      = payload.version || 1;
+          const newRef = await addDoc(collection(window.db, BANK), payload);
+          itemId = newRef.id;
+        } else {
+          // Edit path — item + diagram reverse-index in one batch so
+          // a half-state can't leak (item saved but diagram doc still
+          // claiming it, or vice versa).
+          const batch = writeBatch(window.db);
+          batch.update(doc(window.db, BANK, itemId), payload);
+          // Diagram reverse index — flip both sides when the user
+          // changed the attachment.
+          const prev = diagramState.originalDiagramId;
+          const curr = diagramState.diagramId;
+          if (prev && prev !== curr) {
+            batch.update(doc(window.db, 'chapter_test_diagrams', prev), {
+              usedInItemIds: arrayRemove(itemId),
+              updatedAt: serverTimestamp(),
+            });
+          }
+          if (curr && curr !== prev) {
+            batch.update(doc(window.db, 'chapter_test_diagrams', curr), {
+              usedInItemIds: arrayUnion(itemId),
+              updatedAt: serverTimestamp(),
+            });
+          }
+          await batch.commit();
         }
+
+        // For brand-new items, the diagram reverse index couldn't go
+        // in the addDoc batch (we needed the id first). Do it here.
+        if (!editingId && diagramState.diagramId) {
+          try {
+            await updateDoc(doc(window.db, 'chapter_test_diagrams', diagramState.diagramId), {
+              usedInItemIds: arrayUnion(itemId),
+              updatedAt: serverTimestamp(),
+            });
+          } catch (linkErr) {
+            // Best-effort — the item itself committed. Log + keep
+            // going so the user doesn't think nothing landed.
+            console.warn('[question-bank] post-create diagram backlink failed', linkErr);
+          }
+        }
+
+        if (editingId) await loadPage(pageIndex);
+        else await loadFirstPage();
         loadStats();
         toast('Saved.');
       } catch (e) {
