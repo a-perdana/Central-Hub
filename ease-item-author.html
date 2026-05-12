@@ -527,7 +527,10 @@
           </label>
           <label class="ack-row">
             <input type="checkbox" class="ack-check" data-ack="orphans">
-            <span class="ack-text"><b>Orphaned references.</b> Live <code>ease_responses</code> + chapter test clones pointing at these items will become dangling refs. Re-imports from latihan.id will recreate by uuid; HQ-authored items are <b>not recoverable</b>.</span>
+            <span class="ack-text">
+              <b>Orphaned references.</b> Live <code>ease_responses</code> + chapter test clones pointing at these items will become dangling refs. Re-imports from latihan.id will recreate by uuid; HQ-authored items are <b>not recoverable</b>.
+              <span id="orphanRefSummary" style="display:block;margin-top:6px;font-size:12px;color:#7f1d1d;font-weight:600">Counting references…</span>
+            </span>
           </label>
           <label class="ack-row">
             <input type="checkbox" class="ack-check" data-ack="responsible">
@@ -1444,9 +1447,60 @@
       // Reset every gate.
       modal.querySelectorAll('.ack-check').forEach(cb => { cb.checked = false; });
       document.getElementById('bulkDeleteConfirm').value = '';
+      // Live orphan-ref count — Stage 1 promises "X live responses,
+      // Y chapter test clones become orphan"; we should actually
+      // compute it before the user ticks the box. Fire-and-forget,
+      // updates the summary line when it lands.
+      document.getElementById('orphanRefSummary').textContent = 'Counting references…';
+      document.getElementById('orphanRefSummary').style.color = '#7f1d1d';
+      loadOrphanCounts(ids);
       // Stage transitions.
       showStage(1);
       modal.classList.add('is-open');
+    }
+
+    // Count live references that will be orphaned by deleting these
+    // items. Two collections are at risk:
+    //   - ease_responses.itemId — every student response on a
+    //     deleted item becomes a dangling ref. Phase-3 Cloud Function
+    //     (onEaseResponseCreated) won't recompute against a deleted
+    //     item; calibration aggregates skip.
+    //   - chapter_test_items.clonedFromEaseId — chapter-test-author
+    //     "Latihan archive" picker clones an ease item into a fresh
+    //     chapter_test_items doc on save; HQ may have edited the
+    //     clone since. Clone keeps working (it's a separate doc)
+    //     but the audit trail loses its source.
+    // Firestore `in` accepts ≤30 values; chunk so a future "select
+    // across pages" path with 100+ ids still works.
+    async function loadOrphanCounts(ids) {
+      const summary = document.getElementById('orphanRefSummary');
+      if (!summary) return;
+      try {
+        const chunks = [];
+        for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+        const respCounts = await Promise.all(chunks.map(c =>
+          getCountFromServer(query(collection(window.db, 'ease_responses'), where('itemId', 'in', c)))
+            .then(s => s.data().count).catch(() => 0)
+        ));
+        const cloneCounts = await Promise.all(chunks.map(c =>
+          getCountFromServer(query(collection(window.db, 'chapter_test_items'), where('clonedFromEaseId', 'in', c)))
+            .then(s => s.data().count).catch(() => 0)
+        ));
+        const totalResp = respCounts.reduce((a, b) => a + b, 0);
+        const totalClone = cloneCounts.reduce((a, b) => a + b, 0);
+        const respLbl = `${totalResp.toLocaleString()} live student response${totalResp === 1 ? '' : 's'}`;
+        const cloneLbl = `${totalClone.toLocaleString()} chapter test clone${totalClone === 1 ? '' : 's'}`;
+        if (totalResp === 0 && totalClone === 0) {
+          summary.textContent = 'No live references found — safe to delete.';
+          summary.style.color = '#065f46';
+        } else {
+          summary.innerHTML = `Will orphan: <b>${respLbl}</b> · <b>${cloneLbl}</b>`;
+          summary.style.color = totalResp > 0 ? '#991b1b' : '#7f1d1d';
+        }
+      } catch (e) {
+        summary.textContent = 'Could not count references (proceed with caution).';
+        summary.style.color = '#7f1d1d';
+      }
     }
 
     function showStage(n) {
