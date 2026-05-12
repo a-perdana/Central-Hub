@@ -209,6 +209,41 @@
     content: attr(data-placeholder);
     color: #9ca3af;
   }
+  /* Expanded mode — overrides line-clamp + lets the card grow */
+  .note-card.is-expanded .note-card-body {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+  .note-card.is-expanded {
+    /* Push the meta row back into the flow so a long note can grow
+       without overlapping the action bar. */
+    padding-bottom: 16px;
+  }
+  .note-card.is-expanded .note-card-meta {
+    position: static;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(0,0,0,0.08);
+  }
+  .note-readmore-row {
+    margin-top: 6px;
+    display: none;
+  }
+  .note-readmore-row.is-on { display: block; }
+  .note-readmore-btn {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #4c1d95;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .note-readmore-btn:hover { color: #2e1065; }
 
   .note-attachments {
     display: flex;
@@ -644,12 +679,40 @@
         body.spellcheck = true;
         body.dataset.placeholder = 'Write your note…';
         body.textContent = noteData.body || '';
+
+        // Read more / show less row — visibility computed after layout
+        // (we don't know if the body actually overflows until it's in
+        // the DOM with its real width).
+        const readMoreRow = document.createElement('div');
+        readMoreRow.className = 'note-readmore-row';
+        const readMoreBtn = document.createElement('button');
+        readMoreBtn.type = 'button';
+        readMoreBtn.className = 'note-readmore-btn';
+        readMoreBtn.textContent = 'Read more';
+        readMoreRow.appendChild(readMoreBtn);
+        readMoreBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nowExpanded = card.classList.toggle('is-expanded');
+          readMoreBtn.textContent = nowExpanded ? 'Show less' : 'Read more';
+        });
+
         if (isOwner) {
           body.contentEditable = 'true';
           body.addEventListener('input', () => {
             scheduleSave(noteId, { body: body.textContent.slice(0, 4000) });
+            // While typing, expand so nothing is hidden behind the clamp.
+            // Don't toggle the button label — typing isn't a manual "read more".
+            card.classList.add('is-expanded');
+            readMoreBtn.textContent = 'Show less';
+          });
+          // Re-check overflow after edits stop (so a shrinking note hides the link).
+          body.addEventListener('blur', () => {
+            // Brief delay so the contentEditable fully finalises
+            setTimeout(() => recheckOverflow(card, body, readMoreRow, readMoreBtn), 30);
           });
         }
+        // Track for after-mount overflow check
+        card._notesOverflow = { body, row: readMoreRow, btn: readMoreBtn };
 
         // Attachments
         const attachments = Array.isArray(noteData.attachments) ? noteData.attachments : [];
@@ -784,10 +847,38 @@
         card.appendChild(topRow);
         card.appendChild(title);
         card.appendChild(body);
+        card.appendChild(readMoreRow);
         if (attachmentsEl) card.appendChild(attachmentsEl);
         card.appendChild(meta);
 
         return card;
+      }
+
+      // Show "Read more" only when the body is actually clipped by the
+      // line-clamp. Called after each render once cards are in the DOM
+      // (line-clamp + overflow are CSS-layout dependent — can't compute
+      // before mount).
+      function recheckOverflow(card, body, row, btn) {
+        if (card.classList.contains('is-expanded')) {
+          // Already expanded — keep the button so user can collapse again,
+          // but only if there's enough content to actually need clamping.
+          // We measure by temporarily collapsing.
+          card.classList.remove('is-expanded');
+          const overflows = body.scrollHeight > body.clientHeight + 2;
+          card.classList.add('is-expanded');
+          row.classList.toggle('is-on', overflows);
+          btn.textContent = 'Show less';
+        } else {
+          const overflows = body.scrollHeight > body.clientHeight + 2;
+          row.classList.toggle('is-on', overflows);
+          btn.textContent = 'Read more';
+        }
+      }
+      function recheckAllOverflows() {
+        grid.querySelectorAll('.note-card').forEach(card => {
+          const o = card._notesOverflow;
+          if (o) recheckOverflow(card, o.body, o.row, o.btn);
+        });
       }
 
       function renderEmpty(msg) {
@@ -827,6 +918,10 @@
             teamCache.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, data.userId === uid)));
           }
         }
+
+        // After mount: decide which cards actually overflow + reveal "Read more".
+        // requestAnimationFrame so layout has settled (line-clamp needs render pass).
+        requestAnimationFrame(recheckAllOverflows);
 
         // Brief pulse on a card that just moved tabs (visibility toggle).
         if (pendingHighlightId) {
@@ -920,6 +1015,13 @@
         if (activeTab === 'team') renderActiveTab();
       }, (err) => {
         console.warn('[notes] team-notes subscription failed', err);
+      });
+
+      // Window resize → cards may rewrap to fewer/more lines
+      let resizeTimer = null;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(recheckAllOverflows, 150);
       });
 
       // -- Tab switching ----------------------------------------------------
