@@ -271,6 +271,42 @@
     .danger-modal .modal-actions .btn-danger { background: #b91c1c; color: #fff; border: none; }
     .danger-modal .modal-actions .btn-danger:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
     .danger-modal .modal-actions .btn-danger:not(:disabled):hover { background: #991b1b; }
+    /* Non-admin role gate: hide every delete affordance up front so
+       coordinators / directors don't see promises the rule won't
+       honour. Server-side rule is the real enforcement; this is the
+       visible boundary. Bulk-select checkboxes also disappear —
+       without a delete path there's no point selecting. */
+    body.no-delete .bulk-bar,
+    body.no-delete .icon-btn-danger,
+    body.no-delete .col-check,
+    body.no-delete .th-check,
+    body.no-delete .td-check { display: none !important; }
+    /* Confirm-modal multi-stage layout */
+    .danger-modal .stage { display: none; }
+    .danger-modal .stage.is-active { display: block; }
+    .danger-modal .stage-dots {
+      display: flex; gap: 6px; justify-content: center; margin: 0 0 14px;
+    }
+    .danger-modal .stage-dots .dot {
+      width: 22px; height: 4px; border-radius: 99px; background: var(--border);
+      transition: background .15s ease;
+    }
+    .danger-modal .stage-dots .dot.is-passed { background: #fca5a5; }
+    .danger-modal .stage-dots .dot.is-current { background: #b91c1c; }
+    .danger-modal .ack-row {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 12px 14px; background: #fef2f2; border: 1px solid #fca5a5;
+      border-radius: 10px; margin-bottom: 10px;
+      cursor: pointer; user-select: none;
+    }
+    .danger-modal .ack-row:hover { background: #fee2e2; }
+    .danger-modal .ack-row input { margin-top: 3px; accent-color: #b91c1c; }
+    .danger-modal .ack-row .ack-text { font-size: 13px; line-height: 1.45; color: var(--ink); }
+    .danger-modal .ack-row .ack-text b { color: #991b1b; }
+    .danger-modal .cooldown-hint {
+      font-size: 11.5px; color: var(--ink-3); text-align: right; margin: 6px 0 0;
+      font-feature-settings: 'tnum';
+    }
 
     /* Code cell — compact monospace */
     .col-code-text { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; color: var(--ink-3); letter-spacing: .02em; }
@@ -465,7 +501,9 @@
     </div>
   </div>
 
-  <!-- Bulk delete confirm — type-to-confirm gate, irreversible action. -->
+  <!-- Bulk delete confirm — 3-stage gate (acknowledge → type-to-
+       confirm → 3s cooldown). Same modal handles single-row delete
+       too. -->
   <div id="bulkDeleteModal" class="modal-overlay danger-modal" role="dialog" aria-hidden="true">
     <div class="modal">
       <h2>
@@ -473,13 +511,56 @@
         Delete <span id="bulkDeleteCount">0</span> items?
       </h2>
       <div class="modal-body">
-        <p>This permanently removes the selected EASE items from the bank. Re-importing from latihan.id with the same upstream id <b>will recreate them</b>; HQ-authored items are gone for good.</p>
-        <p>Type <b>DELETE</b> below to confirm:</p>
-        <input id="bulkDeleteConfirm" type="text" placeholder="DELETE" autocomplete="off" autocapitalize="characters">
+        <div class="stage-dots">
+          <span class="dot is-current" data-dot="1"></span>
+          <span class="dot" data-dot="2"></span>
+          <span class="dot" data-dot="3"></span>
+        </div>
+
+        <!-- Stage 1 — Acknowledge consequences. 3 separate ticks so
+             muscle-memory can't autopilot through them. -->
+        <div class="stage is-active" data-stage="1">
+          <p>You are about to <b>permanently delete <span class="bulkDeleteCountInline">0</span> item(s)</b> from the EASE bank. Please confirm each consequence:</p>
+          <label class="ack-row">
+            <input type="checkbox" class="ack-check" data-ack="irreversible">
+            <span class="ack-text"><b>Irreversible.</b> Once committed, the items are gone from Firestore. There is no undo button.</span>
+          </label>
+          <label class="ack-row">
+            <input type="checkbox" class="ack-check" data-ack="orphans">
+            <span class="ack-text"><b>Orphaned references.</b> Live <code>ease_responses</code> + chapter test clones pointing at these items will become dangling refs. Re-imports from latihan.id will recreate by uuid; HQ-authored items are <b>not recoverable</b>.</span>
+          </label>
+          <label class="ack-row">
+            <input type="checkbox" class="ack-check" data-ack="responsible">
+            <span class="ack-text"><b>I take responsibility.</b> This action will be logged against my <code>central_admin</code> account.</span>
+          </label>
+        </div>
+
+        <!-- Stage 2 — Type the exact phrase, including the count, so
+             a copy-pasted "DELETE" from the previous attempt doesn't
+             carry over. -->
+        <div class="stage" data-stage="2">
+          <p>Type the phrase below exactly to continue. The item count is included so the confirmation can't be auto-completed by browser autofill:</p>
+          <p style="font-family:'JetBrains Mono',ui-monospace,monospace;background:var(--paper);padding:10px 14px;border-radius:8px;font-size:13.5px;color:#991b1b;text-align:center;letter-spacing:.04em" id="bulkDeletePhrase">DELETE 0 ITEMS</p>
+          <input id="bulkDeleteConfirm" type="text" placeholder="Type the phrase exactly" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+
+        <!-- Stage 3 — Cooldown. The final button stays disabled for
+             3 seconds with a visible countdown. Gives the user a real
+             pause to back out before the irreversible commit. -->
+        <div class="stage" data-stage="3">
+          <p style="margin-bottom:18px"><b>Last chance.</b> The deletion will commit when you click the final button. The button unlocks after a 3-second cooldown — use it to back out if anything still feels wrong.</p>
+          <div style="padding:18px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;text-align:center">
+            <div style="font-size:11.5px;font-weight:600;color:#991b1b;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Pending deletion</div>
+            <div style="font-family:'Lora',serif;font-size:1.6rem;color:#7f1d1d;font-feature-settings:'tnum'"><span class="bulkDeleteCountInline">0</span> EASE items</div>
+          </div>
+          <p class="cooldown-hint" id="bulkDeleteCooldownHint">Unlocks in 3s…</p>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" id="bulkDeleteCancel" type="button">Cancel</button>
-        <button class="btn-danger" id="bulkDeleteGo" type="button" disabled>Delete items</button>
+        <button class="btn-secondary" id="bulkDeleteBack" type="button" style="display:none">Back</button>
+        <button class="btn-secondary" id="bulkDeleteNext" type="button" disabled>Next</button>
+        <button class="btn-danger" id="bulkDeleteGo" type="button" disabled style="display:none">Delete items</button>
       </div>
     </div>
   </div>
@@ -514,8 +595,13 @@
     let statsInFlight = false;
     // Bulk-select state — Set of doc IDs checked on the current page.
     // Cleared on page change / filter change (no cross-page selection
-    // by design; HQ confirms via a Type-DELETE gate before acting).
+    // by design; HQ confirms via a multi-stage gate before acting).
     let selectedIds = new Set();
+    // Delete privilege — central_admin only. Coordinators + directors
+    // can author + edit items but not erase them (rule-level enforced
+    // via `allow delete: if isAdmin()`; UI also hides the affordances
+    // so the role boundary is visible, not just enforceable).
+    let canDelete = false;
 
     document.addEventListener('authReady', () => {
       const profile = window.userProfile || {};
@@ -525,6 +611,14 @@
         document.getElementById('accessWarn').hidden = false;
         document.getElementById('accessWarn').textContent = 'EASE item authoring restricted to central_admin / director / coordinator.';
         return;
+      }
+      canDelete = isAdmin;
+      // Hide delete affordances at the document level for non-admins.
+      // Defence-in-depth — the rule blocks the write either way, but
+      // a visible Delete button promising a wrong outcome is worse
+      // than no button at all.
+      if (!canDelete) {
+        document.body.classList.add('no-delete');
       }
       // Initial paint: stats (one-shot) + first page.
       loadStats();
@@ -1203,40 +1297,163 @@
       renderBulkBar();
     }
 
-    // Bulk-bar buttons wire-up.
+    // Bulk-bar buttons wire-up. Bulk delete is admin-only; the
+    // button is hidden via .no-delete body class for everyone else,
+    // and this handler also bails so a poking-around inspector edit
+    // can't bypass the UI gate.
     document.getElementById('bulkClear').addEventListener('click', clearSelection);
-    document.getElementById('bulkDelete').addEventListener('click', openBulkDeleteModal);
+    document.getElementById('bulkDelete').addEventListener('click', () => {
+      if (!canDelete) { toast('Delete is restricted to central_admin.'); return; }
+      openDeleteModal(Array.from(selectedIds));
+    });
 
-    function openBulkDeleteModal() {
-      if (selectedIds.size === 0) return;
+    // ──────────────────────────────────────────────────────────────
+    // Multi-stage delete confirmation. Used by both bulk delete and
+    // single-row delete (the latter passes a 1-element id array).
+    //
+    // Stage 1: Acknowledge — three independent checkboxes covering
+    //          irreversibility, orphan refs, accountability.
+    // Stage 2: Type the exact phrase including the item count
+    //          ("DELETE N ITEMS"). The count defeats browser autofill
+    //          and forces the user to look at the size.
+    // Stage 3: 3-second cooldown countdown on the final Delete button.
+    //          Give the user a real pause to back out.
+    //
+    // The Firestore rule is the actual enforcement (`allow delete:
+    // if isAdmin()`); this gate is the human-in-the-loop layer.
+    // ──────────────────────────────────────────────────────────────
+    let pendingDeleteIds = [];
+    let deleteStage = 1;
+    let cooldownTimer = null;
+
+    function openDeleteModal(ids) {
+      if (!Array.isArray(ids) || !ids.length) return;
+      if (!canDelete) { toast('Delete is restricted to central_admin.'); return; }
+      pendingDeleteIds = ids.slice();
+      deleteStage = 1;
       const modal = document.getElementById('bulkDeleteModal');
-      document.getElementById('bulkDeleteCount').textContent = selectedIds.size.toLocaleString();
-      const input = document.getElementById('bulkDeleteConfirm');
-      const goBtn = document.getElementById('bulkDeleteGo');
-      input.value = '';
-      goBtn.disabled = true;
+      // Item counts everywhere the markup names them.
+      const n = ids.length;
+      document.getElementById('bulkDeleteCount').textContent = n.toLocaleString();
+      modal.querySelectorAll('.bulkDeleteCountInline').forEach(el => {
+        el.textContent = n.toLocaleString();
+      });
+      document.getElementById('bulkDeletePhrase').textContent = `DELETE ${n} ITEM${n === 1 ? '' : 'S'}`;
+      // Reset every gate.
+      modal.querySelectorAll('.ack-check').forEach(cb => { cb.checked = false; });
+      document.getElementById('bulkDeleteConfirm').value = '';
+      // Stage transitions.
+      showStage(1);
       modal.classList.add('is-open');
-      // Focus the confirm field so keyboard-first users can type
-      // straight away.
-      setTimeout(() => input.focus(), 30);
     }
 
-    // Type-DELETE gate — button stays disabled until the literal
-    // string matches.
-    document.getElementById('bulkDeleteConfirm').addEventListener('input', (e) => {
-      document.getElementById('bulkDeleteGo').disabled = e.target.value.trim() !== 'DELETE';
+    function showStage(n) {
+      deleteStage = n;
+      const modal = document.getElementById('bulkDeleteModal');
+      modal.querySelectorAll('.stage').forEach(s => {
+        s.classList.toggle('is-active', Number(s.dataset.stage) === n);
+      });
+      modal.querySelectorAll('.stage-dots .dot').forEach(d => {
+        const i = Number(d.dataset.dot);
+        d.classList.toggle('is-passed', i < n);
+        d.classList.toggle('is-current', i === n);
+      });
+      const nextBtn = document.getElementById('bulkDeleteNext');
+      const backBtn = document.getElementById('bulkDeleteBack');
+      const goBtn   = document.getElementById('bulkDeleteGo');
+      backBtn.style.display = (n > 1) ? '' : 'none';
+      nextBtn.style.display = (n < 3) ? '' : 'none';
+      goBtn.style.display   = (n === 3) ? '' : 'none';
+      // Each stage gates the Next/Go button on its own predicate.
+      if (n === 1) {
+        nextBtn.textContent = 'Next';
+        nextBtn.disabled = !allAcksTicked();
+      } else if (n === 2) {
+        nextBtn.textContent = 'Next';
+        nextBtn.disabled = !phraseMatches();
+        setTimeout(() => document.getElementById('bulkDeleteConfirm').focus(), 30);
+      } else if (n === 3) {
+        startCooldown();
+      }
+    }
+
+    function allAcksTicked() {
+      return Array.from(document.querySelectorAll('.ack-check')).every(cb => cb.checked);
+    }
+    function phraseMatches() {
+      const n = pendingDeleteIds.length;
+      const want = `DELETE ${n} ITEM${n === 1 ? '' : 'S'}`;
+      return document.getElementById('bulkDeleteConfirm').value.trim().toUpperCase() === want;
+    }
+
+    function startCooldown() {
+      const goBtn = document.getElementById('bulkDeleteGo');
+      const hint = document.getElementById('bulkDeleteCooldownHint');
+      goBtn.disabled = true;
+      goBtn.textContent = 'Delete items';
+      let sec = 3;
+      hint.textContent = `Unlocks in ${sec}s…`;
+      if (cooldownTimer) clearInterval(cooldownTimer);
+      cooldownTimer = setInterval(() => {
+        sec -= 1;
+        if (sec <= 0) {
+          clearInterval(cooldownTimer);
+          cooldownTimer = null;
+          hint.textContent = 'Ready. Click Delete to commit.';
+          goBtn.disabled = false;
+        } else {
+          hint.textContent = `Unlocks in ${sec}s…`;
+        }
+      }, 1000);
+    }
+
+    // Stage 1 — re-validate every checkbox tick.
+    document.querySelectorAll('.ack-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (deleteStage === 1) {
+          document.getElementById('bulkDeleteNext').disabled = !allAcksTicked();
+        }
+      });
     });
-    document.getElementById('bulkDeleteCancel').addEventListener('click', () => {
-      document.getElementById('bulkDeleteModal').classList.remove('is-open');
-    });
-    document.getElementById('bulkDeleteModal').addEventListener('click', (e) => {
-      if (e.target.id === 'bulkDeleteModal') {
-        document.getElementById('bulkDeleteModal').classList.remove('is-open');
+    // Stage 2 — re-validate phrase on every keystroke.
+    document.getElementById('bulkDeleteConfirm').addEventListener('input', () => {
+      if (deleteStage === 2) {
+        document.getElementById('bulkDeleteNext').disabled = !phraseMatches();
       }
     });
+
+    // Stage navigation buttons.
+    document.getElementById('bulkDeleteNext').addEventListener('click', () => {
+      if (deleteStage < 3) showStage(deleteStage + 1);
+    });
+    document.getElementById('bulkDeleteBack').addEventListener('click', () => {
+      if (deleteStage > 1) {
+        // Backing out cancels any in-flight cooldown.
+        if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+        showStage(deleteStage - 1);
+      }
+    });
+
+    function closeDeleteModal() {
+      document.getElementById('bulkDeleteModal').classList.remove('is-open');
+      if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+      pendingDeleteIds = [];
+    }
+    document.getElementById('bulkDeleteCancel').addEventListener('click', closeDeleteModal);
+    document.getElementById('bulkDeleteModal').addEventListener('click', (e) => {
+      // Backdrop-click closes only from stages 1-2; on the final
+      // cooldown stage the user must click Cancel explicitly so a
+      // stray click can't leak through the danger gate.
+      if (e.target.id === 'bulkDeleteModal' && deleteStage < 3) {
+        closeDeleteModal();
+      }
+    });
+
+    // Final commit.
     document.getElementById('bulkDeleteGo').addEventListener('click', async () => {
-      const ids = Array.from(selectedIds);
+      const ids = pendingDeleteIds.slice();
       if (!ids.length) return;
+      if (!canDelete) { toast('Delete is restricted to central_admin.'); return; }
       const goBtn = document.getElementById('bulkDeleteGo');
       goBtn.disabled = true;
       goBtn.textContent = 'Deleting…';
@@ -1253,16 +1470,15 @@
           });
           await batch.commit();
         }
-        document.getElementById('bulkDeleteModal').classList.remove('is-open');
-        toast(`Deleted ${ids.length.toLocaleString()} items.`);
+        closeDeleteModal();
+        toast(`Deleted ${ids.length.toLocaleString()} item${ids.length === 1 ? '' : 's'}.`);
         clearSelection();
         await loadPage(pageIndex);
         loadStats();
-        loadFirstPage(); // refresh totalCount under the new bank state
+        loadFirstPage();
       } catch (e) {
-        console.error('[ease-item-author] bulk delete failed', e);
-        toast('Bulk delete failed: ' + (e.message || e.code));
-      } finally {
+        console.error('[ease-item-author] delete failed', e);
+        toast('Delete failed: ' + (e.message || e.code));
         goBtn.disabled = false;
         goBtn.textContent = 'Delete items';
       }
@@ -1383,16 +1599,11 @@
       if (act === 'view') return openPreview(id);
       if (act === 'edit') return openItem(id);
       if (act === 'del') {
-        if (!confirm('Delete this item?')) return;
-        try {
-          await deleteDoc(doc(window.db, 'ease_items', id));
-          toast('Deleted.');
-          // Stats are stale by 1 doc; bank size > 1k makes this
-          // hard to notice. Refresh current page so the row vanishes.
-          await loadPage(pageIndex);
-          loadStats(); // refresh totals in the background
-        }
-        catch (e) { toast('Failed: ' + (e.message || e.code)); }
+        // Same multi-stage gate as bulk delete — one item still
+        // deserves the acknowledge → phrase → cooldown sequence.
+        // The rule blocks non-admin writes either way.
+        if (!canDelete) { toast('Delete is restricted to central_admin.'); return; }
+        openDeleteModal([id]);
       }
     }
 
