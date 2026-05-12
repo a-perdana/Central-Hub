@@ -1988,9 +1988,50 @@
           ${(it.stage_min || it.stage_max) ? `<span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">Y${escHtml(it.stage_min)}${it.stage_max && it.stage_max !== it.stage_min ? '–'+escHtml(it.stage_max) : ''}</span>` : ''}
           ${it.cognitiveTag ? `<span style="background:#ecfdf5;color:#047857;padding:3px 9px;border-radius:99px;border:1px solid #6ee7b7">${escHtml(it.cognitiveTag)}</span>` : ''}
         `;
-        // Stem
+        // Stem + diagram, placement-aware. Same pattern as /question-bank
+        // — 'after' is the default, 'before' flips, 'inline' splits the
+        // stem on {{diagram}} and inserts the image in-place.
+        const placement = it.diagramPlacement || 'after';
         const stemHtml = it.stemHtml || it.stem || '';
-        document.getElementById('pvStem').innerHTML = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
+        const stemBody = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
+        const TOKEN_RE = /\{\{\s*diagram\s*\}\}/i;
+        const pvStem = document.getElementById('pvStem');
+        if (!it.diagramId) {
+          pvStem.innerHTML = stemBody;
+        } else if (placement === 'inline' && TOKEN_RE.test(stemBody)) {
+          const parts = stemBody.split(TOKEN_RE);
+          pvStem.innerHTML = parts[0] + `<div id="pvDiagram" style="margin:14px 0"></div>` + parts.slice(1).join('');
+        } else if (placement === 'before') {
+          pvStem.innerHTML = `<div id="pvDiagram" style="margin-bottom:14px"></div>` + stemBody;
+        } else {
+          const hint = (placement === 'inline')
+            ? `<div style="font-size:11px;color:#92400e;background:#fef3c7;padding:3px 9px;border-radius:99px;display:inline-block;margin-top:6px">⚠ inline placement set but no {{diagram}} token in stem · rendering after</div>`
+            : '';
+          pvStem.innerHTML = stemBody + hint + `<div id="pvDiagram" style="margin-top:14px"></div>`;
+        }
+        // Async hydrate the diagram slot when there's a linked doc.
+        const slot = document.getElementById('pvDiagram');
+        if (it.diagramId && slot) {
+          slot.innerHTML = '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;background:var(--paper);border-radius:8px">Loading diagram…</div>';
+          getDoc(doc(window.db, 'chapter_test_diagrams', it.diagramId)).then(dsnap => {
+            if (!dsnap.exists()) {
+              slot.innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">Linked diagram <code>${escHtml(it.diagramId)}</code> not found.</div>`;
+              return;
+            }
+            const dd = dsnap.data();
+            const topics = (dd.topics || []).join(' · ');
+            slot.innerHTML = `
+              <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+                <img src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(dd.storagePath || '')}" alt="${escAttr(dd.description || dd.imageName || 'diagram')}" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
+                ${dd.description ? `<div style="margin-top:8px;font-size:12.5px;color:var(--ink-2);text-align:center">${escHtml(dd.description)}</div>` : ''}
+                ${topics ? `<div style="margin-top:4px;font-size:11px;color:var(--ink-3);text-align:center">${escHtml(topics)}</div>` : ''}
+              </div>
+            `;
+            hydrateImages(slot);
+          }).catch(() => {
+            slot.innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px">(Diagram load failed)</div>';
+          });
+        }
         // Answers
         const ansBox = document.getElementById('pvAnswers');
         if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length) {
@@ -2095,7 +2136,7 @@
     // Editor-side diagram state — captured on open, mutated by the
     // picker, persisted on save. Mirrors /question-bank's pattern so
     // the two banks share the same UX + atomic batch semantics.
-    let diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null };
+    let diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null, placement: 'after' };
 
     const EASE_EXTRA_HTML = `
       <div class="qe-section" style="background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:14px;margin-bottom:14px;">
@@ -2154,6 +2195,7 @@
               ${topicsLbl ? `<div class="qe-diag-topics">${escHtml(topicsLbl)}</div>` : ''}
             </div>
           </div>
+          ${renderPlacementControls()}
           <div class="qe-diagram-actions">
             <button type="button" class="qe-diag-pick" id="qeDiagChange">Change diagram</button>
             <button type="button" class="qe-diag-remove" id="qeDiagRemove">Remove</button>
@@ -2169,6 +2211,57 @@
         diagramState.diagramDoc = null;
         renderDiagramSection(root);
       });
+      const placeSel = body.querySelector('#qeDiagPlace');
+      if (placeSel) {
+        placeSel.value = diagramState.placement;
+        placeSel.addEventListener('change', () => {
+          diagramState.placement = placeSel.value;
+          renderDiagramSection(root);
+        });
+      }
+      const insertBtn = body.querySelector('#qeDiagInsertToken');
+      if (insertBtn) {
+        insertBtn.addEventListener('click', () => insertDiagramToken(root));
+      }
+    }
+
+    // Same placement controls as /question-bank. Plain dropdown +
+    // (inline only) "Insert {{diagram}} at cursor" button.
+    function renderPlacementControls() {
+      const place = diagramState.placement || 'after';
+      const showInsert = place === 'inline';
+      return `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2)">
+          <label for="qeDiagPlace" style="font-weight:600;letter-spacing:.02em">Placement</label>
+          <select id="qeDiagPlace" style="padding:5px 8px;font:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer">
+            <option value="after">After stem (default)</option>
+            <option value="before">Before stem</option>
+            <option value="inline">Inline (use {{diagram}} in stem)</option>
+          </select>
+          ${showInsert ? `<button type="button" id="qeDiagInsertToken" class="qe-diag-pick" style="font-size:11px;padding:5px 10px">+ Insert {{diagram}} at cursor</button>` : ''}
+          ${place === 'inline' ? renderInlineWarning() : ''}
+        </div>
+      `;
+    }
+    function renderInlineWarning() {
+      const stem = (activeEditor && activeEditor.getItem && activeEditor.getItem().stem) || '';
+      const hasToken = /\{\{\s*diagram\s*\}\}/i.test(stem);
+      if (hasToken) return '';
+      return `<span style="color:#92400e;background:#fef3c7;padding:2px 7px;border-radius:99px;font-size:10.5px;font-weight:600">⚠ No {{diagram}} in stem yet</span>`;
+    }
+    function insertDiagramToken(root) {
+      const ta = document.querySelector('#qe-stem');
+      if (!ta) { toast('Cannot find stem editor.'); return; }
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const tok = ta.value.length > 0 && start > 0 && ta.value[start - 1] !== '\n'
+        ? `\n\n{{diagram}}\n\n` : `{{diagram}}\n\n`;
+      ta.value = ta.value.slice(0, start) + tok + ta.value.slice(end);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      const after = start + tok.length;
+      ta.focus();
+      ta.setSelectionRange(after, after);
+      renderDiagramSection(root);
     }
 
     async function openItem(id) {
@@ -2184,11 +2277,13 @@
         stage_max:  Number(it.stage_max) || 9,
       };
       // Diagram state init — hydrate the linked doc when known so the
-      // editor renders the thumb without flicker.
+      // editor renders the thumb without flicker. Placement default
+      // 'after' matches the legacy / migration default.
       diagramState = {
         diagramId: it.diagramId || null,
         diagramDoc: null,
         originalDiagramId: it.diagramId || null,
+        placement: (it.diagramPlacement === 'before' || it.diagramPlacement === 'inline') ? it.diagramPlacement : 'after',
       };
       if (it.diagramId) {
         try {
@@ -2241,7 +2336,7 @@
     function closeItem() {
       document.getElementById('itemModal').classList.remove('is-open');
       if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
-      diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null };
+      diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null, placement: 'after' };
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -2424,6 +2519,7 @@
           correctRate: null,
           searchTokens: buildSearchTokens(corePayload.stem),
           diagramId:    diagramState.diagramId || null,
+          diagramPlacement: diagramState.diagramId ? (diagramState.placement || 'after') : null,
           authorUid:    window.currentUser.uid,
           updatedAt:    serverTimestamp(),
         };

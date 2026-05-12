@@ -1718,38 +1718,66 @@
           ${it.assessmentObjective ? `<span style="background:#fef3c7;color:#92400e;padding:3px 9px;border-radius:99px;border:1px solid #fcd34d">${escHtml(it.assessmentObjective)}</span>` : ''}
           ${(it.cambridgeStandardRefs || []).map(r => `<span style="background:#f5f3ff;color:#6c5ce7;padding:3px 9px;border-radius:99px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px">${escHtml(r)}</span>`).join('')}
         `;
+        // Render stem + diagram according to placement:
+        //   - 'inline'  + stem contains {{diagram}} → split, image
+        //                 replaces the token in place
+        //   - 'before'  → diagram first, stem under it
+        //   - 'after'   → stem first, diagram under it (legacy default;
+        //                 every migrated IGCSE item lands here)
+        //   - inline placement but token missing → fallback to 'after'
+        //     with a small visual hint so HQ knows the stem needs the
+        //     placeholder added (no surprise blank-render).
+        const placement = it.diagramPlacement || 'after';
         const stemHtml = it.stemHtml || it.stem || '';
-        let stemBody = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
-        // Attach the diagram, if any. Two paths:
-        //   - it.diagramId set    → fetch chapter_test_diagrams doc, render its imageURL
-        //   - legacy stemImagePath → use stemImageBucket || CH bucket to render directly
-        // We render a placeholder first so the layout doesn't jump
-        // when the async fetch lands.
-        const diagWrap = `<div id="pvDiagram" style="margin-top:14px"></div>`;
-        document.getElementById('pvStem').innerHTML = stemBody + diagWrap;
-        if (it.diagramId) {
-          // Async hydrate — render skeleton, replace with the real
-          // image when getDoc returns.
-          document.getElementById('pvDiagram').innerHTML = '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;background:var(--paper);border-radius:8px">Loading diagram…</div>';
+        const stemBody = sanitisePreviewHtml(stemHtml) || '<em style="color:var(--ink-3)">No stem</em>';
+        const TOKEN_RE = /\{\{\s*diagram\s*\}\}/i;
+        const pvStem = document.getElementById('pvStem');
+
+        if (!it.diagramId && !it.stemImagePath) {
+          // No diagram at all — plain stem, no slot.
+          pvStem.innerHTML = stemBody;
+        } else if (placement === 'inline' && TOKEN_RE.test(stemBody)) {
+          // Split stem around the {{diagram}} token. Image slot
+          // inherits #pvDiagram so the async hydration logic below
+          // can find it.
+          const parts = stemBody.split(TOKEN_RE);
+          pvStem.innerHTML = parts[0] + `<div id="pvDiagram" style="margin:14px 0"></div>` + parts.slice(1).join('');
+        } else if (placement === 'before') {
+          pvStem.innerHTML = `<div id="pvDiagram" style="margin-bottom:14px"></div>` + stemBody;
+        } else {
+          // 'after' (default) — and the fallback case for inline-
+          // without-token. We emit a small hint chip in the latter so
+          // the missing token doesn't look like a renderer bug.
+          const hint = (it.diagramId && placement === 'inline')
+            ? `<div style="font-size:11px;color:#92400e;background:#fef3c7;padding:3px 9px;border-radius:99px;display:inline-block;margin-top:6px">⚠ inline placement set but no {{diagram}} token in stem · rendering after</div>`
+            : '';
+          pvStem.innerHTML = stemBody + hint + `<div id="pvDiagram" style="margin-top:14px"></div>`;
+        }
+
+        // Diagram hydration — same logic as before, just runs into the
+        // #pvDiagram slot wherever the placement put it.
+        const slot = document.getElementById('pvDiagram');
+        if (it.diagramId && slot) {
+          slot.innerHTML = '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;background:var(--paper);border-radius:8px">Loading diagram…</div>';
           getDoc(doc(window.db, 'chapter_test_diagrams', it.diagramId)).then(dsnap => {
             if (!dsnap.exists()) {
-              document.getElementById('pvDiagram').innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">Linked diagram <code>${escHtml(it.diagramId)}</code> not found.</div>`;
+              slot.innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">Linked diagram <code>${escHtml(it.diagramId)}</code> not found.</div>`;
               return;
             }
             const d = dsnap.data();
             const topics = (d.topics || []).join(' · ');
-            document.getElementById('pvDiagram').innerHTML = `
+            slot.innerHTML = `
               <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
                 <img src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(d.storagePath || '')}" alt="${escAttr(d.description || d.imageName || 'diagram')}" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
                 ${d.description ? `<div style="margin-top:8px;font-size:12.5px;color:var(--ink-2);text-align:center">${escHtml(d.description)}</div>` : ''}
                 ${topics ? `<div style="margin-top:4px;font-size:11px;color:var(--ink-3);text-align:center">${escHtml(topics)}</div>` : ''}
               </div>
             `;
-            hydrateImages(document.getElementById('pvDiagram'));
+            hydrateImages(slot);
           }).catch(() => {
-            document.getElementById('pvDiagram').innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px">(Diagram load failed)</div>';
+            slot.innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px">(Diagram load failed)</div>';
           });
-        } else if (it.stemImagePath) {
+        } else if (it.stemImagePath && slot) {
           // Legacy direct path — render straight from Storage. Only
           // valid for items whose binary was already moved to the CH
           // bucket; stemImageBucket should be null after the diagram
@@ -1757,14 +1785,14 @@
           // foreign bucket and we point at it explicitly.
           const bucket = it.stemImageBucket || 'centralhub-8727b.firebasestorage.app';
           const url = `https://storage.googleapis.com/${bucket}/${it.stemImagePath}`;
-          document.getElementById('pvDiagram').innerHTML = `
+          slot.innerHTML = `
             <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
               <img src="${escAttr(url)}" alt="diagram" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
               <div style="margin-top:6px;font-size:10.5px;color:var(--ink-3);text-align:center">Legacy direct path · not yet pool-linked</div>
             </div>
           `;
-        } else {
-          document.getElementById('pvDiagram').remove();
+        } else if (slot) {
+          slot.remove();
         }
         const ansBox = document.getElementById('pvAnswers');
         if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length) {
@@ -1883,7 +1911,7 @@
     //                    needed at save time to flip the reverse
     //                    `usedInItemIds[]` arrayUnion/arrayRemove if
     //                    the user changed the attachment.
-    let diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null };
+    let diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null, placement: 'after' };
 
     async function openItem(id) {
       editingId = id;
@@ -1893,11 +1921,14 @@
         if (snap.exists()) it = { id, ...snap.data() };
       }
       // Diagram state init — hydrate the linked doc when known so the
-      // editor can render the thumb without flicker.
+      // editor can render the thumb without flicker. Placement default
+      // 'after' matches the legacy / migrated rendering (every IGCSE
+      // import item lands here today).
       diagramState = {
         diagramId: it.diagramId || null,
         diagramDoc: null,
         originalDiagramId: it.diagramId || null,
+        placement: (it.diagramPlacement === 'before' || it.diagramPlacement === 'inline') ? it.diagramPlacement : 'after',
       };
       if (it.diagramId) {
         try {
@@ -1931,7 +1962,7 @@
     function closeItem() {
       document.getElementById('itemModal').classList.remove('is-open');
       if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
-      diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null };
+      diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null, placement: 'after' };
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -1981,6 +2012,7 @@
               ${topicsLbl ? `<div class="qe-diag-topics">${escHtml(topicsLbl)}</div>` : ''}
             </div>
           </div>
+          ${renderPlacementControls()}
           <div class="qe-diagram-actions">
             <button type="button" class="qe-diag-pick" id="qeDiagChange">Change diagram</button>
             <button type="button" class="qe-diag-remove" id="qeDiagRemove">Remove</button>
@@ -1997,6 +2029,70 @@
         diagramState.diagramDoc = null;
         renderDiagramSection(root);
       });
+      // Placement select + {{diagram}} insert button (only visible
+      // when a diagram is attached).
+      const placeSel = body.querySelector('#qeDiagPlace');
+      if (placeSel) {
+        placeSel.value = diagramState.placement;
+        placeSel.addEventListener('change', () => {
+          diagramState.placement = placeSel.value;
+          renderDiagramSection(root);
+        });
+      }
+      const insertBtn = body.querySelector('#qeDiagInsertToken');
+      if (insertBtn) {
+        insertBtn.addEventListener('click', () => insertDiagramToken(root));
+      }
+    }
+
+    // Compact placement controls — dropdown + (for inline) an "Insert
+    // {{diagram}} at cursor" button. Plain text, no Quill — the stem
+    // editor is a textarea and we just splice the literal token in at
+    // the caret position.
+    function renderPlacementControls() {
+      const place = diagramState.placement || 'after';
+      const showInsert = place === 'inline';
+      return `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2)">
+          <label for="qeDiagPlace" style="font-weight:600;letter-spacing:.02em">Placement</label>
+          <select id="qeDiagPlace" style="padding:5px 8px;font:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer">
+            <option value="after">After stem (default)</option>
+            <option value="before">Before stem</option>
+            <option value="inline">Inline (use {{diagram}} in stem)</option>
+          </select>
+          ${showInsert ? `<button type="button" id="qeDiagInsertToken" class="qe-diag-pick" style="font-size:11px;padding:5px 10px">+ Insert {{diagram}} at cursor</button>` : ''}
+          ${place === 'inline' ? renderInlineWarning() : ''}
+        </div>
+      `;
+    }
+    // Show a small caveat when inline is selected but the token is
+    // missing from the stem — render path will fall back to 'after'
+    // in that case, and the user should know.
+    function renderInlineWarning() {
+      const stem = (activeEditor && activeEditor.getItem && activeEditor.getItem().stem) || '';
+      const hasToken = /\{\{\s*diagram\s*\}\}/i.test(stem);
+      if (hasToken) return '';
+      return `<span style="color:#92400e;background:#fef3c7;padding:2px 7px;border-radius:99px;font-size:10.5px;font-weight:600">⚠ No {{diagram}} in stem yet</span>`;
+    }
+    function insertDiagramToken(root) {
+      // The shared question-editor.js renders a plain <textarea
+      // id="qe-stem">. Splice the literal {{diagram}} at the current
+      // caret position; if the textarea has no focus state, append.
+      const ta = document.querySelector('#qe-stem');
+      if (!ta) { toast('Cannot find stem editor.'); return; }
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const tok = ta.value.length > 0 && start > 0 && ta.value[start - 1] !== '\n'
+        ? `\n\n{{diagram}}\n\n` : `{{diagram}}\n\n`;
+      ta.value = ta.value.slice(0, start) + tok + ta.value.slice(end);
+      // Fire input so the editor's internal item.stem updates.
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      // Move caret past the inserted token.
+      const after = start + tok.length;
+      ta.focus();
+      ta.setSelectionRange(after, after);
+      // Re-render the section so the warning chip clears.
+      renderDiagramSection(root);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -2190,6 +2286,7 @@
           // alongside the item. The reverse `usedInItemIds[]` on
           // the diagram doc is updated atomically below.
           diagramId:    diagramState.diagramId || null,
+          diagramPlacement: diagramState.diagramId ? (diagramState.placement || 'after') : null,
           authorUid:    window.currentUser.uid,
           updatedAt:    serverTimestamp(),
         };
