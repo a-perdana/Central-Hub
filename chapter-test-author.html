@@ -999,6 +999,7 @@
         stagedPacingRef = null;
         renderPacingRefBanner();
         refreshUnitCodeOptions();
+        syncItemButtons();
       });
       document.getElementById('linkerPacing').addEventListener('change', onLinkerPacingChange);
       document.getElementById('linkerChapter').addEventListener('change', onLinkerChapterChange);
@@ -1402,9 +1403,32 @@
           const opt = unitCodeOptionsCache.find(o => o.code === el.dataset.code);
           input.dataset.pickedTopic = opt ? (opt.topic || '') : '';
           dd.classList.remove('is-open');
+          syncItemButtons();
         });
       });
     }
+
+    // Enable / disable "+ Add item" and "+ Browse bank" based on whether
+    // the unit code is set. Items always carry a unit code on save (it's
+    // copied from the test envelope onto each chapter_test_items doc), so
+    // authoring before the code is picked just leaves us with items that
+    // can't be tagged into the syllabus hierarchy. Block the entry point.
+    function syncItemButtons() {
+      const code = (document.getElementById('fUnitCode').value || '').trim();
+      const disabled = !code;
+      const tip = 'Pick a unit code first';
+      ['addItemBtn', 'browseBankBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = disabled;
+        if (disabled) btn.setAttribute('title', tip);
+        else btn.removeAttribute('title');
+      });
+    }
+    // Sync on free-text edits too — the picker normally writes via the
+    // dropdown handler, but the input also accepts manual typing when the
+    // pacing link is unlinked and the field flips to non-readonly.
+    document.getElementById('fUnitCode').addEventListener('input', syncItemButtons);
 
     // Wire the picker once at module load — modal DOM stays mounted.
     document.getElementById('fUnitCode').addEventListener('click', () => {
@@ -1769,6 +1793,7 @@
       renderPacingRefBanner();
       refreshUnitCodeOptions();
       renderItems();
+      syncItemButtons();
       document.getElementById('testModal').classList.add('is-open');
     }
 
