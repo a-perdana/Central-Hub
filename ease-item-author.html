@@ -212,12 +212,65 @@
     table.items tbody tr { transition: background .1s ease; }
     table.items tbody tr:nth-child(even) { background: #fafafa; }
     table.items tbody tr:hover { background: #f3f4f6; }
+    table.items col.col-check { width: 38px; }
     table.items col.col-code { width: 70px; }
     table.items col.col-subject { width: 90px; }
     table.items col.col-difficulty { width: 84px; }
     table.items col.col-type { width: 44px; }
     table.items col.col-stem { width: auto; }
     table.items col.col-actions { width: 110px; }
+    /* Row-select checkbox styling — visually quiet at rest, mor when
+       checked. Native checkbox + accent-color is the lightest path
+       and respects the user's reduced-motion preference. */
+    .row-check, .row-check-all {
+      width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent);
+      vertical-align: middle;
+    }
+    table.items td.td-check, table.items th.th-check {
+      text-align: center; padding-left: 0; padding-right: 0;
+    }
+    table.items tr.is-selected { background: var(--accent-2) !important; }
+    table.items tr.is-selected:hover { background: #ede9fe !important; }
+    /* Bulk action bar — surfaces only when ≥1 row checked. Slides in
+       above the table without shifting the layout (position:sticky-
+       like; we just toggle .is-active to slide visibility). */
+    .bulk-bar {
+      display: none; align-items: center; gap: 12px;
+      background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
+      color: #fff; border-radius: 12px;
+      padding: 10px 16px; margin-bottom: 12px;
+      box-shadow: 0 4px 12px rgba(67,56,202,.25);
+    }
+    .bulk-bar.is-active { display: flex; }
+    .bulk-bar .bulk-count {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600;
+      font-feature-settings: 'tnum';
+    }
+    .bulk-bar .bulk-count small { font-size: 11px; font-weight: 400; opacity: .75; margin-left: 4px; letter-spacing: .04em; }
+    .bulk-bar .bulk-spacer { flex: 1; }
+    .bulk-bar .bulk-btn {
+      padding: 7px 14px; font-family: inherit; font-size: 12.5px; font-weight: 600;
+      background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.18);
+      border-radius: 7px; cursor: pointer; transition: background .12s ease;
+    }
+    .bulk-bar .bulk-btn:hover { background: rgba(255,255,255,.2); }
+    .bulk-bar .bulk-btn-danger { background: rgba(248,113,113,.18); border-color: rgba(248,113,113,.35); }
+    .bulk-bar .bulk-btn-danger:hover { background: rgba(248,113,113,.32); }
+    /* Confirm-delete modal — tinted danger header, type-to-confirm gate */
+    .danger-modal .modal { width: min(480px, 100%); }
+    .danger-modal .modal h2 { color: #b91c1c; display: flex; align-items: center; gap: 10px; }
+    .danger-modal .modal h2 svg { width: 22px; height: 22px; flex-shrink: 0; }
+    .danger-modal .modal-body p { margin: 0 0 12px; font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+    .danger-modal .modal-body p b { color: var(--ink); }
+    .danger-modal input[type="text"] {
+      width: 100%; padding: 10px 12px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 14px; border: 1px solid var(--border); border-radius: 8px;
+      letter-spacing: .04em;
+    }
+    .danger-modal input[type="text"]:focus { outline: 2px solid #b91c1c; outline-offset: -1px; }
+    .danger-modal .modal-actions .btn-danger { background: #b91c1c; color: #fff; border: none; }
+    .danger-modal .modal-actions .btn-danger:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+    .danger-modal .modal-actions .btn-danger:not(:disabled):hover { background: #991b1b; }
 
     /* Code cell — compact monospace */
     .col-code-text { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; color: var(--ink-3); letter-spacing: .02em; }
@@ -377,6 +430,12 @@
       <button id="newItemBtn" class="btn-primary">+ New EASE item</button>
     </div>
 
+    <div class="bulk-bar" id="bulkBar" role="region" aria-label="Bulk actions">
+      <span class="bulk-count"><span id="bulkCount">0</span> selected<small>on this page</small></span>
+      <span class="bulk-spacer"></span>
+      <button class="bulk-btn bulk-btn-danger" id="bulkDelete" type="button">Delete selected</button>
+      <button class="bulk-btn" id="bulkClear" type="button">Clear</button>
+    </div>
     <div id="itemsBox"></div>
     <div id="pager" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;"></div>
   </main>
@@ -406,13 +465,32 @@
     </div>
   </div>
 
+  <!-- Bulk delete confirm — type-to-confirm gate, irreversible action. -->
+  <div id="bulkDeleteModal" class="modal-overlay danger-modal" role="dialog" aria-hidden="true">
+    <div class="modal">
+      <h2>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Delete <span id="bulkDeleteCount">0</span> items?
+      </h2>
+      <div class="modal-body">
+        <p>This permanently removes the selected EASE items from the bank. Re-importing from latihan.id with the same upstream id <b>will recreate them</b>; HQ-authored items are gone for good.</p>
+        <p>Type <b>DELETE</b> below to confirm:</p>
+        <input id="bulkDeleteConfirm" type="text" placeholder="DELETE" autocomplete="off" autocapitalize="characters">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="bulkDeleteCancel" type="button">Cancel</button>
+        <button class="btn-danger" id="bulkDeleteGo" type="button" disabled>Delete items</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script type="module">
     import {
       collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs,
       getCountFromServer, query, where, orderBy, limit, startAfter,
-      serverTimestamp
+      serverTimestamp, writeBatch
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { mountQuestionEditor } from './partials/question-editor.js';
 
@@ -434,6 +512,10 @@
     let lastQuerySig = '';       // signature so we can detect filter changes
     let statTotals = null;       // cached `{ total, math, english, science, easy, medium, hard }`
     let statsInFlight = false;
+    // Bulk-select state — Set of doc IDs checked on the current page.
+    // Cleared on page change / filter change (no cross-page selection
+    // by design; HQ confirms via a Type-DELETE gate before acting).
+    let selectedIds = new Set();
 
     document.addEventListener('authReady', () => {
       const profile = window.userProfile || {};
@@ -527,6 +609,9 @@
       pageCursors = [null];
       pageIndex = 0;
       lastVisible = null;
+      // Filter change rewrites the result set — drop the bulk
+      // selection so users never act on items they can no longer see.
+      if (selectedIds.size) clearSelection();
       // Stat totals depend on filter chips — re-fetch.
       loadStats();
       loadFirstPage();
@@ -841,15 +926,26 @@
       const SVG_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
       const SVG_DEL  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
 
+      // Visible-row id set drives the header "select all on page"
+      // tri-state — checked when every visible id is selected.
+      const visibleIds = visible.map(it => it.id);
+      const allChecked = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+      const someChecked = !allChecked && visibleIds.some(id => selectedIds.has(id));
       box.innerHTML = `
         <table class="items">
           <colgroup>
-            <col class="col-code"><col class="col-subject"><col class="col-difficulty">
+            <col class="col-check"><col class="col-code"><col class="col-subject"><col class="col-difficulty">
             <col class="col-type"><col class="col-stem"><col class="col-actions">
           </colgroup>
-          <thead><tr><th>Code</th><th>Subject</th><th>Difficulty</th><th>Type</th><th class="th-stem">Stem</th><th></th></tr></thead>
-          <tbody>${visible.map(it => `
-            <tr>
+          <thead><tr>
+            <th class="th-check"><input type="checkbox" class="row-check-all" id="rowCheckAll" aria-label="Select all on this page"${allChecked ? ' checked' : ''}></th>
+            <th>Code</th><th>Subject</th><th>Difficulty</th><th>Type</th><th class="th-stem">Stem</th><th></th>
+          </tr></thead>
+          <tbody>${visible.map(it => {
+            const checked = selectedIds.has(it.id);
+            return `
+            <tr${checked ? ' class="is-selected"' : ''} data-row-id="${escAttr(it.id)}">
+              <td class="td-check"><input type="checkbox" class="row-check" data-id="${escAttr(it.id)}" aria-label="Select item ${escAttr(itemCode(it))}"${checked ? ' checked' : ''}></td>
               <td><span class="col-code-text">${escHtml(itemCode(it))}</span></td>
               <td>${subjectPill(it.subjectId)}</td>
               <td><span class="pill pill-${escAttr(it.difficulty)}">${escHtml(it.difficulty)}</span></td>
@@ -862,13 +958,46 @@
                   <button class="icon-btn icon-btn-danger" data-act="del" data-id="${escAttr(it.id)}" title="Delete" aria-label="Delete">${SVG_DEL}</button>
                 </div>
               </td>
-            </tr>
-          `).join('')}</tbody>
+            </tr>`;
+          }).join('')}</tbody>
         </table>
       `;
+      // Indeterminate state on the header checkbox.
+      const headerCheck = document.getElementById('rowCheckAll');
+      if (headerCheck) headerCheck.indeterminate = someChecked;
       box.querySelectorAll('button[data-act]').forEach(b => {
         b.addEventListener('click', () => action(b.dataset.act, b.dataset.id));
       });
+      // Per-row checkbox handler.
+      box.querySelectorAll('input.row-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const id = cb.dataset.id;
+          if (cb.checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+          // Toggle the row tint without a full re-render.
+          const tr = cb.closest('tr');
+          if (tr) tr.classList.toggle('is-selected', cb.checked);
+          refreshHeaderCheckState(visibleIds);
+          renderBulkBar();
+        });
+      });
+      // Header "select all on page" — toggles every visible id.
+      if (headerCheck) {
+        headerCheck.addEventListener('change', () => {
+          const wantOn = headerCheck.checked;
+          visibleIds.forEach(id => {
+            if (wantOn) selectedIds.add(id);
+            else selectedIds.delete(id);
+          });
+          // Sync per-row UI without re-rendering the whole tbody.
+          box.querySelectorAll('input.row-check').forEach(cb => {
+            cb.checked = wantOn;
+            const tr = cb.closest('tr');
+            if (tr) tr.classList.toggle('is-selected', wantOn);
+          });
+          renderBulkBar();
+        });
+      }
       // Render any LaTeX in the stem previews.
       if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([box]).catch(() => {});
@@ -1033,9 +1162,111 @@
             : (pageItems.length < PAGE_SIZE ? 'disabled' : '')
         }>Next ›</button>
       `;
-      document.getElementById('pagePrev').addEventListener('click', () => loadPage(Math.max(0, pageIndex - 1)));
-      document.getElementById('pageNext').addEventListener('click', () => loadPage(pageIndex + 1));
+      document.getElementById('pagePrev').addEventListener('click', () => {
+        if (selectedIds.size) clearSelection();
+        loadPage(Math.max(0, pageIndex - 1));
+      });
+      document.getElementById('pageNext').addEventListener('click', () => {
+        if (selectedIds.size) clearSelection();
+        loadPage(pageIndex + 1);
+      });
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // Bulk action mode — multi-select + batch delete. Selection is
+    // page-scoped (cleared on page change / filter change) so HQ
+    // never confuses "what I see" with "what I'll act on".
+    // ──────────────────────────────────────────────────────────────
+    function refreshHeaderCheckState(visibleIds) {
+      const headerCheck = document.getElementById('rowCheckAll');
+      if (!headerCheck) return;
+      const checkedCount = visibleIds.filter(id => selectedIds.has(id)).length;
+      headerCheck.checked = checkedCount === visibleIds.length && visibleIds.length > 0;
+      headerCheck.indeterminate = checkedCount > 0 && checkedCount < visibleIds.length;
+    }
+
+    function renderBulkBar() {
+      const bar = document.getElementById('bulkBar');
+      const countEl = document.getElementById('bulkCount');
+      if (!bar || !countEl) return;
+      const n = selectedIds.size;
+      countEl.textContent = n.toLocaleString();
+      bar.classList.toggle('is-active', n > 0);
+    }
+
+    function clearSelection() {
+      selectedIds.clear();
+      document.querySelectorAll('input.row-check').forEach(cb => { cb.checked = false; });
+      document.querySelectorAll('tr.is-selected').forEach(tr => tr.classList.remove('is-selected'));
+      const headerCheck = document.getElementById('rowCheckAll');
+      if (headerCheck) { headerCheck.checked = false; headerCheck.indeterminate = false; }
+      renderBulkBar();
+    }
+
+    // Bulk-bar buttons wire-up.
+    document.getElementById('bulkClear').addEventListener('click', clearSelection);
+    document.getElementById('bulkDelete').addEventListener('click', openBulkDeleteModal);
+
+    function openBulkDeleteModal() {
+      if (selectedIds.size === 0) return;
+      const modal = document.getElementById('bulkDeleteModal');
+      document.getElementById('bulkDeleteCount').textContent = selectedIds.size.toLocaleString();
+      const input = document.getElementById('bulkDeleteConfirm');
+      const goBtn = document.getElementById('bulkDeleteGo');
+      input.value = '';
+      goBtn.disabled = true;
+      modal.classList.add('is-open');
+      // Focus the confirm field so keyboard-first users can type
+      // straight away.
+      setTimeout(() => input.focus(), 30);
+    }
+
+    // Type-DELETE gate — button stays disabled until the literal
+    // string matches.
+    document.getElementById('bulkDeleteConfirm').addEventListener('input', (e) => {
+      document.getElementById('bulkDeleteGo').disabled = e.target.value.trim() !== 'DELETE';
+    });
+    document.getElementById('bulkDeleteCancel').addEventListener('click', () => {
+      document.getElementById('bulkDeleteModal').classList.remove('is-open');
+    });
+    document.getElementById('bulkDeleteModal').addEventListener('click', (e) => {
+      if (e.target.id === 'bulkDeleteModal') {
+        document.getElementById('bulkDeleteModal').classList.remove('is-open');
+      }
+    });
+    document.getElementById('bulkDeleteGo').addEventListener('click', async () => {
+      const ids = Array.from(selectedIds);
+      if (!ids.length) return;
+      const goBtn = document.getElementById('bulkDeleteGo');
+      goBtn.disabled = true;
+      goBtn.textContent = 'Deleting…';
+      try {
+        // Firestore writeBatch caps at 500 operations per commit —
+        // chunk so callers selecting a full 25-row page (well under
+        // the limit) don't need a special case, but a future "select
+        // all across pages" feature still works.
+        const CHUNK = 400;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const batch = writeBatch(window.db);
+          ids.slice(i, i + CHUNK).forEach(id => {
+            batch.delete(doc(window.db, 'ease_items', id));
+          });
+          await batch.commit();
+        }
+        document.getElementById('bulkDeleteModal').classList.remove('is-open');
+        toast(`Deleted ${ids.length.toLocaleString()} items.`);
+        clearSelection();
+        await loadPage(pageIndex);
+        loadStats();
+        loadFirstPage(); // refresh totalCount under the new bank state
+      } catch (e) {
+        console.error('[ease-item-author] bulk delete failed', e);
+        toast('Bulk delete failed: ' + (e.message || e.code));
+      } finally {
+        goBtn.disabled = false;
+        goBtn.textContent = 'Delete items';
+      }
+    });
 
     // Read-only "student-eye" preview. Pulls fresh from Firestore so
     // a stale list cache doesn't mislead a reviewer who just edited
