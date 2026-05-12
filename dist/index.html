@@ -4926,6 +4926,522 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       </div>
       <!-- /stats-row -->
 
+      <!-- Personal Notes Widget (build-injected from partials/notes-widget.html) -->
+      <!-- ========================================================================
+     Personal Notes Widget — dashboard post-it strip
+     -------------------------------------------------------------------------
+     Self-contained: HTML + CSS + JS in one partial. Injected into index.html
+     by build.js via the <!-- NOTES_WIDGET --> placeholder.
+     Reads/writes user_notes/{noteId} (top-level, userId FK to users.uid).
+     Step 1 of the 3-step plan: hot-list strip on the dashboard. /notes full
+     page (Step 2) and school/user-link (Step 3) come later.
+     ===================================================================== -->
+<style>
+  .notes-widget {
+    background: #ffffff;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 28px;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.04));
+  }
+  .notes-widget-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .notes-widget-title {
+    font-family: 'Lora', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--ink, #111827);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .notes-widget-subtitle {
+    font-size: 0.78rem;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+  .notes-widget-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #6c5ce7;
+    color: #fff;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .notes-widget-add:hover { background: #5a4fcc; }
+  .notes-widget-add:disabled { opacity: 0.5; cursor: not-allowed; }
+  .notes-widget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .note-card {
+    position: relative;
+    border-radius: 10px;
+    padding: 14px 14px 32px 14px;
+    min-height: 130px;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: #1f2937;
+    cursor: text;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 1px 1px rgba(0,0,0,0.04);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .note-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08), 0 2px 3px rgba(0,0,0,0.05);
+  }
+  /* Sticky-note palette — soft, paper-like */
+  .note-card.color-yellow { background: #fef9c3; }
+  .note-card.color-pink   { background: #fce7f3; }
+  .note-card.color-green  { background: #d1fae5; }
+  .note-card.color-blue   { background: #dbeafe; }
+  .note-card.color-violet { background: #ede9fe; }
+  .note-card.color-orange { background: #ffedd5; }
+
+  .note-card-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+    color: #111827;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    outline: none;
+  }
+  .note-card-title:empty::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    font-weight: 400;
+  }
+  .note-card-body {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    outline: none;
+  }
+  .note-card-body:empty::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+  }
+  .note-card-meta {
+    position: absolute;
+    bottom: 6px;
+    left: 14px;
+    right: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: #6b7280;
+  }
+  .note-card-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .note-card:hover .note-card-actions,
+  .note-card:focus-within .note-card-actions { opacity: 1; }
+  .note-action-btn {
+    background: rgba(255,255,255,0.6);
+    border: 0;
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    cursor: pointer;
+    color: #374151;
+    transition: background 120ms ease;
+  }
+  .note-action-btn:hover { background: rgba(255,255,255,0.95); }
+  .note-action-btn[data-confirming="1"] {
+    background: #dc2626;
+    color: #fff;
+  }
+  .note-color-swatches {
+    display: none;
+    position: absolute;
+    bottom: 28px;
+    left: 14px;
+    right: 14px;
+    background: rgba(255,255,255,0.95);
+    border-radius: 6px;
+    padding: 6px;
+    gap: 4px;
+    z-index: 2;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  }
+  .note-color-swatches.is-open { display: flex; flex-wrap: wrap; }
+  .note-color-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.12);
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .notes-widget-empty {
+    text-align: center;
+    padding: 28px 12px;
+    color: #9ca3af;
+    font-size: 0.88rem;
+    grid-column: 1 / -1;
+  }
+  .notes-widget-empty strong {
+    display: block;
+    font-size: 0.95rem;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .notes-widget-error {
+    grid-column: 1 / -1;
+    background: #fef2f2;
+    color: #991b1b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    display: none;
+  }
+  .notes-widget-error.visible { display: block; }
+  .notes-widget-saving {
+    font-size: 0.7rem;
+    color: #6b7280;
+    font-weight: 400;
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .notes-widget-saving.is-on { opacity: 1; }
+</style>
+
+<section class="notes-widget" role="region" aria-label="Personal notes">
+  <div class="notes-widget-header">
+    <div>
+      <h2 class="notes-widget-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="9" y1="13" x2="15" y2="13"/>
+          <line x1="9" y1="17" x2="13" y2="17"/>
+        </svg>
+        My Notes
+        <span class="notes-widget-saving" id="notesWidgetSaving">Saving…</span>
+      </h2>
+      <p class="notes-widget-subtitle">Quick personal notes — only you can see these</p>
+    </div>
+    <button type="button" class="notes-widget-add" id="notesWidgetAddBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      New Note
+    </button>
+  </div>
+  <div class="notes-widget-grid" id="notesWidgetGrid" aria-live="polite">
+    <div class="notes-widget-empty">Loading…</div>
+  </div>
+  <div class="notes-widget-error" id="notesWidgetError"></div>
+</section>
+
+<script type="module">
+  // Wait for auth-guard to publish window.db + window.currentUser before doing anything.
+  // Same pattern other index.html widgets follow (see loadBoards, loadEvents).
+  (function bootstrapNotesWidget() {
+    if (window.__notesWidgetBooted) return;
+    window.__notesWidgetBooted = true;
+
+    function ready(cb) {
+      if (window.db && window.currentUser) cb();
+      else window.addEventListener('authReady', cb, { once: true });
+    }
+
+    ready(async () => {
+      const {
+        collection, query, where, orderBy, limit,
+        addDoc, updateDoc, deleteDoc, doc,
+        onSnapshot, serverTimestamp,
+      } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+
+      const db   = window.db;
+      const uid  = window.currentUser.uid;
+      const grid = document.getElementById('notesWidgetGrid');
+      const addBtn = document.getElementById('notesWidgetAddBtn');
+      const errEl  = document.getElementById('notesWidgetError');
+      const savingEl = document.getElementById('notesWidgetSaving');
+
+      const COLOURS = ['yellow', 'pink', 'green', 'blue', 'violet', 'orange'];
+      const WIDGET_LIMIT = 6;
+      let inFlight = 0;
+
+      const showSaving = (on) => savingEl.classList.toggle('is-on', on);
+      const beginWrite = () => { inFlight++; showSaving(true); };
+      const endWrite   = () => { inFlight = Math.max(0, inFlight - 1); if (!inFlight) showSaving(false); };
+      const showError  = (msg) => {
+        errEl.textContent = msg;
+        errEl.classList.add('visible');
+        setTimeout(() => errEl.classList.remove('visible'), 4000);
+      };
+
+      // Debounce per-note inline saves so each keystroke doesn't fire an update.
+      const saveTimers = new Map();
+      function scheduleSave(noteId, patch) {
+        clearTimeout(saveTimers.get(noteId));
+        saveTimers.set(noteId, setTimeout(async () => {
+          try {
+            beginWrite();
+            await updateDoc(doc(db, 'user_notes', noteId), {
+              ...patch,
+              updatedAt: serverTimestamp(),
+            });
+          } catch (err) {
+            console.warn('[notes] update failed', err);
+            showError('Could not save note. Please try again.');
+          } finally { endWrite(); }
+        }, 500));
+      }
+
+      function fmtRelative(ts) {
+        if (!ts || !ts.toDate) return '';
+        const d = ts.toDate();
+        const diffMs = Date.now() - d.getTime();
+        const min = Math.round(diffMs / 60000);
+        if (min < 1) return 'just now';
+        if (min < 60) return `${min}m ago`;
+        const hr = Math.round(min / 60);
+        if (hr < 24) return `${hr}h ago`;
+        const day = Math.round(hr / 24);
+        if (day < 7) return `${day}d ago`;
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      }
+
+      function renderNote(noteData, noteId) {
+        const colour = COLOURS.includes(noteData.color) ? noteData.color : 'yellow';
+        const card = document.createElement('div');
+        card.className = `note-card color-${colour}`;
+        card.dataset.id = noteId;
+
+        const title = document.createElement('div');
+        title.className = 'note-card-title';
+        title.contentEditable = 'true';
+        title.spellcheck = true;
+        title.dataset.placeholder = 'Title';
+        title.textContent = noteData.title || '';
+        title.addEventListener('input', () => {
+          scheduleSave(noteId, { title: title.textContent.trim().slice(0, 120) });
+        });
+
+        const body = document.createElement('div');
+        body.className = 'note-card-body';
+        body.contentEditable = 'true';
+        body.spellcheck = true;
+        body.dataset.placeholder = 'Write your note…';
+        body.textContent = noteData.body || '';
+        body.addEventListener('input', () => {
+          scheduleSave(noteId, { body: body.textContent.slice(0, 4000) });
+        });
+
+        const meta = document.createElement('div');
+        meta.className = 'note-card-meta';
+        const stamp = document.createElement('span');
+        stamp.textContent = fmtRelative(noteData.updatedAt || noteData.createdAt);
+        const actions = document.createElement('div');
+        actions.className = 'note-card-actions';
+
+        // Colour swatches popover
+        const swatches = document.createElement('div');
+        swatches.className = 'note-color-swatches';
+        COLOURS.forEach(c => {
+          const sw = document.createElement('button');
+          sw.type = 'button';
+          sw.className = 'note-color-swatch';
+          sw.style.background = getComputedStyle(document.documentElement).getPropertyValue('--note-' + c) || '';
+          // Fallback inline colours (must match .note-card.color-* CSS)
+          const fallback = { yellow:'#fef9c3', pink:'#fce7f3', green:'#d1fae5', blue:'#dbeafe', violet:'#ede9fe', orange:'#ffedd5' };
+          sw.style.background = fallback[c];
+          sw.title = c;
+          sw.addEventListener('click', (e) => {
+            e.stopPropagation();
+            COLOURS.forEach(k => card.classList.remove('color-' + k));
+            card.classList.add('color-' + c);
+            swatches.classList.remove('is-open');
+            scheduleSave(noteId, { color: c });
+          });
+          swatches.appendChild(sw);
+        });
+        card.appendChild(swatches);
+
+        const colourBtn = document.createElement('button');
+        colourBtn.type = 'button';
+        colourBtn.className = 'note-action-btn';
+        colourBtn.title = 'Colour';
+        colourBtn.textContent = '🎨';
+        colourBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          swatches.classList.toggle('is-open');
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'note-action-btn';
+        delBtn.title = 'Delete';
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (delBtn.dataset.confirming !== '1') {
+            delBtn.dataset.confirming = '1';
+            delBtn.title = 'Click again to delete';
+            setTimeout(() => {
+              delete delBtn.dataset.confirming;
+              delBtn.title = 'Delete';
+            }, 3000);
+            return;
+          }
+          delete delBtn.dataset.confirming;
+          try {
+            beginWrite();
+            await deleteDoc(doc(db, 'user_notes', noteId));
+          } catch (err) {
+            console.warn('[notes] delete failed', err);
+            showError('Could not delete note.');
+          } finally { endWrite(); }
+        });
+
+        actions.appendChild(colourBtn);
+        actions.appendChild(delBtn);
+        meta.appendChild(stamp);
+        meta.appendChild(actions);
+
+        card.appendChild(title);
+        card.appendChild(body);
+        card.appendChild(meta);
+
+        // Click outside swatches closes them
+        card.addEventListener('click', (e) => {
+          if (!swatches.contains(e.target) && e.target !== colourBtn) {
+            swatches.classList.remove('is-open');
+          }
+        });
+
+        return card;
+      }
+
+      function renderEmpty() {
+        grid.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'notes-widget-empty';
+        empty.innerHTML = '<strong>No notes yet</strong>Click "New Note" to jot down something quickly.';
+        grid.appendChild(empty);
+      }
+
+      // Live subscription — own notes only, ordered by pinned then updatedAt desc.
+      // pinned isn't used yet (Step 1) but we order by it so Step 2 can flip
+      // a doc.pinned=true without resorting.
+      const q = query(
+        collection(db, 'user_notes'),
+        where('userId', '==', uid),
+        orderBy('pinned', 'desc'),
+        orderBy('updatedAt', 'desc'),
+        limit(WIDGET_LIMIT)
+      );
+
+      let firstSnap = true;
+      onSnapshot(q, (snap) => {
+        // Preserve focus across re-renders so typing isn't interrupted.
+        const focused = document.activeElement;
+        const focusedId = focused?.closest?.('.note-card')?.dataset?.id;
+        const focusedRole = focused?.classList?.contains('note-card-title') ? 'title'
+          : focused?.classList?.contains('note-card-body') ? 'body' : null;
+        const sel = window.getSelection();
+        const cursorOffset = sel && sel.focusNode ? sel.focusOffset : 0;
+
+        if (snap.empty) {
+          renderEmpty();
+          return;
+        }
+        grid.innerHTML = '';
+        snap.forEach(d => grid.appendChild(renderNote(d.data(), d.id)));
+
+        // Restore focus + caret
+        if (focusedId && focusedRole) {
+          const card = grid.querySelector(`.note-card[data-id="${focusedId}"]`);
+          const target = card?.querySelector(focusedRole === 'title' ? '.note-card-title' : '.note-card-body');
+          if (target) {
+            target.focus();
+            try {
+              const range = document.createRange();
+              const node = target.firstChild || target;
+              const max = node.textContent ? node.textContent.length : 0;
+              range.setStart(node, Math.min(cursorOffset, max));
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            } catch (_) { /* caret restore best-effort */ }
+          }
+        }
+        firstSnap = false;
+      }, (err) => {
+        console.warn('[notes] subscription failed', err);
+        grid.innerHTML = '';
+        const e = document.createElement('div');
+        e.className = 'notes-widget-empty';
+        e.innerHTML = '<strong>Could not load notes</strong>Check your connection and refresh.';
+        grid.appendChild(e);
+      });
+
+      addBtn.addEventListener('click', async () => {
+        addBtn.disabled = true;
+        try {
+          beginWrite();
+          await addDoc(collection(db, 'user_notes'), {
+            userId: uid,
+            title: '',
+            body: '',
+            color: 'yellow',
+            pinned: false,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          // Snapshot listener will render the new card; focus the body once it lands.
+          setTimeout(() => {
+            const newest = grid.querySelector('.note-card .note-card-body');
+            if (newest) newest.focus();
+          }, 250);
+        } catch (err) {
+          console.warn('[notes] create failed', err);
+          showError('Could not create note. Please try again.');
+        } finally {
+          endWrite();
+          addBtn.disabled = false;
+        }
+      });
+    });
+  })();
+</script>
+
+
       <!-- Upcoming Events -->
       <div class="upcoming-section" role="region" aria-label="Upcoming events">
         <div class="upcoming-header">

@@ -476,7 +476,29 @@ service cloud.firestore {
     //     (rule allows by id), but never list.
     match /ease_items/{itemId} {
       allow get, list: if isAuthorized() || isActiveStudent();
-      allow create, update, delete: if isAdmin() || isCHCoordinator();
+      // Authoring (create / update) open to admin + CH coordinator
+      // (subject specialists). Delete is admin-only — coordinators
+      // can edit but not erase items from the bank. Item deletion
+      // is destructive: latihan re-imports recreate by uuid, but
+      // HQ-authored items are gone for good, and any in-flight
+      // ease_responses pointing at the doc become orphan refs.
+      allow create, update: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+    }
+
+    // Audit trail for destructive ease_items operations. Append-only
+    // — once a row lands, it cannot be edited or removed (even by
+    // central_admin). Written client-side as part of the same
+    // writeBatch as the deletion, so the audit record can't go
+    // missing if the delete commits. Pins actorUid to auth.uid +
+    // action to a known enum at create time so a malformed payload
+    // can't enter the log.
+    match /ease_items_audit/{auditId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.actorUid == request.auth.uid
+                    && request.resource.data.action in ['delete', 'bulk_delete', 'restore', 'create', 'update'];
+      allow update, delete: if false;
     }
 
     match /ease_test_windows/{windowId} {
@@ -1402,6 +1424,28 @@ service cloud.firestore {
                     || (isAuthorized() && resource.data.kind == 'system');
       allow list:   if isAdmin();
       allow write:  if isAdmin();
+    }
+
+    // -- user_notes (Personal post-it / notepad — owner private) -----
+    // Step 1 of the dashboard notes widget plan. Each row belongs to
+    // exactly one user; HQ admins do NOT bypass — these are personal
+    // scratch notes and must stay private. Doc id is auto.
+    //   - Create: signed-in caller must pin userId to their own auth.uid.
+    //   - Read/Update/Delete: only the owner.
+    //   - List: rule filters by `userId == auth.uid` so the dashboard
+    //     widget query (`where('userId', '==', uid) + orderBy(...)`)
+    //     returns only the caller's own notes.
+    match /user_notes/{noteId} {
+      allow create: if isAuthorized()
+                    && request.resource.data.userId == request.auth.uid;
+      allow read:   if isAuthorized()
+                    && resource.data.userId == request.auth.uid;
+      allow list:   if isAuthorized();
+      allow update: if isAuthorized()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthorized()
+                    && resource.data.userId == request.auth.uid;
     }
 
     // -- competency_evidence (Teacher & Admin evidence submissions) --

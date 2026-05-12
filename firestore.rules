@@ -1426,6 +1426,28 @@ service cloud.firestore {
       allow write:  if isAdmin();
     }
 
+    // -- user_notes (Personal post-it / notepad — owner private) -----
+    // Step 1 of the dashboard notes widget plan. Each row belongs to
+    // exactly one user; HQ admins do NOT bypass — these are personal
+    // scratch notes and must stay private. Doc id is auto.
+    //   - Create: signed-in caller must pin userId to their own auth.uid.
+    //   - Read/Update/Delete: only the owner.
+    //   - List: rule filters by `userId == auth.uid` so the dashboard
+    //     widget query (`where('userId', '==', uid) + orderBy(...)`)
+    //     returns only the caller's own notes.
+    match /user_notes/{noteId} {
+      allow create: if isAuthorized()
+                    && request.resource.data.userId == request.auth.uid;
+      allow read:   if isAuthorized()
+                    && resource.data.userId == request.auth.uid;
+      allow list:   if isAuthorized();
+      allow update: if isAuthorized()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthorized()
+                    && resource.data.userId == request.auth.uid;
+    }
+
     // -- competency_evidence (Teacher & Admin evidence submissions) --
     // Create:  the owner (any authorized teacher or academic user)
     // Read:    owner reads their own; central_admin reads all

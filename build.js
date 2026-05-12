@@ -30,6 +30,11 @@ const syllabusToolbarBtn = fs.existsSync(syllabusToolbarBtnPath)
   ? fs.readFileSync(syllabusToolbarBtnPath, "utf8")
   : "";
 
+const notesWidgetPath = path.join("partials", "notes-widget.html");
+const notesWidget = fs.existsSync(notesWidgetPath)
+  ? fs.readFileSync(notesWidgetPath, "utf8")
+  : "";
+
 // -- Generate firebase-config.js from Vercel env vars
 const cfg = {
   FIREBASE_API_KEY:            process.env.FIREBASE_API_KEY            || "",
@@ -367,6 +372,11 @@ htmlFiles.forEach((file) => {
   // Inject shared syllabus toolbar button (Teaching Schedule launcher)
   if (syllabusToolbarBtn) {
     output = output.replace("<!-- SYLLABUS_TEACH_SCHED_BTN -->", syllabusToolbarBtn);
+  }
+  // Inject personal notes widget (currently only on index.html — placeholder
+  // is a no-op on every other page, since the marker isn't present)
+  if (notesWidget) {
+    output = output.replace("<!-- NOTES_WIDGET -->", notesWidget);
   }
   // Phase 4 — inject /cambridge-crossref.js once per page (defer; auto-
   // bootstraps from DOM scan). Skip login + index since they don't render
