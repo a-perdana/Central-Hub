@@ -410,6 +410,38 @@
       bahasa: 'Bahasa', religion: 'Religion',
     };
 
+    // Same searchTokens algorithm as /question-bank /ease-item-author
+    // /scripts/ease/*. Drives bank-wide stem search via array-contains.
+    // Keep in sync — if you change the algorithm in one place, mirror
+    // to all four call sites.
+    const STOP_WORDS = new Set([
+      'the','and','for','are','but','not','you','your','our','all',
+      'any','one','two','three','from','into','onto','also','can','may',
+      'with','that','this','these','those','what','which','when','where',
+      'why','how','who','whom','whose','was','were','has','have','had',
+      'will','would','should','could','must','about','above','below',
+      'between','during','than','then','their','there','them','they',
+      'his','her','its','him','she','only','very','some','most','more',
+      'less','such','same','each','every','other','another','also','just',
+      'over','under','before','after','between','through','within','without',
+    ]);
+    function buildSearchTokens(stem) {
+      if (!stem) return [];
+      const out = new Set();
+      const cleaned = String(stem)
+        .toLowerCase()
+        .replace(/\\[a-z]+\b/gi, ' ')
+        .replace(/[{}()[\]^_$=<>+\-*\/\\|]/g, ' ');
+      for (const raw of cleaned.split(/[^a-z0-9]+/)) {
+        if (raw.length < 3) continue;
+        if (STOP_WORDS.has(raw)) continue;
+        if (/^\d+$/.test(raw) && raw.length < 4) continue;
+        out.add(raw);
+        if (out.size >= 60) break;
+      }
+      return Array.from(out);
+    }
+
     let tests = [];
     let unsub = null;
     let editingTestId = null;
@@ -1073,6 +1105,13 @@
             type:            it.type,
             stem:            it.stem || '',
             stemHtml:        it.stemHtml || null,
+            // Bank-wide search index. Same algorithm as /question-bank
+            // editor save + /ease-item-author. New & re-saved items
+            // through this path get indexed automatically; legacy
+            // chapter_test_items without searchTokens land in the
+            // backfill (scripts/ease/backfill-search-tokens.js
+            // supports both banks via --collection).
+            searchTokens:    buildSearchTokens(it.stem || ''),
             options:         Array.isArray(it.options) ? it.options : null,
             optionsHtml:     Array.isArray(it.optionsHtml) ? it.optionsHtml : null,
             correctIdx:      typeof it.correctIdx === 'number' ? it.correctIdx : null,
