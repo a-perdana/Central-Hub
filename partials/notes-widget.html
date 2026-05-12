@@ -388,11 +388,11 @@
         Notes
         <span class="notes-widget-saving" id="notesWidgetSaving">Saving…</span>
       </h2>
-      <p class="notes-widget-subtitle" id="notesWidgetSubtitle">Personal notes — only you can see private notes</p>
+      <p class="notes-widget-subtitle" id="notesWidgetSubtitle">Public notes shared across Central Hub</p>
     </div>
     <div class="notes-widget-tabs" id="notesWidgetTabs" role="tablist">
-      <button type="button" class="notes-tab-btn is-active" data-tab="mine" role="tab">My Notes <span class="tab-count" id="notesCountMine"></span></button>
-      <button type="button" class="notes-tab-btn" data-tab="team" role="tab">Team <span class="tab-count" id="notesCountTeam"></span></button>
+      <button type="button" class="notes-tab-btn" data-tab="mine" role="tab">My Notes <span class="tab-count" id="notesCountMine"></span></button>
+      <button type="button" class="notes-tab-btn is-active" data-tab="team" role="tab">Team <span class="tab-count" id="notesCountTeam"></span></button>
     </div>
     <button type="button" class="notes-widget-add" id="notesWidgetAddBtn">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -454,7 +454,7 @@
       const TEAM_LIMIT   = 12;
       const MAX_FILE_BYTES = 10 * 1024 * 1024;
       let inFlight = 0;
-      let activeTab = 'mine';
+      let activeTab = 'team';
       let mineCache = [];
       let teamCache = [];
       let pendingHighlightId = null;
@@ -1043,19 +1043,21 @@
       );
 
       let firstMineSnap = true;
+      let firstTeamSnap = true;
       const stuckTimer = setTimeout(() => {
-        if (firstMineSnap) {
+        // Show "still loading" only if the snapshot driving the
+        // currently-visible tab hasn't arrived yet.
+        const stuck = (activeTab === 'mine' && firstMineSnap) || (activeTab === 'team' && firstTeamSnap);
+        if (stuck) {
           console.warn('[notes] no snapshot in 6s — index likely still building or query rejected');
-          if (activeTab === 'mine') {
-            grid.innerHTML = '';
-            grid.appendChild(renderEmpty('<strong>Still loading…</strong>The Firestore index may still be building (1–5 min after first deploy). Try refreshing in a minute.'));
-          }
+          grid.innerHTML = '';
+          grid.appendChild(renderEmpty('<strong>Still loading…</strong>The Firestore index may still be building (1–5 min after first deploy). Try refreshing in a minute.'));
         }
       }, 6000);
 
       onSnapshot(myQuery, (snap) => {
-        clearTimeout(stuckTimer);
         firstMineSnap = false;
+        if (activeTab === 'mine') clearTimeout(stuckTimer);
         mineCache = snap.docs.map(d => ({ id: d.id, data: d.data() }));
         updateCounts();
         if (activeTab === 'mine') renderActiveTab();
@@ -1073,11 +1075,17 @@
       });
 
       onSnapshot(teamQuery, (snap) => {
+        firstTeamSnap = false;
+        if (activeTab === 'team') clearTimeout(stuckTimer);
         teamCache = snap.docs.map(d => ({ id: d.id, data: d.data() }));
         updateCounts();
         if (activeTab === 'team') renderActiveTab();
       }, (err) => {
         console.warn('[notes] team-notes subscription failed', err);
+        if (activeTab === 'team') {
+          grid.innerHTML = '';
+          grid.appendChild(renderEmpty('<strong>Could not load team notes</strong>Check your connection and refresh.'));
+        }
       });
 
       // Window resize → cards may rewrap to fewer/more lines
