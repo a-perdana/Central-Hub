@@ -110,10 +110,10 @@
     .icon-btn.icon-btn-success:hover { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
     .icon-btn.icon-btn-warn:hover { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
 
-    /* Stem cell */
+    /* Stem cell: 4-line clamp — fewer rows per page so each row breathes. */
     .stem-cell {
-      line-height: 1.4; font-size: 13px;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      line-height: 1.45; font-size: 13px;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
       overflow: hidden; text-overflow: ellipsis;
     }
     .stem-cell p, .stem-cell span, .stem-cell strong, .stem-cell b { margin: 0; display: inline; font-weight: inherit; }
@@ -3533,7 +3533,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // ──────────────────────────────────────────────────────────────
     const BANK = 'chapter_test_items';
     const AUDIT = 'chapter_test_items_audit';
-    const PAGE_SIZE = 25;
+    const PAGE_SIZE = 8;
 
     // Central subject theme — same 6 EASE subjects plus bahasa +
     // religion for chapter tests. Adding a subject is one edit (here
@@ -4287,8 +4287,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         chips.push(`<span class="meta-chip meta-chip-ao" title="Assessment objective">${escHtml(it.assessmentObjective)}</span>`);
       }
       if (it.unitCode) {
-        const unitLabel = it.unitTitle ? `${it.unitCode} · ${it.unitTitle}` : it.unitCode;
-        chips.push(`<span class="meta-chip meta-chip-unit" title="Unit">${escHtml(unitLabel)}</span>`);
+        // Hide slug-looking unitCodes (e.g. `biotechnology-and-genetic-modification`
+        // from the IGCSE Tools import) — they're just lowercase titles
+        // with hyphens, not Cambridge syllabus codes, so they add zero
+        // information next to the unit title and CTS chips. Real codes
+        // like `7Ni.04`, `B21`, `C1.6` keep rendering.
+        const looksSlug = (() => {
+          const v = String(it.unitCode || '').trim();
+          if (!v || !/-/.test(v)) return false;
+          return /^[a-z][a-z0-9-]*$/.test(v) && !/\d+\.\d+/.test(v);
+        })();
+        if (looksSlug) {
+          if (it.unitTitle) {
+            chips.push(`<span class="meta-chip meta-chip-unit" title="Unit">${escHtml(it.unitTitle)}</span>`);
+          }
+        } else {
+          const unitLabel = it.unitTitle ? `${it.unitCode} · ${it.unitTitle}` : it.unitCode;
+          chips.push(`<span class="meta-chip meta-chip-unit" title="Unit">${escHtml(unitLabel)}</span>`);
+        }
       }
       // Cambridge standard refs — render every ref as its own
       // clickable chip up to 4, then collapse the tail into a "+N"
@@ -4308,8 +4324,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
       if (it.syllabusObjective) {
         const so = String(it.syllabusObjective);
-        const trimmed = so.length > 40 ? so.slice(0, 40) + '…' : so;
-        chips.push(`<span class="meta-chip meta-chip-syl" title="Syllabus objective: ${escAttr(so)}">${escHtml(trimmed)}</span>`);
+        // Phase-A auto-tagger seeded `syllabusObjective = chapter title`
+        // as a placeholder. When that placeholder equals the test
+        // envelope's unitTitle, the chip duplicates information.
+        // Suppress to cut visual noise; topic-level refinement is Phase B.
+        const echoesUnit = (() => {
+          if (!it.unitTitle) return false;
+          const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          return norm(so) === norm(it.unitTitle);
+        })();
+        if (!echoesUnit) {
+          const trimmed = so.length > 40 ? so.slice(0, 40) + '…' : so;
+          chips.push(`<span class="meta-chip meta-chip-syl" title="Syllabus objective: ${escAttr(so)}">${escHtml(trimmed)}</span>`);
+        }
       }
       const usedIn = Array.isArray(it.usedInTestIds) ? it.usedInTestIds.length : 0;
       if (usedIn > 0) {
@@ -4780,7 +4807,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <span style="background:${statusPill[0]};color:${statusPill[1]};padding:3px 9px;border-radius:99px;font-weight:600">${escHtml(it.status || 'draft')}</span>
           <span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">${escHtml(it.type || '—')}</span>
           ${it.stage ? `<span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">Year ${escHtml(it.stage)}</span>` : ''}
-          ${it.unitCode ? `<span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">${escHtml(it.unitCode)}${it.unitTitle ? ' · ' + escHtml(it.unitTitle) : ''}</span>` : ''}
+          ${(() => {
+            if (!it.unitCode) return '';
+            const v = String(it.unitCode).trim();
+            const looksSlug = /-/.test(v) && /^[a-z][a-z0-9-]*$/.test(v) && !/\d+\.\d+/.test(v);
+            const label = looksSlug
+              ? (it.unitTitle ? escHtml(it.unitTitle) : '')
+              : escHtml(it.unitCode) + (it.unitTitle ? ' · ' + escHtml(it.unitTitle) : '');
+            return label ? `<span style="background:var(--paper);color:var(--ink-2);padding:3px 9px;border-radius:99px;border:1px solid var(--border)">${label}</span>` : '';
+          })()}
           ${it.commandWord ? `<span style="background:#eef2ff;color:#4338ca;padding:3px 9px;border-radius:99px;border:1px solid #c7d2fe">${escHtml(it.commandWord)}</span>` : ''}
           ${it.assessmentObjective ? `<span style="background:#fef3c7;color:#92400e;padding:3px 9px;border-radius:99px;border:1px solid #fcd34d">${escHtml(it.assessmentObjective)}</span>` : ''}
           ${(it.cambridgeStandardRefs || []).map(r => `<span style="background:#f5f3ff;color:#6c5ce7;padding:3px 9px;border-radius:99px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px">${escHtml(r)}</span>`).join('')}
