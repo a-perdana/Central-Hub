@@ -1701,8 +1701,23 @@
           document.getElementById('pvMeta').textContent = 'Item not found.';
           return;
         }
-        const it = { id: snap.id, ...snap.data() };
-        if (SUBJECT_IDS.includes(it.subjectId)) modal.setAttribute('data-subject-id', it.subjectId);
+        renderPreviewItem({ id: snap.id, ...snap.data() });
+      } catch (e) {
+        document.getElementById('pvMeta').textContent = 'Preview failed: ' + (e.message || e.code);
+      }
+    }
+
+    // Render an item into the preview modal. Used by openPreview (from
+    // Firestore by id) AND by the "Preview question" button inside the
+    // editor (from the in-memory item being edited, so the user can see
+    // their unsaved {{diagram}} placement before committing).
+    function renderPreviewItem(it) {
+      const modal = document.getElementById('previewModal');
+      modal.classList.add('is-open');
+      if (SUBJECT_IDS.includes(it.subjectId)) modal.setAttribute('data-subject-id', it.subjectId);
+      else modal.removeAttribute('data-subject-id');
+      document.getElementById('pvCode').textContent = '';
+      try {
         document.getElementById('pvCode').textContent = itemCode(it);
         const subjTheme = subjectThemeFor(it.subjectId) || { text: '#374151', wash: '#f3f4f6' };
         const pillBg = { easy: ['#dcfce7','#166534'], medium: ['#fef3c7','#92400e'], hard: ['#fee2e2','#b91c1c'] }[it.difficulty] || ['#f3f4f6','#374151'];
@@ -1988,8 +2003,12 @@
       if (!diagramState.diagramId) {
         body.innerHTML = `
           <div class="qe-diagram-empty">No diagram attached.<br>Click below to pick from the pool.</div>
-          <div class="qe-diagram-actions" style="margin-top:8px">
+          <div class="qe-diagram-actions" style="margin-top:8px;justify-content:space-between">
             <button type="button" class="qe-diag-pick" id="qeDiagPick">+ Attach diagram</button>
+            <button type="button" id="qeDiagPreview" class="btn-secondary" style="font-size:11.5px;padding:5px 12px;display:inline-flex;align-items:center;gap:5px">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Preview question
+            </button>
           </div>
         `;
       } else if (!d) {
@@ -2043,12 +2062,18 @@
       if (insertBtn) {
         insertBtn.addEventListener('click', () => insertDiagramToken(root));
       }
+      const previewBtn = body.querySelector('#qeDiagPreview');
+      if (previewBtn) {
+        previewBtn.addEventListener('click', () => previewCurrentEdit());
+      }
     }
 
     // Compact placement controls — dropdown + (for inline) an "Insert
-    // {{diagram}} at cursor" button. Plain text, no Quill — the stem
-    // editor is a textarea and we just splice the literal token in at
-    // the caret position.
+    // {{diagram}} at cursor" button + a "Preview question" button on
+    // the right edge that shows the current in-memory item exactly as
+    // the student would see it (stem + diagram + options). Closes the
+    // tight loop on Inline placement: HQ inserts {{diagram}}, hits
+    // Preview, sees the actual layout without saving + reopening.
     function renderPlacementControls() {
       const place = diagramState.placement || 'after';
       const showInsert = place === 'inline';
@@ -2062,8 +2087,28 @@
           </select>
           ${showInsert ? `<button type="button" id="qeDiagInsertToken" class="qe-diag-pick" style="font-size:11px;padding:5px 10px">+ Insert {{diagram}} at cursor</button>` : ''}
           ${place === 'inline' ? renderInlineWarning() : ''}
+          <span style="flex:1"></span>
+          <button type="button" id="qeDiagPreview" class="btn-secondary" style="font-size:11.5px;padding:5px 12px;display:inline-flex;align-items:center;gap:5px">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Preview question
+          </button>
         </div>
       `;
+    }
+
+    // Snapshot current editor state (saved + unsaved) into a synthetic
+    // item, then render it through the same preview modal that the
+    // bank list uses. No write — pure visual.
+    function previewCurrentEdit() {
+      if (!activeEditor) return;
+      const core = activeEditor.getItem();
+      const synth = {
+        ...core,
+        id: editingId || '(unsaved)',
+        diagramId: diagramState.diagramId || null,
+        diagramPlacement: diagramState.diagramId ? (diagramState.placement || 'after') : null,
+      };
+      renderPreviewItem(synth);
     }
     // Show a small caveat when inline is selected but the token is
     // missing from the stem — render path will fall back to 'after'
