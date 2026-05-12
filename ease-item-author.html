@@ -152,8 +152,9 @@
     .pv-option .pv-content p { margin: 0; }
     .pv-option .pv-content ul, .pv-option .pv-content ol { margin: 4px 0; padding-left: 22px; }
 
-    .stat-row { display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 12px; margin-bottom: 20px; }
-    @media (max-width: 880px) { .stat-row { grid-template-columns: 1fr; } }
+    .stat-row { display: grid; grid-template-columns: 1.6fr 1fr 1.2fr; gap: 12px; margin-bottom: 20px; }
+    @media (max-width: 1080px) { .stat-row { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 720px)  { .stat-row { grid-template-columns: 1fr; } }
     /* Filter banner spans the full row when filters narrow the view. */
     .stat-row .filter-banner {
       grid-column: 1 / -1;
@@ -325,15 +326,20 @@
 
     /* Subject pills — colour-coded but disjoint from the difficulty
        palette so the eye separates "subject" from "difficulty"
-       instinctively. Math = amber, English = teal, Science = mor. */
+       instinctively. 6 subjects: math (amber), english (teal),
+       science = Combined Science (mor), physics (indigo), chemistry
+       (forest green), biology (rose). Palette mirrored in the
+       SUBJECT_THEME JS object so chip / bar / row-tint stay in
+       sync. Each pair: lighter wash for background, full saturation
+       for text + dot. */
     .subj-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px 2px 6px; border-radius: 99px; }
     .subj-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
-    .subj-math    { background: #fffbeb; color: #b45309; }
-    .subj-math::before    { background: #b45309; }
-    .subj-english { background: #ecfeff; color: #0e7490; }
-    .subj-english::before { background: #0e7490; }
-    .subj-science { background: #f5f3ff; color: #6c5ce7; }
-    .subj-science::before { background: #6c5ce7; }
+    .subj-math      { background: #fffbeb; color: #b45309; } .subj-math::before      { background: #b45309; }
+    .subj-english   { background: #ecfeff; color: #0e7490; } .subj-english::before   { background: #0e7490; }
+    .subj-science   { background: #f5f3ff; color: #6c5ce7; } .subj-science::before   { background: #6c5ce7; }
+    .subj-physics   { background: #eef2ff; color: #4338ca; } .subj-physics::before   { background: #4338ca; }
+    .subj-chemistry { background: #f0fdf4; color: #15803d; } .subj-chemistry::before { background: #15803d; }
+    .subj-biology   { background: #fff1f2; color: #be185d; } .subj-biology::before   { background: #be185d; }
     .subj-other { background: var(--paper); color: var(--ink-2); }
     .subj-other::before { background: var(--ink-3); }
 
@@ -408,7 +414,7 @@
       <div class="hero-title">
         <div class="hero-eyebrow">EASE Growth Engine</div>
         <h1>EASE Item Author</h1>
-        <p>Adaptive 3-band item bank for Math · English · Science. Calibrated logits replace pilot bands after enough live response data.</p>
+        <p>Adaptive 3-band item bank across 6 subjects — Math, English, Combined Science, Physics, Chemistry, Biology. Calibrated logits replace pilot bands after enough live response data.</p>
       </div>
       <div class="hero-kpis" id="heroKpis">
         <div class="hero-kpi hero-kpi-primary">
@@ -431,7 +437,7 @@
     <div class="hero-signature" id="heroSignature">
       <span><b id="sigPilotShare">—</b> calibration-ready</span>
       <span class="sig-dot"></span>
-      <span><b id="sigSubjects">3</b> subjects</span>
+      <span><b id="sigSubjects">6</b> subjects</span>
       <span class="sig-dot"></span>
       <span><b id="sigYears">Y7 – Y12</b> coverage</span>
       <span class="sig-dot"></span>
@@ -454,7 +460,15 @@
     </div>
     <div class="toolbar">
       <span class="filter-label">Filter</span>
-      <select id="fSubject"><option value="">All subjects</option><option value="math">Math</option><option value="english">English</option><option value="science">Science</option></select>
+      <select id="fSubject">
+        <option value="">All subjects</option>
+        <option value="math">Math</option>
+        <option value="english">English</option>
+        <option value="science">Combined Science</option>
+        <option value="physics">Physics</option>
+        <option value="chemistry">Chemistry</option>
+        <option value="biology">Biology</option>
+      </select>
       <select id="fDifficulty"><option value="">All difficulties</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
       <select id="fYear" title="Filtered by lowest target grade (stage_min)">
         <option value="">All years</option>
@@ -796,8 +810,9 @@
       statsInFlight = true;
       try {
         // Top-level counts (always shown). Each count() is one
-        // billed read regardless of underlying doc count.
-        const subjects = ['math', 'english', 'science'];
+        // billed read regardless of underlying doc count. Subject
+        // list mirrors SUBJECT_THEME so adding a subject is one edit.
+        const subjects = SUBJECT_IDS; // 6: math/eng/sci/phy/chem/bio
         const diffs = ['easy', 'medium', 'hard'];
         // Year breakdown counts items by their lowest grade target
         // (`stage_min`). Single-grade imports land in exactly one year;
@@ -817,14 +832,22 @@
           ...years.map(y => getCountFromServer(query(col, where('stage_min', '==', y)))),
           ...sources.map(src => getCountFromServer(query(col, where('source', '==', src)))),
         ]);
-        const subjCounts = rest.slice(0, 3).map(s => s.data().count);
-        const diffCounts = rest.slice(3, 6).map(s => s.data().count);
-        const yearCounts = rest.slice(6, 12).map(s => s.data().count);
-        const srcCounts  = rest.slice(12, 14).map(s => s.data().count);
+        const subjCounts = rest.slice(0, subjects.length).map(s => s.data().count);
+        const diffCounts = rest.slice(subjects.length, subjects.length + 3).map(s => s.data().count);
+        const yearCounts = rest.slice(subjects.length + 3, subjects.length + 9).map(s => s.data().count);
+        const srcCounts  = rest.slice(subjects.length + 9, subjects.length + 11).map(s => s.data().count);
         statTotals = {
           total: totalSnap.data().count,
           calibrated: calibratedSnap.data().count,
-          math: subjCounts[0], english: subjCounts[1], science: subjCounts[2],
+          // Per-subject counts keyed by subjectId so `statTotals[id]`
+          // works without renaming legacy keys. Older callers that
+          // referenced `.math/.english/.science` keep working.
+          math: subjCounts[0],
+          english: subjCounts[1],
+          science: subjCounts[2],
+          physics: subjCounts[3],
+          chemistry: subjCounts[4],
+          biology: subjCounts[5],
           easy: diffCounts[0], medium: diffCounts[1], hard: diffCounts[2],
           y7: yearCounts[0], y8: yearCounts[1], y9: yearCounts[2],
           y10: yearCounts[3], y11: yearCounts[4], y12: yearCounts[5],
@@ -920,10 +943,16 @@
         }).join('');
         return `<div class="stat-bar">${segHtml}</div>`;
       };
+      // Subject bar segments use the same accents as the chips
+      // (sourced from SUBJECT_THEME) so chip → segment hover-link
+      // remains coherent across all 6 subjects.
       const subjBar = bar([
-        { count: s.math,    color: '#b45309', tag: 'math', key: 'math' },
-        { count: s.english, color: '#0e7490', tag: 'eng',  key: 'eng'  },
-        { count: s.science, color: '#6c5ce7', tag: 'sci',  key: 'sci'  },
+        { count: s.math,      color: SUBJECT_THEME.math.text,      tag: 'math', key: 'math' },
+        { count: s.english,   color: SUBJECT_THEME.english.text,   tag: 'eng',  key: 'eng'  },
+        { count: s.science,   color: SUBJECT_THEME.science.text,   tag: 'sci',  key: 'sci'  },
+        { count: s.physics,   color: SUBJECT_THEME.physics.text,   tag: 'phy',  key: 'phy'  },
+        { count: s.chemistry, color: SUBJECT_THEME.chemistry.text, tag: 'chm',  key: 'chm'  },
+        { count: s.biology,   color: SUBJECT_THEME.biology.text,   tag: 'bio',  key: 'bio'  },
       ], typeof s.total === 'number' ? s.total : null);
       const diffBar = bar([
         { count: s.easy,   color: '#047857', tag: 'easy', key: 'easy' },
@@ -946,9 +975,12 @@
         <div class="stat-card" data-card="subject">
           <div class="stat-lbl" style="margin:0 0 6px">By subject</div>
           <div class="stat-mini">
-            ${chip('subject', 'math',    s.math,    'math', '#b45309')}
-            ${chip('subject', 'english', s.english, 'eng',  '#0e7490')}
-            ${chip('subject', 'science', s.science, 'sci',  '#6c5ce7')}
+            ${chip('subject', 'math',      s.math,      'math', SUBJECT_THEME.math.text)}
+            ${chip('subject', 'english',   s.english,   'eng',  SUBJECT_THEME.english.text)}
+            ${chip('subject', 'science',   s.science,   'sci',  SUBJECT_THEME.science.text)}
+            ${chip('subject', 'physics',   s.physics,   'phy',  SUBJECT_THEME.physics.text)}
+            ${chip('subject', 'chemistry', s.chemistry, 'chm',  SUBJECT_THEME.chemistry.text)}
+            ${chip('subject', 'biology',   s.biology,   'bio',  SUBJECT_THEME.biology.text)}
           </div>
           ${subjBar}
         </div>
@@ -1183,9 +1215,25 @@
       renderPager();
     }
 
+    // Central subject theme — every subject-coloured surface (chips,
+    // bars, row tints) reads from this single object so adding a
+    // subject is one edit. `text` is the saturated accent, `wash`
+    // is the soft background, `border` is a 12%-opacity stroke for
+    // row-tint borders.
+    const SUBJECT_THEME = {
+      math:      { text: '#b45309', wash: '#fffbeb', tint: 'rgba(180, 83,  9, .06)', stroke: 'rgba(180, 83,  9, .35)' },
+      english:   { text: '#0e7490', wash: '#ecfeff', tint: 'rgba( 14,116,144, .06)', stroke: 'rgba( 14,116,144, .35)' },
+      science:   { text: '#6c5ce7', wash: '#f5f3ff', tint: 'rgba(108, 92,231, .06)', stroke: 'rgba(108, 92,231, .35)' },
+      physics:   { text: '#4338ca', wash: '#eef2ff', tint: 'rgba( 67, 56,202, .06)', stroke: 'rgba( 67, 56,202, .35)' },
+      chemistry: { text: '#15803d', wash: '#f0fdf4', tint: 'rgba( 21,128, 61, .06)', stroke: 'rgba( 21,128, 61, .35)' },
+      biology:   { text: '#be185d', wash: '#fff1f2', tint: 'rgba(190, 24, 93, .06)', stroke: 'rgba(190, 24, 93, .35)' },
+    };
+    const SUBJECT_IDS = Object.keys(SUBJECT_THEME);
+    function subjectThemeFor(id) { return SUBJECT_THEME[id] || null; }
+
     // Subject color pill — colour-coded by subjectId.
     function subjectPill(subjectId) {
-      const key = ['math','english','science'].includes(subjectId) ? subjectId : 'other';
+      const key = SUBJECT_IDS.includes(subjectId) ? subjectId : 'other';
       return `<span class="subj-pill subj-${key}">${escHtml(subjectId || '—')}</span>`;
     }
     // Compact type icon (mcq / numeric / short) with native tooltip.
