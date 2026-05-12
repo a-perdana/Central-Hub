@@ -218,6 +218,45 @@
     }
     .field textarea { min-height: 80px; resize: vertical; }
     .field-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Unit code picker — combobox: clickable input + dropdown list of
+       syllabus refs sourced from the linked pacing chapter's topics. */
+    .uc-picker { position: relative; }
+    .uc-picker input { cursor: pointer; padding-right: 32px; }
+    .uc-picker::after {
+      content: ''; position: absolute; right: 12px; top: 50%;
+      width: 8px; height: 8px; pointer-events: none;
+      border-right: 2px solid var(--ink-3);
+      border-bottom: 2px solid var(--ink-3);
+      transform: translateY(-70%) rotate(45deg);
+    }
+    .uc-dropdown {
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      max-height: 280px; overflow-y: auto;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.10);
+      z-index: 30; display: none; padding: 4px 0;
+    }
+    .uc-dropdown.is-open { display: block; }
+    .uc-dd-empty {
+      padding: 12px 14px; font-size: 12px; color: var(--ink-3);
+    }
+    .uc-dd-item {
+      padding: 8px 14px; font-size: 13px; cursor: pointer;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .uc-dd-item:hover { background: #f5f3ff; }
+    .uc-dd-code {
+      font-family: 'Roboto Mono', ui-monospace, monospace;
+      font-size: 12px; font-weight: 600; color: var(--accent-dk);
+      flex-shrink: 0; min-width: 60px;
+    }
+    .uc-dd-topic { color: var(--ink-2); flex: 1; min-width: 0; }
+    .uc-dd-hint {
+      padding: 6px 14px; font-size: 10.5px; color: var(--ink-3);
+      letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+      border-bottom: 1px solid var(--border); margin-bottom: 4px;
+    }
     .modal-actions {
       display: flex; gap: 8px; justify-content: flex-end;
       padding: 14px 24px; border-top: 1px solid var(--border);
@@ -294,6 +333,25 @@
       background: #fff;
     }
     #bankPickerModal .bp-filters input[type="search"] { flex: 1; min-width: 180px; }
+    #bankPickerModal .bp-unit-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 6px 5px 10px; border-radius: 999px;
+      background: #ede9fe; border: 1px solid #c4b5fd;
+      font-size: 11.5px; color: var(--accent-dk); font-weight: 600;
+    }
+    #bankPickerModal .bp-unit-pill-label {
+      text-transform: uppercase; letter-spacing: .04em;
+      font-size: 10px; font-weight: 700;
+    }
+    #bankPickerModal .bp-unit-pill-value {
+      font-family: 'Roboto Mono', ui-monospace, monospace;
+    }
+    #bankPickerModal .bp-unit-pill-x {
+      border: none; background: transparent; cursor: pointer;
+      color: var(--accent-dk); font-size: 16px; line-height: 1;
+      padding: 0 4px; border-radius: 4px;
+    }
+    #bankPickerModal .bp-unit-pill-x:hover { background: #ddd6fe; }
     #bankPickerModal .bp-list { flex: 1; overflow-y: auto; padding: 8px 18px; background: #fafaf8; }
     #bankPickerModal .bp-row {
       display: flex; gap: 14px; padding: 14px 16px; margin-bottom: 8px;
@@ -568,7 +626,10 @@
         </div>
         <div class="field">
           <label>Unit code (e.g. <code>7Ni.04</code>, <code>C1.6</code>)</label>
-          <input id="fUnitCode" placeholder="Pacing collection unit code">
+          <div class="uc-picker">
+            <input id="fUnitCode" placeholder="Click to pick from pacing chapter…" readonly>
+            <div id="fUnitCodeDropdown" class="uc-dropdown" role="listbox"></div>
+          </div>
         </div>
         <div class="field">
           <label>Unit title</label>
@@ -649,6 +710,11 @@
           <option value="biology">Biology</option>
         </select>
         <input id="bpSearch" type="search" placeholder="Search stem…">
+        <div id="bpUnitCodeFilter" class="bp-unit-pill" hidden>
+          <span class="bp-unit-pill-label">Unit code:</span>
+          <span id="bpUnitCodeValue" class="bp-unit-pill-value"></span>
+          <button type="button" id="bpUnitCodeClear" class="bp-unit-pill-x" title="Show all unit codes" aria-label="Clear unit code filter">×</button>
+        </div>
       </div>
       <div class="bp-list" id="bpList">
         <div class="bp-empty">Loading…</div>
@@ -813,6 +879,7 @@
       document.getElementById('unlinkPacingBtn').addEventListener('click', () => {
         stagedPacingRef = null;
         renderPacingRefBanner();
+        refreshUnitCodeOptions();
       });
       document.getElementById('linkerPacing').addEventListener('change', onLinkerPacingChange);
       document.getElementById('linkerChapter').addEventListener('change', onLinkerChapterChange);
@@ -1073,8 +1140,134 @@
         document.getElementById('fUnitTitle').value = ch.chapter || '';
       }
       renderPacingRefBanner();
+      // Refresh the unit-code picker — newly linked chapter brings its own
+      // syllabusRefs which become the picker's options.
+      refreshUnitCodeOptions();
       toast('Linked. Save the test to persist.');
     }
+
+    // ── Unit code picker ─────────────────────────────────────────
+    // Click-to-pick dropdown sourced from the linked pacing chapter's
+    // topics[].syllabusRefs[]. Falls back to "type any code" placeholder if
+    // no pacing chapter is linked yet, so authors aren't blocked when
+    // creating an ad-hoc test before linking.
+    let unitCodeOptionsCache = []; // [{code, topic}]
+
+    async function refreshUnitCodeOptions() {
+      const input = document.getElementById('fUnitCode');
+      const dd    = document.getElementById('fUnitCodeDropdown');
+      dd.classList.remove('is-open');
+      unitCodeOptionsCache = [];
+
+      // No staged pacing link → free-text mode.
+      if (!stagedPacingRef || !stagedPacingRef.collection || !stagedPacingRef.docId) {
+        input.readOnly = false;
+        input.placeholder = 'Link a pacing chapter to pick from its syllabus refs, or type a code';
+        dd.innerHTML = '';
+        return;
+      }
+
+      input.readOnly = true;
+      input.placeholder = 'Loading chapter syllabus refs…';
+
+      try {
+        // Try cache first — if the pacing browser already loaded this doc,
+        // reuse its in-memory copy instead of a fresh getDoc.
+        let chapters = null;
+        if (
+          pacingKey === `${stagedPacingRef.collection}/${stagedPacingRef.docId}` &&
+          Array.isArray(pacingChapters) && pacingChapters.length > 0
+        ) {
+          chapters = pacingChapters;
+        } else if (
+          linkerChaptersCache.length > 0 &&
+          document.getElementById('linkerPacing').value === `${stagedPacingRef.collection}/${stagedPacingRef.docId}`
+        ) {
+          chapters = linkerChaptersCache;
+        } else {
+          const snap = await getDoc(
+            doc(window.db, stagedPacingRef.collection, stagedPacingRef.docId)
+          );
+          const data = snap.exists() ? (snap.data() || {}) : {};
+          chapters = Array.isArray(data.chapters) ? data.chapters : [];
+        }
+
+        const ch = chapters.find(c => c.id === stagedPacingRef.chapterId);
+        const topics = ch && Array.isArray(ch.topics) ? ch.topics : [];
+
+        // Flatten (topic × syllabusRef) → one option per ref so authors see
+        // which topic each ref belongs to. Dedup on `code` because the same
+        // ref often spans multiple topics inside the chapter.
+        const byCode = new Map();
+        for (const t of topics) {
+          const refs = Array.isArray(t.syllabusRefs) ? t.syllabusRefs : [];
+          for (const code of refs) {
+            if (!code) continue;
+            if (!byCode.has(code)) {
+              byCode.set(code, { code, topics: [] });
+            }
+            if (t.topic) byCode.get(code).topics.push(t.topic);
+          }
+        }
+        unitCodeOptionsCache = Array.from(byCode.values()).map(o => ({
+          code:  o.code,
+          topic: o.topics.length > 0 ? o.topics.join(' · ') : '',
+        }));
+
+        input.placeholder = unitCodeOptionsCache.length > 0
+          ? 'Click to pick a syllabus ref from this chapter…'
+          : 'No syllabus refs on this chapter — type a code';
+        input.readOnly = unitCodeOptionsCache.length > 0;
+      } catch (e) {
+        console.error('[unit-code-picker] load failed', e);
+        input.readOnly = false;
+        input.placeholder = 'Could not load chapter refs — type a code';
+      }
+    }
+
+    function renderUnitCodeDropdown() {
+      const dd = document.getElementById('fUnitCodeDropdown');
+      if (unitCodeOptionsCache.length === 0) {
+        dd.innerHTML = '<div class="uc-dd-empty">No syllabus refs on this chapter. Link a different chapter or type a code manually.</div>';
+        return;
+      }
+      const hintLabel = stagedPacingRef
+        ? `${escHtml(stagedPacingRef.chapterTitle || stagedPacingRef.chapterId)}`
+        : '';
+      dd.innerHTML =
+        (hintLabel ? `<div class="uc-dd-hint">${hintLabel}</div>` : '') +
+        unitCodeOptionsCache.map(o => `
+          <div class="uc-dd-item" data-code="${escAttr(o.code)}" role="option">
+            <span class="uc-dd-code">${escHtml(o.code)}</span>
+            <span class="uc-dd-topic">${escHtml(o.topic)}</span>
+          </div>
+        `).join('');
+      dd.querySelectorAll('.uc-dd-item').forEach(el => {
+        el.addEventListener('click', () => {
+          document.getElementById('fUnitCode').value = el.dataset.code || '';
+          dd.classList.remove('is-open');
+        });
+      });
+    }
+
+    // Wire the picker once at module load — modal DOM stays mounted.
+    document.getElementById('fUnitCode').addEventListener('click', () => {
+      const input = document.getElementById('fUnitCode');
+      if (!input.readOnly) return; // free-text mode → no dropdown
+      const dd = document.getElementById('fUnitCodeDropdown');
+      if (dd.classList.contains('is-open')) {
+        dd.classList.remove('is-open');
+        return;
+      }
+      renderUnitCodeDropdown();
+      dd.classList.add('is-open');
+    });
+    document.addEventListener('click', (e) => {
+      const dd = document.getElementById('fUnitCodeDropdown');
+      if (!dd.classList.contains('is-open')) return;
+      if (e.target.closest('.uc-picker')) return;
+      dd.classList.remove('is-open');
+    });
 
     function subscribe() {
       if (unsub) unsub();
@@ -1267,6 +1460,7 @@
         document.getElementById('fDesc').value      = '';
       }
       renderPacingRefBanner();
+      refreshUnitCodeOptions();
       renderItems();
       document.getElementById('testModal').classList.add('is-open');
     }
@@ -1335,7 +1529,22 @@
       pageIndex: 0,
       lastSnap: null,
       selected: new Map(), // itemId → minimal item object captured for add-to-test
+      unitCodeFilter: '',  // when set, query restricts to chapter_test_items.unitCode == X
     };
+
+    // Show/hide the unit-code chip in the filter row + sync bpState.unitCodeFilter.
+    function applyBpUnitCodeFilter(code) {
+      bpState.unitCodeFilter = code || '';
+      const pill   = document.getElementById('bpUnitCodeFilter');
+      const valEl  = document.getElementById('bpUnitCodeValue');
+      if (code) {
+        valEl.textContent = code;
+        pill.hidden = false;
+      } else {
+        valEl.textContent = '';
+        pill.hidden = true;
+      }
+    }
 
     function setBpMode(mode) {
       if (mode !== 'bank' && mode !== 'latihan') return;
@@ -1345,6 +1554,15 @@
       bpState.cursors = [null];
       bpState.pageIndex = 0;
       bpState.lastSnap = null;
+      // Latihan archive items don't carry chapter_test_items.unitCode — hide
+      // the pill there so the user doesn't see a filter that's silently
+      // ignored. Re-apply on switch back to bank mode from the form value.
+      if (mode === 'latihan') {
+        applyBpUnitCodeFilter('');
+      } else {
+        const code = (document.getElementById('fUnitCode').value || '').trim();
+        applyBpUnitCodeFilter(code);
+      }
       updateBpSelCount();
       // Tab UI
       document.querySelectorAll('.bp-mode-tab').forEach(b => {
@@ -1375,6 +1593,7 @@
       // candidates immediately rather than the whole bank.
       const subj  = document.getElementById('fSubject').value || '';
       const stage = document.getElementById('fStage').value   || '';
+      const code  = (document.getElementById('fUnitCode').value || '').trim();
       const bpSubject = document.getElementById('bpSubject');
       // Subject options come from mySubjects (CH subject-specialty scope).
       bpSubject.innerHTML = '<option value="">All my subjects</option>' +
@@ -1384,6 +1603,9 @@
       document.getElementById('bpDiff').value  = '';
       document.getElementById('bpDiscipline').value = '';
       document.getElementById('bpSearch').value = '';
+      // Seed the unit-code chip from the current test's unit code, so the
+      // first bank query is already scoped to "items tagged with this code".
+      applyBpUnitCodeFilter(code);
       // Reset to chapter-test-bank mode on every open.
       bpState.mode = 'bank';
       document.querySelectorAll('.bp-mode-tab').forEach(b => {
@@ -1441,6 +1663,9 @@
       if (stage) constraints.push(where('stage', '==', Number(stage)));
       if (type)  constraints.push(where('type', '==', type));
       if (diff)  constraints.push(where('difficulty', '==', diff));
+      if (bpState.unitCodeFilter) {
+        constraints.push(where('unitCode', '==', bpState.unitCodeFilter));
+      }
       // Sort by createdAt desc — docs missing the field are silently
       // dropped, but every chapter_test_items doc written through
       // saveTest() or question-bank does set createdAt at addDoc time.
@@ -1816,6 +2041,12 @@
         bpState.pageIndex = 0;
         loadBpPage(0);
       });
+    });
+    document.getElementById('bpUnitCodeClear').addEventListener('click', () => {
+      applyBpUnitCodeFilter('');
+      bpState.cursors = [null];
+      bpState.pageIndex = 0;
+      loadBpPage(0);
     });
     document.getElementById('bpSearch').addEventListener('input', applyBpSearch);
 
