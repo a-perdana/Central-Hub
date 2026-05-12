@@ -396,6 +396,54 @@
     let stats = null;
     let storage = null;
 
+    // ──────────────────────────────────────────────────────────────
+    // Image URL resolver
+    //
+    // The migrated `imageURL` field on chapter_test_diagrams uses the
+    // plain `storage.googleapis.com/{bucket}/{path}` URL form. That
+    // host requires a public ACL on the object — our Storage rule
+    // intentionally gates reads to authenticated users (no public
+    // exposure of Cambridge diagrams), so plain GET → 403.
+    //
+    // Firebase Web SDK's getDownloadURL() mints a token-stamped URL
+    // (`?alt=media&token=...`) that bypasses the public-ACL path and
+    // is gated only by the Storage rule. Auth-gated, no token
+    // expiry, no public bucket needed. The downside: one resolve
+    // call per unique path. We cache in-memory so revisits + repaints
+    // don't burn quota.
+    // ──────────────────────────────────────────────────────────────
+    const urlCache = new Map(); // storagePath → token-stamped URL (Promise while in flight)
+    function resolveImageUrl(path) {
+      if (!path) return Promise.resolve(null);
+      if (urlCache.has(path)) return urlCache.get(path);
+      const p = getDownloadURL(storageRef(storage, path)).catch(e => {
+        // Fall back to the unresolved field on the doc so partial
+        // failures (one orphaned path) don't blank the whole grid.
+        console.warn('[diagrams] getDownloadURL failed for', path, e.code || e.message);
+        urlCache.delete(path); // allow retry on next render
+        return null;
+      });
+      urlCache.set(path, p);
+      return p;
+    }
+
+    // Hydrate every <img data-storage-path="..."> that's been
+    // rendered with a transparent placeholder src. Runs after each
+    // grid/list paint. Detail/edit modals call resolveImageUrl
+    // directly because they only need one image.
+    function hydrateImages(root = document) {
+      root.querySelectorAll('img[data-storage-path]').forEach(img => {
+        const p = img.getAttribute('data-storage-path');
+        if (!p || img.dataset.hydrated === '1') return;
+        img.dataset.hydrated = '1';
+        resolveImageUrl(p).then(url => { if (url) img.src = url; });
+      });
+    }
+
+    // 1×1 transparent PNG — used as the initial src so the <img>
+    // element holds its layout slot until the real URL lands.
+    const PLACEHOLDER_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+
     document.addEventListener('authReady', () => {
       const profile = window.userProfile || {};
       const isAdmin = profile.role_centralhub === 'central_admin';
@@ -564,6 +612,9 @@
       const end = Math.min(start + PAGE_SIZE, total);
       const slice = filteredItems.slice(start, end);
       box.innerHTML = viewMode === 'grid' ? renderGrid(slice) : renderList(slice);
+      // Hydrate every placeholder thumb with its token-resolved URL.
+      // Concurrent — each card fetches its own URL in parallel.
+      hydrateImages(box);
       // Wire actions.
       box.querySelectorAll('[data-act="open"]').forEach(el => el.addEventListener('click', () => openDetailModal(el.dataset.id)));
       box.querySelectorAll('[data-act="edit"]').forEach(el => el.addEventListener('click', (ev) => { ev.stopPropagation(); openEditModal(el.dataset.id); }));
@@ -591,7 +642,7 @@
               <button class="icon-btn-edit" data-act="edit" data-id="${escAttr(d.id)}" title="Edit metadata">${SVG_EDIT}</button>
               <button class="icon-btn-danger" data-act="del" data-id="${escAttr(d.id)}" title="Delete">${SVG_DEL}</button>
             </div>
-            <div class="diag-card-img-wrap" data-act="open" data-id="${escAttr(d.id)}"><img src="${escAttr(d.imageURL)}" loading="lazy" alt="${escAttr(d.description || d.imageName || '')}"></div>
+            <div class="diag-card-img-wrap" data-act="open" data-id="${escAttr(d.id)}"><img src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(d.storagePath || '')}" loading="lazy" alt="${escAttr(d.description || d.imageName || '')}"></div>
             <div class="diag-card-cat-eyebrow">${escHtml(d.category || 'diagram')}</div>
             <div class="diag-card-desc">${escHtml(d.description || d.imageName || '(untitled)')}</div>
             <div class="diag-card-meta">
@@ -610,7 +661,7 @@
         const subjCls = `diag-pill-subj-${d.subjectId || 'other'}`;
         return `
           <tr data-id="${escAttr(d.id)}">
-            <td><img class="diag-list-thumb" src="${escAttr(d.imageURL)}" loading="lazy" alt=""></td>
+            <td><img class="diag-list-thumb" src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(d.storagePath || '')}" loading="lazy" alt=""></td>
             <td><span class="diag-pill ${subjCls}">${escHtml(d.subjectId || '—')}</span></td>
             <td>${escHtml(d.category || 'diagram')}</td>
             <td>${escHtml(d.description || d.imageName || '(untitled)')}</td>
@@ -643,8 +694,12 @@
       const modal = document.getElementById('detailModal');
       modal.dataset.diagramId = id;
       document.getElementById('detailTitle').textContent = d.description || d.imageName || 'Diagram';
-      document.getElementById('detailImg').src = d.imageURL;
-      document.getElementById('detailImg').alt = d.description || '';
+      const img = document.getElementById('detailImg');
+      img.src = PLACEHOLDER_SRC;
+      img.alt = d.description || '';
+      // Token-resolved URL — same path the grid uses, hits the cache
+      // if the thumb already fetched it.
+      resolveImageUrl(d.storagePath).then(url => { if (url) img.src = url; });
       const usedIn = Array.isArray(d.usedInItemIds) ? d.usedInItemIds : [];
       document.getElementById('detailMeta').innerHTML = `
         <span><b>Subject:</b> ${escHtml(d.subjectId || '—')}</span>
@@ -667,8 +722,12 @@
       document.getElementById('editTitle').textContent = isNew ? 'Upload new diagram' : 'Edit diagram';
       document.getElementById('fileFieldWrap').style.display = isNew ? '' : 'none';
       document.getElementById('fEditFile').value = '';
-      document.getElementById('editPreviewWrap').style.display = (!isNew && editingDiagram.imageURL) ? 'block' : 'none';
-      if (!isNew) document.getElementById('editPreviewImg').src = editingDiagram.imageURL || '';
+      document.getElementById('editPreviewWrap').style.display = (!isNew && editingDiagram && editingDiagram.storagePath) ? 'block' : 'none';
+      if (!isNew && editingDiagram) {
+        const prev = document.getElementById('editPreviewImg');
+        prev.src = PLACEHOLDER_SRC;
+        resolveImageUrl(editingDiagram.storagePath).then(url => { if (url) prev.src = url; });
+      }
       document.getElementById('fEditSubject').value = editingDiagram?.subjectId || 'biology';
       document.getElementById('fEditCategory').value = editingDiagram?.category || 'diagram';
       document.getElementById('fEditDesc').value = editingDiagram?.description || '';
