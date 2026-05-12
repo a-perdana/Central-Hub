@@ -281,6 +281,11 @@
     body.no-delete .col-check,
     body.no-delete .th-check,
     body.no-delete .td-check { display: none !important; }
+    /* Non-author role gate (viewer-only directors). Hides the "+ New"
+       button and the per-row edit icon. View / preview stay open so
+       the bank remains browsable for non-authoring HQ users. */
+    body.no-author #newItemBtn,
+    body.no-author .row-actions .icon-btn[data-act="edit"] { display: none !important; }
     /* Confirm-modal multi-stage layout */
     .danger-modal .stage { display: none; }
     .danger-modal .stage.is-active { display: block; }
@@ -605,6 +610,14 @@
     // via `allow delete: if isAdmin()`; UI also hides the affordances
     // so the role boundary is visible, not just enforceable).
     let canDelete = false;
+    // Authoring privilege — admin OR coordinator sub-role. Director
+    // is a navigation role (bypasses page-access) but doesn't carry
+    // authoring power on ease_items per the rule:
+    //   allow create, update: if isAdmin() || isCHCoordinator();
+    // Mirror that in the UI so a viewer-only director sees the bank
+    // without "+ New" and per-row edit buttons promising writes the
+    // rule will reject.
+    let canAuthor = false;
 
     document.addEventListener('authReady', () => {
       const profile = window.userProfile || {};
@@ -616,13 +629,13 @@
         return;
       }
       canDelete = isAdmin;
+      canAuthor = isAdmin || sub.includes('coordinator');
       // Hide delete affordances at the document level for non-admins.
       // Defence-in-depth — the rule blocks the write either way, but
       // a visible Delete button promising a wrong outcome is worse
       // than no button at all.
-      if (!canDelete) {
-        document.body.classList.add('no-delete');
-      }
+      if (!canDelete) document.body.classList.add('no-delete');
+      if (!canAuthor) document.body.classList.add('no-author');
       // Initial paint: stats (one-shot) + first page.
       loadStats();
       loadFirstPage();
@@ -713,7 +726,10 @@
         renderPage();
       }
     }
-    document.getElementById('newItemBtn').addEventListener('click', () => openItem(null));
+    document.getElementById('newItemBtn').addEventListener('click', () => {
+      if (!canAuthor) { toast('Authoring is restricted to central_admin and CH coordinators.'); return; }
+      openItem(null);
+    });
 
     // Update the search placeholder once we know the bank size + the
     // current view scope. Helps the user gauge what a page-scoped
@@ -1794,7 +1810,10 @@
 
     async function action(act, id) {
       if (act === 'view') return openPreview(id);
-      if (act === 'edit') return openItem(id);
+      if (act === 'edit') {
+        if (!canAuthor) { toast('Editing items is restricted to central_admin and CH coordinators.'); return; }
+        return openItem(id);
+      }
       if (act === 'del') {
         // Same multi-stage gate as bulk delete — one item still
         // deserves the acknowledge → phrase → cooldown sequence.
