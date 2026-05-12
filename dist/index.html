@@ -5176,6 +5176,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.08), 0 2px 3px rgba(0,0,0,0.05);
   }
+  @keyframes notePulse {
+    0%   { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.55); }
+    70%  { box-shadow: 0 0 0 10px rgba(108, 92, 231, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0); }
+  }
+  .note-card.is-highlight {
+    animation: notePulse 1.4s ease-out 1;
+  }
   .note-card.is-done {
     opacity: 0.55;
   }
@@ -5488,6 +5496,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       let activeTab = 'mine';
       let mineCache = [];
       let teamCache = [];
+      let pendingHighlightId = null;
 
       const showSaving = (on) => savingEl.classList.toggle('is-on', on);
       const beginWrite = () => { inFlight++; showSaving(true); };
@@ -5665,10 +5674,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Private';
           visBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            const goingPublic = !noteData.isPublic;
             saveNow(noteId, {
-              isPublic: !noteData.isPublic,
+              isPublic: goingPublic,
               userDisplayName: myDisplayName,
             });
+            // Follow the card to its new home so the user doesn't
+            // wonder where it went. Switch tabs and flag the card so
+            // the next render scrolls it briefly into view.
+            const targetTab = goingPublic ? 'team' : 'mine';
+            if (targetTab !== activeTab) {
+              activeTab = targetTab;
+              tabsEl.querySelectorAll('.notes-tab-btn').forEach(b => b.classList.toggle('is-active', b.dataset.tab === activeTab));
+              subtitleEl.textContent = activeTab === 'mine'
+                ? 'Private notes — only you can read these'
+                : 'Public notes shared across Central Hub';
+              pendingHighlightId = noteId;
+              renderActiveTab();
+            }
           });
           topRow.appendChild(visBtn);
         } else {
@@ -5859,23 +5882,39 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
         grid.innerHTML = '';
         if (activeTab === 'mine') {
-          if (!mineCache.length) {
-            grid.appendChild(renderEmpty('<strong>No notes yet</strong>Click "New Note" to jot down something quickly.'));
+          // My Notes shows ONLY my private notes. Once a note is made
+          // public it moves to the Team tab so the two views never
+          // double-count it.
+          const privateOnly = mineCache.filter(({ data }) => !data.isPublic);
+          if (!privateOnly.length) {
+            grid.appendChild(renderEmpty('<strong>No private notes</strong>Click "New Note" to jot down something quickly. Public notes show up in the Team tab.'));
           } else {
-            mineCache.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, true)));
+            privateOnly.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, true)));
           }
         } else {
-          // Team tab — exclude own notes (those already show in My Notes; no point listing twice)
-          const teamOnly = teamCache.filter(({ data }) => data.userId !== uid);
-          if (!teamOnly.length) {
-            grid.appendChild(renderEmpty('<strong>No team notes yet</strong>When a CH user makes a note Public, it shows up here.'));
+          // Team tab shows all public notes — including my own. Owner
+          // controls (edit / colour / attach / delete) stay live for
+          // the cards I own; other people's cards render read-only.
+          if (!teamCache.length) {
+            grid.appendChild(renderEmpty('<strong>No team notes yet</strong>Toggle a note to Public (or wait for a teammate) to populate this tab.'));
           } else {
-            teamOnly.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, false)));
+            teamCache.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, data.userId === uid)));
           }
         }
 
-        // Restore focus + caret (My Notes only, since Team is read-only)
-        if (focusedId && focusedRole && activeTab === 'mine') {
+        // Brief pulse on a card that just moved tabs (visibility toggle).
+        if (pendingHighlightId) {
+          const moved = grid.querySelector(`.note-card[data-id="${pendingHighlightId}"]`);
+          if (moved) {
+            moved.classList.add('is-highlight');
+            moved.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => moved.classList.remove('is-highlight'), 1500);
+          }
+          pendingHighlightId = null;
+        }
+
+        // Restore focus + caret (only when a card I own is focused).
+        if (focusedId && focusedRole) {
           const card = grid.querySelector(`.note-card[data-id="${focusedId}"]`);
           const target = card?.querySelector(focusedRole === 'title' ? '.note-card-title' : '.note-card-body');
           if (target) {
@@ -5894,9 +5933,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
 
       function updateCounts() {
-        countMineEl.textContent = mineCache.length ? `(${mineCache.length})` : '';
-        const teamOnly = teamCache.filter(({ data }) => data.userId !== uid).length;
-        countTeamEl.textContent = teamOnly ? `(${teamOnly})` : '';
+        const privateOnly = mineCache.filter(({ data }) => !data.isPublic).length;
+        countMineEl.textContent = privateOnly ? `(${privateOnly})` : '';
+        countTeamEl.textContent = teamCache.length ? `(${teamCache.length})` : '';
       }
 
       // -- Subscriptions ----------------------------------------------------
@@ -5965,10 +6004,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         if (!tab || tab === activeTab) return;
         activeTab = tab;
         tabsEl.querySelectorAll('.notes-tab-btn').forEach(b => b.classList.toggle('is-active', b.dataset.tab === activeTab));
-        addBtn.style.display = activeTab === 'mine' ? '' : 'none';
         subtitleEl.textContent = activeTab === 'mine'
-          ? 'Personal notes — only you can see private notes'
-          : 'Public notes shared by other Central Hub users';
+          ? 'Private notes — only you can read these'
+          : 'Public notes shared across Central Hub';
         renderActiveTab();
       });
 
