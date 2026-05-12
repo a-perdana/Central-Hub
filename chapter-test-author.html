@@ -236,6 +236,30 @@
     .btn-icon.is-danger:hover { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
     .btn-icon svg { width: 15px; height: 15px; }
 
+    /* Items-locked warning banner shown above + Add item / + Browse bank
+       when the test envelope's unit code is still blank. Picks up the
+       same red palette as inline validation errors elsewhere in the modal. */
+    .items-lock-notice {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px; margin: 0 0 10px;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 8px; color: #991b1b; font-size: 12.5px; line-height: 1.45;
+    }
+    .items-lock-notice svg {
+      width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: #dc2626;
+    }
+    .items-lock-notice strong { color: #7f1d1d; }
+
+    /* Visually-locked variant of .btn-secondary used for + Add item /
+       + Browse bank when the unit code is blank. We keep them clickable
+       (no `disabled` attribute) so the click can trigger a toast — actual
+       authoring is short-circuited in the handler. */
+    .btn-secondary.is-locked {
+      opacity: .5; cursor: not-allowed;
+      background: #f9fafb; color: var(--ink-3);
+    }
+    .btn-secondary.is-locked:hover { background: #f9fafb; }
+
     /* View toggle pill */
     .view-toggle {
       display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
@@ -794,6 +818,10 @@
         </div>
 
         <h3 style="font-family:'Lora',serif; font-size:1rem; margin:18px 0 10px;">Items</h3>
+        <div id="itemsLockNotice" class="items-lock-notice" hidden role="alert" aria-live="polite">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5l6.5 11.5h-13L8 1.5z"/><path d="M8 6.5v3.5"/><circle cx="8" cy="12" r=".7" fill="currentColor" stroke="none"/></svg>
+          <span><strong>Pick a unit code first.</strong> Items must be tagged to a Cambridge syllabus reference, so item authoring is locked until you set the unit code above.</span>
+        </div>
         <div id="itemsList"></div>
         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
           <button class="btn-secondary" id="addItemBtn"    type="button">+ Add item</button>
@@ -1462,17 +1490,40 @@
     // copied from the test envelope onto each chapter_test_items doc), so
     // authoring before the code is picked just leaves us with items that
     // can't be tagged into the syllabus hierarchy. Block the entry point.
+    //
+    // Visual + audible signal (not just a silent disabled attribute):
+    // - red banner above the buttons explains why authoring is locked
+    // - buttons get `.is-locked` styling (faded, not-allowed cursor)
+    // - clicks on the locked buttons still fire — handler shows a toast
     function syncItemButtons() {
       const code = (document.getElementById('fUnitCode').value || '').trim();
-      const disabled = !code;
+      const locked = !code;
       const tip = 'Pick a unit code first';
+      const notice = document.getElementById('itemsLockNotice');
+      if (notice) notice.hidden = !locked;
       ['addItemBtn', 'browseBankBtn'].forEach(id => {
         const btn = document.getElementById(id);
         if (!btn) return;
-        btn.disabled = disabled;
-        if (disabled) btn.setAttribute('title', tip);
+        btn.classList.toggle('is-locked', locked);
+        if (locked) btn.setAttribute('title', tip);
         else btn.removeAttribute('title');
       });
+    }
+
+    // Click guard for the two item-authoring buttons: when locked, swallow
+    // the click and toast the reason so the author actually sees feedback.
+    function guardItemButtonClick(e) {
+      const code = (document.getElementById('fUnitCode').value || '').trim();
+      if (code) return false; // not locked → let the real handler run
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toast('Pick a unit code first — items have to be tagged to a syllabus reference.');
+      // Briefly highlight the unit-code field so the user knows where to look.
+      const input = document.getElementById('fUnitCode');
+      input.focus();
+      input.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, .25)';
+      setTimeout(() => { input.style.boxShadow = ''; }, 1200);
+      return true;
     }
     // Sync on free-text edits too — the picker normally writes via the
     // dropdown handler, but the input also accepts manual typing when the
@@ -1894,6 +1945,11 @@
       });
     }
 
+    // Guard registered with `capture: true` so it runs before the real
+    // openItemModal / openBankPicker handlers; when locked, it swallows
+    // the click and surfaces a toast.
+    document.getElementById('addItemBtn').addEventListener('click', guardItemButtonClick, true);
+    document.getElementById('browseBankBtn').addEventListener('click', guardItemButtonClick, true);
     document.getElementById('addItemBtn').addEventListener('click', () => openItemModal(-1));
     document.getElementById('browseBankBtn').addEventListener('click', () => openBankPicker());
 
