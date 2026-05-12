@@ -391,31 +391,6 @@
     #bankPickerModal .bp-head { padding: 14px 22px 12px; border-bottom: 1px solid var(--border); }
     #bankPickerModal .bp-head h2 { font-family: 'Lora', serif; font-size: 1.2rem; margin: 0 0 4px; }
     #bankPickerModal .bp-head p  { font-size: 12.5px; color: var(--ink-3); margin: 0; }
-    #bankPickerModal .bp-mode-tabs {
-      display: flex; gap: 4px; margin-bottom: 10px;
-      background: var(--bg-2, #f3f4f6); padding: 4px; border-radius: 8px;
-      width: fit-content;
-    }
-    #bankPickerModal .bp-mode-tab {
-      padding: 6px 14px; border: none; background: transparent;
-      font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600;
-      color: var(--ink-2, #4b5563); border-radius: 6px; cursor: pointer;
-      transition: background .15s, color .15s;
-    }
-    #bankPickerModal .bp-mode-tab:hover { color: var(--ink); }
-    #bankPickerModal .bp-mode-tab.is-active {
-      background: #fff; color: var(--accent);
-      box-shadow: 0 1px 2px rgba(0,0,0,.06);
-    }
-    #bankPickerModal .bp-row-meta .pill.latihan {
-      background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa;
-    }
-    #bankPickerModal .bp-row-meta .pill.discipline {
-      background: #f0fdf4; color: #14532d;
-    }
-    #bankPickerModal .bp-row-meta .pill.imported {
-      background: #fef9c3; color: #713f12;
-    }
     #bankPickerModal .bp-foot { background: #fff; padding: 14px 22px; }
     #bankPickerModal .bp-pager button { padding: 6px 12px; font-weight: 500; }
     #bankPickerModal .bp-head { padding: 18px 22px 14px; }
@@ -815,15 +790,14 @@
     </div>
   </div>
 
-  <!-- Bank picker — browse + multi-select existing chapter_test_items OR clone from latihan ease_items -->
+  <!-- Bank picker — browse + multi-select existing chapter_test_items.
+       Latihan Archive picker was removed 2026-05-12 — tag taxonomies don't
+       line up with chapter_test_items, and HQ now goes through the
+       dedicated /ease-item-author + Question Bank flows instead. -->
   <div id="bankPickerModal" class="modal-overlay" role="dialog" aria-hidden="true" aria-labelledby="bpTitle">
     <div class="modal">
       <div class="bp-head">
-        <div class="bp-mode-tabs">
-          <button id="bpModeBank"    class="bp-mode-tab is-active" type="button" data-mode="bank">Chapter Test Bank</button>
-          <button id="bpModeLatihan" class="bp-mode-tab"           type="button" data-mode="latihan">Latihan Archive</button>
-        </div>
-        <h2 id="bpTitle">Browse Chapter Test Item Bank</h2>
+        <h2 id="bpTitle">Select Questions</h2>
         <p id="bpSubtitle">Pick existing items to add to this test. Items already attached are tagged "used" and disabled. Edits go through Question Bank — same doc, every test that references it picks up the change.</p>
       </div>
       <div class="bp-filters">
@@ -839,12 +813,6 @@
           <option value="easy">Easy</option>
           <option value="medium">Medium</option>
           <option value="hard">Hard</option>
-        </select>
-        <select id="bpDiscipline" hidden>
-          <option value="">All disciplines</option>
-          <option value="physics">Physics</option>
-          <option value="chemistry">Chemistry</option>
-          <option value="biology">Biology</option>
         </select>
         <input id="bpSearch" type="search" placeholder="Search stem…">
         <div id="bpUnitCodeFilter" class="bp-unit-pill" hidden title="Filtering bank items by Cambridge syllabus reference (cambridgeStandardRefs array-contains)">
@@ -1862,7 +1830,6 @@
     // ────────────────────────────────────────────────────────────────
     const BP_PAGE_SIZE = 5;
     const bpState = {
-      mode: 'bank',        // 'bank' (chapter_test_items) | 'latihan' (ease_items, clone-on-add)
       cursors: [null],     // bpState.cursors[N] = startAfter snapshot for page N
       pageItems: [],       // current rendered page (with snap refs)
       pageIndex: 0,
@@ -1885,48 +1852,6 @@
       }
     }
 
-    function setBpMode(mode) {
-      if (mode !== 'bank' && mode !== 'latihan') return;
-      if (bpState.mode === mode) return;
-      bpState.mode = mode;
-      bpState.selected.clear();
-      bpState.cursors = [null];
-      bpState.pageIndex = 0;
-      bpState.lastSnap = null;
-      // Latihan archive items don't carry chapter_test_items.unitCode — hide
-      // the pill there so the user doesn't see a filter that's silently
-      // ignored. Re-apply on switch back to bank mode from the form value.
-      if (mode === 'latihan') {
-        applyBpUnitCodeFilter('');
-      } else {
-        const code = (document.getElementById('fUnitCode').value || '').trim();
-        applyBpUnitCodeFilter(code);
-      }
-      updateBpSelCount();
-      // Tab UI
-      document.querySelectorAll('.bp-mode-tab').forEach(b => {
-        b.classList.toggle('is-active', b.dataset.mode === mode);
-      });
-      // Title + subtitle
-      const isLat = (mode === 'latihan');
-      document.getElementById('bpTitle').textContent = isLat
-        ? 'Browse Latihan Archive (clone into test)'
-        : 'Browse Chapter Test Item Bank';
-      document.getElementById('bpSubtitle').textContent = isLat
-        ? 'Pick Latihan items to clone into this test. Each selected item becomes a fresh chapter_test_items doc (source attribution preserved) — HQ can edit the clone without touching the upstream archive.'
-        : 'Pick existing items to add to this test. Items already attached are tagged "used" and disabled. Edits go through Question Bank — same doc, every test that references it picks up the change.';
-      // Discipline filter only relevant for Latihan archive (science items split on discipline).
-      document.getElementById('bpDiscipline').hidden = !isLat;
-      // Latihan archive only ships MCQ + short (essay/checklist skipped at import); numeric is HQ-only.
-      const bpType = document.getElementById('bpType');
-      Array.from(bpType.options).forEach(opt => {
-        if (opt.value === 'numeric') opt.disabled = isLat;
-      });
-      if (isLat && bpType.value === 'numeric') bpType.value = '';
-      // Reload with the new collection.
-      loadBpPage(0);
-    }
-
     function openBankPicker() {
       // Pre-seed filters from the test envelope so authors see relevant
       // candidates immediately rather than the whole bank.
@@ -1939,22 +1864,10 @@
       document.getElementById('bpSubject').value = subj;
       document.getElementById('bpType').value  = '';
       document.getElementById('bpDiff').value  = '';
-      document.getElementById('bpDiscipline').value = '';
       document.getElementById('bpSearch').value = '';
       // Seed the unit-code chip from the current test's unit code, so the
       // first bank query is already scoped to "items tagged with this code".
       applyBpUnitCodeFilter(code);
-      // Reset to chapter-test-bank mode on every open.
-      bpState.mode = 'bank';
-      document.querySelectorAll('.bp-mode-tab').forEach(b => {
-        b.classList.toggle('is-active', b.dataset.mode === 'bank');
-      });
-      document.getElementById('bpTitle').textContent = 'Browse Chapter Test Item Bank';
-      document.getElementById('bpSubtitle').textContent = 'Pick existing items to add to this test. Items already attached are tagged "used" and disabled. Edits go through Question Bank — same doc, every test that references it picks up the change.';
-      document.getElementById('bpDiscipline').hidden = true;
-      Array.from(document.getElementById('bpType').options).forEach(opt => {
-        if (opt.value === 'numeric') opt.disabled = false;
-      });
       bpState.selected.clear();
       bpState.cursors = [null];
       bpState.pageIndex = 0;
@@ -1971,7 +1884,6 @@
       const subj  = document.getElementById('bpSubject').value;
       const type  = document.getElementById('bpType').value;
       const diff  = document.getElementById('bpDiff').value;
-      const disc  = document.getElementById('bpDiscipline').value;
       const constraints = [];
 
       // Stage / grade is intentionally NOT a filter: the syllabus ref pill
@@ -1980,24 +1892,6 @@
       // Adding stage on top forced an extra composite index and silently
       // hid Y9-tagged items from a Y8 test whose chapter references shared
       // standards. Subject + syllabus ref is the right scoping primitive.
-
-      if (bpState.mode === 'latihan') {
-        // ease_items — only Latihan-sourced (skip 36 HQ-authored docs); type
-        // filtered to mcq/short (auto-graders we support).
-        const col = collection(window.db, 'ease_items');
-        constraints.push(where('source', '==', 'latihan'));
-        if (subj)  constraints.push(where('subjectId', '==', subj));
-        if (type && type !== 'numeric') constraints.push(where('type', '==', type));
-        if (diff)  constraints.push(where('difficulty', '==', diff));
-        if (disc && (subj === 'science' || !subj)) {
-          // discipline filter only meaningful inside Combined Science (Y7-8 flipped items).
-          // For physics/chemistry/biology subjectId, the discipline matches the subject
-          // by construction — filter would be redundant but not wrong.
-          constraints.push(where('discipline', '==', disc));
-        }
-        constraints.push(orderBy('createdAt', 'desc'));
-        return query(col, ...constraints);
-      }
 
       const col = collection(window.db, 'chapter_test_items');
       if (subj)  constraints.push(where('subjectId', '==', subj));
@@ -2050,16 +1944,13 @@
         document.getElementById('bpNext').disabled = true;
         return;
       }
-      const isLatihan = (bpState.mode === 'latihan');
-      // For Bank mode, IDs already in the current test (workingItems) are shown
-      // disabled. For Latihan mode, the upstream ease_items id has no relation
-      // to chapter_test_items ids (we clone on add), so no "already in" check.
-      const alreadyIn = isLatihan ? new Set() : new Set(workingItems.map(it => it.id).filter(Boolean));
+      // IDs already in the current test (workingItems) are shown disabled.
+      const alreadyIn = new Set(workingItems.map(it => it.id).filter(Boolean));
       list.innerHTML = bpState.pageItems.map(it => {
-        const inUse = !isLatihan && alreadyIn.has(it.id);
+        const inUse = alreadyIn.has(it.id);
         const usedCount = Array.isArray(it.usedInTestIds) ? it.usedInTestIds.length : 0;
         const isSelected = bpState.selected.has(it.id);
-        const stageLabel = isLatihan ? (it.stage_min || '—') : (it.stage || '—');
+        const stageLabel = it.stage || '—';
         // Prefer rich HTML (LaTeX wrapped in \(...\), inline images, formatting)
         // when present, else fall back to plain text. sanitiseBpStem strips
         // table/list/heavy markup so the 3-line clamp stays readable.
@@ -2082,32 +1973,26 @@
                 Preview
               </button>
               <span class="pill">${escHtml(SUBJ_LABEL[it.subjectId] || it.subjectId || '—')}</span>
-              ${isLatihan && it.discipline ? `<span class="pill discipline">${escHtml(it.discipline)}</span>` : ''}
               <span class="pill">Y${escHtml(stageLabel)}</span>
               <span class="pill ${escAttr(it.difficulty)}">${escHtml(it.difficulty || '?')}</span>
               <span class="pill">${escHtml(it.type)}</span>
-              ${isLatihan
-                ? (it.sourceCode ? `<span class="pill code">${escHtml(it.sourceCode)}</span>` : '')
-                  + `<span class="pill latihan">latihan</span>`
-                  + (it.cognitiveTag ? `<span class="pill">${escHtml(it.cognitiveTag)}</span>` : '')
-                  + (it.hasDeadImage ? '<span class="pill" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">img 404</span>' : '')
-                : (it.unitCode && !looksLikeSlug(it.unitCode)
-                    ? `<span class="pill code">${escHtml(it.unitCode)}</span>`
+              ${(it.unitCode && !looksLikeSlug(it.unitCode)
+                  ? `<span class="pill code">${escHtml(it.unitCode)}</span>`
+                  : '')
+                + (Array.isArray(it.cambridgeStandardRefs)
+                    ? it.cambridgeStandardRefs
+                        .filter(r => r && r !== it.unitCode)
+                        .map(r => `<span class="pill cts" title="Cambridge ref">${escHtml(r)}</span>`)
+                        .join('')
                     : '')
-                  + (Array.isArray(it.cambridgeStandardRefs)
-                      ? it.cambridgeStandardRefs
-                          .filter(r => r && r !== it.unitCode)
-                          .map(r => `<span class="pill cts" title="Cambridge ref">${escHtml(r)}</span>`)
-                          .join('')
-                      : '')
-                  + (it.commandWord ? `<span class="pill cmd" title="Command word">${escHtml(it.commandWord)}</span>` : '')
-                  + (it.assessmentObjective ? `<span class="pill ao" title="Assessment objective">${escHtml(it.assessmentObjective)}</span>` : '')
-                  + (inUse
-                      ? '<span class="pill used">already in this test</span>'
-                      : (usedCount > 0 ? `<span class="pill">used in ${usedCount} test${usedCount === 1 ? '' : 's'}</span>` : ''))
+                + (it.commandWord ? `<span class="pill cmd" title="Command word">${escHtml(it.commandWord)}</span>` : '')
+                + (it.assessmentObjective ? `<span class="pill ao" title="Assessment objective">${escHtml(it.assessmentObjective)}</span>` : '')
+                + (inUse
+                    ? '<span class="pill used">already in this test</span>'
+                    : (usedCount > 0 ? `<span class="pill">used in ${usedCount} test${usedCount === 1 ? '' : 's'}</span>` : ''))
               }
             </div>
-            ${!isLatihan && it.syllabusObjective && !objectiveEchoesUnitTitle(it.syllabusObjective, it.unitTitle)
+            ${it.syllabusObjective && !objectiveEchoesUnitTitle(it.syllabusObjective, it.unitTitle)
               ? `<div class="bp-row-syllabus" title="${escAttr(it.syllabusObjective)}"><b>Syllabus:</b> ${escHtml(it.syllabusObjective)}</div>`
               : ''}
           </div>
@@ -2306,10 +2191,6 @@
     }
 
     function commitBpSelection() {
-      if (bpState.mode === 'latihan') {
-        commitLatihanSelection();
-        return;
-      }
       // Append selected bank items to workingItems, tagged bankSourced=true
       // so renderItems shows the "bank" pill + "Edit in bank ↗" affordance.
       // saveTest() already handles items with an .id correctly (update path
@@ -2329,70 +2210,12 @@
       if (added > 0) toast(`Added ${added} item${added === 1 ? '' : 's'} from the bank.`);
     }
 
-    // Clone selected ease_items into workingItems as fresh chapter_test_items
-    // shapes. NO Firestore write here — saveTest() will addDoc each fresh item
-    // when the parent test is saved (existing flow). We just translate the
-    // ease_items shape → chapter_test_items shape and stamp source attribution
-    // so HQ can audit the origin later.
-    function commitLatihanSelection() {
-      // For Combined Science (subjectId='science') items that were originally
-      // Y7-8 PHY/CHE/BIO content (have a discipline tag), the test envelope's
-      // subjectId may be different from the latihan item's subjectId — but
-      // saveTest() always rewrites items with the test envelope's subjectId,
-      // so we just carry whatever's there and let saveTest normalise.
-      let added = 0;
-      bpState.selected.forEach((it /*, id*/) => {
-        const { snap, ...src } = it;
-        // Translate ease_items → chapter_test_items in-memory shape. Leave
-        // `id` undefined so saveTest() takes the addDoc path. Test envelope
-        // (subjectId / stage / unitCode / unitTitle / status) is written by
-        // saveTest() from the form, NOT here.
-        const cloned = {
-          // Core content
-          type:          src.type === 'mcq' ? 'mcq' : 'short',
-          stem:          src.stem || '',
-          stemHtml:      src.stemHtml || null,
-          options:       Array.isArray(src.options) ? src.options : null,
-          optionsHtml:   Array.isArray(src.optionsHtml) ? src.optionsHtml : null,
-          correctIdx:    typeof src.correctIdx === 'number' ? src.correctIdx : null,
-          correctAnswer: src.correctAnswer ?? null,
-          // Defaults specific to chapter_test_items (item-level marks);
-          // HQ can override per-item in the editor before save.
-          marks:         1,
-          difficulty:    src.difficulty || 'medium',
-          // Cambridge metadata — start blank; HQ tags from question editor.
-          commandWord:           null,
-          assessmentObjective:   null,
-          syllabusObjective:     null,
-          cambridgeStandardRefs: [],
-          markScheme:            null,
-          explanation:           src.explanation || null,
-          // Source attribution — preserved through saveTest() because every
-          // field in the cloned object becomes part of `itemPayload`.
-          clonedFromEaseId:      src.id || src.sourceId || null,
-          clonedFromSource:      'latihan',
-          clonedFromSourceCode:  src.sourceCode || null,
-          clonedFromLessonCode:  src.sourceLessonCode || null,
-          clonedFromDiscipline:  src.discipline || null,
-        };
-        workingItems.push(cloned);
-        added++;
-      });
-      bpState.selected.clear();
-      closeBankPicker();
-      renderItems();
-      if (added > 0) toast(`Cloned ${added} item${added === 1 ? '' : 's'} from Latihan archive.`);
-    }
-
     // Wire picker controls (one-time at module load — picker DOM stays mounted).
     document.getElementById('bpCancel').addEventListener('click', closeBankPicker);
     document.getElementById('bpAdd').addEventListener('click', commitBpSelection);
     document.getElementById('bpPrev').addEventListener('click', () => loadBpPage(Math.max(0, bpState.pageIndex - 1)));
     document.getElementById('bpNext').addEventListener('click', () => loadBpPage(bpState.pageIndex + 1));
-    document.querySelectorAll('.bp-mode-tab').forEach(btn => {
-      btn.addEventListener('click', () => setBpMode(btn.dataset.mode));
-    });
-    ['bpType', 'bpDiff', 'bpDiscipline'].forEach(id => {
+    ['bpType', 'bpDiff'].forEach(id => {
       document.getElementById(id).addEventListener('change', () => {
         // Filter change → reset pagination + reload.
         bpState.cursors = [null];
