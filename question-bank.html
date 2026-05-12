@@ -629,7 +629,41 @@
       getCountFromServer, query, where, orderBy, limit, startAfter,
       serverTimestamp, writeBatch, arrayUnion, arrayRemove
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    import { getStorage, ref as storageRef, getDownloadURL }
+      from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
     import { mountQuestionEditor } from './partials/question-editor.js';
+
+    // Image URL resolver — same pattern as /diagrams. Token-stamped
+    // download URL is auth-gated by the Storage rule; plain
+    // storage.googleapis.com URLs would need a public-ACL grant
+    // we don't issue. Cache by storagePath so repaints + the
+    // picker→editor→preview flow share lookups.
+    const PLACEHOLDER_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+    const urlCache = new Map();
+    let _qbStorage = null;
+    function qbStorage() {
+      if (!_qbStorage) _qbStorage = getStorage(window.firebaseApp);
+      return _qbStorage;
+    }
+    function resolveImageUrl(path) {
+      if (!path) return Promise.resolve(null);
+      if (urlCache.has(path)) return urlCache.get(path);
+      const p = getDownloadURL(storageRef(qbStorage(), path)).catch(e => {
+        console.warn('[question-bank] getDownloadURL failed for', path, e.code || e.message);
+        urlCache.delete(path);
+        return null;
+      });
+      urlCache.set(path, p);
+      return p;
+    }
+    function hydrateImages(root = document) {
+      root.querySelectorAll('img[data-storage-path]').forEach(img => {
+        const p = img.getAttribute('data-storage-path');
+        if (!p || img.dataset.hydrated === '1') return;
+        img.dataset.hydrated = '1';
+        resolveImageUrl(p).then(url => { if (url) img.src = url; });
+      });
+    }
 
     // ──────────────────────────────────────────────────────────────
     // Bank locked to chapter_test_items. EASE items live in
@@ -1706,11 +1740,12 @@
             const topics = (d.topics || []).join(' · ');
             document.getElementById('pvDiagram').innerHTML = `
               <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
-                <img src="${escAttr(d.imageURL)}" alt="${escAttr(d.description || d.imageName || 'diagram')}" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
+                <img src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(d.storagePath || '')}" alt="${escAttr(d.description || d.imageName || 'diagram')}" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto">
                 ${d.description ? `<div style="margin-top:8px;font-size:12.5px;color:var(--ink-2);text-align:center">${escHtml(d.description)}</div>` : ''}
                 ${topics ? `<div style="margin-top:4px;font-size:11px;color:var(--ink-3);text-align:center">${escHtml(topics)}</div>` : ''}
               </div>
             `;
+            hydrateImages(document.getElementById('pvDiagram'));
           }).catch(() => {
             document.getElementById('pvDiagram').innerHTML = '<div style="padding:10px;color:var(--ink-3);font-size:12px">(Diagram load failed)</div>';
           });
@@ -1939,7 +1974,7 @@
         const topicsLbl = (d.topics || []).slice(0, 2).join(' · ') + ((d.topics || []).length > 2 ? ` (+${d.topics.length - 2})` : '');
         body.innerHTML = `
           <div class="qe-diagram-thumb">
-            <img src="${escAttr(d.imageURL)}" alt="${escAttr(d.description || d.imageName || 'diagram')}">
+            <img src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(d.storagePath || '')}" alt="${escAttr(d.description || d.imageName || 'diagram')}">
             <div class="qe-diagram-meta">
               <div class="qe-diag-cat">${escHtml(d.category || 'diagram')} · ${escHtml(d.subjectId || '')}</div>
               <div class="qe-diag-desc">${escHtml(d.description || d.imageName || 'Untitled diagram')}</div>
@@ -1951,6 +1986,7 @@
             <button type="button" class="qe-diag-remove" id="qeDiagRemove">Remove</button>
           </div>
         `;
+        hydrateImages(body);
       }
       // Wire actions.
       const pick = body.querySelector('#qeDiagPick') || body.querySelector('#qeDiagChange');
@@ -2057,7 +2093,7 @@
         const usedIn = Array.isArray(d.usedInItemIds) ? d.usedInItemIds.length : 0;
         return `
           <div class="dp-card" data-diagram-id="${escAttr(d.id)}">
-            <div class="dp-card-img-wrap"><img src="${escAttr(d.imageURL)}" alt="${escAttr(desc)}" loading="lazy"></div>
+            <div class="dp-card-img-wrap"><img src="${PLACEHOLDER_SRC}" data-storage-path="${escAttr(d.storagePath || '')}" alt="${escAttr(desc)}" loading="lazy"></div>
             <div class="dp-card-desc">${escHtml(desc)}</div>
             <div class="dp-card-meta">
               <span class="dp-pill dp-pill-subj">${escHtml(d.subjectId || '—')}</span>
@@ -2068,6 +2104,7 @@
           </div>
         `;
       }).join('');
+      hydrateImages(grid);
       grid.querySelectorAll('.dp-card[data-diagram-id]').forEach(card => {
         card.addEventListener('click', () => pickDiagram(card.dataset.diagramId));
       });
