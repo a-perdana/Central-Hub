@@ -445,7 +445,7 @@
       <button id="fSearchClear" class="search-clear" type="button" aria-label="Clear search" title="Clear search">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-      <span class="search-scope" title="Stem search runs over the 25 items currently on screen — not the full bank. Narrow with the filters below to bring the items you want into view first.">page-scoped</span>
+      <span class="search-scope" title="Searches the whole bank via per-item searchTokens. ≥3 chars required. Returns up to 50 matches; narrow the term if you see the cap.">bank-wide</span>
     </div>
     <div class="toolbar">
       <span class="filter-label">Filter</span>
@@ -630,24 +630,85 @@
     document.getElementById('fYear').addEventListener('change', resetAndReload);
     document.getElementById('fType').addEventListener('change', resetAndReload);
     document.getElementById('fSource').addEventListener('change', resetAndReload);
-    // Search is client-side WITHIN the current page (cheap). Putting
-    // a full-bank text search behind getDocs would need a build-time
-    // index — out of scope here. Tooltip + scope chip hint at the limit.
+    // Search runs against the full bank via `searchTokens[]`
+    // array-contains. Debounced (300ms) so each keystroke isn't a
+    // Firestore read; falls back to the page-paged list when the
+    // input is empty.
+    let searchMode = false;
+    let searchResults = [];
+    let searchDebounceTimer = null;
     {
       const input = document.getElementById('fSearch');
       const bar = document.getElementById('searchBar');
       const clear = document.getElementById('fSearchClear');
       const sync = () => bar.classList.toggle('has-value', !!input.value);
-      input.addEventListener('input', () => { sync(); renderPage(); });
+      const trigger = () => {
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        const term = input.value.trim().toLowerCase();
+        if (!term) {
+          searchMode = false;
+          searchResults = [];
+          renderPage();
+          return;
+        }
+        // Need ≥3 chars to match a token; short queries would scan
+        // tens of thousands of docs for nothing useful.
+        if (term.length < 3) {
+          renderPage(); // shows the short-query hint
+          return;
+        }
+        searchDebounceTimer = setTimeout(() => runBankSearch(term), 280);
+      };
+      input.addEventListener('input', () => { sync(); trigger(); });
       clear.addEventListener('click', () => {
-        input.value = ''; sync(); renderPage(); input.focus();
+        input.value = ''; sync(); searchMode = false; searchResults = [];
+        renderPage(); input.focus();
       });
-      // Esc clears the field — keyboard parity with the clear button.
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && input.value) {
-          e.preventDefault(); input.value = ''; sync(); renderPage();
+          e.preventDefault();
+          input.value = ''; sync(); searchMode = false; searchResults = [];
+          renderPage();
         }
       });
+    }
+
+    // Bank-wide search via `searchTokens` array-contains. Picks the
+    // first whitespace-split word ≥3 chars (Firestore allows only a
+    // single array-contains per query). Caps results at 50 — a
+    // larger window would mean either pagination state for search
+    // (complex) or running up against composite-index limits when
+    // combined with other filters.
+    async function runBankSearch(term) {
+      const word = term.split(/\s+/).find(w => w.length >= 3);
+      if (!word) { searchMode = false; renderPage(); return; }
+      searchMode = true;
+      try {
+        const col = collection(window.db, 'ease_items');
+        // No other filters in this MVP — composite index per
+        // combination would balloon. UX: user clears filters or
+        // narrows the term itself; future step can layer one
+        // common filter (subjectId) once the search shape stabilises.
+        const q = query(col, where('searchTokens', 'array-contains', word), limit(50));
+        const snap = await getDocs(q);
+        searchResults = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Further client-side narrowing on the full term — array-
+        // contains matches one token, but the user may have typed
+        // multiple words ("photo synth"). Filter the 50-doc window
+        // against the joined term so multi-word matches refine.
+        const all = term.split(/\s+/).filter(w => w.length >= 3);
+        if (all.length > 1) {
+          searchResults = searchResults.filter(it => {
+            const tokens = it.searchTokens || [];
+            return all.every(w => tokens.includes(w));
+          });
+        }
+        renderPage();
+      } catch (e) {
+        console.warn('[ease-item-author] bank search failed', e);
+        searchResults = [];
+        renderPage();
+      }
     }
     document.getElementById('newItemBtn').addEventListener('click', () => openItem(null));
 
@@ -991,22 +1052,26 @@
     }
 
     function renderPage() {
-      // Client-side stem search WITHIN the loaded page only.
-      const search = (document.getElementById('fSearch').value || '').trim().toLowerCase();
-      const visible = !search
-        ? pageItems
-        : pageItems.filter(it => (it.stem || '').toLowerCase().includes(search));
+      // Two list sources:
+      //   - searchMode: Firestore-fetched bank-wide matches (≤50)
+      //   - default:    cursor-paginated page items
+      const searchRaw = document.getElementById('fSearch').value || '';
+      const search = searchRaw.trim().toLowerCase();
+      const shortQuery = search.length > 0 && search.length < 3 && !searchMode;
+      const visible = searchMode ? searchResults : pageItems;
 
       const box = document.getElementById('itemsBox');
-      if (visible.length === 0) {
+      if (visible.length === 0 || shortQuery) {
         const hasFilter = !!(document.getElementById('fSubject').value
           || document.getElementById('fDifficulty').value
           || document.getElementById('fYear').value
           || document.getElementById('fType').value
           || document.getElementById('fSource').value);
         let msg;
-        if (search) {
-          msg = 'No match on this page. Stem search is page-scoped — narrow by subject / difficulty / type first, or clear the search.';
+        if (shortQuery) {
+          msg = 'Keep typing — bank search needs at least 3 characters.';
+        } else if (searchMode) {
+          msg = `No items match "${escHtml(searchRaw)}" anywhere in the bank. Try a different word or check spelling.`;
         } else if (hasFilter) {
           msg = 'No items match these filters. Try clearing one.';
         } else {
@@ -1238,11 +1303,19 @@
     }
 
     function renderPager() {
+      const wrap = document.getElementById('pager');
+      if (!wrap) return;
+      // In search mode there's no pagination — show a one-line
+      // result summary instead so the user knows the cap is real.
+      if (searchMode) {
+        const n = searchResults.length;
+        const capped = n === 50;
+        wrap.innerHTML = `<span style="font-size:13px;color:var(--ink-3)">${n} match${n === 1 ? '' : 'es'}${capped ? ' (capped at 50 — narrow the term for more)' : ''}</span>`;
+        return;
+      }
       const lastPage = totalCount != null ? Math.max(0, Math.ceil(totalCount / PAGE_SIZE) - 1) : null;
       const from = totalCount === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
       const to = Math.min((pageIndex + 1) * PAGE_SIZE, totalCount ?? (pageIndex * PAGE_SIZE + pageItems.length));
-      const wrap = document.getElementById('pager');
-      if (!wrap) return;
       wrap.innerHTML = `
         <button class="btn-secondary" id="pagePrev" ${pageIndex === 0 ? 'disabled' : ''}>‹ Prev</button>
         <span style="font-size:13px;color:var(--ink-3);padding:0 10px">
@@ -1750,6 +1823,42 @@
       if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
     }
 
+    // Build a small token array for full-bank stem search via
+    // `array-contains`. Lowercase, alphanumeric-only, ≥3 chars,
+    // common stop-words filtered, capped at 60 unique tokens so a
+    // long stem can't blow up the doc size. Mirrors the algorithm
+    // in scripts/ease/build-search-tokens.js (Node port) — keep
+    // both in sync if you tweak the rules.
+    const STOP_WORDS = new Set([
+      'the','and','for','are','but','not','you','your','our','all',
+      'any','one','two','three','from','into','onto','also','can','may',
+      'with','that','this','these','those','what','which','when','where',
+      'why','how','who','whom','whose','was','were','has','have','had',
+      'will','would','should','could','must','about','above','below',
+      'between','during','than','then','their','there','them','they',
+      'his','her','its','him','she','only','very','some','most','more',
+      'less','such','same','each','every','other','another','also','just',
+      'over','under','before','after','between','through','within','without',
+    ]);
+    function buildSearchTokens(stem) {
+      if (!stem) return [];
+      const out = new Set();
+      const cleaned = String(stem)
+        .toLowerCase()
+        // Strip LaTeX command names + surrounding braces so `\frac{x}{y}`
+        // doesn't pollute tokens. Keeps the variable letters as words.
+        .replace(/\\[a-z]+\b/gi, ' ')
+        .replace(/[{}()[\]^_$=<>+\-*\/\\|]/g, ' ');
+      for (const raw of cleaned.split(/[^a-z0-9]+/)) {
+        if (raw.length < 3) continue;
+        if (STOP_WORDS.has(raw)) continue;
+        if (/^\d+$/.test(raw) && raw.length < 4) continue; // skip 1-3 digit numbers (too noisy)
+        out.add(raw);
+        if (out.size >= 60) break;
+      }
+      return Array.from(out);
+    }
+
     async function save(corePayload) {
       try {
         const payload = {
@@ -1760,6 +1869,7 @@
           pilotPhase: true,
           seenCount:  0,
           correctRate: null,
+          searchTokens: buildSearchTokens(corePayload.stem),
           authorUid:  window.currentUser.uid,
           updatedAt:  serverTimestamp(),
         };
