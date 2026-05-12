@@ -3337,6 +3337,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
     import { getFunctions, httpsCallable }
       from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+    import { getStorage, ref as storageRef, getDownloadURL }
+      from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
     const PAGE_SIZE = 25;
     const VALID_TOPIC_GROUPS = ['number','algebra','geometry','statistics','probability','problem-solving','mixed'];
@@ -3452,6 +3454,51 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Storage image hydration — same pattern as practice-bank-admin.
+    // Practice items' stem + option HTML carry <img data-storage-path="…">
+    // pointing at `practice-diagrams/{subject}/{filename}` in the CH
+    // bucket. Bucket isn't public, so we need a signed download URL via
+    // Firebase Storage SDK (auth != null storage rule).
+    // ─────────────────────────────────────────────────────────────
+    const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+    const urlCache = new Map();
+    let _paStorage = null;
+    function paStorage() {
+      if (!_paStorage) _paStorage = getStorage(window.firebaseApp);
+      return _paStorage;
+    }
+    function resolveImageUrl(path) {
+      if (!path) return Promise.resolve(null);
+      if (urlCache.has(path)) return urlCache.get(path);
+      const p = getDownloadURL(storageRef(paStorage(), path)).catch(e => {
+        console.warn('[pa-author] getDownloadURL failed for', path, e.code || e.message);
+        urlCache.delete(path);
+        return null;
+      });
+      urlCache.set(path, p);
+      return p;
+    }
+    function hydrateImages(root) {
+      const scope = root || document;
+      scope.querySelectorAll('img[data-storage-path]').forEach(img => {
+        if (img.dataset.hydrated === '1') return;
+        const p = img.getAttribute('data-storage-path');
+        if (!p) {
+          img.dataset.hydrated = '1';
+          img.alt = img.alt || 'image unavailable';
+          img.title = 'Image source missing in CH bucket — re-run the copy script.';
+          img.style.opacity = '0.4';
+          return;
+        }
+        img.dataset.hydrated = '1';
+        resolveImageUrl(p).then(url => {
+          if (url) img.src = url;
+          else { img.style.opacity = '0.4'; img.title = 'Image could not be loaded.'; }
+        });
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────
     function $(id) { return document.getElementById(id); }
@@ -3478,7 +3525,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const tpl = document.createElement('template');
       tpl.innerHTML = String(html);
       const ALLOWED = new Set(['P','SPAN','IMG','BR','STRONG','EM','B','I','U','UL','OL','LI','TABLE','TR','TD','TH','TBODY','THEAD','SUP','SUB','DIV']);
-      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading']), '*': new Set([]) };
+      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading','data-storage-path','data-storage-missing']), '*': new Set([]) };
       function walk(node) {
         for (const child of [...node.childNodes]) {
           if (child.nodeType !== 1) continue;
@@ -3634,6 +3681,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         b.addEventListener('click', () => previewItem(b.dataset.id));
       });
       typeset(tbody);
+      hydrateImages(tbody);
     }
 
     function updatePager(currentRows) {
@@ -3671,6 +3719,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       $('pvMeta').innerHTML = metaParts.join(' &nbsp;·&nbsp; ') || '';
       $('pvOverlay').classList.add('open');
       typeset($('pvOverlay'));
+      hydrateImages($('pvOverlay'));
     }
 
     async function fetchItem(id) {
@@ -3739,6 +3788,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         b.addEventListener('click', () => removeFromBasket(b.dataset.remove));
       });
       typeset(list);
+      hydrateImages(list);
 
       const total = state.assessment.itemIds.length;
       $('basketMix').innerHTML = ['easy','medium','hard'].map(k =>
@@ -3838,6 +3888,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       });
       typeset(wrap);
+      hydrateImages(wrap);
     }
 
     function addAllAiSuggestions() {
