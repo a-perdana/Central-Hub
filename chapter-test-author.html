@@ -345,6 +345,49 @@
       background: #fff; color: var(--ink-2); border: 1px solid var(--border);
       font-family: 'DM Mono', ui-monospace, monospace; text-transform: none; letter-spacing: 0;
     }
+    #bankPickerModal .bp-preview-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 99px;
+      background: #fff; color: var(--accent-dk);
+      border: 1px solid #c4b5fd; cursor: pointer;
+      font-family: inherit; font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    #bankPickerModal .bp-preview-btn:hover {
+      background: var(--accent); color: #fff; border-color: var(--accent);
+    }
+    #bankPickerModal .bp-preview-btn svg { display: block; }
+
+    /* Preview modal — full question render */
+    #bpPreviewModal .pv-stem {
+      font-size: 15px; line-height: 1.6; color: var(--ink);
+      margin-bottom: 16px;
+    }
+    #bpPreviewModal .pv-stem img { max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; }
+    #bpPreviewModal .pv-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    #bpPreviewModal .pv-option {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+      background: #fff; font-size: 14px; line-height: 1.5;
+    }
+    #bpPreviewModal .pv-option.is-correct { background: #ecfdf5; border-color: #6ee7b7; }
+    #bpPreviewModal .pv-option-letter { font-weight: 700; min-width: 22px; color: var(--ink-2); }
+    #bpPreviewModal .pv-option-body { flex: 1; min-width: 0; }
+    #bpPreviewModal .pv-option-body img { max-width: 100%; height: auto; border-radius: 4px; }
+    #bpPreviewModal .pv-correct-tag { font-size: 11px; color: #047857; font-weight: 600; flex-shrink: 0; }
+    #bpPreviewModal .pv-answer-box {
+      padding: 10px 14px; background: #ecfdf5; border: 1px solid #6ee7b7;
+      border-radius: 10px; font-size: 14px; margin-bottom: 14px;
+    }
+    #bpPreviewModal .pv-explain {
+      padding: 12px 14px; background: #fafaf8; border: 1px solid var(--border);
+      border-radius: 10px; font-size: 13px; line-height: 1.55; color: var(--ink-2);
+    }
+    #bpPreviewModal .pv-section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--ink-3); margin-bottom: 6px;
+    }
     #bankPickerModal .bp-empty  { padding: 36px 22px; text-align: center; font-size: 13px; color: var(--ink-3); }
     #bankPickerModal .bp-foot {
       display: flex; justify-content: space-between; align-items: center;
@@ -622,6 +665,19 @@
           <button class="btn-primary"   id="bpAdd"    type="button" disabled>Add selected</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Item preview modal — full stem + options + answer + explanation,
+       opened from the eye button on bank picker rows. -->
+  <div id="bpPreviewModal" class="modal-overlay" role="dialog" aria-hidden="true" style="z-index: 120; padding: 24px 16px;">
+    <div class="modal" style="width: min(720px, 100%); max-width: 720px; max-height: calc(100vh - 48px);">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 22px 0;">
+        <h2 style="font-family:'Lora',serif; font-size:1.15rem; margin:0;">Question preview</h2>
+        <button type="button" class="btn-secondary" id="bpPreviewClose">Close</button>
+      </div>
+      <div id="bpPreviewMeta" style="padding:6px 22px 0; font-size:11.5px; color:var(--ink-3);"></div>
+      <div class="modal-body" id="bpPreviewBody" style="padding:14px 22px 22px;"></div>
     </div>
   </div>
 
@@ -1440,6 +1496,10 @@
           <div class="bp-row-body">
             <div class="bp-row-stem">${stemMarkup}</div>
             <div class="bp-row-meta">
+              <button type="button" class="bp-preview-btn" data-preview="${escAttr(it.id)}" title="Preview full question" aria-label="Preview question">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Preview
+              </button>
               <span class="pill">${escHtml(SUBJ_LABEL[it.subjectId] || it.subjectId || '—')}</span>
               ${isLatihan && it.discipline ? `<span class="pill discipline">${escHtml(it.discipline)}</span>` : ''}
               <span class="pill">Y${escHtml(stageLabel)}</span>
@@ -1459,15 +1519,24 @@
           </div>
         </div>`;
       }).join('');
-      // Row click anywhere toggles selection (except on the checkbox itself,
-      // which has its own native handler).
+      // Row click anywhere toggles selection (except on the checkbox itself
+      // + the Preview button, which have their own handlers).
       list.querySelectorAll('.bp-row').forEach(row => {
         row.addEventListener('click', e => {
           if (e.target.tagName === 'INPUT') return;
+          if (e.target.closest('.bp-preview-btn')) return;
           const cb = row.querySelector('input[type="checkbox"]');
           if (!cb || cb.disabled) return;
           cb.checked = !cb.checked;
           cb.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      });
+      list.querySelectorAll('.bp-preview-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const id = btn.dataset.preview;
+          const it = bpState.pageItems.find(x => x.id === id);
+          if (it) openBpPreview(it);
         });
       });
       list.querySelectorAll('input[type="checkbox"][data-pick]').forEach(cb => {
@@ -1497,6 +1566,115 @@
       if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([list]).catch(() => {});
       }
+    }
+
+    // Full-question preview modal — surfaces stem + options + correct
+    // answer + explanation so the author knows what they're picking
+    // without having to add it first and look it up in the editor.
+    function openBpPreview(it) {
+      const modal = document.getElementById('bpPreviewModal');
+      const body  = document.getElementById('bpPreviewBody');
+      const meta  = document.getElementById('bpPreviewMeta');
+
+      // Header meta line — same pills as the row, slightly larger.
+      const pieces = [];
+      pieces.push(SUBJ_LABEL[it.subjectId] || it.subjectId || '—');
+      const stageLabel = it.stage || it.stage_min;
+      if (stageLabel) pieces.push('Y' + stageLabel);
+      if (it.difficulty) pieces.push(it.difficulty);
+      if (it.type) pieces.push(it.type);
+      if (it.unitCode) pieces.push(it.unitCode);
+      if (it.source === 'latihan' && it.sourceCode) pieces.push('latihan · ' + it.sourceCode);
+      meta.textContent = pieces.join(' · ');
+
+      // Stem (rich HTML preferred, fall back to plain text)
+      const stemHtml = it.stemHtml
+        ? sanitisePreviewHtml(it.stemHtml)
+        : escHtml(it.stem || '(no stem)');
+      let html = `<div class="pv-stem">${stemHtml}</div>`;
+
+      // Options (MCQ) with correct-answer highlight
+      if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length > 0) {
+        const opts = (Array.isArray(it.optionsHtml) && it.optionsHtml.length === it.options.length)
+          ? it.optionsHtml
+          : it.options;
+        html += '<div class="pv-options">';
+        for (let i = 0; i < opts.length; i++) {
+          const isCorrect = (typeof it.correctIdx === 'number' && it.correctIdx === i);
+          const oHtml = (typeof opts[i] === 'string' && opts[i].trim().startsWith('<'))
+            ? sanitisePreviewHtml(opts[i])
+            : escHtml(opts[i] || '');
+          html += `
+            <div class="pv-option${isCorrect ? ' is-correct' : ''}">
+              <span class="pv-option-letter">${String.fromCharCode(65 + i)}</span>
+              <span class="pv-option-body">${oHtml}</span>
+              ${isCorrect ? '<span class="pv-correct-tag">✓ correct</span>' : ''}
+            </div>
+          `;
+        }
+        html += '</div>';
+      } else if (it.type === 'numeric' || it.type === 'short') {
+        const ans = it.correctAnswer != null && it.correctAnswer !== ''
+          ? escHtml(String(it.correctAnswer))
+          : '<span style="color:var(--ink-3)">(no canonical answer set)</span>';
+        html += `<div class="pv-answer-box"><b>Answer:</b> ${ans}</div>`;
+      }
+
+      if (it.explanation) {
+        html += `
+          <div class="pv-section-label">Explanation</div>
+          <div class="pv-explain">${sanitisePreviewHtml(it.explanation)}</div>
+        `;
+      }
+
+      body.innerHTML = html;
+      modal.classList.add('is-open');
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([modal]).catch(() => {});
+      }
+    }
+
+    function closeBpPreview() {
+      document.getElementById('bpPreviewModal').classList.remove('is-open');
+    }
+
+    // Less-strict sanitiser for the full preview modal — keep tables,
+    // images, structural tags so the author sees the same render as the
+    // student would. Mirrors ease-item-author's sanitisePreviewHtml().
+    function sanitisePreviewHtml(html) {
+      if (!html) return '';
+      const tpl = document.createElement('template');
+      tpl.innerHTML = String(html);
+      const ALLOWED = new Set(['P','SPAN','IMG','BR','STRONG','EM','B','I','U','UL','OL','LI','TABLE','TR','TD','TH','TBODY','THEAD','SUP','SUB','DIV','CODE','PRE']);
+      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading']), '*': new Set([]) };
+      function walk(node) {
+        for (const child of [...node.childNodes]) {
+          if (child.nodeType !== 1) continue;
+          if (!ALLOWED.has(child.tagName)) {
+            child.replaceWith(document.createTextNode(child.textContent || ''));
+            continue;
+          }
+          const okSet = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS['*'];
+          for (const attr of [...child.attributes]) {
+            if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+          }
+          if (child.tagName === 'IMG') {
+            const src = child.getAttribute('src') || '';
+            if (src && !/^https?:/i.test(src)) {
+              // Upstream sometimes emits `/storage/...` — rebase to latihan.id.
+              if (src.startsWith('/')) {
+                child.setAttribute('src', 'https://latihan.id' + src);
+              } else {
+                child.removeAttribute('src');
+              }
+            }
+            child.setAttribute('loading', 'lazy');
+          }
+          walk(child);
+        }
+      }
+      walk(tpl.content);
+      return tpl.innerHTML;
     }
 
     // Strip noisy tags from preview stems so the 3-line clamp stays clean.
@@ -1629,6 +1807,17 @@
       });
     });
     document.getElementById('bpSearch').addEventListener('input', applyBpSearch);
+
+    // Preview modal — Close button, ESC, click outside.
+    document.getElementById('bpPreviewClose').addEventListener('click', closeBpPreview);
+    document.getElementById('bpPreviewModal').addEventListener('click', e => {
+      if (e.target.id === 'bpPreviewModal') closeBpPreview();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && document.getElementById('bpPreviewModal').classList.contains('is-open')) {
+        closeBpPreview();
+      }
+    });
 
     // Item editor: mount shared rich editor (markdown + LaTeX + Cambridge metadata).
     // Working item lives in memory until the parent test is saved; new items get
