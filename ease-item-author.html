@@ -1653,45 +1653,81 @@
         }
         // Firestore writeBatch caps at 500 operations per commit. We
         // chunk at 400 deletes + 1 audit doc = 401 ops per batch,
-        // well under the ceiling. Future "select all across pages"
-        // feature still works without revisiting this loop.
+        // well under the ceiling. Partial-failure tracking: each
+        // chunk commits atomically (Firestore semantics — all-or-
+        // nothing per batch), but the loop spanning multiple chunks
+        // can leave a partial state if one chunk fails. We count
+        // ok vs failed and report both so HQ knows what actually
+        // landed.
         const CHUNK = 400;
         const chunkTotal = Math.ceil(ids.length / CHUNK);
         const actor = window.currentUser;
         const profile = window.userProfile || {};
+        const okIds = [];
+        const failures = []; // { chunkIndex, ids, error }
         for (let i = 0; i < ids.length; i += CHUNK) {
-          const batch = writeBatch(window.db);
+          const chunkIndex = Math.floor(i / CHUNK);
           const chunkIds = ids.slice(i, i + CHUNK);
           const chunkSnaps = snaps.slice(i, i + CHUNK);
-          chunkIds.forEach(id => {
-            batch.delete(doc(window.db, 'ease_items', id));
-          });
-          // Audit doc — auto-id so reads list chronologically by
-          // doc id (newer ULIDs sort last; we order client-side by
-          // `at` anyway). Same batch ⇒ atomic with the deletes.
-          const auditRef = doc(collection(window.db, 'ease_items_audit'));
-          batch.set(auditRef, {
-            action: chunkIds.length === 1 ? 'delete' : 'bulk_delete',
-            actorUid: actor.uid,
-            actorEmail: actor.email || null,
-            actorRole: profile.role_centralhub || null,
-            at: serverTimestamp(),
-            itemIds: chunkIds,
-            itemSnapshots: chunkSnaps,
-            chunkIndex: Math.floor(i / CHUNK),
-            chunkTotal,
-          });
-          await batch.commit();
+          try {
+            const batch = writeBatch(window.db);
+            chunkIds.forEach(id => {
+              batch.delete(doc(window.db, 'ease_items', id));
+            });
+            // Audit doc — auto-id so reads list chronologically by
+            // doc id (newer ULIDs sort last; we order client-side by
+            // `at` anyway). Same batch ⇒ atomic with the deletes.
+            const auditRef = doc(collection(window.db, 'ease_items_audit'));
+            batch.set(auditRef, {
+              action: chunkIds.length === 1 ? 'delete' : 'bulk_delete',
+              actorUid: actor.uid,
+              actorEmail: actor.email || null,
+              actorRole: profile.role_centralhub || null,
+              at: serverTimestamp(),
+              itemIds: chunkIds,
+              itemSnapshots: chunkSnaps,
+              chunkIndex,
+              chunkTotal,
+            });
+            await batch.commit();
+            okIds.push(...chunkIds);
+          } catch (chunkErr) {
+            console.error(`[ease-item-author] chunk ${chunkIndex + 1}/${chunkTotal} failed`, chunkErr, { failedIds: chunkIds });
+            failures.push({ chunkIndex, ids: chunkIds, error: chunkErr });
+          }
         }
         closeDeleteModal();
-        toast(`Deleted ${ids.length.toLocaleString()} item${ids.length === 1 ? '' : 's'}.`);
+        if (failures.length === 0) {
+          toast(`Deleted ${okIds.length.toLocaleString()} item${okIds.length === 1 ? '' : 's'}.`);
+        } else if (okIds.length === 0) {
+          const first = failures[0].error;
+          toast(`Delete failed: ${first.message || first.code || 'unknown error'} — nothing was deleted.`);
+        } else {
+          // Partial — surface both halves so HQ knows where the
+          // bank actually stands. The console carries the full
+          // failed-ids list per chunk for forensics.
+          const failedCount = failures.reduce((n, f) => n + f.ids.length, 0);
+          toast(`Partial delete: ${okIds.length.toLocaleString()} succeeded, ${failedCount.toLocaleString()} failed. Check console for IDs.`);
+          console.warn('[ease-item-author] partial delete summary', {
+            succeeded: okIds.length,
+            failed: failedCount,
+            failedChunks: failures.map(f => ({
+              chunkIndex: f.chunkIndex,
+              ids: f.ids,
+              error: f.error.message || f.error.code || String(f.error),
+            })),
+          });
+        }
         clearSelection();
         await loadPage(pageIndex);
         loadStats();
         loadFirstPage();
       } catch (e) {
-        console.error('[ease-item-author] delete failed', e);
-        toast('Delete failed: ' + (e.message || e.code));
+        // Reached only on programmer error inside the loop wrapper
+        // (Firestore errors are caught per-chunk above). Keep this
+        // path so a stray throw still reports cleanly.
+        console.error('[ease-item-author] delete handler crashed', e);
+        toast('Delete crashed: ' + (e.message || e.code));
         goBtn.disabled = false;
         goBtn.textContent = 'Delete items';
       }
