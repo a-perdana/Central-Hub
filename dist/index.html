@@ -4927,15 +4927,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <!-- /stats-row -->
 
       <!-- Personal Notes Widget (build-injected from partials/notes-widget.html) -->
-      <!-- ========================================================================
-     Personal Notes Widget — dashboard post-it strip
-     -------------------------------------------------------------------------
-     Self-contained: HTML + CSS + JS in one partial. Injected into index.html
-     by build.js via the <!-- NOTES_WIDGET --> placeholder.
-     Reads/writes user_notes/{noteId} (top-level, userId FK to users.uid).
-     Step 1 of the 3-step plan: hot-list strip on the dashboard. /notes full
-     page (Step 2) and school/user-link (Step 3) come later.
-     ===================================================================== -->
+      <!-- Personal notes widget — injected into index.html by build.js. -->
 <style>
   .notes-widget {
     background: #ffffff;
@@ -5407,7 +5399,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         grid.innerHTML = '';
         const e = document.createElement('div');
         e.className = 'notes-widget-empty';
-        e.innerHTML = '<strong>Could not load notes</strong>Check your connection and refresh.';
+        const isIndex = /index|requires an index/i.test(err?.message || '');
+        const isPerm  = /permission|insufficient/i.test(err?.message || '');
+        let msg = 'Check your connection and refresh.';
+        if (isIndex) msg = 'Firestore index is still building (this can take 1–5 minutes after deploy). Refresh shortly.';
+        else if (isPerm) msg = 'Firestore rule rejected the read. Check that user_notes rules are deployed.';
+        e.innerHTML = `<strong>Could not load notes</strong>${msg}`;
         grid.appendChild(e);
       });
 
