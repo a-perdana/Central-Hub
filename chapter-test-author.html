@@ -298,6 +298,33 @@
       font-family: 'Lora', serif; font-size: 1.3rem;
       padding: 24px 24px 0;  /* sticky-ish title region */
     }
+
+    /* Subject-aware accent for testModal + itemModal. `--subj-accent`
+       is set by applySubjectAccent() on the .modal element based on
+       the test envelope's Subject select. Falls back to brand mor
+       when the variable isn't set (no subject yet / item editor in
+       standalone mode). */
+    .modal { --subj-accent: var(--accent); }
+    .modal.is-subject-themed h2 {
+      border-top: 4px solid var(--subj-accent);
+      margin-top: -1px;
+      padding-top: 22px;
+    }
+    .modal.is-subject-themed .btn-primary {
+      background: var(--subj-accent);
+    }
+    .modal.is-subject-themed .btn-primary:hover {
+      filter: brightness(.92);
+    }
+    /* Linked-pacing banner picks up the subject hue too — kept light
+       so the test-modal layout stays scannable. */
+    .modal.is-subject-themed #pacingRefBanner {
+      background: color-mix(in srgb, var(--subj-accent) 10%, #fff);
+      border-color: color-mix(in srgb, var(--subj-accent) 45%, #fff);
+    }
+    .modal.is-subject-themed #pacingRefBanner > div > div:first-child {
+      color: var(--subj-accent);
+    }
     .modal-body {
       padding: 14px 24px 4px;
       overflow-y: auto;
@@ -875,6 +902,27 @@
       bahasa: '#db2777', religion: '#92400e',
     };
 
+    // Paint the test + item edit modals with the test envelope's
+    // subject accent — top stripe on the title, primary button tone,
+    // and the linked-pacing banner. Subject is the strongest signal
+    // when an HQ author has 8 subjects' chapter tests open in
+    // parallel; tinting the modal reduces "which test am I editing"
+    // mistakes. Falls back to brand mor when subject is unset.
+    function applySubjectAccent(subjectId) {
+      const colour = SUBJ_COLOR[subjectId] || '';
+      ['testModal', 'itemModal'].forEach(id => {
+        const modal = document.querySelector(`#${id} .modal`);
+        if (!modal) return;
+        if (colour) {
+          modal.style.setProperty('--subj-accent', colour);
+          modal.classList.add('is-subject-themed');
+        } else {
+          modal.style.removeProperty('--subj-accent');
+          modal.classList.remove('is-subject-themed');
+        }
+      });
+    }
+
     // Same searchTokens algorithm as /question-bank /ease-item-author
     // /scripts/ease/*. Drives bank-wide stem search via array-contains.
     // Keep in sync — if you change the algorithm in one place, mirror
@@ -1009,6 +1057,7 @@
       // editing an English test.
       document.getElementById('fSubject').addEventListener('change', () => {
         if (!stagedPacingRef) populateLinkerPacingOptions();
+        applySubjectAccent(document.getElementById('fSubject').value);
       });
 
       subscribe();
@@ -1794,6 +1843,7 @@
       refreshUnitCodeOptions();
       renderItems();
       syncItemButtons();
+      applySubjectAccent(document.getElementById('fSubject').value);
       document.getElementById('testModal').classList.add('is-open');
     }
 
@@ -2307,6 +2357,7 @@
       document.getElementById('itemModalTitle').textContent = idx >= 0 ? `Edit Q${idx+1}` : 'New item';
       const mount = document.getElementById('itemEditorMount');
       mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
+      applySubjectAccent(envCtx.subjectId);
       document.getElementById('itemModal').classList.add('is-open');
       activeItemEditor = await mountQuestionEditor(mount, {
         mode: 'chapter_test',
