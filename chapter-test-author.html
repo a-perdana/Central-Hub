@@ -1782,7 +1782,9 @@
                   + `<span class="pill latihan">latihan</span>`
                   + (it.cognitiveTag ? `<span class="pill">${escHtml(it.cognitiveTag)}</span>` : '')
                   + (it.hasDeadImage ? '<span class="pill" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">img 404</span>' : '')
-                : (it.unitCode ? `<span class="pill code">${escHtml(it.unitCode)}</span>` : '')
+                : (it.unitCode && !looksLikeSlug(it.unitCode)
+                    ? `<span class="pill code">${escHtml(it.unitCode)}</span>`
+                    : '')
                   + (Array.isArray(it.cambridgeStandardRefs)
                       ? it.cambridgeStandardRefs
                           .filter(r => r && r !== it.unitCode)
@@ -1796,7 +1798,7 @@
                       : (usedCount > 0 ? `<span class="pill">used in ${usedCount} test${usedCount === 1 ? '' : 's'}</span>` : ''))
               }
             </div>
-            ${!isLatihan && it.syllabusObjective
+            ${!isLatihan && it.syllabusObjective && !objectiveEchoesUnitTitle(it.syllabusObjective, it.unitTitle)
               ? `<div class="bp-row-syllabus" title="${escAttr(it.syllabusObjective)}"><b>Syllabus:</b> ${escHtml(it.syllabusObjective)}</div>`
               : ''}
           </div>
@@ -2327,6 +2329,31 @@
       })[c]);
     }
     function escAttr(s) { return escHtml(s); }
+
+    // unitCode comes from many sources — proper Cambridge codes (e.g.
+    // `7Ni.04`, `C1.6`, `B21`) AND legacy slugs from the IGCSE Tools
+    // bulk import (e.g. `biotechnology-and-genetic-modification`).
+    // The slugs add zero information next to the Cambridge ref chips
+    // — they're just lowercase titles with hyphens — so skip them in
+    // the row pill. Heuristic: hyphenated AND no digits OR > 14 chars.
+    function looksLikeSlug(s) {
+      const v = String(s || '').trim();
+      if (!v) return false;
+      if (!/-/.test(v)) return false;
+      // Pure lowercase + hyphens, no Cambridge dot-decimal pattern → slug.
+      if (/^[a-z][a-z0-9-]*$/.test(v) && !/\d+\.\d+/.test(v)) return true;
+      return false;
+    }
+
+    // Phase-A auto-tagger seeded `syllabusObjective = chapter title`
+    // as a placeholder until topic-level refinement (Phase B). When
+    // that placeholder equals the test envelope's `unitTitle`, the
+    // chip duplicates information and adds visual noise. Hide it.
+    function objectiveEchoesUnitTitle(obj, unitTitle) {
+      if (!obj || !unitTitle) return false;
+      const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      return norm(obj) === norm(unitTitle);
+    }
   </script>
 </body>
 </html>
