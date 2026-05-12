@@ -299,15 +299,18 @@
     }
     .uc-dd-item {
       padding: 8px 14px; font-size: 13px; cursor: pointer;
-      display: flex; align-items: baseline; gap: 10px;
+      display: flex; align-items: flex-start; gap: 10px;
     }
     .uc-dd-item:hover { background: #f5f3ff; }
     .uc-dd-code {
       font-family: 'Roboto Mono', ui-monospace, monospace;
       font-size: 12px; font-weight: 600; color: var(--accent-dk);
       flex-shrink: 0; min-width: 60px;
+      padding-top: 1px;
     }
-    .uc-dd-topic { color: var(--ink-2); flex: 1; min-width: 0; }
+    .uc-dd-topic { color: var(--ink-2); flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .uc-dd-topic-line { display: block; line-height: 1.35; }
+    .uc-dd-topic-empty { color: var(--ink-3); font-style: italic; }
     .uc-dd-hint {
       padding: 6px 14px; font-size: 10.5px; color: var(--ink-3);
       letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
@@ -1320,8 +1323,15 @@
           }
         }
         unitCodeOptionsCache = Array.from(byCode.values()).map(o => ({
-          code:  o.code,
-          topic: o.topics.length > 0 ? o.topics.join(' · ') : '',
+          code:   o.code,
+          // Keep a joined fallback for any caller that wants a single string
+          // (envCtx → openItemModal feeds this into the new-item editor as
+          // syllabusObjective placeholder), but also surface the raw list
+          // so the dropdown can render each topic on its own line — Cambridge
+          // syllabus often groups multiple coursebook topics under one ref
+          // (e.g. Biology Ch 5: both 5.1 + 5.2 map to syllabus ref 5.1).
+          topic:  o.topics.length > 0 ? o.topics.join(' · ') : '',
+          topics: o.topics.slice(),
         }));
 
         input.placeholder = unitCodeOptionsCache.length > 0
@@ -1354,12 +1364,22 @@
         : '';
       dd.innerHTML =
         (hintLabel ? `<div class="uc-dd-hint">${hintLabel}</div>` : '') +
-        unitCodeOptionsCache.map(o => `
-          <div class="uc-dd-item" data-code="${escAttr(o.code)}" role="option">
-            <span class="uc-dd-code">${escHtml(o.code)}</span>
-            <span class="uc-dd-topic">${escHtml(o.topic)}</span>
-          </div>
-        `).join('');
+        unitCodeOptionsCache.map(o => {
+          const topics = Array.isArray(o.topics) && o.topics.length > 0
+            ? o.topics
+            : (o.topic ? [o.topic] : []);
+          const topicsMarkup = topics.length === 0
+            ? '<span class="uc-dd-topic uc-dd-topic-empty">—</span>'
+            : `<span class="uc-dd-topic">${topics.map(t =>
+                `<span class="uc-dd-topic-line">${escHtml(t)}</span>`
+              ).join('')}</span>`;
+          return `
+            <div class="uc-dd-item" data-code="${escAttr(o.code)}" role="option">
+              <span class="uc-dd-code">${escHtml(o.code)}</span>
+              ${topicsMarkup}
+            </div>
+          `;
+        }).join('');
       dd.querySelectorAll('.uc-dd-item').forEach(el => {
         el.addEventListener('click', () => {
           const input = document.getElementById('fUnitCode');

@@ -175,6 +175,35 @@ service firebase.storage {
              .data.role_centralhub == 'central_admin';
     }
 
+    // Practice bank diagrams (2026-05-12). Migrated from IGCSE Tools
+    // (`igcse-tools.firebasestorage.app`) into the CH bucket at the
+    // path `practice-diagrams/{subjectId}/{filename}` by the
+    // `scripts/migration/copy-igcse-math-images-to-ch-bucket.js`
+    // pre-step before the `practice_questions` Firestore import runs.
+    //
+    // Read is open to any signed-in user (including active students)
+    // because the SH gamification UI fetches images directly via
+    // `diagramUrl`. Write/delete mirror the `/diagrams` boundary:
+    // admin + CH coordinator can write; admin-only delete. ≤5 MB,
+    // image/* only.
+    match /practice-diagrams/{subjectId}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+              .data.role_centralhub == 'central_admin'
+            || (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                  .data.role_centralhub == 'central_user'
+                && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                     .data.ch_sub_roles is list
+                && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                     .data.ch_sub_roles.hasAny(['coordinator'])))
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin';
+    }
+
     // Mail-composer image embeds. Quill's "image" toolbar button uploads
     // here instead of inlining base64 — Gmail silently drops data:image
     // URIs in newsletters, but external <img src=https://...> renders

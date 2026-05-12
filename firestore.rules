@@ -393,6 +393,44 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // -- practice_questions (2026-05-12) ---------------------
+    // Supplemental, curriculum-adjacent bank. NOT wired into the
+    // formal assessment flow — kept separate from chapter_test_items
+    // (network-uniform formal bank) and ease_items (calibrated EASE
+    // growth bank). Today populated entirely by the IGCSE Tools
+    // ExamView import (Pearson Pre-Algebra / Algebra / Geometry /
+    // Pre-Calculus textbook chapters, math only). Future imports of
+    // other ExamView decks land here too.
+    //
+    // Intended use is SH-side tournaments / leaderboards / daily-
+    // challenge gamification. Active students need read access so the
+    // gamification UI can pull items directly. Authoring boundary
+    // mirrors chapter_test_items + ease_items: admin + CH coordinator
+    // for create/update, delete admin-only.
+    //
+    // Public unauth read is intentionally OFF (despite some upstream
+    // questions carrying isPublic) — Pearson textbook origin is pilot-
+    // internal only. Active-student is the lowest read tier.
+    match /practice_questions/{itemId} {
+      allow get, list: if isAuthorized() || isActiveStudent();
+      allow create, update: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+    }
+
+    // Append-only audit trail for practice_questions operations.
+    // Same lifecycle as chapter_test_items_audit / ease_items_audit:
+    // written client-side (or by admin-SDK migration scripts) inside
+    // the same writeBatch as the action so the record can't go
+    // missing. The 'import' action covers bulk seeding from external
+    // sources (IGCSE Tools ExamView migration onwards).
+    match /practice_questions_audit/{auditId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.actorUid == request.auth.uid
+                    && request.resource.data.action in ['delete', 'bulk_delete', 'restore', 'create', 'update', 'import', 'flag', 'unflag'];
+      allow update, delete: if false;
+    }
+
     // -- scheduled_sessions ----------------------------------
     // A teacher schedules a published chapter_test for one of their
     // classes. Each session writes N draft chapter_test_attempts (one
