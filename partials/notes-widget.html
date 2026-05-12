@@ -458,6 +458,14 @@
       let mineCache = [];
       let teamCache = [];
       let pendingHighlightId = null;
+      // Notes currently being typed in (debounce save in flight). We
+      // skip re-rendering these from snapshot so the contentEditable
+      // caret + expanded state aren't yanked out from under the user.
+      const dirtyNotes = new Set();
+      // Cards we've already painted, by id → DOM node. Lets us update
+      // metadata (timestamp, attachments) on a card without re-creating
+      // it, which would also blow away the caret.
+      const cardNodes = new Map();
 
       const showSaving = (on) => savingEl.classList.toggle('is-on', on);
       const beginWrite = () => { inFlight++; showSaving(true); };
@@ -470,6 +478,7 @@
 
       const saveTimers = new Map();
       function scheduleSave(noteId, patch) {
+        dirtyNotes.add(noteId);
         clearTimeout(saveTimers.get(noteId));
         saveTimers.set(noteId, setTimeout(async () => {
           try {
@@ -481,7 +490,13 @@
           } catch (err) {
             console.warn('[notes] update failed', err);
             showError('Could not save note. Please try again.');
-          } finally { endWrite(); }
+          } finally {
+            endWrite();
+            // Hold the dirty flag a hair longer than the snapshot
+            // round-trip so the listener can echo our own write
+            // without re-rendering the card we're typing in.
+            setTimeout(() => dirtyNotes.delete(noteId), 600);
+          }
         }, 500));
       }
 
@@ -694,20 +709,42 @@
           e.stopPropagation();
           const nowExpanded = card.classList.toggle('is-expanded');
           readMoreBtn.textContent = nowExpanded ? 'Show less' : 'Read more';
+          // If owner expands, drop the caret at the end of the body
+          // so they can keep typing without an extra click.
+          if (nowExpanded && isOwner) {
+            body.focus();
+            try {
+              const range = document.createRange();
+              range.selectNodeContents(body);
+              range.collapse(false);
+              const s = window.getSelection();
+              s.removeAllRanges();
+              s.addRange(range);
+            } catch (_) { /* best-effort */ }
+          }
         });
 
         if (isOwner) {
           body.contentEditable = 'true';
+          // Focusing the body to type → expand immediately so the
+          // user never has to click "Read more" first.
+          body.addEventListener('focus', () => {
+            if (!card.classList.contains('is-expanded')) {
+              card.classList.add('is-expanded');
+              readMoreBtn.textContent = 'Show less';
+            }
+          });
           body.addEventListener('input', () => {
             scheduleSave(noteId, { body: body.textContent.slice(0, 4000) });
-            // While typing, expand so nothing is hidden behind the clamp.
-            // Don't toggle the button label — typing isn't a manual "read more".
-            card.classList.add('is-expanded');
-            readMoreBtn.textContent = 'Show less';
+            // Make sure expanded stays on while typing (defence-in-depth
+            // in case some upstream code collapsed it).
+            if (!card.classList.contains('is-expanded')) {
+              card.classList.add('is-expanded');
+              readMoreBtn.textContent = 'Show less';
+            }
           });
           // Re-check overflow after edits stop (so a shrinking note hides the link).
           body.addEventListener('blur', () => {
-            // Brief delay so the contentEditable fully finalises
             setTimeout(() => recheckOverflow(card, body, readMoreRow, readMoreBtn), 30);
           });
         }
@@ -889,7 +926,7 @@
       }
 
       function renderActiveTab() {
-        // Preserve focus across re-renders
+        // Capture currently-focused card so caret survives the re-render.
         const focused = document.activeElement;
         const focusedId = focused?.closest?.('.note-card')?.dataset?.id;
         const focusedRole = focused?.classList?.contains('note-card-title') ? 'title'
@@ -897,27 +934,53 @@
         const sel = window.getSelection();
         const cursorOffset = sel && sel.focusNode ? sel.focusOffset : 0;
 
+        // Detach (don't destroy) any cards we're actively typing in,
+        // so we can re-attach them in their new position without
+        // clobbering the contentEditable state.
+        const detached = new Map();
+        dirtyNotes.forEach(id => {
+          const node = cardNodes.get(id);
+          if (node && node.parentNode === grid) {
+            grid.removeChild(node);
+            detached.set(id, node);
+          }
+        });
+
         grid.innerHTML = '';
+        cardNodes.clear();
+
+        let list;
         if (activeTab === 'mine') {
           // My Notes shows ONLY my private notes. Once a note is made
           // public it moves to the Team tab so the two views never
           // double-count it.
-          const privateOnly = mineCache.filter(({ data }) => !data.isPublic);
-          if (!privateOnly.length) {
+          list = mineCache.filter(({ data }) => !data.isPublic).map(x => ({ ...x, isOwner: true }));
+          if (!list.length) {
             grid.appendChild(renderEmpty('<strong>No private notes</strong>Click "New Note" to jot down something quickly. Public notes show up in the Team tab.'));
-          } else {
-            privateOnly.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, true)));
           }
         } else {
           // Team tab shows all public notes — including my own. Owner
           // controls (edit / colour / attach / delete) stay live for
           // the cards I own; other people's cards render read-only.
-          if (!teamCache.length) {
+          list = teamCache.map(x => ({ ...x, isOwner: x.data.userId === uid }));
+          if (!list.length) {
             grid.appendChild(renderEmpty('<strong>No team notes yet</strong>Toggle a note to Public (or wait for a teammate) to populate this tab.'));
-          } else {
-            teamCache.forEach(({ id, data }) => grid.appendChild(renderNote(data, id, data.userId === uid)));
           }
         }
+
+        list.forEach(({ id, data, isOwner }) => {
+          // Reuse the in-progress edit node if we have one — preserves
+          // the contentEditable caret + any local "is-expanded" state.
+          const reused = detached.get(id);
+          const node = reused || renderNote(data, id, isOwner);
+          if (reused) detached.delete(id);
+          grid.appendChild(node);
+          cardNodes.set(id, node);
+        });
+
+        // Anything left in `detached` is a card the new snapshot dropped
+        // (e.g. note made public while on My Notes). Discard.
+        detached.forEach(node => { /* GC'd */ });
 
         // After mount: decide which cards actually overflow + reveal "Read more".
         // requestAnimationFrame so layout has settled (line-clamp needs render pass).
