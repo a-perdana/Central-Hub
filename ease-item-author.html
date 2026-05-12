@@ -50,6 +50,45 @@
       .hero-kpi-num { font-size: 1.8rem; }
     }
     .page-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 32px 80px; }
+    /* Search-first bar — full-width, ikon-prefix, scope hint. Lives
+       above the dropdown toolbar so the 23k bank's primary action
+       (search the visible page) reads first. */
+    .search-bar {
+      display: flex; align-items: center; gap: 0;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 12px; padding: 4px 6px 4px 14px;
+      margin-bottom: 12px;
+      transition: border-color .12s ease, box-shadow .12s ease;
+    }
+    .search-bar:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108,92,231,.12);
+    }
+    .search-bar .search-ico {
+      width: 16px; height: 16px; color: var(--ink-3); flex-shrink: 0;
+    }
+    .search-bar input[type="search"] {
+      flex: 1 1 auto; min-width: 0;
+      padding: 11px 12px; font-family: inherit; font-size: 14px;
+      border: none; background: transparent; outline: none;
+      color: var(--ink);
+    }
+    .search-bar input[type="search"]::placeholder { color: var(--ink-3); }
+    .search-bar .search-scope {
+      font-size: 10.5px; color: var(--ink-3); font-weight: 500;
+      letter-spacing: .02em; padding: 0 12px;
+      border-left: 1px solid var(--border);
+      align-self: stretch; display: flex; align-items: center;
+      cursor: help;
+    }
+    .search-bar .search-clear {
+      width: 28px; height: 28px; border: none; background: transparent;
+      color: var(--ink-3); cursor: pointer; border-radius: 6px;
+      display: none; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .search-bar .search-clear:hover { background: var(--paper); color: var(--ink); }
+    .search-bar.has-value .search-clear { display: inline-flex; }
     .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
     .toolbar select, .toolbar input {
       padding: 7px 11px; font-family: inherit; font-size: 12.5px;
@@ -58,8 +97,14 @@
     }
     .toolbar select { padding-right: 28px; cursor: pointer; }
     .toolbar select:focus, .toolbar input:focus { outline: 1.5px solid var(--accent); outline-offset: -1px; }
-    .toolbar input[type="search"] { min-width: 240px; }
-    .btn-primary { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .toolbar .filter-label {
+      font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: .07em;
+      margin-right: 4px;
+    }
+    .btn-primary { padding: 9px 18px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(108,92,231,.18); transition: background .12s ease, transform .08s ease; }
+    .btn-primary:hover { background: var(--accent-dk); }
+    .btn-primary:active { transform: translateY(1px); }
     .btn-secondary { padding: 7px 14px; background: #fff; color: var(--ink); border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
     .btn-danger { padding: 7px 14px; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
 
@@ -305,8 +350,16 @@
 
     <div class="stat-row" id="statRow" style="margin-top:18px"></div>
 
+    <div class="search-bar" id="searchBar">
+      <svg class="search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="fSearch" type="search" placeholder="Search items on this page…" aria-label="Search items on this page">
+      <button id="fSearchClear" class="search-clear" type="button" aria-label="Clear search" title="Clear search">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="search-scope" title="Stem search runs over the 25 items currently on screen — not the full bank. Narrow with the filters below to bring the items you want into view first.">page-scoped</span>
+    </div>
     <div class="toolbar">
-      <input id="fSearch" type="search" placeholder="Search stem on this page…" title="Stem search filters the current page. Narrow first by subject / difficulty / type for a focused result set.">
+      <span class="filter-label">Filter</span>
       <select id="fSubject"><option value="">All subjects</option><option value="math">Math</option><option value="english">English</option><option value="science">Science</option></select>
       <select id="fDifficulty"><option value="">All difficulties</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
       <select id="fYear" title="Filtered by lowest target grade (stage_min)">
@@ -403,9 +456,44 @@
     document.getElementById('fSource').addEventListener('change', resetAndReload);
     // Search is client-side WITHIN the current page (cheap). Putting
     // a full-bank text search behind getDocs would need a build-time
-    // index — out of scope here. Tooltip hints at the scope.
-    document.getElementById('fSearch').addEventListener('input', renderPage);
+    // index — out of scope here. Tooltip + scope chip hint at the limit.
+    {
+      const input = document.getElementById('fSearch');
+      const bar = document.getElementById('searchBar');
+      const clear = document.getElementById('fSearchClear');
+      const sync = () => bar.classList.toggle('has-value', !!input.value);
+      input.addEventListener('input', () => { sync(); renderPage(); });
+      clear.addEventListener('click', () => {
+        input.value = ''; sync(); renderPage(); input.focus();
+      });
+      // Esc clears the field — keyboard parity with the clear button.
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && input.value) {
+          e.preventDefault(); input.value = ''; sync(); renderPage();
+        }
+      });
+    }
     document.getElementById('newItemBtn').addEventListener('click', () => openItem(null));
+
+    // Update the search placeholder once we know the bank size + the
+    // current view scope. Helps the user gauge what a page-scoped
+    // search actually runs over.
+    function updateSearchPlaceholder() {
+      const input = document.getElementById('fSearch');
+      if (!input) return;
+      const bank = (statTotals && typeof statTotals.total === 'number') ? statTotals.total : null;
+      if (bank == null) {
+        input.placeholder = 'Search items on this page…';
+        return;
+      }
+      // Show filtered-view count when filters are applied so the
+      // placeholder mirrors what's actually being searched into.
+      if (typeof totalCount === 'number' && totalCount !== bank) {
+        input.placeholder = `Search ${totalCount.toLocaleString()} filtered items (page-scoped)…`;
+      } else {
+        input.placeholder = `Search ${bank.toLocaleString()} items on this page…`;
+      }
+    }
 
     function buildQuerySig() {
       const subj = document.getElementById('fSubject').value;
@@ -485,6 +573,7 @@
         };
         renderStats();
         renderHeroKpis();
+        updateSearchPlaceholder();
       } catch (e) {
         console.warn('[ease-item-author] count() failed', e);
       } finally {
@@ -689,6 +778,7 @@
         const c = await getCountFromServer(query(col, ...constraints));
         totalCount = c.data().count;
         renderStats();
+        updateSearchPlaceholder();
       } catch (e) {
         totalCount = null;
       }
