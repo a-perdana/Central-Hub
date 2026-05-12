@@ -26,6 +26,24 @@ service firebase.storage {
       allow delete: if false;
     }
 
+    // Personal notes attachments (CH dashboard widget + /notes page).
+    // Path: user_notes/{uid}/{noteId}/{timestamp}_{filename}
+    // Owner uploads + deletes; up to 10 MB per file. Read access widens
+    // to all signed-in CH users when the parent Firestore note is
+    // public — we can't gate Storage by Firestore field directly, so we
+    // accept the widened read here and rely on the file URL only being
+    // surfaced through the (rule-gated) Firestore note doc. Files for
+    // private notes are still protected because their URLs aren't in
+    // any other user's note doc.
+    match /user_notes/{uid}/{noteId}/{filename} {
+      allow read:   if request.auth != null;
+      allow write:  if request.auth != null
+                       && request.auth.uid == uid
+                       && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if request.auth != null
+                       && request.auth.uid == uid;
+    }
+
     // Competency evidence uploads (Teachers Hub + Academic Hub portfolios).
     // Path: competency_evidence/{platform}/{uid}/{timestamp}_{filename}
     //   - {platform} = 'teachers' | 'academic'
@@ -126,6 +144,35 @@ service firebase.storage {
         && (request.auth.uid == uid
             || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
                  .data.role_centralhub == 'central_admin');
+    }
+
+    // Chapter test diagram pool — reusable images attached to one or
+    // more chapter_test_items (and, by extension, ease_items in the
+    // future). Path mirrors the IGCSE Tools original layout so the
+    // 463-diagram migration (2026-05-12) is path-preserving:
+    //   diagrams/{subjectId}/{filename}
+    //     - subjectId: 'biology' | 'math' | 'physics' | …
+    //     - filename:   imageN.png (legacy) | {ts}_{name}.{ext} (new)
+    // Read open to any signed-in authorised user (diagrams render
+    // inside chapter test attempts + bank previews). Write/delete
+    // restricted to admin + CH coordinator — mirrors
+    // chapter_test_items authoring boundary. ≤5 MB, image/* only.
+    match /diagrams/{subjectId}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+              .data.role_centralhub == 'central_admin'
+            || (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                  .data.role_centralhub == 'central_user'
+                && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                     .data.ch_sub_roles is list
+                && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+                     .data.ch_sub_roles.hasAny(['coordinator'])))
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin';
     }
 
     // Mail-composer image embeds. Quill's "image" toolbar button uploads

@@ -143,16 +143,17 @@ The catalogue below groups collections by the business domain they serve. Within
 - **No deletion at end of year** — `status='graduated'` preserves growth history. Hard-delete only via admin Cloud Function on explicit school request.
 
 #### `user_notes/{noteId}`
-**PK:** auto-id. Personal post-it / notepad scratch space — owner-private.
-**Fields:** `userId →users.uid` (owner; pinned by rule on create), `title` (≤120 chars), `body` (≤4000 chars), `color` (`'yellow'`|`'pink'`|`'green'`|`'blue'`|`'violet'`|`'orange'`), `pinned` (bool, default false), `createdAt`, `updatedAt`. Step-3 link fields (added later): `schoolId →partner_schools.id` (nullable), `linkedUserId →users.uid` (nullable), `tags[]`.
+**PK:** auto-id. Personal post-it / notepad scratch space.
+**Fields:** `userId →users.uid` (owner; pinned by rule on create), `userDisplayName` (denormalised for public listings), `title` (≤120 chars), `body` (≤4000 chars), `color` (`'yellow'`|`'pink'`|`'green'`|`'blue'`|`'violet'`|`'orange'`), `pinned` (bool, default false), `done` (bool, default false), `isPublic` (bool, default false), `attachments[]` (array of `{ name, url, size, contentType, path, addedAt }`), `createdAt`, `updatedAt`. Step-3 link fields (planned): `schoolId →partner_schools.id` (nullable), `linkedUserId →users.uid` (nullable), `tags[]`.
 **FKs:** `userId → users.uid`.
-**Writers:** owner only — create requires `userId == auth.uid`; update/delete requires `resource.data.userId == auth.uid`. No admin override (HQ never reads anyone's private notes).
-**Read:** owner only. `list:false` for non-owner queries (rule filters by `userId == auth.uid`).
-**Indexes:** composite `(userId asc, pinned desc, updatedAt desc)` — drives the dashboard widget's hot-list strip and the future `/notes` archive page. **Required** before the widget can render the live `where + orderBy` query.
+**Writers:** owner only — create requires `userId == auth.uid`; update/delete requires `resource.data.userId == auth.uid`. No admin override.
+**Read:** owner reads own (any visibility). When `isPublic == true`, every authorised CH user can read (HQ-wide "Team Notes"). Edit/delete/upload always stay owner-only — public is read-only sharing.
+**Indexes:** composite `(userId asc, pinned desc, done asc, updatedAt desc)` — owner widget query; composite `(isPublic asc, updatedAt desc)` — Team Notes feed. Both deployed 2026-05-12.
+**Storage:** attachments live at `user_notes/{uid}/{noteId}/{ts}_{filename}` (≤10 MB per file). Storage rule: any signed-in user can read (file URLs are surfaced only via the rule-gated Firestore note doc); only the owning uid can write/delete.
 **Notes:**
-- Step 1 (2026-05-12): Dashboard widget on CH `index.html` — top 6 notes, inline contentEditable title + body, colour swatch picker, hover delete (3-second double-click confirm — never `confirm()`).
+- Step 1 (2026-05-12): Dashboard widget on CH `index.html` — top notes, inline contentEditable title + body, colour swatch, hover delete (3-second double-click confirm — never `confirm()`), done toggle (dim + strikethrough + bottom-sorted), private/public chip, multi-file attachments (10 MB each).
 - Step 2 (planned): `/notes` full page with markdown, search, archive view.
-- Step 3 (planned): optional `schoolId` / `linkedUserId` link + per-school view from `schools.html`. Sharing with other CH users is explicitly out of scope for now (would require relaxing the owner-only read rule).
+- Step 3 (planned): optional `schoolId` / `linkedUserId` link + per-school view from `schools.html`.
 
 ---
 
@@ -734,13 +735,41 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 
 #### `chapter_test_items/{itemId}`
 **PK:** Auto-id (preserved across migration so existing `chapter_test_attempts.responses` keys stay valid).
-**Fields:** `subjectId`, `stage` (7..12), `unitCode`, `unitTitle`, `type` (`'mcq' | 'numeric' | 'short'`), `stem` (markdown + LaTeX), `stemImagePath` (Storage path, optional), `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short), `tolerance` (numeric — ±value, default 0 = exact), `acceptedAnswers[]` (short — synonym list), `marks` (default 1), `difficulty` (`'easy' | 'medium' | 'hard'`), `difficultyStars` (1..3, optional), `commandWord` (Cambridge command word, optional), `assessmentObjective` (`'AO1' | 'AO2' | 'AO3'`, optional), `syllabusObjective` (e.g. `'C4.1 – Define the term acid'`, optional), `cambridgeStandardRefs[]` (e.g. `['7Ni.04']`), `markScheme` (M1/A1/B1 notation, optional), `explanation`, `status` (`'draft' | 'published' | 'archived'`), `version` (default 1), `parentItemId` (→ self, set when `version > 1`), `usedInTestIds[]` (denormalised reverse index → `chapter_tests.id`), `authorUid →users.uid`, `createdAt`, `updatedAt`.
-**FKs:** `authorUid → users.uid` · `parentItemId → chapter_test_items.id` · `usedInTestIds[] → chapter_tests.id`.
-**Writers:** `central_admin` and `central_user` with `coordinator` sub-role (CH `chapter-test-author.html` + `question-bank.html`).
+**Fields:** `subjectId`, `stage` (7..12), `unitCode`, `unitTitle`, `type` (`'mcq' | 'numeric' | 'short'`), `stem` (markdown + LaTeX), `stemImagePath` (Storage path, optional — kept for back-compat; canonical lookup is `diagramId → chapter_test_diagrams.storagePath`), `stemImageBucket` (bucket host — only set when image lives in a non-default bucket. Added 2026-05-12 with the IGCSE biology migration; cleared on items linked to a `chapter_test_diagrams` doc since the binary then lives in the CH bucket.), `diagramId` (→ `chapter_test_diagrams.id` — set when the item references a pooled reusable diagram. The reverse index lives on the diagram doc as `usedInItemIds[]`. Added 2026-05-12.), `options[]` (mcq), `correctIdx` (mcq), `correctAnswer` (numeric/short — null on IGCSE-imported items pending HQ answer-key fill), `tolerance` (numeric — ±value, default 0 = exact), `acceptedAnswers[]` (short — synonym list), `marks` (default 1), `difficulty` (`'easy' | 'medium' | 'hard'`), `difficultyStars` (1..3, optional), `commandWord` (Cambridge command word, optional), `assessmentObjective` (`'AO1' | 'AO2' | 'AO3'`, optional), `syllabusObjective` (e.g. `'C4.1 – Define the term acid'`, optional), `cambridgeStandardRefs[]` (e.g. `['7Ni.04']`), `markScheme` (M1/A1/B1 notation, optional), `explanation`, `status` (`'draft' | 'published' | 'archived'`), `version` (default 1), `parentItemId` (→ self, set when `version > 1`), `usedInTestIds[]` (denormalised reverse index → `chapter_tests.id`), `searchTokens[]` (lowercase alphanumeric tokens ≥3 chars derived from `stem`, stop-words filtered, capped at 60 — drives bank-wide search on `/question-bank` via `array-contains`. Same algorithm shared with `ease_items.searchTokens`. Added 2026-05-12.), `source` (`'hq' | 'igcse-tools'` — set on imported items; null/undefined for HQ-authored. Added 2026-05-12 with the IGCSE biology migration), `sourceCollection` (origin Firestore collection on the source project, e.g. `'importedQuestions'`), `sourceUid` (e.g. `'biol_0001'`), `pastPaperRef` (e.g. `'0610/12/F/M/2024-1'` — full Cambridge paper reference), `pastPaperCode` (paper-level, e.g. `'0610/12/F/M/2024'`), `pastPaperYear`, `pastPaperSession` (`'F/M' | 'M/J' | 'O/N' | 'SP'`), `pastPaperPaper` (`'1' | '2' | 'specimen'`), `pastPaperQuestionNumber`, `authorUid →users.uid`, `createdAt`, `updatedAt`.
+**FKs:** `authorUid → users.uid` · `parentItemId → chapter_test_items.id` · `usedInTestIds[] → chapter_tests.id` · `diagramId → chapter_test_diagrams.id`.
+**Writers:** `central_admin` (create/update/delete) and `central_user` with `coordinator` sub-role (create/update only; delete is admin-only since 2026-05-12 to match ease_items policy).
 **Read scope:** any authorised staff; active students read items their attempt references.
 **Notes:**
 - Top-level since 2026-05-11 — enables item reuse across tests, standalone question bank, versioning, and parallel use by EASE-style aggregators.
 - Editing a published item that has `usedInTestIds.size() > 0`: UI should bump `version`, write a new doc with `parentItemId` set, and atomically swap the id in the affected `chapter_tests.itemIds[]`. The rule does not enforce this — discipline lives in the editor.
+- **IGCSE Biology import (2026-05-12):** 900 Cambridge IGCSE Biology (0610) past-paper MCQs migrated from the `igcse-tools` Firestore project's `importedQuestions` collection via [`scripts/migration/import-igcse-biology-to-chapter-bank.js`](scripts/migration/import-igcse-biology-to-chapter-bank.js). Deterministic doc id `igcse_${uid}` so re-runs are idempotent. All landed `status: 'draft'` because upstream answer keys are missing — HQ promotes to `published` as `correctAnswer` is filled in `/question-bank`. 448/900 carry `stemImagePath` pointing at the `igcse-tools.firebasestorage.app` bucket (kept verbatim; `stemImageBucket` field tags the cross-bucket case so UI can render with the correct origin or fall back to a placeholder). One source doc has `year='2402'` (upstream data-entry error) — passed through; HQ can fix in-place.
+
+---
+
+#### `chapter_test_diagrams/{diagramId}`
+**PK:** Deterministic `igcse_${diagramPoolId}` for IGCSE-migrated entries; auto-id for HQ-created ones.
+**Fields:** `imageName` (original filename, e.g. `'image141.png'`), `storagePath` (path within `centralhub-8727b.firebasestorage.app/diagrams/{subjectId}/...`, kept verbatim from IGCSE Tools layout), `imageURL` (public download URL — `https://storage.googleapis.com/centralhub-8727b.firebasestorage.app/{path}`), `subjectId` (`'biology' | 'math' | 'physics' | …` — canonical lowercase), `topics[]` (Cambridge syllabus topics this diagram is associated with — e.g. `['Characteristics and classification of living organisms']`), `tags[]` (free-form authoring tags), `description` (short human-readable caption — optional), `category` (`'diagram' | 'graph' | 'photo' | 'table' | 'other'`), `usedInItemIds[]` (denormalised reverse index → `chapter_test_items.id`; arrayUnion'd as items link the diagram), `width`, `height` (px, optional — read from Storage metadata when available), `source` (`'hq' | 'igcse-tools'`), `sourceId` (original `diagramPool.id` from IGCSE Tools), `authorUid →users.uid` (or sentinel for migrated entries), `createdAt`, `updatedAt`.
+**FKs:** `authorUid → users.uid` · `usedInItemIds[] → chapter_test_items.id`.
+**Writers:** `central_admin` and `central_user` with `coordinator` sub-role. Delete admin-only.
+**Read:** any authorised staff; active students (so diagrams render inside chapter test attempts).
+**Notes:**
+- **IGCSE Tools migration (2026-05-12):** 463 reusable diagram entries pulled from `igcse-tools/diagramPool` via [`scripts/migration/import-igcse-diagrams-to-chapter-bank.js`](scripts/migration/import-igcse-diagrams-to-chapter-bank.js) — 448 biology + 15 math. Binaries copied to CH bucket in step 1 ([`copy-igcse-diagrams-to-ch-bucket.js`](scripts/migration/copy-igcse-diagrams-to-ch-bucket.js)) at the same path; this step writes the Firestore registry.
+- **Reuse semantics:** one diagram can back N chapter_test_items via the FK `chapter_test_items.diagramId → chapter_test_diagrams.id`. The reverse `usedInItemIds[]` is maintained denormalised so the gallery UI can render a "used in N items" badge without a collection-group query.
+- Path convention `diagrams/{subjectId}/{filename}` is shared with the Storage rule in `Central Hub/storage.rules`. Changing it breaks both directions.
+- HQ-created diagrams (via `/diagrams` upload, future) get auto-id + `source: 'hq'`. The pool is platform-wide — eventually `ease_items` may also link diagrams via a parallel `diagramId` field.
+
+---
+
+#### `chapter_test_items_audit/{auditId}`
+**PK:** Auto-id.
+**Fields:** Same shape as `ease_items_audit`. `action` (`'delete' | 'bulk_delete' | 'restore' | 'create' | 'update' | 'import'`), `actorUid → users.uid` (or sentinel string for admin-SDK migrations, e.g. `'igcse-tools-import'`), `actorEmail`, `actorRole` (`'central_admin' | 'admin-sdk'`), `at` (serverTimestamp), `itemIds[]` (capped at 500 entries on bulk imports — forensic pointer, not a complete inventory), `itemSnapshots[]` (per-item small snapshot for `delete` actions: `{ id, subjectId, difficulty, type, status, stage, unitCode, usedInTestCount, stemPreview (first 200 chars) }`; empty `[]` on `import` actions where the items are being created, not destroyed), `reason` (optional), `chunkIndex` + `chunkTotal`. **`import`-specific fields:** `migrationSource` (e.g. `'igcse-tools/importedQuestions'`), `migrationSubject`, `migrationCount`, `migrationCreated`, `migrationUpdated`, `migrationForce`, `migrationLimit`.
+**FKs:** `actorUid → users.uid` · each entry in `itemIds[]` was once a `chapter_test_items.id`.
+**Writers:** `central_admin` (created inside the same `writeBatch` as the deletion).
+**Read:** `central_admin`.
+**Notes:**
+- Append-only by rule (no update / no delete). Same audit-trail discipline as `ease_items_audit`.
+- One audit doc per delete chunk (chunked at 400 items per Firestore's 500-op batch ceiling, +1 audit doc = 401 ops/batch).
+- Snapshot carries `usedInTestCount` (length of `usedInTestIds[]` at delete time) so HQ can see if a deletion violated the in-use guard.
 
 ---
 

@@ -353,7 +353,44 @@ service cloud.firestore {
     //   new doc; the rule does not enforce this — UI does.
     match /chapter_test_items/{itemId} {
       allow get, list: if isAuthorized() || isActiveStudent();
-      allow create, update, delete: if isAdmin() || isCHCoordinator();
+      // Authoring (create / update) open to admin + CH coordinator;
+      // delete restricted to admin only — coordinators can author
+      // and archive but not erase. Mirrors the ease_items policy
+      // (2026-05-12) so the two banks share the same boundary.
+      allow create, update: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+    }
+
+    // Reusable diagram pool — images attached to one or more
+    // chapter_test_items (and, later, ease_items / direct
+    // /diagrams gallery). Migrated 2026-05-12 from IGCSE Tools'
+    // `diagramPool` collection (463 entries: 448 biology + 15 math).
+    // Read open to all authorised staff (diagrams render inside
+    // chapter test attempts via the bank UI and inside the gallery
+    // page). Create/update open to admin + CH coordinator (mirrors
+    // chapter_test_items authoring boundary); delete admin-only.
+    // Storage rule for the actual binaries lives in storage.rules
+    // under `match /diagrams/{subjectId}/{filename}`.
+    match /chapter_test_diagrams/{diagramId} {
+      allow get, list: if isAuthorized() || isActiveStudent();
+      allow create, update: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+    }
+
+    // Append-only audit trail for destructive chapter_test_items
+    // operations. Same shape + lifecycle as ease_items_audit:
+    // written client-side inside the same writeBatch as the delete
+    // so the record can't go missing if the delete commits.
+    // `'import'` action covers bulk seeding from external sources
+    // (IGCSE Tools past-paper migration 2026-05-12 onwards) — these
+    // are written by admin SDK scripts via service account, the rule
+    // still applies if a future UI ever creates an `'import'` audit.
+    match /chapter_test_items_audit/{auditId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.actorUid == request.auth.uid
+                    && request.resource.data.action in ['delete', 'bulk_delete', 'restore', 'create', 'update', 'import'];
+      allow update, delete: if false;
     }
 
     // -- scheduled_sessions ----------------------------------
@@ -1426,20 +1463,24 @@ service cloud.firestore {
       allow write:  if isAdmin();
     }
 
-    // -- user_notes (Personal post-it / notepad — owner private) -----
-    // Step 1 of the dashboard notes widget plan. Each row belongs to
-    // exactly one user; HQ admins do NOT bypass — these are personal
-    // scratch notes and must stay private. Doc id is auto.
+    // -- user_notes (Personal post-it / notepad) ---------------------
+    // Each row has exactly one owner. By default a note is private
+    // (`isPublic: false`) — only the owner reads. When the owner flips
+    // `isPublic: true` the note becomes readable by every authorised
+    // CH user (HQ-wide "Team Notes"). Edit/delete/upload always stay
+    // owner-only — public is read-only sharing.
     //   - Create: signed-in caller must pin userId to their own auth.uid.
-    //   - Read/Update/Delete: only the owner.
-    //   - List: rule filters by `userId == auth.uid` so the dashboard
-    //     widget query (`where('userId', '==', uid) + orderBy(...)`)
-    //     returns only the caller's own notes.
+    //   - Get:    owner OR (isPublic == true AND any authorised user).
+    //   - List:   client query MUST scope by either userId == auth.uid
+    //             OR isPublic == true. Rule allows the read; query shape
+    //             is what scopes it.
+    //   - Update/Delete: owner only.
     match /user_notes/{noteId} {
       allow create: if isAuthorized()
                     && request.resource.data.userId == request.auth.uid;
-      allow read:   if isAuthorized()
-                    && resource.data.userId == request.auth.uid;
+      allow get:    if isAuthorized()
+                    && (resource.data.userId == request.auth.uid
+                        || resource.data.isPublic == true);
       allow list:   if isAuthorized();
       allow update: if isAuthorized()
                     && resource.data.userId == request.auth.uid
