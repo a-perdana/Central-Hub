@@ -1007,6 +1007,51 @@ Stable IDs (slugs): `first_chapter_clear`, `perfect_score`, `streak_7`, `streak_
 
 ---
 
+### 21. Practice Bank (supplemental items for SH tournaments / leaderboards / gamification, 2026-05-12)
+
+Curriculum-adjacent question bank kept **separate from** `chapter_test_items` (which is the network-uniform formal chapter-test bank authored by HQ Subject Specialists) and **separate from** `ease_items` (which is the calibrated EASE growth bank). `practice_questions` holds items that are pedagogically useful but not Cambridge-mapped — today populated entirely from the IGCSE Tools `questions` collection's `source: 'examview'` slice (Pearson Pre-Algebra / Algebra 1 / Algebra 2 / Geometry / Pre-Calculus textbook chapters). Future imports (other ExamView decks, paraphrased third-party content) land in the same collection.
+
+**Design intent:**
+- Never wired into the formal assessment flow (`scheduled_sessions` / chapter-test attempts / EASE growth). Reading these never affects `chapter_mastery` or `ease_growth`.
+- Reserved for SH-side **tournaments, leaderboards, daily-challenge gamification** — modes where item-level Cambridge alignment is nice-to-have, not load-bearing.
+- Ham `topic` strings preserved verbatim from upstream (e.g. `'1-5 Adding Integers'`). Cambridge `unitCode` mapping is **deferred** — HQ Math Specialist tags items in `/practice-bank-admin` (future) when an item is promoted into a gamification pool.
+
+#### `practice_questions/{itemId}`
+**PK:** Deterministic `igcse_${sourceId}` for IGCSE-Tools-imported items (where `sourceId = questions.{id}` upstream). Auto-id for hand-added or future-source items.
+**Fields:**
+- Content: `subjectId` (lowercase canonical — `'math'` / `'english'` / `'science'`), `type` (`'mcq' | 'short_answer'`), `stem` (markdown + LaTeX), `stemHtml` (rich source if upstream provided HTML; null when upstream is plain text), `options[]` (mcq), `optionsHtml[]` (rich source), `correctAnswer` (mcq → letter `'A'..'D'`; short_answer → freeform string or null), `marks` (default 1), `commandWord`, `assessmentObjective` (`'AO1' | 'AO2' | 'AO3'` — sparse, ~26% of imported items), `markScheme` (sparse — upstream rarely has it), `explanation`.
+- Tagging: `difficultyStars` (1-3 — upstream `L1/L2/L3` rating preserved), `difficulty` (`'easy' | 'medium' | 'hard'` — derived from stars), `topic` (verbatim upstream string, e.g. `'1-5 Adding Integers'`), `topicSlug` (kebab-case of `topic`), `topicGroup` (`'number' | 'algebra' | 'geometry' | 'statistics' | 'probability' | 'problem-solving' | 'mixed' | null` — coarse heuristic bucket, used by leaderboard "Algebra Champion" / "Geometry Champion" segmentation. **Filled at import** by keyword match on `topic`. Null = unclassified (today mostly `'Uncategorised'` upstream entries — explicit decision to leave them null for HQ sweep). Later HQ tagging in `/practice-bank-admin` rewrites this).
+- Cambridge mapping (deferred — null at import time): `cambridgeStandardRefs[]`, `cambridgeUnitCode`, `cambridgeStage` (7..12). HQ Math Specialist fills these as items are curated.
+- Diagrams: `hasDiagram`, `diagramUrl` (full HTTPS URL — CH bucket after the storage copy step has run; `null` until then), `diagramOriginalUrl` (verbatim upstream URL on `igcse-tools.firebasestorage.app` for forensics + rollback), `diagramStoragePath` (CH bucket path within `centralhub-8727b.firebasestorage.app/practice-diagrams/{subjectId}/...`).
+- Lifecycle: `status` (`'active' | 'archived' | 'flagged'` — default `'active'`. Promoted-to-tournament items stay `'active'`; HQ flags items with copyright/quality concerns as `'flagged'`).
+- Provenance (always set on IGCSE-Tools imports): `source` (`'igcse-tools-examview' | 'hq' | string`), `sourceCollection` (e.g. `'questions'`), `sourceUid` (upstream doc id), `sourceFile` (e.g. `'Pre_Algebra_Chapter_0'` — original ExamView ZIP filename, used for "which textbook" filters), `sourceId` (e.g. `'question_42_1'` — upstream QTI id), `sourceUserId` (upstream uploader's IGCSE Tools uid — provenance only; the user who originally imported the ZIP).
+- Search: `searchTokens[]` (same `buildSearchTokens()` algorithm as `chapter_test_items.searchTokens` + `ease_items.searchTokens` — `array-contains` queries on `/practice-bank-admin`).
+- Audit: `authorUid` (sentinel `'igcse-tools-examview-import'` for migration; future HQ-authored items carry actual uid), `createdAt`, `updatedAt`, `importedAt`.
+
+**FKs:** `authorUid → users.uid` (sentinel for migrated entries).
+**Writers:** `central_admin` (full CRUD) and `central_user` with `coordinator` sub-role (create + update, no delete — matches `ease_items` and `chapter_test_items` policy since 2026-05-12).
+**Read scope:**
+- Any authorised staff (CH/AH/TH browse for admin + future curation UIs).
+- Active students (`isActiveStudent()`) — list + get. SH gamification surfaces (`/tournaments`, `/daily-challenge`, future `/practice` page) read this collection directly. Privacy is not a concern: items are themselves the product, like a textbook.
+- Public read: **no.** Even though upstream `questions` had `isPublic` flag, we keep this auth-gated — student-account or staff-account is the minimum bar.
+
+**Notes:**
+- **IGCSE Tools ExamView import (2026-05-12):** 805 math items from `igcse-tools.questions` filtered by `source == 'examview'` migrated via [`scripts/migration/import-igcse-examview-math-to-practice-bank.js`](scripts/migration/import-igcse-examview-math-to-practice-bank.js). Deterministic doc id so re-runs are idempotent. Includes 570 MCQs (with `correctAnswer` letter populated) + 235 short_answer (open-ended, `correctAnswer` typically null — gamification surfaces filter by `type == 'mcq' AND correctAnswer != null` for auto-gradability).
+- **Image binaries:** 436/805 items reference raster diagrams. Pre-step [`scripts/migration/copy-igcse-math-images-to-ch-bucket.js`](scripts/migration/copy-igcse-math-images-to-ch-bucket.js) copies the binary from `igcse-tools.firebasestorage.app` into `centralhub-8727b.firebasestorage.app/practice-diagrams/math/{filename}`; the import script then writes `diagramUrl` + `diagramStoragePath` accordingly. Items whose source image fails to copy land with `diagramUrl: null` + `hasDiagram: true` — gamification UI must render a "diagram missing" placeholder and skip the item from grading pools.
+- **`topicGroup` coarse heuristic:** Topics matching `/integer|decimal|fraction|percent|ratio|number/i` → `'number'`. `/algebra|equation|expression|inequalit|polynomial|exponent|radical|coordinate plane/i` → `'algebra'`. `/geometry|angle|triangle|polygon|perimeter|area|volume|pythagorean|translation|reflection|rotation/i` → `'geometry'`. `/mean|median|mode|histogram|bar graph|line graph|stem.and.leaf|box.and.whisker|statistic/i` → `'statistics'`. `/probabilit|combinatori|permutation/i` → `'probability'`. `/mixed/i` → `'mixed'`. Otherwise `null`. **Heuristic is intentionally loose — it just bootstraps the leaderboard buckets. HQ rewrites in `/practice-bank-admin`.**
+- **Copyright posture:** Pearson textbook origin is internal-pilot-only. Do NOT expose any `practice_questions` doc with `source: 'igcse-tools-examview'` on a public unauth route. The active-student `read` rule is the strictest layer that lets the gamification flow work. If HQ paraphrases a question, set `source: 'hq'` (and recommend writing a new doc, not in-place editing — preserves audit).
+- **Future imports** (e.g. ExamView English / Science decks) follow the same shape: `source: 'igcse-tools-examview'` with `subjectId` differing; the import script supports `--subject=` flag.
+
+#### `practice_questions_audit/{auditId}`
+**PK:** Auto-id.
+**Fields:** Same shape as `chapter_test_items_audit` / `ease_items_audit`. `action` (`'import' | 'create' | 'update' | 'delete' | 'flag' | 'unflag'`), `actorUid → users.uid` (or sentinel `'igcse-tools-examview-import'` for the bulk migration), `actorEmail`, `actorRole` (`'central_admin' | 'admin-sdk'`), `at` (serverTimestamp), `itemIds[]` (capped at 500 entries on bulk imports), `itemSnapshots[]` (small per-item snapshot for delete actions only), `reason`. **`import`-specific fields:** `migrationSource` (e.g. `'igcse-tools/questions/source=examview'`), `migrationSubject`, `migrationCount`, `migrationCreated`, `migrationUpdated`, `migrationForce`, `migrationLimit`.
+**FKs:** `actorUid → users.uid` · each entry in `itemIds[]` was once a `practice_questions.id`.
+**Writers:** `central_admin` (created inside the same `writeBatch` as the action).
+**Read:** `central_admin`.
+**Notes:** Append-only by rule (no update / no delete). One audit doc per chunk on bulk imports (chunked at 400 items per Firestore's 500-op batch ceiling).
+
+---
+
 ## Indexes (composite)
 
 Single-field indexes are auto-created by Firestore. Composites must be declared in `Central Hub/firestore.indexes.json`.
