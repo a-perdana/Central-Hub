@@ -126,6 +126,39 @@
   .note-card.color-violet { background: #ede9fe; }
   .note-card.color-orange { background: #ffedd5; }
 
+  /* Team (public) notes get a distinct mor-tinted frame so they don't visually
+     blend with private notes. Border + top accent strip + faint inner glow. */
+  .note-card.is-team {
+    border: 1.5px solid rgba(108, 92, 231, 0.45);
+    box-shadow:
+      0 1px 2px rgba(108, 92, 231, 0.12),
+      0 1px 1px rgba(0, 0, 0, 0.04),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  }
+  .note-card.is-team::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #6c5ce7 0%, #0891b2 100%);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+  }
+  .note-card.is-team:hover {
+    box-shadow:
+      0 4px 10px rgba(108, 92, 231, 0.18),
+      0 2px 3px rgba(0, 0, 0, 0.05),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  }
+
+  /* Private (My Notes) get a softer, dashed neutral frame so they read as
+     personal-scratch vs the team-shared frame above. */
+  .note-card.is-mine {
+    border: 1px dashed rgba(0, 0, 0, 0.12);
+  }
+
   .note-card-toprow {
     display: flex;
     align-items: center;
@@ -620,6 +653,9 @@
         card.dataset.id = noteId;
         if (noteData.done) card.classList.add('is-done');
         if (!isOwner) card.classList.add('is-readonly');
+        // Visual scope marker: public notes (team) vs private (mine). Distinct
+        // frames so the two grids don't blend when a user looks across tabs.
+        card.classList.add(noteData.isPublic ? 'is-team' : 'is-mine');
 
         // Top row: done toggle (owner only) + visibility chip / author chip
         const topRow = document.createElement('div');
@@ -1112,6 +1148,10 @@
       // -- Add note ---------------------------------------------------------
       addBtn.addEventListener('click', async () => {
         addBtn.disabled = true;
+        // New note inherits the active tab's scope: clicking "+ New Note"
+        // while viewing Team creates a public/shared note (so it shows up
+        // right there); on My Notes it creates a private one as before.
+        const createPublic = activeTab === 'team';
         try {
           beginWrite();
           await addDoc(collection(db, 'user_notes'), {
@@ -1122,7 +1162,7 @@
             color: 'yellow',
             pinned: false,
             done: false,
-            isPublic: false,
+            isPublic: createPublic,
             attachments: [],
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
