@@ -130,6 +130,7 @@ export async function mountQuestionEditor(container, opts) {
     subjects = mode === 'ease' ? SUBJECTS_EASE : SUBJECTS_ALL,
     extraFieldsHtml = '',                   // HTML appended to the right-side metadata column
     extraFieldsBind = null,                 // (rootEl, item, opts) => void — wire up the extra inputs
+    onChange = null,                        // (currentItem) => void — fires on every keystroke / select change
     onSave,
     onCancel,
   } = opts || {};
@@ -304,6 +305,26 @@ export async function mountQuestionEditor(container, opts) {
     }
   });
   $('#qe-cancel').addEventListener('click', () => onCancel?.());
+
+  // Delegated change-stream — every keystroke / radio / select bubbles
+  // here, which lets host pages drop a live "student preview" pane
+  // outside the editor and refresh it without poking internals. We
+  // microtask the call so any synchronous handler bound below us
+  // (e.g. radio change → item.correctIdx assignment) lands first.
+  if (typeof onChange === 'function') {
+    const fire = () => queueMicrotask(() => {
+      try { onChange(item); } catch (e) { console.warn('[question-editor] onChange threw', e); }
+    });
+    root.addEventListener('input', fire);
+    root.addEventListener('change', fire);
+    root.addEventListener('click', (e) => {
+      // Catch option add / move / remove / radio buttons that don't
+      // necessarily fire input on the root.
+      if (e.target.closest('.qe-opt-up, .qe-opt-down, .qe-opt-rm, #qe-opt-add')) fire();
+    });
+    // Initial paint.
+    fire();
+  }
 
   function showErr(msg) {
     const e = $('#qe-error');

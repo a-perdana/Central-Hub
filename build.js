@@ -325,6 +325,7 @@ const htmlFiles = [
   "my-induction.html",
   "handbook.html",
   "references.html",
+  "roles-positions.html",
   "principal-coaching-session.html",
   "principal-coaching-hub.html",
   "principal-360-admin.html",

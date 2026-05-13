@@ -722,7 +722,20 @@ service cloud.firestore {
     match /student_points/{uid} {
       allow get:    if isAuthorized() || isActiveStudent();
       allow list:   if isAuthorized() || isActiveStudent();
-      allow create, update, delete: if false;   // Cloud Function (admin SDK) only
+      allow create, delete: if false;           // Cloud Function (admin SDK) only
+
+      // Owner can flip lastStreakMilestone.seen from false to true,
+      // exactly once per milestone payout. Cloud Function writes the
+      // {day,bonus,seen:false,awardedAt} envelope; the dashboard
+      // overlay marks it consumed so the celebration never repeats.
+      // No other field may change via this path.
+      allow update: if isSignedIn()
+                    && uid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastStreakMilestone'])
+                    && request.resource.data.lastStreakMilestone.seen == true
+                    && resource.data.lastStreakMilestone.seen == false
+                    && request.resource.data.lastStreakMilestone.day   == resource.data.lastStreakMilestone.day
+                    && request.resource.data.lastStreakMilestone.bonus == resource.data.lastStreakMilestone.bonus;
     }
 
     match /school_leaderboards/{boardId} {
