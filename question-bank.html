@@ -326,6 +326,100 @@
     .dp-card-meta .dp-pill { padding: 1px 5px; border-radius: 99px; background: var(--paper); border: 1px solid var(--border); }
     .dp-card-meta .dp-pill-subj { background: #ede9fe; color: var(--accent-dk); border-color: #ddd6fe; }
 
+    /* Diagram load spinner — injected next to img[data-storage-path]
+       while getDownloadURL + the GCS fetch are in flight. Storage
+       URLs can take 1-3s cold; without a spinner the slot is just a
+       blank placeholder PNG. Position: absolute relative to a wrap we
+       set position:relative on at hydrate-time. */
+    .qb-img-spinner {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none; background: var(--paper);
+      border-radius: inherit;
+    }
+    .qb-img-spinner::before {
+      content: ''; width: 22px; height: 22px;
+      border: 2.5px solid #e5e7eb; border-top-color: var(--accent, #6c5ce7);
+      border-radius: 50%; animation: qb-spin .7s linear infinite;
+    }
+    @keyframes qb-spin { to { transform: rotate(360deg); } }
+
+    /* Preview-modal quiz interactivity — teachers tap an option to
+       "answer", revealing whether they were right + the correct row.
+       Pre-reveal: rows are clickable + hover-lift. Post-reveal: rows
+       are inert; picked + correct rows tint, others fade. */
+    .pv-opt {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 11px 14px; background: #fff;
+      border: 1px solid var(--border); border-radius: 10px;
+      font-size: 14px; line-height: 1.5;
+      cursor: pointer; user-select: none;
+      transition: transform .12s ease, border-color .12s ease,
+                  box-shadow .12s ease, background .15s ease, opacity .2s ease;
+    }
+    .pv-opt:hover {
+      border-color: var(--accent, #6c5ce7);
+      box-shadow: 0 3px 12px rgba(108,92,231,.14);
+      transform: translateY(-1px);
+    }
+    .pv-opt:active { transform: translateY(0); }
+    .pv-opt .pv-opt-letter {
+      font-weight: 700; min-width: 22px;
+      transition: color .15s ease;
+    }
+    .pv-opt .pv-opt-badge {
+      font-size: 11px; font-weight: 600; opacity: 0;
+      transition: opacity .25s ease;
+      margin-left: auto; padding: 2px 8px; border-radius: 99px;
+      white-space: nowrap;
+    }
+    /* Revealed states */
+    #pvAnswers.is-revealed .pv-opt { cursor: default; transform: none; }
+    #pvAnswers.is-revealed .pv-opt:hover { box-shadow: none; transform: none; }
+    .pv-opt.is-correct {
+      background: #ecfdf5; border-color: #6ee7b7;
+      animation: pv-pop .35s ease;
+    }
+    .pv-opt.is-correct .pv-opt-letter { color: #047857; }
+    .pv-opt.is-correct .pv-opt-badge { opacity: 1; background: #d1fae5; color: #047857; }
+    .pv-opt.is-wrong {
+      background: #fef2f2; border-color: #fca5a5;
+      animation: pv-shake .35s ease;
+    }
+    .pv-opt.is-wrong .pv-opt-letter { color: #b91c1c; }
+    .pv-opt.is-wrong .pv-opt-badge { opacity: 1; background: #fee2e2; color: #b91c1c; }
+    #pvAnswers.is-revealed .pv-opt:not(.is-correct):not(.is-wrong) { opacity: .55; }
+    @keyframes pv-pop {
+      0%   { transform: scale(1); }
+      45%  { transform: scale(1.025); }
+      100% { transform: scale(1); }
+    }
+    @keyframes pv-shake {
+      0%, 100% { transform: translateX(0); }
+      25%      { transform: translateX(-4px); }
+      50%      { transform: translateX(4px); }
+      75%      { transform: translateX(-2px); }
+    }
+    .pv-result-banner {
+      margin-top: 6px; padding: 9px 12px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      animation: pv-fade .3s ease;
+    }
+    .pv-result-banner.is-correct { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+    .pv-result-banner.is-wrong   { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .pv-reveal-row {
+      display: flex; justify-content: flex-end; margin-top: -2px;
+    }
+    .pv-reveal-row button {
+      font: inherit; font-size: 12px; color: var(--ink-3);
+      background: transparent; border: 1px dashed var(--border);
+      border-radius: 99px; padding: 4px 12px; cursor: pointer;
+      transition: color .15s ease, border-color .15s ease;
+    }
+    .pv-reveal-row button:hover { color: var(--accent-dk, #5b48d6); border-color: var(--accent, #6c5ce7); }
+    @keyframes pv-fade { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
     /* Modal */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 40px 20px; }
     .modal-overlay.is-open { display: flex; }
@@ -517,7 +611,7 @@
   <!-- Preview modal -->
   <div id="previewModal" class="modal-overlay" role="dialog" aria-hidden="true">
     <div class="modal" style="width: min(760px, 100%); max-width: 760px;">
-      <h2 style="display:flex;align-items:center;gap:10px;">
+      <h2 style="display:flex;align-items:center;gap:10px;padding-bottom:18px;border-bottom:1px solid var(--border);">
         <span>Item preview</span>
         <span id="pvCode" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;color:var(--ink-3);font-weight:400"></span>
         <span style="flex:1"></span>
@@ -667,7 +761,22 @@
         const p = img.getAttribute('data-storage-path');
         if (!p || img.dataset.hydrated === '1') return;
         img.dataset.hydrated = '1';
-        resolveImageUrl(p).then(url => { if (url) img.src = url; });
+        const parent = img.parentElement;
+        let spinner = null;
+        if (parent) {
+          const cs = getComputedStyle(parent);
+          if (cs.position === 'static') parent.style.position = 'relative';
+          spinner = document.createElement('div');
+          spinner.className = 'qb-img-spinner';
+          parent.appendChild(spinner);
+        }
+        const clear = () => { if (spinner && spinner.parentElement) spinner.remove(); };
+        img.addEventListener('load', clear, { once: true });
+        img.addEventListener('error', clear, { once: true });
+        resolveImageUrl(p).then(url => {
+          if (url) img.src = url;
+          else clear();
+        }).catch(clear);
       });
     }
 
@@ -2043,17 +2152,51 @@
           slot.remove();
         }
         const ansBox = document.getElementById('pvAnswers');
+        ansBox.classList.remove('is-revealed');
         if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length) {
+          const correctIdx = it.correctIdx;
           ansBox.innerHTML = it.options.map((o, i) => {
             const oHtml = (it.optionsHtml && it.optionsHtml[i]) ? sanitisePreviewHtml(it.optionsHtml[i]) : escHtml(o);
-            const isCorrect = i === it.correctIdx;
             return `
-              <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:${isCorrect ? '#ecfdf5' : '#fff'};border:1px solid ${isCorrect ? '#6ee7b7' : 'var(--border)'};border-radius:10px;font-size:14px;line-height:1.5;">
-                <span style="font-weight:700;min-width:22px">${String.fromCharCode(65+i)}</span>
+              <div class="pv-opt" data-idx="${i}" role="button" tabindex="0">
+                <span class="pv-opt-letter">${String.fromCharCode(65+i)}</span>
                 <span class="pv-content" style="flex:1">${oHtml}</span>
-                ${isCorrect ? '<span style="font-size:11px;color:#047857;font-weight:600">✓ correct</span>' : ''}
+                <span class="pv-opt-badge"></span>
               </div>`;
-          }).join('');
+          }).join('')
+            + `<div class="pv-reveal-row"><button type="button" id="pvRevealBtn">Reveal answer →</button></div>`
+            + `<div id="pvResult"></div>`;
+          const reveal = (pickedIdx) => {
+            if (ansBox.classList.contains('is-revealed')) return;
+            ansBox.classList.add('is-revealed');
+            ansBox.querySelectorAll('.pv-opt').forEach(el => {
+              const idx = Number(el.dataset.idx);
+              const badge = el.querySelector('.pv-opt-badge');
+              if (idx === correctIdx) {
+                el.classList.add('is-correct');
+                if (badge) badge.textContent = idx === pickedIdx ? '✓ your answer · correct' : '✓ correct';
+              } else if (idx === pickedIdx) {
+                el.classList.add('is-wrong');
+                if (badge) badge.textContent = '✗ your answer';
+              }
+            });
+            const banner = ansBox.querySelector('#pvResult');
+            if (banner && pickedIdx != null) {
+              const ok = pickedIdx === correctIdx;
+              banner.innerHTML = `<div class="pv-result-banner ${ok ? 'is-correct' : 'is-wrong'}">${ok ? '🎯 Correct — nice one.' : `Not quite — the correct answer is ${String.fromCharCode(65+correctIdx)}.`}</div>`;
+            }
+            const revealBtn = ansBox.querySelector('#pvRevealBtn');
+            if (revealBtn) revealBtn.parentElement.remove();
+          };
+          ansBox.querySelectorAll('.pv-opt').forEach(el => {
+            const pick = () => reveal(Number(el.dataset.idx));
+            el.addEventListener('click', pick);
+            el.addEventListener('keydown', e => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+            });
+          });
+          const revealBtn = ansBox.querySelector('#pvRevealBtn');
+          if (revealBtn) revealBtn.addEventListener('click', () => reveal(null));
         } else if (it.type === 'numeric' || it.type === 'short') {
           ansBox.innerHTML = `
             <div style="padding:10px 14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:10px;font-size:14px;">
