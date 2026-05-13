@@ -263,6 +263,122 @@
     line-height: 1.5;
   }
 
+  /* ── Remove confirm modal ──────────────────────────────── */
+  .rm-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,0.45);
+    backdrop-filter: blur(3px);
+    z-index: 1100;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .rm-overlay.is-open { display: flex; }
+  .rm-modal {
+    background: #fff;
+    border-radius: 14px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: 0 24px 60px -16px rgba(15,23,42,0.4);
+    overflow: hidden;
+    animation: rmIn 0.18s ease;
+  }
+  @keyframes rmIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .rm-head {
+    padding: 18px 22px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rm-head .rm-eyebrow {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #b91c1c; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-bottom: 6px;
+  }
+  .rm-head .rm-eyebrow::before {
+    content: '⚠'; font-size: 13px;
+  }
+  .rm-head h3 {
+    font-family: 'Lora', serif;
+    font-size: 18px; margin: 0; color: var(--ink);
+  }
+  .rm-body { padding: 16px 22px; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .rm-body p { margin: 0 0 12px; }
+  .rm-body strong { color: var(--ink); }
+  .rm-stage {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 12px 0 4px;
+  }
+  .rm-stage .rm-stage-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-3); font-weight: 700; margin-bottom: 6px;
+  }
+  .rm-stage input[type="text"] {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--ink);
+    background: #fff;
+    box-sizing: border-box;
+  }
+  .rm-stage input[type="text"]:focus {
+    outline: none;
+    border-color: #b91c1c;
+    box-shadow: 0 0 0 3px rgba(185,28,28,0.15);
+  }
+  .rm-checklist { list-style: none; padding: 0; margin: 0; }
+  .rm-checklist li {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0;
+    font-size: 13px; color: var(--ink-2);
+    cursor: pointer;
+  }
+  .rm-checklist input[type="checkbox"] {
+    margin-top: 3px;
+    width: 16px; height: 16px;
+    accent-color: #b91c1c;
+    cursor: pointer;
+  }
+  .rm-foot {
+    padding: 14px 22px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end;
+    background: #fafafa;
+  }
+  .rm-foot button {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--ink-2);
+  }
+  .rm-foot button:hover { background: var(--paper, #f5f1e8); }
+  .rm-foot button.rm-go {
+    background: #b91c1c;
+    color: #fff;
+    border-color: #b91c1c;
+  }
+  .rm-foot button.rm-go:hover { background: #991b1b; }
+  .rm-foot button.rm-go:disabled {
+    background: #fca5a5;
+    border-color: #fca5a5;
+    cursor: not-allowed;
+  }
+
   /* ── Detail drawer ─────────────────────────────────────── */
   .drawer-overlay {
     position: fixed; inset: 0;
@@ -446,6 +562,21 @@
   <div class="drawer-body" id="drawerBody"></div>
   <footer class="drawer-foot" id="drawerFoot"></footer>
 </aside>
+
+<!-- Remove confirm modal (multi-step, central_admin only) -->
+<div class="rm-overlay" id="rmOverlay" aria-hidden="true">
+  <div class="rm-modal" role="dialog" aria-modal="true" aria-labelledby="rmTitle">
+    <header class="rm-head">
+      <div class="rm-eyebrow">Destructive action</div>
+      <h3 id="rmTitle">Remove student</h3>
+    </header>
+    <div class="rm-body" id="rmBody"></div>
+    <footer class="rm-foot">
+      <button type="button" id="rmCancel">Cancel</button>
+      <button type="button" id="rmGo" class="rm-go" disabled>Remove student</button>
+    </footer>
+  </div>
+</div>
 
 <div id="toast" class="toast"></div>
 
@@ -640,20 +771,123 @@
   }
 
   async function actOn(action, uid) {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      toast('Only central_admin can change student status.', 'error');
+      return;
+    }
+    if (action === 'reject') {
+      openRemoveConfirm(uid);
+      return;
+    }
     const map = {
       approve:  { status: 'active',    approvedAt:  serverTimestamp(), approvedBy:  window.currentUser.uid },
-      reject:   { status: 'rejected',  rejectedAt:  serverTimestamp(), rejectedBy:  window.currentUser.uid },
       graduate: { status: 'graduated', graduatedAt: serverTimestamp() },
     };
     const update = map[action];
     if (!update) return;
     try {
       await updateDoc(doc(window.db, 'students', uid), update);
-      toast(action === 'approve' ? 'Student approved' : action === 'reject' ? 'Student removed' : 'Student graduated', 'success');
+      toast(action === 'approve' ? 'Student approved' : 'Student graduated', 'success');
       if (currentDrawerUid === uid) renderDrawer();
     } catch (e) {
       toast('Failed: ' + (e.message || e.code), 'error');
+    }
+  }
+
+  /* ── Remove confirm flow (3 gates: ack checklist + typed name + final button) ── */
+  let rmTargetUid = null;
+  function openRemoveConfirm(uid) {
+    if (!isAdmin) {
+      toast('Only central_admin can remove students.', 'error');
+      return;
+    }
+    const s = students.find(x => x.id === uid);
+    if (!s) return;
+    rmTargetUid = uid;
+    const schoolName = s.school || schools.get(s.schoolId) || '—';
+    const displayName = s.displayName || s.email || '(unnamed)';
+    const expected = displayName.trim();
+    $('rmBody').innerHTML = `
+      <p>You are about to set <strong>${escHtml(displayName)}</strong>
+        (<code>${escHtml(s.email || '—')}</code>, ${escHtml(schoolName)}${s.className ? ' · ' + escHtml(s.className) : ''})
+        to <strong>rejected</strong>. They lose access to chapter tests, EASE, and growth reports immediately.</p>
+      <ul class="rm-checklist">
+        <li>
+          <input type="checkbox" id="rmAck1">
+          <label for="rmAck1">I confirm this student should no longer have Students Hub access.</label>
+        </li>
+        <li>
+          <input type="checkbox" id="rmAck2">
+          <label for="rmAck2">I have informed the school's <strong>academic coordinator</strong> or <strong>principal</strong>.</label>
+        </li>
+        <li>
+          <input type="checkbox" id="rmAck3">
+          <label for="rmAck3">I understand existing chapter attempts and EASE results remain in the database for audit.</label>
+        </li>
+      </ul>
+      <div class="rm-stage">
+        <div class="rm-stage-label">Type the student's full name to confirm</div>
+        <input type="text" id="rmTypedName" autocomplete="off" placeholder="${escAttr(expected)}">
+      </div>
+    `;
+    $('rmGo').disabled = true;
+    $('rmGo').textContent = 'Remove student';
+    $('rmOverlay').classList.add('is-open');
+    $('rmOverlay').setAttribute('aria-hidden', 'false');
+
+    const checks = ['rmAck1','rmAck2','rmAck3'].map(id => $(id));
+    const typed  = $('rmTypedName');
+    const recompute = () => {
+      const allChecked = checks.every(c => c.checked);
+      const nameOk = typed.value.trim().toLowerCase() === expected.toLowerCase();
+      $('rmGo').disabled = !(allChecked && nameOk);
+    };
+    checks.forEach(c => c.addEventListener('change', recompute));
+    typed.addEventListener('input', recompute);
+    setTimeout(() => typed.focus(), 30);
+  }
+
+  function closeRemoveConfirm() {
+    rmTargetUid = null;
+    $('rmOverlay').classList.remove('is-open');
+    $('rmOverlay').setAttribute('aria-hidden', 'true');
+  }
+
+  async function executeRemove() {
+    if (!isAdmin) {
+      toast('Only central_admin can remove students.', 'error');
+      return;
+    }
+    const uid = rmTargetUid;
+    if (!uid) return;
+    const s = students.find(x => x.id === uid);
+    if (!s) { closeRemoveConfirm(); return; }
+    const expected = (s.displayName || s.email || '').trim().toLowerCase();
+    const typedVal = ($('rmTypedName').value || '').trim().toLowerCase();
+    const allChecked = ['rmAck1','rmAck2','rmAck3'].every(id => $(id).checked);
+    if (!allChecked || typedVal !== expected) {
+      toast('Confirmation incomplete.', 'error');
+      return;
+    }
+    if (!window.confirm(`Final confirmation: remove ${s.displayName || s.email}? This sets status to "rejected".`)) {
+      return;
+    }
+    const btn = $('rmGo');
+    btn.disabled = true;
+    btn.textContent = 'Removing…';
+    try {
+      await updateDoc(doc(window.db, 'students', uid), {
+        status: 'rejected',
+        rejectedAt: serverTimestamp(),
+        rejectedBy: window.currentUser.uid,
+      });
+      toast('Student removed', 'success');
+      closeRemoveConfirm();
+      if (currentDrawerUid === uid) renderDrawer();
+    } catch (e) {
+      toast('Failed: ' + (e.message || e.code), 'error');
+      btn.disabled = false;
+      btn.textContent = 'Remove student';
     }
   }
 
@@ -725,8 +959,15 @@
   $('fStatus').addEventListener('change', render);
   $('drawerCloseBtn').addEventListener('click', closeDrawer);
   $('drawerOverlay').addEventListener('click', closeDrawer);
+  $('rmCancel').addEventListener('click', closeRemoveConfirm);
+  $('rmGo').addEventListener('click', executeRemove);
+  $('rmOverlay').addEventListener('click', (e) => {
+    if (e.target === $('rmOverlay')) closeRemoveConfirm();
+  });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && currentDrawerUid) closeDrawer();
+    if (e.key !== 'Escape') return;
+    if ($('rmOverlay').classList.contains('is-open')) { closeRemoveConfirm(); return; }
+    if (currentDrawerUid) closeDrawer();
   });
 </script>
 </body>
