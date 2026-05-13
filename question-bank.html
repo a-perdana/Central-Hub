@@ -343,6 +343,11 @@
       border-radius: 50%; animation: qb-spin .7s linear infinite;
     }
     @keyframes qb-spin { to { transform: rotate(360deg); } }
+    .qb-inline-spinner {
+      width: 24px; height: 24px;
+      border: 2.5px solid #e5e7eb; border-top-color: var(--accent, #6c5ce7);
+      border-radius: 50%; animation: qb-spin .7s linear infinite;
+    }
 
     /* Preview-modal quiz interactivity — teachers tap an option to
        "answer", revealing whether they were right + the correct row.
@@ -377,18 +382,20 @@
     #pvAnswers.is-revealed .pv-opt { cursor: default; transform: none; }
     #pvAnswers.is-revealed .pv-opt:hover { box-shadow: none; transform: none; }
     .pv-opt.is-correct {
-      background: #ecfdf5; border-color: #6ee7b7;
-      animation: pv-pop .35s ease;
+      background: #d1fae5; border: 2px solid #10b981;
+      box-shadow: 0 0 0 3px rgba(16,185,129,.18);
+      animation: pv-pop .4s ease;
     }
-    .pv-opt.is-correct .pv-opt-letter { color: #047857; }
-    .pv-opt.is-correct .pv-opt-badge { opacity: 1; background: #d1fae5; color: #047857; }
+    .pv-opt.is-correct .pv-opt-letter { color: #047857; font-size: 16px; }
+    .pv-opt.is-correct .pv-opt-badge { opacity: 1; background: #10b981; color: #fff; }
     .pv-opt.is-wrong {
-      background: #fef2f2; border-color: #fca5a5;
-      animation: pv-shake .35s ease;
+      background: #fee2e2; border: 2px solid #ef4444;
+      box-shadow: 0 0 0 3px rgba(239,68,68,.15);
+      animation: pv-shake .4s ease;
     }
-    .pv-opt.is-wrong .pv-opt-letter { color: #b91c1c; }
-    .pv-opt.is-wrong .pv-opt-badge { opacity: 1; background: #fee2e2; color: #b91c1c; }
-    #pvAnswers.is-revealed .pv-opt:not(.is-correct):not(.is-wrong) { opacity: .55; }
+    .pv-opt.is-wrong .pv-opt-letter { color: #b91c1c; font-size: 16px; }
+    .pv-opt.is-wrong .pv-opt-badge { opacity: 1; background: #ef4444; color: #fff; }
+    #pvAnswers.is-revealed .pv-opt:not(.is-correct):not(.is-wrong) { opacity: .45; filter: grayscale(.4); }
     @keyframes pv-pop {
       0%   { transform: scale(1); }
       45%  { transform: scale(1.025); }
@@ -604,7 +611,16 @@
   <div id="itemModal" class="modal-overlay" role="dialog" aria-hidden="true">
     <div class="modal" style="width: min(1100px, 100%); max-width: 1100px;">
       <h2 id="iModalTitle">New chapter-test item</h2>
-      <div class="modal-body" id="itemEditorMount" style="padding: 18px 22px;"></div>
+      <div class="modal-body" style="padding: 0; display: flex; flex-direction: column;">
+        <div id="itemEditorMount" style="padding: 18px 22px;"></div>
+        <div id="editorLivePreview" style="border-top:1px solid var(--border);background:linear-gradient(180deg,#fafaff 0%,#fff 100%);padding:18px 22px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-dk,#5b48d6);">Student preview</span>
+            <span style="font-size:11px;color:var(--ink-3);">— live as you edit</span>
+          </div>
+          <div id="elpBody" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55;color:var(--ink);"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2115,7 +2131,7 @@
         // #pvDiagram slot wherever the placement put it.
         const slot = document.getElementById('pvDiagram');
         if (it.diagramId && slot) {
-          slot.innerHTML = '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;background:var(--paper);border-radius:8px">Loading diagram…</div>';
+          slot.innerHTML = '<div style="height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--ink-3);font-size:12px;background:var(--paper);border-radius:8px;"><div class="qb-inline-spinner"></div><span>Loading diagram…</span></div>';
           getDoc(doc(window.db, 'chapter_test_diagrams', it.diagramId)).then(dsnap => {
             if (!dsnap.exists()) {
               slot.innerHTML = `<div style="padding:10px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px">Linked diagram <code>${escHtml(it.diagramId)}</code> not found.</div>`;
@@ -2346,9 +2362,54 @@
           // the inner DOM through opening/closing the picker.
           renderDiagramSection(root);
         },
+        onChange: (cur) => renderEditorLivePreview(cur),
         onSave: async (payload) => { await save(payload); closeItem(); },
         onCancel: closeItem,
       });
+    }
+
+    // Live "Student preview" pane under the editor — refreshes on every
+    // keystroke via the question-editor onChange hook. Shows the same
+    // shape students see in the runner (stem + options + diagram-meta
+    // strip) so HQ catches missing options / wrong correctIdx / dollar-
+    // sign math glitches before saving.
+    function renderEditorLivePreview(cur) {
+      const body = document.getElementById('elpBody');
+      if (!body || !cur) return;
+      const stemRich = cur.stem || cur.stemHtml || '';
+      const stemHtml = stemRich
+        ? sanitisePreviewHtml(stemRich)
+        : '<em style="color:var(--ink-3)">(stem empty)</em>';
+      const diagInfo = diagramState.diagramId
+        ? `<div style="margin-top:10px;padding:8px 12px;background:var(--paper);border:1px dashed var(--border);border-radius:8px;font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:8px;"><span style="font-size:14px">🖼</span><span>Diagram attached · <code style="font-size:11px">${escHtml(diagramState.diagramId)}</code> · placement <b>${escHtml(diagramState.placement || 'after')}</b></span></div>`
+        : '';
+      let answersHtml = '';
+      if (cur.type === 'mcq' && Array.isArray(cur.options) && cur.options.length) {
+        answersHtml = '<div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;">'
+          + cur.options.map((o, i) => {
+              const isCorrect = i === cur.correctIdx;
+              const text = (o && o.trim()) ? sanitisePreviewHtml(o) : `<span style="color:var(--ink-3);font-style:italic">Option ${String.fromCharCode(65+i)} empty</span>`;
+              return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border:1px solid ${isCorrect ? '#10b981' : 'var(--border)'};background:${isCorrect ? '#d1fae5' : '#fff'};border-radius:8px;font-size:13.5px;">
+                <span style="font-weight:700;min-width:20px;color:${isCorrect ? '#047857' : 'var(--ink-2)'}">${String.fromCharCode(65+i)}</span>
+                <span style="flex:1">${text}</span>
+                ${isCorrect ? '<span style="font-size:10.5px;color:#fff;background:#10b981;padding:1px 7px;border-radius:99px;font-weight:600">✓ correct</span>' : ''}
+              </div>`;
+            }).join('')
+          + '</div>';
+        if (cur.correctIdx == null || cur.correctIdx < 0 || cur.correctIdx >= cur.options.length) {
+          answersHtml += '<div style="margin-top:8px;padding:6px 10px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:6px;font-size:11.5px;">⚠ No correct option selected</div>';
+        }
+      } else if (cur.type === 'numeric' || cur.type === 'short') {
+        const ans = cur.correctAnswer || '';
+        answersHtml = `<div style="margin-top:12px;padding:9px 12px;background:#d1fae5;border:1px solid #10b981;border-radius:8px;font-size:13.5px;"><b>Answer:</b> ${ans ? escHtml(ans) : '<span style="color:var(--ink-3);font-style:italic">(empty)</span>'}${cur.type === 'numeric' && cur.tolerance ? ` · <span style="color:var(--ink-3)">±${escHtml(cur.tolerance)}</span>` : ''}</div>`;
+        if (Array.isArray(cur.acceptedAnswers) && cur.acceptedAnswers.length) {
+          answersHtml += `<div style="margin-top:6px;padding:6px 12px;background:var(--paper);border-radius:6px;font-size:12px;color:var(--ink-3);"><b>Accepted variants:</b> ${cur.acceptedAnswers.map(a => escHtml(a)).join(' · ')}</div>`;
+        }
+      }
+      body.innerHTML = `<div class="pv-content">${stemHtml}</div>${diagInfo}${answersHtml}`;
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([body]).catch(() => {});
+      }
     }
     function closeItem() {
       document.getElementById('itemModal').classList.remove('is-open');
@@ -2423,6 +2484,7 @@
         diagramState.diagramId = null;
         diagramState.diagramDoc = null;
         renderDiagramSection(root);
+        root.dispatchEvent(new Event('input', { bubbles: true }));
       });
       // Placement select + {{diagram}} insert button (only visible
       // when a diagram is attached).
@@ -2644,6 +2706,9 @@
       diagramState.diagramDoc = d;
       document.getElementById('diagramPickerModal').classList.remove('is-open');
       if (dpEditorRoot) renderDiagramSection(dpEditorRoot);
+      // Bubble an input event so the editor's delegated onChange
+      // refreshes the live preview pane below.
+      if (dpEditorRoot) dpEditorRoot.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     // Wire picker controls.
