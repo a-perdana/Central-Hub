@@ -362,6 +362,96 @@
       cursor: not-allowed;
       pointer-events: none;
     }
+    .btn-row-action.is-danger {
+      color: #b91c1c;
+      border-color: #fca5a5;
+      background: #fef2f2;
+    }
+    .btn-row-action.is-danger:hover {
+      background: #fee2e2;
+      border-color: #f87171;
+      color: #991b1b;
+    }
+    .btn-row-action.is-danger.is-confirming {
+      background: #b91c1c;
+      border-color: #b91c1c;
+      color: #fff;
+      animation: pulse-danger 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse-danger {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(185,28,28,.4); }
+      50%      { box-shadow: 0 0 0 6px rgba(185,28,28,0); }
+    }
+
+    /* Per-endorsement (rows view) remove button — slimmer inline form */
+    .row-remove-btn {
+      padding: 4px 10px;
+      border: 1px solid #fca5a5;
+      background: #fef2f2;
+      color: #b91c1c;
+      border-radius: 6px;
+      font-family: inherit; font-size: 11.5px; font-weight: 600;
+      cursor: pointer;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .row-remove-btn:hover {
+      background: #fee2e2;
+      border-color: #f87171;
+    }
+    .row-remove-btn.is-confirming {
+      background: #b91c1c;
+      border-color: #b91c1c;
+      color: #fff;
+      animation: pulse-danger 1.2s ease-in-out infinite;
+    }
+
+    /* Pagination footer */
+    .pagination {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .pagination .page-btn {
+      min-width: 34px; height: 34px;
+      padding: 0 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--ink-2);
+      border-radius: 7px;
+      font-family: inherit; font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .pagination .page-btn:hover:not(:disabled):not(.is-active) {
+      background: var(--accent-3);
+      border-color: var(--accent);
+      color: var(--accent-dk);
+    }
+    .pagination .page-btn:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+    .pagination .page-btn.is-active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      cursor: default;
+    }
+    .pagination .page-ellipsis {
+      color: var(--ink-3);
+      padding: 0 4px;
+    }
+    .pagination .page-summary {
+      margin-left: 14px;
+      font-size: 12px;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
 
     /* Per-endorsement (rows) view — slimmer cards */
     .row-card {
@@ -514,6 +604,8 @@
 
     <div id="endorseList"></div>
 
+    <div id="pagination" class="pagination" hidden></div>
+
     <div id="emptyState" class="empty-state" hidden>
       <div class="glyph">⭐</div>
       <h3>No endorsements match these filters</h3>
@@ -531,7 +623,7 @@
 
   <script type="module">
     import {
-      collection, query, orderBy, onSnapshot
+      collection, query, orderBy, onSnapshot, doc, deleteDoc, writeBatch
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
     const BANK_DEEPLINK = {
@@ -545,13 +637,19 @@
       ease_items:          'EASE',
     };
 
+    const PAGE_SIZE = 5;
     const state = {
-      endorsements:    [],
-      activeTags:      new Set(),
-      currentColl:     'all',
-      sort:            'stars',
-      view:            'byItem',
-      expandedStems:   new Set(),
+      endorsements:       [],
+      activeTags:         new Set(),
+      currentColl:        'all',
+      sort:               'stars',
+      view:               'byItem',
+      expandedStems:      new Set(),
+      currentPage:        1,
+      // Double-click confirmation state (Common Mistake #3 — never use confirm()).
+      // Key in byItem mode: itemId. Key in rows mode: endorsement doc id.
+      // Set is cleared after a successful delete or 3s timeout.
+      pendingRemoves:     new Set(),
     };
 
     function escHtml(s) {
@@ -720,6 +818,15 @@
         <div class="item-card-actions">
           <a class="btn-row-action is-primary" href="${escAttr(deeplink + encodeURIComponent(group.itemId))}" target="_blank" rel="noopener">↗ Open in CH</a>
           <span class="btn-row-action is-disabled" title="Coming soon">+ Add to assessment</span>
+          <button type="button"
+                  class="btn-row-action is-danger ${state.pendingRemoves.has('item:' + group.itemId) ? 'is-confirming' : ''}"
+                  data-action="remove-item"
+                  data-item-id="${escAttr(group.itemId)}"
+                  data-star-count="${group.rows.length}">
+            ${state.pendingRemoves.has('item:' + group.itemId)
+              ? `Click again to confirm`
+              : `🗑 Remove ${group.rows.length === 1 ? 'star' : 'all ' + group.rows.length + ' stars'}`}
+          </button>
           <span style="text-align:center;font-size:10.5px;color:var(--ink-3);margin-top:2px">${relDate(mostRecent)}</span>
         </div>
       </article>`;
@@ -747,6 +854,15 @@
             <span>by <b>${escHtml(e.specialistName || 'Anon')}</b></span>
             <span>${relDate(e.updatedAt || e.createdAt)}</span>
             <a href="${escAttr(deeplink + encodeURIComponent(e.itemId))}" target="_blank" rel="noopener" style="margin-left:auto;color:var(--accent-dk)">↗ Open in CH</a>
+            <button type="button"
+                    class="row-remove-btn ${state.pendingRemoves.has('row:' + e.id) ? 'is-confirming' : ''}"
+                    data-action="remove-row"
+                    data-doc-id="${escAttr(e.id)}"
+                    data-item-id="${escAttr(e.itemId)}"
+                    data-collection="${escAttr(bank)}"
+                    data-specialist-uid="${escAttr(e.specialistUid)}">
+              ${state.pendingRemoves.has('row:' + e.id) ? 'Confirm?' : '🗑 Remove'}
+            </button>
           </div>
         </div>
       </article>`;
@@ -782,30 +898,83 @@
       return arr;
     }
 
+    function paginate(arr) {
+      const total = arr.length;
+      const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      // Clamp page if data shrinks below current page
+      if (state.currentPage > pageCount) state.currentPage = pageCount;
+      const start = (state.currentPage - 1) * PAGE_SIZE;
+      return { slice: arr.slice(start, start + PAGE_SIZE), total, pageCount, start };
+    }
+
+    function renderPagination(total, pageCount, start) {
+      const wrap = document.getElementById('pagination');
+      if (total <= PAGE_SIZE) { wrap.hidden = true; wrap.innerHTML = ''; return; }
+      wrap.hidden = false;
+
+      const cur = state.currentPage;
+      const pages = [];
+      const push = (label, page, active, disabled) => pages.push({ label, page, active, disabled });
+
+      push('‹ Prev', cur - 1, false, cur === 1);
+
+      // Windowed page numbers (1 … cur-1 cur cur+1 … N)
+      const win = new Set([1, pageCount, cur - 1, cur, cur + 1]);
+      let last = 0;
+      [...win].filter(p => p >= 1 && p <= pageCount).sort((a, b) => a - b).forEach(p => {
+        if (p - last > 1) pages.push({ ellipsis: true });
+        push(String(p), p, p === cur, false);
+        last = p;
+      });
+
+      push('Next ›', cur + 1, false, cur === pageCount);
+
+      const end = Math.min(start + PAGE_SIZE, total);
+      wrap.innerHTML = pages.map(p => {
+        if (p.ellipsis) return `<span class="page-ellipsis">…</span>`;
+        return `<button type="button" class="page-btn ${p.active ? 'is-active' : ''}" data-page="${p.page}" ${p.disabled ? 'disabled' : ''}>${p.label}</button>`;
+      }).join('') + `<span class="page-summary">${start + 1}–${end} of ${total}</span>`;
+
+      wrap.querySelectorAll('.page-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const next = Number(btn.dataset.page);
+          if (next >= 1 && next <= pageCount && next !== cur) {
+            state.currentPage = next;
+            render();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        });
+      });
+    }
+
     function render() {
       document.getElementById('loadingState').hidden = true;
       const filtered = applyFilters(state.endorsements);
       const list = document.getElementById('endorseList');
       const empty = document.getElementById('emptyState');
 
-      let html;
-      if (filtered.length === 0) {
-        html = '';
+      let renderable;
+      if (state.view === 'byItem') {
+        renderable = groupByItem(filtered);
+      } else {
+        renderable = [...filtered].sort((a, b) => {
+          const ta = (a.updatedAt || a.createdAt)?.toDate?.()?.getTime() || 0;
+          const tb = (b.updatedAt || b.createdAt)?.toDate?.()?.getTime() || 0;
+          return tb - ta;
+        });
+      }
+
+      if (renderable.length === 0) {
+        list.innerHTML = '';
         empty.hidden = false;
+        document.getElementById('pagination').hidden = true;
       } else {
         empty.hidden = true;
-        if (state.view === 'byItem') {
-          html = groupByItem(filtered).map(itemCard).join('');
-        } else {
-          const sorted = [...filtered].sort((a, b) => {
-            const ta = (a.updatedAt || a.createdAt)?.toDate?.()?.getTime() || 0;
-            const tb = (b.updatedAt || b.createdAt)?.toDate?.()?.getTime() || 0;
-            return tb - ta;
-          });
-          html = sorted.map(rowCard).join('');
-        }
+        const { slice, total, pageCount, start } = paginate(renderable);
+        const cardFn = state.view === 'byItem' ? itemCard : rowCard;
+        list.innerHTML = slice.map(cardFn).join('');
+        renderPagination(total, pageCount, start);
       }
-      list.innerHTML = html;
 
       // Stem expand toggles + item-id copy
       list.querySelectorAll('.item-stem-expand').forEach(el => {
@@ -825,6 +994,14 @@
         });
       });
 
+      // Remove handlers — double-click confirmation, 3s timeout window.
+      list.querySelectorAll('[data-action="remove-item"]').forEach(btn => {
+        btn.addEventListener('click', () => handleRemoveItem(btn));
+      });
+      list.querySelectorAll('[data-action="remove-row"]').forEach(btn => {
+        btn.addEventListener('click', () => handleRemoveRow(btn));
+      });
+
       // KPIs
       document.getElementById('kpiTotal').textContent = state.endorsements.length;
       const uniqItems = new Set(state.endorsements.map(e => e.itemId));
@@ -834,6 +1011,71 @@
 
       if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([list]).catch(() => {});
+      }
+    }
+
+    // ─── Double-click confirmation pattern (no native confirm()) ───
+    // First click → mark pending + re-render so button visually
+    // changes ("Confirm?" / pulse). Second click within 3s →
+    // delete. After 3s the pending entry clears and the next click
+    // starts over.
+    function armConfirm(key) {
+      state.pendingRemoves.add(key);
+      setTimeout(() => {
+        if (state.pendingRemoves.has(key)) {
+          state.pendingRemoves.delete(key);
+          render();
+        }
+      }, 3000);
+      render();
+    }
+
+    async function handleRemoveItem(btn) {
+      const itemId = btn.dataset.itemId;
+      const key = 'item:' + itemId;
+      if (!state.pendingRemoves.has(key)) { armConfirm(key); return; }
+
+      // Confirmed — fire deletion. We delete every endorsement row
+      // matching the itemId. Rule allows CH reviewers (admin / director /
+      // coordinator) to delete any row, so bulk-remove just works.
+      state.pendingRemoves.delete(key);
+      btn.disabled = true;
+      try {
+        const matching = state.endorsements.filter(e => e.itemId === itemId);
+        if (matching.length === 0) throw new Error('No rows to delete');
+
+        // Firestore writeBatch caps at 500 ops — comfortably within
+        // reach for an item with a handful of endorsements.
+        const batch = writeBatch(window.db);
+        matching.forEach(e => {
+          batch.delete(doc(window.db, 'practice_question_endorsements', e.id));
+        });
+        await batch.commit();
+        toast('Removed ' + matching.length + (matching.length === 1 ? ' endorsement' : ' endorsements'));
+        // onSnapshot will re-render once Firestore propagates.
+      } catch (e) {
+        console.error('[remove-item]', e);
+        toast('Could not remove: ' + (e.message || e.code), true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function handleRemoveRow(btn) {
+      const docId = btn.dataset.docId;
+      const key = 'row:' + docId;
+      if (!state.pendingRemoves.has(key)) { armConfirm(key); return; }
+
+      state.pendingRemoves.delete(key);
+      btn.disabled = true;
+      try {
+        await deleteDoc(doc(window.db, 'practice_question_endorsements', docId));
+        toast('Endorsement removed');
+      } catch (e) {
+        console.error('[remove-row]', e);
+        toast('Could not remove: ' + (e.message || e.code), true);
+      } finally {
+        btn.disabled = false;
       }
     }
 
@@ -848,19 +1090,23 @@
             state.activeTags.add(tag);
             btn.classList.add('is-active');
           }
+          state.currentPage = 1;
           render();
         });
       });
       document.getElementById('filterCollection').addEventListener('change', (e) => {
         state.currentColl = e.target.value;
+        state.currentPage = 1;
         render();
       });
       document.getElementById('filterSort').addEventListener('change', (e) => {
         state.sort = e.target.value;
+        state.currentPage = 1;
         render();
       });
       document.getElementById('filterView').addEventListener('change', (e) => {
         state.view = e.target.value;
+        state.currentPage = 1;
         render();
       });
     }
