@@ -1080,6 +1080,110 @@ exports.resetLeaderboardWindows = onSchedule(
 );
 
 // ───────────────────────────────────────────────────────────────
+// rotateDailyChallenges — nightly auto-publish for tomorrow
+//   Runs daily at 00:05 Asia/Jakarta. For each pilot subject
+//   (math / english / science):
+//     - If a daily_challenges/{tomorrow_subj} doc already exists,
+//       do nothing (HQ may have manual-published).
+//     - Else pick one published practice_assessments doc for that
+//       subject (prefer mode='daily_challenge', fall back to
+//       mode='practice') and write tomorrow's challenge with
+//       createdBy: 'system'.
+//   Empty pool → log + skip. Never overwrites a manual publish.
+//
+//   Doc id pattern matches /daily-challenge-admin:
+//     {YYYY-MM-DD}_{subjectId}
+// ───────────────────────────────────────────────────────────────
+exports.rotateDailyChallenges = onSchedule(
+  { schedule: "5 0 * * *", timeZone: "Asia/Jakarta", region: "asia-southeast1" },
+  async () => {
+    const SUBJECTS = ["math", "english", "science"];
+    // Compute tomorrow in Asia/Jakarta. The runtime container is UTC,
+    // so build the date key from a localised string slice to avoid
+    // timezone drift on the boundary day.
+    const nowJakarta = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+    const tomorrow = new Date(nowJakarta);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const y = tomorrow.getFullYear();
+    const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
+    const d = String(tomorrow.getDate()).padStart(2, "0");
+    const dateKey = `${y}-${m}-${d}`;
+
+    // 00:00:00 → 23:59:59 in Asia/Jakarta, expressed as a UTC Date.
+    // Asia/Jakarta is UTC+7 always (no DST). So local 00:00 → UTC 17:00 prior day.
+    const opens  = new Date(`${dateKey}T00:00:00+07:00`);
+    const closes = new Date(`${dateKey}T23:59:59+07:00`);
+
+    const summary = { dateKey, published: [], skipped: [], empty: [] };
+
+    for (const subj of SUBJECTS) {
+      const id = `${dateKey}_${subj}`;
+      const ref = db.collection("daily_challenges").doc(id);
+      const existing = await ref.get();
+      if (existing.exists) {
+        summary.skipped.push(subj);
+        continue;
+      }
+
+      // Pick from published assessments for this subject. Prefer
+      // mode='daily_challenge' (the HQ-curated daily bucket); fall
+      // back to mode='practice' so the rotator still has something
+      // to land on during the math-only pilot.
+      let pool = await db.collection("practice_assessments")
+        .where("subjectId", "==", subj)
+        .where("status", "==", "published")
+        .where("mode", "==", "daily_challenge")
+        .limit(50).get();
+      if (pool.empty) {
+        pool = await db.collection("practice_assessments")
+          .where("subjectId", "==", subj)
+          .where("status", "==", "published")
+          .where("mode", "==", "practice")
+          .limit(50).get();
+      }
+      if (pool.empty) {
+        summary.empty.push(subj);
+        continue;
+      }
+
+      // Random pick. Deterministic alternative considered (e.g.
+      // round-robin by dateKey hash) but random gives more variety
+      // when the pool is small.
+      const docs = pool.docs;
+      const pickIdx = Math.floor(Math.random() * docs.length);
+      const a = docs[pickIdx];
+      const aData = a.data();
+      if (!Array.isArray(aData.itemIds) || aData.itemIds.length === 0) {
+        summary.empty.push(subj);
+        continue;
+      }
+
+      const SUBJ_LABEL = { math: "Math", english: "English", science: "Science" };
+      await ref.set({
+        dateKey,
+        subjectId: subj,
+        title: aData.title || `${SUBJ_LABEL[subj]} — daily rotation`,
+        description: aData.description || "",
+        itemIds: aData.itemIds,
+        itemCount: aData.itemCount || aData.itemIds.length,
+        difficultyMix: aData.difficultyMix || {},
+        topicGroups: aData.topicGroups || [],
+        sourceAssessmentId: a.id,
+        opensAt: opens,
+        closesAt: closes,
+        status: "open",
+        createdBy: "system",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      summary.published.push({ subj, assessmentId: a.id });
+    }
+
+    console.log("[rotateDailyChallenges]", JSON.stringify(summary));
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
 // EASE BANK PROXY — easeBankProxy
 //   Server-side proxy to the external latihan.id question bank
 //   API. Keeps the bearer token off the client; restricts callers
