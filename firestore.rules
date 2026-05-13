@@ -305,13 +305,28 @@ service cloud.firestore {
                            && userProfile().th_sub_roles.hasAny(['subject_teacher','subject_leader']));
       allow delete: if isAdmin();
 
-      // Self-CREATE on first login. uid pinned, emailLower pinned, status pinned.
+      // Self-CREATE on first login. uid pinned, emailLower pinned.
+      // Real students start in `needs_class`. HQ Specialists signing
+      // into SH to QA the runners (@eduversal.org domain) skip the
+      // class-picker flow entirely — they self-create directly into
+      // `active` with `is_hq_observer:true`. The domain check is
+      // verified server-side from the auth token, so a regular student
+      // can't claim observer status by writing the field on their own
+      // doc — the rule rejects them outright.
       allow create: if isAdmin() ||
         (isSignedIn()
          && request.auth.uid == uid
          && request.resource.data.uid == uid
          && request.resource.data.emailLower == request.auth.token.email.lower()
-         && request.resource.data.status == 'needs_class');
+         && (
+           // Real student path
+           request.resource.data.status == 'needs_class'
+           ||
+           // HQ observer fast-path
+           ( request.resource.data.status == 'active'
+             && request.resource.data.is_hq_observer == true
+             && request.auth.token.email.lower().matches('.*@eduversal\\.org$') )
+         ));
 
       // Self-UPDATE: class picker (needs_class → pending_approval) OR lastLoginAt touch.
       // Admin / TH admin / AH admin can update freely (including approving).
@@ -329,6 +344,17 @@ service cloud.firestore {
           // Login touch
           ( request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['lastLoginAt','displayName','photoURL'])
+          ) ||
+          // HQ observer back-fill — promote an @eduversal.org account
+          // whose pre-observer doc was created before the fast-path
+          // existed. Status flips to 'active' + is_hq_observer flag set
+          // in the same touch. Real students can't reach this branch
+          // because the token email domain check rejects them.
+          ( request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['lastLoginAt','displayName','photoURL','is_hq_observer','status'])
+            && request.resource.data.is_hq_observer == true
+            && request.resource.data.status == 'active'
+            && request.auth.token.email.lower().matches('.*@eduversal\\.org$')
           ) ||
           // Avatar customization (SH /avatar page, 2026-05-13)
           // Cosmetic only — never reaches assessment scoring. Style
