@@ -286,6 +286,91 @@
     .pv-content table { border-collapse: collapse; margin: 8px 0; font-size: 13.5px; }
     .pv-content th, .pv-content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
 
+    /* Diagram-image spinner — getDownloadURL + GCS fetch can take
+       1-3s cold; without a spinner the slot looks blank. */
+    .qb-img-spinner {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none; background: var(--paper);
+      border-radius: inherit;
+    }
+    .qb-img-spinner::before {
+      content: ''; width: 22px; height: 22px;
+      border: 2.5px solid #e5e7eb; border-top-color: var(--accent, #6c5ce7);
+      border-radius: 50%; animation: qb-spin .7s linear infinite;
+    }
+    @keyframes qb-spin { to { transform: rotate(360deg); } }
+    .qb-inline-spinner {
+      width: 24px; height: 24px;
+      border: 2.5px solid #e5e7eb; border-top-color: var(--accent, #6c5ce7);
+      border-radius: 50%; animation: qb-spin .7s linear infinite;
+    }
+
+    /* Preview-modal quiz interactivity — same pattern as /question-bank. */
+    .pv-opt {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 11px 14px; background: #fff;
+      border: 1px solid var(--border); border-radius: 10px;
+      font-size: 14px; line-height: 1.5;
+      cursor: pointer; user-select: none;
+      transition: transform .12s ease, border-color .12s ease,
+                  box-shadow .12s ease, background .15s ease, opacity .2s ease;
+    }
+    .pv-opt:hover {
+      border-color: var(--accent, #6c5ce7);
+      box-shadow: 0 3px 12px rgba(108,92,231,.14);
+      transform: translateY(-1px);
+    }
+    .pv-opt:active { transform: translateY(0); }
+    .pv-opt .pv-opt-letter { font-weight: 700; min-width: 22px; transition: color .15s ease; }
+    .pv-opt .pv-opt-badge {
+      font-size: 11px; font-weight: 600; opacity: 0;
+      transition: opacity .25s ease;
+      margin-left: auto; padding: 2px 8px; border-radius: 99px;
+      white-space: nowrap;
+    }
+    #pvAnswers.is-revealed .pv-opt { cursor: default; transform: none; }
+    #pvAnswers.is-revealed .pv-opt:hover { box-shadow: none; transform: none; }
+    .pv-opt.is-correct {
+      background: #d1fae5; border: 2px solid #10b981;
+      box-shadow: 0 0 0 3px rgba(16,185,129,.18);
+      animation: pv-pop .4s ease;
+    }
+    .pv-opt.is-correct .pv-opt-letter { color: #047857; font-size: 16px; }
+    .pv-opt.is-correct .pv-opt-badge { opacity: 1; background: #10b981; color: #fff; }
+    .pv-opt.is-wrong {
+      background: #fee2e2; border: 2px solid #ef4444;
+      box-shadow: 0 0 0 3px rgba(239,68,68,.15);
+      animation: pv-shake .4s ease;
+    }
+    .pv-opt.is-wrong .pv-opt-letter { color: #b91c1c; font-size: 16px; }
+    .pv-opt.is-wrong .pv-opt-badge { opacity: 1; background: #ef4444; color: #fff; }
+    #pvAnswers.is-revealed .pv-opt:not(.is-correct):not(.is-wrong) { opacity: .45; filter: grayscale(.4); }
+    @keyframes pv-pop {
+      0% { transform: scale(1); } 45% { transform: scale(1.025); } 100% { transform: scale(1); }
+    }
+    @keyframes pv-shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); }
+    }
+    .pv-result-banner {
+      margin-top: 6px; padding: 9px 12px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      animation: pv-fade .3s ease;
+    }
+    .pv-result-banner.is-correct { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+    .pv-result-banner.is-wrong   { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .pv-reveal-row { display: flex; justify-content: flex-end; margin-top: -2px; }
+    .pv-reveal-row button {
+      font: inherit; font-size: 12px; color: var(--ink-3);
+      background: transparent; border: 1px dashed var(--border);
+      border-radius: 99px; padding: 4px 12px; cursor: pointer;
+      transition: color .15s ease, border-color .15s ease;
+    }
+    .pv-reveal-row button:hover { color: var(--accent-dk, #5b48d6); border-color: var(--accent, #6c5ce7); }
+    @keyframes pv-fade { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
     .empty { text-align: center; padding: 60px 20px; color: var(--ink-3); }
     .empty-title { font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
     .access-warn { padding: 14px 18px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 10px; margin-bottom: 18px; font-size: 13px; }
@@ -408,11 +493,21 @@
   <!-- Editor modal -->
   <div id="itemModal" class="modal-overlay" role="dialog" aria-hidden="true">
     <div class="modal" style="width: min(960px, 100%); max-width: 960px;">
-      <h2 id="iModalTitle">New practice item</h2>
-      <div class="modal-body" id="itemEditorMount" style="padding: 18px 22px;"></div>
-      <div class="modal-actions">
-        <button id="iCancelBtn" class="btn-secondary" type="button">Cancel</button>
-        <button id="iSaveBtn" class="btn-primary" type="button">Save</button>
+      <h2 style="display:flex;align-items:center;gap:10px;padding-bottom:18px;border-bottom:1px solid var(--border);">
+        <span id="iModalTitle">New practice item</span>
+        <span style="flex:1"></span>
+        <button id="iCancelBtn" class="btn-secondary" type="button" style="font-size:13px">Cancel</button>
+        <button id="iSaveBtn" class="btn-primary" type="button" style="font-size:13px">Save</button>
+      </h2>
+      <div class="modal-body" style="padding: 0; display: flex; flex-direction: column;">
+        <div id="editorLivePreview" style="border-bottom:1px solid var(--border);background:linear-gradient(180deg,#fafaff 0%,#fff 100%);padding:18px 22px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-dk,#5b48d6);">Student preview</span>
+            <span style="font-size:11px;color:var(--ink-3);">— live as you edit</span>
+          </div>
+          <div id="elpBody" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55;color:var(--ink);"></div>
+        </div>
+        <div id="itemEditorMount" style="padding: 18px 22px;"></div>
       </div>
     </div>
   </div>
@@ -420,7 +515,7 @@
   <!-- Preview modal -->
   <div id="previewModal" class="modal-overlay" role="dialog" aria-hidden="true">
     <div class="modal" style="width: min(760px, 100%); max-width: 760px;">
-      <h2 style="display:flex;align-items:center;gap:10px;">
+      <h2 style="display:flex;align-items:center;gap:10px;padding-bottom:18px;border-bottom:1px solid var(--border);">
         <span>Item preview</span>
         <span id="pvCode" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;color:var(--ink-3);font-weight:400"></span>
         <span style="flex:1"></span>
@@ -528,10 +623,22 @@
           return;
         }
         img.dataset.hydrated = '1';
+        const parent = img.parentElement;
+        let spinner = null;
+        if (parent) {
+          const cs = getComputedStyle(parent);
+          if (cs.position === 'static') parent.style.position = 'relative';
+          spinner = document.createElement('div');
+          spinner.className = 'qb-img-spinner';
+          parent.appendChild(spinner);
+        }
+        const clear = () => { if (spinner && spinner.parentElement) spinner.remove(); };
+        img.addEventListener('load', clear, { once: true });
+        img.addEventListener('error', clear, { once: true });
         resolveImageUrl(p).then(url => {
           if (url) img.src = url;
-          else { img.style.opacity = '0.4'; img.title = 'Image could not be loaded.'; }
-        });
+          else { img.style.opacity = '0.4'; img.title = 'Image could not be loaded.'; clear(); }
+        }).catch(clear);
       });
     }
 
@@ -1393,23 +1500,55 @@
     }
     function renderPreviewAnswers(it) {
       const ansBox = document.getElementById('pvAnswers');
+      ansBox.classList.remove('is-revealed');
       if (it.type === 'mcq' && Array.isArray(it.options) && it.options.length) {
         // correctAnswer is a LETTER ('A'..'D'), NOT an integer index.
         const correctLetter = (it.correctAnswer || '').toString().toUpperCase();
         const correctIdx = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
         ansBox.innerHTML = it.options.map((o, i) => {
           const oHtml = (it.optionsHtml && it.optionsHtml[i]) ? sanitisePreviewHtml(it.optionsHtml[i]) : escHtml(o);
-          const isCorrect = pvReveal && i === correctIdx;
-          const isWrong = pvReveal && correctIdx >= 0 && i !== correctIdx;
-          const bg = isCorrect ? '#ecfdf5' : (isWrong ? '#fff' : '#fff');
-          const bd = isCorrect ? '#6ee7b7' : 'var(--border)';
           return `
-            <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:${bg};border:1px solid ${bd};border-radius:10px;font-size:14px;line-height:1.5;${isWrong ? 'opacity:.7' : ''}">
-              <span style="font-weight:700;min-width:22px">${String.fromCharCode(65+i)}</span>
+            <div class="pv-opt" data-idx="${i}" role="button" tabindex="0">
+              <span class="pv-opt-letter">${String.fromCharCode(65+i)}</span>
               <span class="pv-content" style="flex:1">${oHtml}</span>
-              ${isCorrect ? '<span style="font-size:11px;color:#047857;font-weight:600">✓ correct</span>' : ''}
+              <span class="pv-opt-badge"></span>
             </div>`;
-        }).join('');
+        }).join('')
+          + `<div id="pvResult"></div>`;
+        const reveal = (pickedIdx) => {
+          if (ansBox.classList.contains('is-revealed')) return;
+          ansBox.classList.add('is-revealed');
+          ansBox.querySelectorAll('.pv-opt').forEach(el => {
+            const idx = Number(el.dataset.idx);
+            const badge = el.querySelector('.pv-opt-badge');
+            if (idx === correctIdx) {
+              el.classList.add('is-correct');
+              if (badge) badge.textContent = idx === pickedIdx ? '✓ your answer · correct' : '✓ correct';
+            } else if (idx === pickedIdx) {
+              el.classList.add('is-wrong');
+              if (badge) badge.textContent = '✗ your answer';
+            }
+          });
+          const banner = ansBox.querySelector('#pvResult');
+          if (banner && pickedIdx != null && correctIdx >= 0) {
+            const ok = pickedIdx === correctIdx;
+            banner.innerHTML = `<div class="pv-result-banner ${ok ? 'is-correct' : 'is-wrong'}">${ok ? '🎯 Correct — nice one.' : `Not quite — the correct answer is ${String.fromCharCode(65+correctIdx)}.`}</div>`;
+          }
+          // Sync the header "Show answer" toggle with the revealed state.
+          pvReveal = true;
+          const rb = document.getElementById('pvReveal');
+          if (rb) rb.textContent = 'Hide answer';
+        };
+        ansBox.querySelectorAll('.pv-opt').forEach(el => {
+          const pick = () => reveal(Number(el.dataset.idx));
+          el.addEventListener('click', pick);
+          el.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+          });
+        });
+        // If the header "Show answer" button was pre-clicked before
+        // render (rare), auto-reveal without a pick.
+        if (pvReveal) reveal(null);
       } else if (it.type === 'short_answer') {
         if (pvReveal) {
           ansBox.innerHTML = `
@@ -1758,6 +1897,54 @@
         if (SUBJECT_IDS.includes(v)) m.setAttribute('data-subject-id', v);
         else m.removeAttribute('data-subject-id');
       });
+
+      // Live "Student preview" pane above the editor — refreshes on
+      // every keystroke / radio / select change so HQ catches missing
+      // options / wrong correctAnswer / dollar-sign math glitches
+      // before save. Delegated listener keeps it cheap and survives
+      // the MCQ ↔ short_answer mid-edit re-render (wireEditor reruns).
+      const fireLive = () => {
+        try { renderEditorLivePreview(readEditorPayload(mount)); }
+        catch (e) { console.warn('[practice-bank] live preview render failed', e); }
+      };
+      mount.addEventListener('input', fireLive);
+      mount.addEventListener('change', fireLive);
+      fireLive();
+    }
+
+    function renderEditorLivePreview(cur) {
+      const body = document.getElementById('elpBody');
+      if (!body || !cur) return;
+      const stemRich = cur.stem || '';
+      const stemHtml = stemRich
+        ? sanitisePreviewHtml(stemRich)
+        : '<em style="color:var(--ink-3)">(stem empty)</em>';
+      let answersHtml = '';
+      if (cur.type === 'mcq' && Array.isArray(cur.options) && cur.options.length) {
+        const correctLetter = (cur.correctAnswer || '').toString().toUpperCase();
+        const correctIdx = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
+        answersHtml = '<div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;">'
+          + cur.options.map((o, i) => {
+              const isCorrect = i === correctIdx;
+              const text = (o && o.trim()) ? sanitisePreviewHtml(o) : `<span style="color:var(--ink-3);font-style:italic">Option ${String.fromCharCode(65+i)} empty</span>`;
+              return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border:1px solid ${isCorrect ? '#10b981' : 'var(--border)'};background:${isCorrect ? '#d1fae5' : '#fff'};border-radius:8px;font-size:13.5px;">
+                <span style="font-weight:700;min-width:20px;color:${isCorrect ? '#047857' : 'var(--ink-2)'}">${String.fromCharCode(65+i)}</span>
+                <span style="flex:1">${text}</span>
+                ${isCorrect ? '<span style="font-size:10.5px;color:#fff;background:#10b981;padding:1px 7px;border-radius:99px;font-weight:600">✓ correct</span>' : ''}
+              </div>`;
+            }).join('')
+          + '</div>';
+        if (correctIdx < 0) {
+          answersHtml += '<div style="margin-top:8px;padding:6px 10px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:6px;font-size:11.5px;">⚠ No correct option selected</div>';
+        }
+      } else if (cur.type === 'short_answer') {
+        const ans = cur.correctAnswer || '';
+        answersHtml = `<div style="margin-top:12px;padding:9px 12px;background:${ans ? '#d1fae5' : 'var(--paper)'};border:1px ${ans ? 'solid #10b981' : 'dashed var(--border)'};border-radius:8px;font-size:13.5px;">${ans ? `<b>Canonical answer:</b> ${escHtml(ans)}` : '<span style="color:var(--ink-3);font-style:italic">Short answer · no canonical response (open-ended)</span>'}</div>`;
+      }
+      body.innerHTML = `<div class="pv-content">${stemHtml}</div>${answersHtml}`;
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([body]).catch(() => {});
+      }
     }
 
     function readEditorPayload(mount) {
