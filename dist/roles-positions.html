@@ -3017,29 +3017,62 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       color: var(--ink); margin: 8px 0 14px;
     }
 
-    /* Treemap (SVG, vanilla) */
-    .rp-treemap-wrap {
+    /* Horizontal bar chart */
+    .rp-bars-wrap {
       background: var(--white); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px; margin-bottom: 22px;
+      border-radius: var(--radius); padding: 18px 20px; margin-bottom: 22px;
     }
-    #rpTreemap { width: 100%; height: 380px; display: block; }
-    .rp-treemap-rect { cursor: pointer; transition: opacity .15s; }
-    .rp-treemap-rect:hover { opacity: 0.85; }
-    .rp-treemap-label { font-family: 'DM Sans', sans-serif; pointer-events: none; fill: #fff; font-weight: 600; }
-    .rp-treemap-count { font-family: 'DM Mono', monospace; pointer-events: none; fill: rgba(255,255,255,0.85); }
-
-    /* Legend / category pills */
-    .rp-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-    .rp-legend-pill {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 4px 10px; border-radius: 999px;
-      background: var(--white); border: 1px solid var(--border);
-      font-size: 12px; color: var(--ink-2); cursor: pointer;
-      transition: border-color .15s, background .15s;
+    .rp-bars-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px dashed var(--border-soft);
+      font-size: 12px; color: var(--ink-3);
     }
-    .rp-legend-pill .dot { width: 9px; height: 9px; border-radius: 50%; }
-    .rp-legend-pill.active { background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk); }
-    .rp-legend-pill:hover { border-color: var(--accent); }
+    .rp-bars-head .total { font-family: 'DM Mono', monospace; color: var(--ink-2); }
+    .rp-bars-head .total strong { color: var(--ink); font-weight: 700; }
+    .rp-bar-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(120px, 2.6fr) 56px;
+      align-items: center; gap: 14px;
+      padding: 8px 6px; border-radius: 8px;
+      cursor: pointer; transition: background .15s;
+    }
+    .rp-bar-row:hover { background: var(--paper); }
+    .rp-bar-row + .rp-bar-row { margin-top: 2px; }
+    .rp-bar-label {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 12.5px; color: var(--ink-2); font-weight: 500;
+      min-width: 0;
+    }
+    .rp-bar-label .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.6);
+    }
+    .rp-bar-label .lbl {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .rp-bar-row:hover .rp-bar-label .lbl { color: var(--ink); }
+    .rp-bar-track {
+      position: relative; height: 18px;
+      background: var(--border-soft); border-radius: 6px; overflow: hidden;
+    }
+    .rp-bar-fill {
+      position: absolute; inset: 0 auto 0 0;
+      border-radius: 6px;
+      transition: width .35s ease, opacity .15s;
+      opacity: 0.92;
+    }
+    .rp-bar-row:hover .rp-bar-fill { opacity: 1; }
+    .rp-bar-count {
+      text-align: right;
+      font-family: 'DM Mono', monospace; font-size: 12.5px;
+      color: var(--ink); font-weight: 600;
+    }
+    .rp-bar-count .pct {
+      display: block;
+      font-size: 10.5px; color: var(--ink-3); font-weight: 500;
+      margin-top: 1px;
+    }
 
     /* Org Chart (mermaid + fallback) */
     .rp-diagram-wrap {
@@ -3114,6 +3147,132 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
     .rp-tree-node.is-collapsed > .rp-tree-children { display: none; }
     .rp-diagram-wrap:has(.rp-tree) { padding: 18px 20px; }
+
+    /* Org chart — hybrid card layout */
+    .rp-orgchart {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 10px 4px 20px;
+    }
+    .rp-org-root { display: flex; justify-content: center; }
+    .rp-org-trunk {
+      width: 2px; height: 28px; background: var(--border);
+    }
+    .rp-org-row {
+      display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
+      position: relative; padding-top: 18px; width: 100%;
+    }
+    /* horizontal connector line above the row */
+    .rp-org-row::before {
+      content: ''; position: absolute; top: 0; left: 10%; right: 10%;
+      height: 2px; background: var(--border);
+    }
+    .rp-org-branch {
+      display: flex; flex-direction: column; align-items: stretch;
+      position: relative; flex: 1 1 200px; max-width: 240px; min-width: 180px;
+    }
+    /* vertical drop from the row connector to each card */
+    .rp-org-branch::before {
+      content: ''; position: absolute; top: -18px; left: 50%; width: 2px; height: 18px;
+      background: var(--border); transform: translateX(-50%);
+    }
+    .rp-org-card {
+      background: var(--white); border: 1.5px solid var(--border);
+      border-radius: 14px; padding: 14px 14px 12px;
+      box-shadow: var(--shadow-sm);
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      gap: 4px;
+    }
+    .rp-org-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px -10px rgba(15,23,42,0.18);
+      border-color: var(--accent);
+    }
+    .rp-org-card:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+    .rp-org-card--root {
+      background: linear-gradient(135deg, #1a1530 0%, #2d2354 100%);
+      border-color: #2d2354; color: #fff; cursor: default;
+      padding: 18px 22px 16px;
+    }
+    .rp-org-card--root:hover { transform: none; box-shadow: var(--shadow-sm); }
+    .rp-org-card--root .rp-org-card-sub,
+    .rp-org-card--root .rp-org-card-meta { color: rgba(255,255,255,0.78); }
+    .rp-org-card-icon {
+      font-size: 20px; line-height: 1; margin-bottom: 2px;
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--accent-2); color: var(--accent-dk);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .rp-org-card--root .rp-org-card-icon {
+      background: rgba(255,255,255,0.14); color: #fff;
+    }
+    .rp-org-card-title {
+      font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.25;
+    }
+    .rp-org-card--root .rp-org-card-title { color: #fff; font-size: 15px; }
+    .rp-org-card-sub {
+      font-size: 11.5px; color: var(--ink-3); font-weight: 500;
+      text-transform: capitalize;
+    }
+    .rp-org-card-meta {
+      font-size: 10.5px; color: var(--ink-3); margin-top: 4px;
+      background: var(--border-soft); padding: 2px 8px; border-radius: 10px;
+    }
+    .rp-org-card--root .rp-org-card-meta {
+      background: rgba(255,255,255,0.14);
+    }
+
+    /* Per-category accent on L1 card border + icon */
+    .rp-org-card--academic_leadership { border-color: var(--c-lead); }
+    .rp-org-card--academic_leadership .rp-org-card-icon { background: #ede9fe; color: var(--c-lead); }
+    .rp-org-card--academic_operations { border-color: var(--c-ops); }
+    .rp-org-card--academic_operations .rp-org-card-icon { background: #cffafe; color: var(--c-ops); }
+    .rp-org-card--teaching_staff { border-color: var(--c-teach); }
+    .rp-org-card--teaching_staff .rp-org-card-icon { background: #dcfce7; color: var(--c-teach); }
+    .rp-org-card--student_support { border-color: var(--c-supp); }
+    .rp-org-card--student_support .rp-org-card-icon { background: #fed7aa; color: var(--c-supp); }
+    .rp-org-card--administration { border-color: var(--c-admin); }
+    .rp-org-card--administration .rp-org-card-icon { background: #fecaca; color: var(--c-admin); }
+    .rp-org-card--communications { border-color: var(--c-comms); }
+    .rp-org-card--communications .rp-org-card-icon { background: #e9d5ff; color: var(--c-comms); }
+    .rp-org-card--hq_central { border-color: var(--c-hq); }
+    .rp-org-card--hq_central .rp-org-card-icon { background: #dbeafe; color: var(--c-hq); }
+    .rp-org-card--compliance { border-color: var(--c-comp); }
+    .rp-org-card--compliance .rp-org-card-icon { background: #e2e8f0; color: var(--c-comp); }
+
+    /* Show team button */
+    .rp-org-expand {
+      margin-top: 8px; align-self: center;
+      background: var(--white); border: 1px solid var(--border);
+      color: var(--ink-2); font: 500 12px/1 'DM Sans', sans-serif;
+      padding: 6px 12px; border-radius: 999px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: all 0.15s;
+    }
+    .rp-org-expand:hover { border-color: var(--accent); color: var(--accent-dk); background: var(--accent-2); }
+    .rp-org-expand-caret { transition: transform 0.15s; display: inline-block; }
+    .rp-org-expand.is-open .rp-org-expand-caret { transform: rotate(180deg); }
+    .rp-org-expand--leaf {
+      cursor: default; opacity: 0.55; background: transparent; border-style: dashed;
+    }
+    .rp-org-expand--leaf:hover { background: transparent; color: var(--ink-3); border-color: var(--border); }
+    .rp-org-subtree {
+      margin-top: 12px; padding: 10px 6px 6px;
+      background: var(--paper); border: 1px solid var(--border);
+      border-radius: 10px;
+      text-align: left;
+    }
+    .rp-org-subtree .rp-tree-node { font-size: 13px; }
+    .rp-org-subtree .rp-tree-name { font-size: 13px; }
+
+    @media (max-width: 720px) {
+      .rp-org-row { gap: 14px; }
+      .rp-org-branch { flex-basis: 100%; max-width: 100%; }
+      .rp-org-row::before { display: none; }
+      .rp-org-branch::before { display: none; }
+    }
 
     /* Heatmap */
     .rp-heatmap-wrap {
@@ -3327,9 +3486,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="rp-stat-row" id="rpStatRow"></div>
 
     <h2 class="rp-h2">Headcount distribution by category</h2>
-    <div class="rp-treemap-wrap">
-      <div class="rp-legend" id="rpTreemapLegend"></div>
-      <svg id="rpTreemap" viewBox="0 0 800 380" preserveAspectRatio="none"></svg>
+    <div class="rp-bars-wrap">
+      <div class="rp-bars-head">
+        <span>Click any row to filter the catalogue by that category.</span>
+        <span class="total"><strong id="rpBarsTotal">—</strong> positions across <strong id="rpBarsCats">—</strong> categories</span>
+      </div>
+      <div id="rpBars"></div>
     </div>
 
     <div id="rpDisclaimers"></div>
@@ -3383,6 +3545,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <option value="source-sheet">Source-sheet only</option>
         <option value="gap_added">HR additions</option>
         <option value="gap-flagged">Gap-flagged (incomplete)</option>
+      </select>
+      <select id="rpFilterTier">
+        <option value="">All tiers</option>
+        <option value="Certificated">Certificated</option>
+        <option value="Classified">Classified</option>
+        <option value="AM&amp;C">AM&amp;C</option>
+        <option value="none">No tier in source</option>
       </select>
       <button class="reset" id="rpResetFilters">Reset</button>
     </div>
@@ -3472,7 +3641,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         // Build everything
         renderStatRow();
         renderDisclaimers();
-        renderTreemap();
+        renderBars();
         renderHeatmap();
         renderCatalogueFilters();
         renderCatalogue();
@@ -3529,7 +3698,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           byTrack[t] = (byTrack[t] || 0) + 1;
         });
         var gapFlagged = DATA.positions.filter(function (p) { return !!p.gapFlag; }).length;
-        var withTeachingHrs = DATA.positions.filter(function (p) { return p.teachingHoursEquivalent != null; }).length;
+        var withTriplet = DATA.positions.filter(function (p) { return !!p.teachingHoursModel; }).length;
+        var byTier = { 'Certificated': 0, 'Classified': 0, 'AM&C': 0 };
+        DATA.positions.forEach(function (p) {
+          if (p.certificationTier && byTier[p.certificationTier] != null) byTier[p.certificationTier]++;
+        });
 
         var stats = [
           { label: 'Academic Hub roles',  value: byPlat.academichub, sub: 'school-side (AH)' },
@@ -3539,7 +3712,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           { label: 'Teachers track',      value: byTrack.teachers,   sub: 'CTS 2023 anchored' },
           { label: 'Specialists track',   value: byTrack.specialists, sub: 'CH hybrid (9/27 CTS)' },
           { label: 'Gap-flagged roles',   value: gapFlagged,         sub: 'source-incomplete' },
-          { label: 'Teaching-hr quoted',  value: withTeachingHrs,    sub: 'source-sheet 4-21 range' },
+          { label: 'Hours triplet rows',  value: withTriplet,        sub: 'Equivalent.pdf 24/E/S model' },
+          { label: 'Certificated tier',   value: byTier['Certificated'], sub: 'sertifikasi guru pathway' },
+          { label: 'Classified tier',     value: byTier['Classified'],   sub: 'classified staff' },
+          { label: 'AM&C tier',           value: byTier['AM&C'],         sub: 'Admin / Mgmt / Confidential' },
         ];
         $('rpStatRow').innerHTML = stats.map(function (s) {
           return '<div class="rp-stat">' +
@@ -3561,8 +3737,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         $('rpDisclaimers').innerHTML = html;
       }
 
-      // ── Overview: treemap (vanilla SVG, squarified-lite) ──────────────
-      function renderTreemap() {
+      // ── Overview: horizontal bar chart ────────────────────────────────
+      function renderBars() {
         var counts = {};
         DATA.positions.forEach(function (p) { counts[p.category] = (counts[p.category] || 0) + 1; });
         var items = DATA.categories.map(function (c) {
@@ -3570,113 +3746,47 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }).filter(function (x) { return x.value > 0; })
           .sort(function (a, b) { return b.value - a.value; });
 
-        // Legend
-        var legendHtml = items.map(function (it) {
-          return '<span class="rp-legend-pill" data-cat="' + esc(it.id) + '">' +
-            '<span class="dot" style="background:' + esc(it.color) + '"></span>' +
-            esc(it.label) + ' <strong style="margin-left:4px;color:' + esc(it.color) + '">' + it.value + '</strong>' +
-          '</span>';
-        }).join('');
-        $('rpTreemapLegend').innerHTML = legendHtml;
-        Array.prototype.forEach.call(document.querySelectorAll('.rp-legend-pill'), function (el) {
-          el.addEventListener('click', function () {
-            $('rpFilterCat').value = el.dataset.cat;
-            renderCatalogue();
-            var tabBtn = document.querySelector('.rp-tab[data-tab="catalogue"]');
-            if (tabBtn) tabBtn.click();
-          });
-        });
-
-        // Layout — slice-and-dice (simple). 800 × 380 viewport.
-        var svg = $('rpTreemap');
-        svg.innerHTML = '';
-        var W = 800, H = 380;
         var total = items.reduce(function (acc, it) { return acc + it.value; }, 0);
-        // Two-row split: bigger items in top row, smaller in bottom.
-        var split = Math.ceil(items.length / 2);
-        var topItems = items.slice(0, split);
-        var botItems = items.slice(split);
-        var topTotal = topItems.reduce(function (a, b) { return a + b.value; }, 0);
-        var botTotal = botItems.reduce(function (a, b) { return a + b.value; }, 0);
-        var rowSplit = total > 0 ? (topTotal / total) * H : H;
-        var minRow = 90, maxRow = H - 90;
-        if (rowSplit < minRow) rowSplit = minRow;
-        if (rowSplit > maxRow) rowSplit = maxRow;
-        if (botItems.length === 0) rowSplit = H;
+        var maxVal = items.length ? items[0].value : 1;
 
-        var ns = 'http://www.w3.org/2000/svg';
-        function drawRow(rowItems, y, rowH, rowTotal) {
-          var x = 0;
-          rowItems.forEach(function (it) {
-            var w = rowTotal > 0 ? (it.value / rowTotal) * W : 0;
-            var rect = document.createElementNS(ns, 'rect');
-            rect.setAttribute('x', x);
-            rect.setAttribute('y', y);
-            rect.setAttribute('width', w);
-            rect.setAttribute('height', rowH);
-            rect.setAttribute('fill', it.color);
-            rect.setAttribute('class', 'rp-treemap-rect');
-            rect.setAttribute('data-cat', it.id);
-            svg.appendChild(rect);
+        $('rpBarsTotal').textContent = total;
+        $('rpBarsCats').textContent = items.length;
 
-            if (w > 70 && rowH > 30) {
-              var lines = wrapText(it.label, Math.max(8, w / 7));
-              var lh = 14;
-              var startY = y + rowH / 2 - (lines.length * lh) / 2 + 4;
-              lines.forEach(function (ln, i) {
-                var t = document.createElementNS(ns, 'text');
-                t.setAttribute('x', x + w / 2);
-                t.setAttribute('y', startY + i * lh);
-                t.setAttribute('text-anchor', 'middle');
-                t.setAttribute('font-size', '13');
-                t.setAttribute('class', 'rp-treemap-label');
-                t.textContent = ln;
-                svg.appendChild(t);
-              });
-              var c = document.createElementNS(ns, 'text');
-              c.setAttribute('x', x + w / 2);
-              c.setAttribute('y', startY + lines.length * lh + 4);
-              c.setAttribute('text-anchor', 'middle');
-              c.setAttribute('font-size', '12');
-              c.setAttribute('class', 'rp-treemap-count');
-              c.textContent = it.value + ' roles';
-              svg.appendChild(c);
-            } else if (w > 30 && rowH > 24) {
-              var c2 = document.createElementNS(ns, 'text');
-              c2.setAttribute('x', x + w / 2);
-              c2.setAttribute('y', y + rowH / 2 + 5);
-              c2.setAttribute('text-anchor', 'middle');
-              c2.setAttribute('font-size', '13');
-              c2.setAttribute('class', 'rp-treemap-count');
-              c2.textContent = it.value;
-              svg.appendChild(c2);
-            }
-            x += w;
-          });
+        $('rpBars').innerHTML = items.map(function (it) {
+          var widthPct = maxVal > 0 ? (it.value / maxVal) * 100 : 0;
+          var sharePct = total > 0 ? Math.round((it.value / total) * 100) : 0;
+          // Linear gradient: solid colour fading slightly to the right for visual lift
+          var grad = 'linear-gradient(90deg, ' + it.color + ' 0%, ' + it.color + 'd9 100%)';
+          return '<div class="rp-bar-row" data-cat="' + esc(it.id) + '" role="button" tabindex="0" aria-label="Filter catalogue by ' + esc(it.label) + '">' +
+            '<div class="rp-bar-label">' +
+              '<span class="dot" style="background:' + esc(it.color) + '"></span>' +
+              '<span class="lbl">' + esc(it.label) + '</span>' +
+            '</div>' +
+            '<div class="rp-bar-track">' +
+              '<div class="rp-bar-fill" style="width:' + widthPct.toFixed(1) + '%;background:' + grad + ';"></div>' +
+            '</div>' +
+            '<div class="rp-bar-count">' + it.value +
+              '<span class="pct">' + sharePct + '%</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+        function jumpToCatalogue(catId) {
+          $('rpFilterCat').value = catId;
+          renderCatalogue();
+          var tabBtn = document.querySelector('.rp-tab[data-tab="catalogue"]');
+          if (tabBtn) tabBtn.click();
         }
-        drawRow(topItems, 0, rowSplit, topTotal);
-        if (botItems.length) drawRow(botItems, rowSplit, H - rowSplit, botTotal);
 
-        // Click handler
-        Array.prototype.forEach.call(svg.querySelectorAll('.rp-treemap-rect'), function (r) {
-          r.addEventListener('click', function () {
-            $('rpFilterCat').value = r.dataset.cat;
-            renderCatalogue();
-            var tabBtn = document.querySelector('.rp-tab[data-tab="catalogue"]');
-            if (tabBtn) tabBtn.click();
+        Array.prototype.forEach.call($('rpBars').querySelectorAll('.rp-bar-row'), function (row) {
+          row.addEventListener('click', function () { jumpToCatalogue(row.dataset.cat); });
+          row.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              jumpToCatalogue(row.dataset.cat);
+            }
           });
         });
-      }
-      function wrapText(s, maxChars) {
-        var words = String(s).split(/\s+/);
-        var lines = [], cur = '';
-        words.forEach(function (w) {
-          if (!cur) { cur = w; return; }
-          if ((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
-          else { lines.push(cur); cur = w; }
-        });
-        if (cur) lines.push(cur);
-        return lines.slice(0, 2);
       }
 
       // ── Mermaid loader ─────────────────────────────────────────────────
@@ -3752,23 +3862,82 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       function renderOrgChart() {
         var el = $('rpOrgChart');
         var childrenOf = buildOrgIndex();
+        var topReports = childrenOf.foundation_board || [];
+        var totalDesc = countDescendants('foundation_board', childrenOf);
 
-        // Root label
-        var rootHtml = '';
-        rootHtml += '<div class="rp-tree" role="tree">';
-        rootHtml += renderTreeNode('foundation_board', childrenOf, 0, true);
-        rootHtml += '</div>';
+        // ── Hybrid layout: top 2 levels as horizontal cards, deeper levels as inline tree ──
+        var html = '';
+        html += '<div class="rp-orgchart">';
 
-        // Controls
+        // Root card (CEO-style top node)
+        html += '<div class="rp-org-root">';
+        html += '  <div class="rp-org-card rp-org-card--root">';
+        html += '    <div class="rp-org-card-icon">⬢</div>';
+        html += '    <div class="rp-org-card-title">Foundation Board</div>';
+        html += '    <div class="rp-org-card-sub">Eduversal HQ Foundation</div>';
+        html += '    <div class="rp-org-card-meta">' + topReports.length + ' direct · ' + totalDesc + ' total</div>';
+        html += '  </div>';
+        html += '</div>';
+
+        // Connector down to row
+        if (topReports.length > 0) {
+          html += '<div class="rp-org-trunk"></div>';
+        }
+
+        // Row of L1 cards (direct reports of foundation_board), each carrying its own subtree
+        html += '<div class="rp-org-row" data-count="' + topReports.length + '">';
+        topReports.forEach(function (childId) {
+          var p = POS_BY_ID[childId];
+          if (!p) return;
+          var subKids = childrenOf[childId] || [];
+          var subDesc = countDescendants(childId, childrenOf);
+          var lbl = p.title.replace(/\s*\(.*?\)\s*$/, '');
+          var subtitle = p.platformMapping && p.platformMapping.platform
+            ? p.platformMapping.platform.replace('hub', ' Hub')
+            : (CAT_BY_ID[p.category] ? CAT_BY_ID[p.category].label : '');
+
+          html += '<div class="rp-org-branch">';
+          html += '  <div class="rp-org-card rp-org-card--' + p.category + '" data-pos-id="' + esc(childId) + '" tabindex="0" role="button">';
+          html += '    <div class="rp-org-card-icon">👤</div>';
+          html += '    <div class="rp-org-card-title">' + esc(lbl) + '</div>';
+          html += '    <div class="rp-org-card-sub">' + esc(subtitle) + '</div>';
+          if (subKids.length > 0) {
+            html += '    <div class="rp-org-card-meta">' + subKids.length + ' direct'
+                  + (subDesc > subKids.length ? ' · ' + subDesc + ' total' : '') + '</div>';
+          }
+          html += '  </div>';
+
+          // Subtree (initially hidden)
+          if (subKids.length > 0) {
+            html += '  <button type="button" class="rp-org-expand" data-branch-id="' + esc(childId) + '">';
+            html += '    <span class="rp-org-expand-caret">▾</span> Show team';
+            html += '  </button>';
+            html += '  <div class="rp-org-subtree" data-branch-tree="' + esc(childId) + '" hidden>';
+            html += '    <div class="rp-tree" role="tree">';
+            for (var i = 0; i < subKids.length; i++) {
+              html += renderTreeNode(subKids[i], childrenOf, 0, false);
+            }
+            html += '    </div>';
+            html += '  </div>';
+          } else {
+            html += '  <div class="rp-org-expand rp-org-expand--leaf">No direct reports</div>';
+          }
+
+          html += '</div>'; // .rp-org-branch
+        });
+        html += '</div>'; // .rp-org-row
+
+        // Global tree controls (apply to currently-open subtrees)
         var controls = ''
           + '<div class="rp-tree-controls">'
-          +   '<button type="button" class="rp-tree-btn" data-tree-action="expand-all">Expand all</button>'
-          +   '<button type="button" class="rp-tree-btn" data-tree-action="collapse-all">Collapse all</button>'
-          +   '<button type="button" class="rp-tree-btn" data-tree-action="expand-2">Expand to depth 2</button>'
+          +   '<button type="button" class="rp-tree-btn" data-tree-action="expand-all">Expand all teams</button>'
+          +   '<button type="button" class="rp-tree-btn" data-tree-action="collapse-all">Collapse all teams</button>'
           + '</div>';
 
+        html += '</div>'; // .rp-orgchart
+
         el.classList.remove('mermaid');
-        el.innerHTML = controls + rootHtml;
+        el.innerHTML = controls + html;
 
         if (ORG_CHART_BOUND) return;
         ORG_CHART_BOUND = true;
@@ -3778,21 +3947,54 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           var actionBtn = ev.target.closest('[data-tree-action]');
           if (actionBtn) {
             var action = actionBtn.dataset.treeAction;
-            Array.prototype.forEach.call(el.querySelectorAll('.rp-tree-node'), function (n) {
-              var depth = parseInt(n.dataset.depth || '0', 10);
-              if (action === 'expand-all')   n.classList.remove('is-collapsed');
-              if (action === 'collapse-all') { if (depth > 0) n.classList.add('is-collapsed'); }
-              if (action === 'expand-2')     n.classList.toggle('is-collapsed', depth >= 2);
+            // Apply to all branch subtrees: open or close every one
+            Array.prototype.forEach.call(el.querySelectorAll('.rp-org-subtree'), function (sub) {
+              var btn = el.querySelector('[data-branch-id="' + sub.dataset.branchTree + '"]');
+              if (action === 'expand-all') {
+                sub.hidden = false;
+                if (btn) btn.classList.add('is-open');
+              } else if (action === 'collapse-all') {
+                sub.hidden = true;
+                if (btn) btn.classList.remove('is-open');
+              }
             });
+            // Also reset inner tree-node collapsed state to depth-1 default when expanding
+            if (action === 'expand-all') {
+              Array.prototype.forEach.call(el.querySelectorAll('.rp-tree-node'), function (n) {
+                n.classList.remove('is-collapsed');
+              });
+            }
             return;
           }
+          // Top-level "Show team" toggle on an L1 card
+          var branchBtn = ev.target.closest('.rp-org-expand[data-branch-id]');
+          if (branchBtn) {
+            ev.preventDefault();
+            var bid = branchBtn.dataset.branchId;
+            var sub = el.querySelector('[data-branch-tree="' + bid + '"]');
+            if (sub) {
+              sub.hidden = !sub.hidden;
+              branchBtn.classList.toggle('is-open', !sub.hidden);
+            }
+            return;
+          }
+          // Click on an L1 card → open role detail
+          var orgCard = ev.target.closest('.rp-org-card[data-pos-id]');
+          if (orgCard) {
+            ev.preventDefault();
+            var cardPid = orgCard.dataset.posId;
+            if (cardPid) openRole(cardPid);
+            return;
+          }
+          // Inner tree caret toggle
           var toggle = ev.target.closest('.rp-tree-toggle');
-          if (toggle) {
+          if (toggle && !toggle.classList.contains('rp-tree-toggle--leaf')) {
             ev.preventDefault();
             var node = toggle.closest('.rp-tree-node');
             if (node) node.classList.toggle('is-collapsed');
             return;
           }
+          // Inner tree name → role detail
           var nameLink = ev.target.closest('.rp-tree-name');
           if (nameLink) {
             ev.preventDefault();
@@ -3966,11 +4168,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         $('rpFilterCat').addEventListener('change', renderCatalogue);
         $('rpFilterTrack').addEventListener('change', renderCatalogue);
         $('rpFilterSource').addEventListener('change', renderCatalogue);
+        $('rpFilterTier').addEventListener('change', renderCatalogue);
         $('rpResetFilters').addEventListener('click', function () {
           $('rpSearch').value = '';
           $('rpFilterCat').value = '';
           $('rpFilterTrack').value = '';
           $('rpFilterSource').value = '';
+          $('rpFilterTier').value = '';
           renderCatalogue();
         });
       }
@@ -3979,6 +4183,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         var fc = $('rpFilterCat').value;
         var ft = $('rpFilterTrack').value;
         var fs = $('rpFilterSource').value;
+        var ftier = $('rpFilterTier').value;
 
         var filtered = DATA.positions.filter(function (p) {
           if (fc && p.category !== fc) return false;
@@ -3989,13 +4194,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           if (fs === 'source-sheet' && (p.source || '').indexOf('gap_added') >= 0) return false;
           if (fs === 'gap_added' && (p.source || '').indexOf('gap_added') < 0) return false;
           if (fs === 'gap-flagged' && !p.gapFlag) return false;
+          if (ftier) {
+            if (ftier === 'none' && p.certificationTier) return false;
+            if (ftier !== 'none' && p.certificationTier !== ftier) return false;
+          }
           if (q) {
             var hay = [
               p.title, p.description, p.code,
               (p.tags || []).join(' '),
               (p.cambridgeRefs || []).join(' '),
               (p.indonesianRefs || []).join(' '),
-              (p.competencyTrack || '')
+              (p.competencyTrack || ''),
+              (p.certificationTier || ''),
+              (p.sheetNote || '')
             ].join(' ').toLowerCase();
             if (hay.indexOf(q) < 0) return false;
           }
@@ -4021,7 +4232,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           else if (p.competencyTrack === 'specialists') trackPill = '<span class="pill track-s">Specialists track</span>';
           var gapPill = p.gapFlag ? '<span class="pill gap">gap-flagged</span>' : '';
           var addedPill = ((p.source || '').indexOf('gap_added') >= 0) ? '<span class="pill added">HR-added</span>' : '';
-          var thrs = p.teachingHoursEquivalent != null ? '<span class="pill">' + p.teachingHoursEquivalent + ' hrs</span>' : '';
+          var thrs = '';
+          if (p.teachingHoursModel && p.teachingHoursModel.suggested != null) {
+            thrs = '<span class="pill" title="Suggested teaching hours (Optimum ' + (p.teachingHoursModel.optimum != null ? p.teachingHoursModel.optimum : '—') + ' − Equivalent ' + (p.teachingHoursModel.equivalent != null ? p.teachingHoursModel.equivalent : '—') + ')">' + p.teachingHoursModel.suggested + ' h/wk</span>';
+          } else if (p.teachingHoursEquivalent != null) {
+            thrs = '<span class="pill">' + p.teachingHoursEquivalent + ' hrs</span>';
+          }
+          var tierPill = '';
+          if (p.certificationTier === 'Certificated')     tierPill = '<span class="pill" style="background:#dcfce7;color:#14532d;">Certificated</span>';
+          else if (p.certificationTier === 'Classified')  tierPill = '<span class="pill" style="background:#dbeafe;color:#1e3a8a;">Classified</span>';
+          else if (p.certificationTier === 'AM&C')        tierPill = '<span class="pill" style="background:#ede9fe;color:#4c1d95;">AM&amp;C</span>';
 
           return '<a class="rp-card" data-role="' + esc(p.id) + '" href="#" style="border-left-color:' + esc(cat.color) + '">' +
             '<div class="rp-card-head">' +
@@ -4030,7 +4250,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             '</div>' +
             '<div class="rp-card-title">' + esc(p.title) + '</div>' +
             '<div class="rp-card-desc">' + esc((p.description || '').slice(0, 180) + ((p.description || '').length > 180 ? '…' : '')) + '</div>' +
-            '<div class="rp-card-meta">' + trackPill + addedPill + gapPill + thrs + '</div>' +
+            '<div class="rp-card-meta">' + trackPill + tierPill + addedPill + gapPill + thrs + '</div>' +
           '</a>';
         }).join('');
 
@@ -4113,10 +4333,49 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         if (p.miNote) {
           profileBits.push('<dt>MI note</dt><dd style="font-size:12px;color:var(--ink-3);">' + esc(p.miNote) + '</dd>');
         }
+        if (p.teachingHoursModel) {
+          var thm = p.teachingHoursModel;
+          var opt = thm.optimum != null ? thm.optimum : '—';
+          var eq  = thm.equivalent != null ? thm.equivalent : '—';
+          var sug = thm.suggested != null ? thm.suggested : '—';
+          var thmNote = p.teachingHoursModelNote ? '<div style="margin-top:6px;font-size:11.5px;color:var(--ink-3);font-style:italic;">' + esc(p.teachingHoursModelNote) + '</div>' : '';
+          profileBits.push('<dt>Teaching-hours model</dt><dd>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:340px;">' +
+              '<div style="background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:6px 8px;text-align:center;">' +
+                '<div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Optimum</div>' +
+                '<div style="font-family:DM Mono,monospace;font-size:15px;font-weight:700;color:var(--ink);">' + opt + '</div>' +
+              '</div>' +
+              '<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;text-align:center;">' +
+                '<div style="font-size:10px;color:#92400e;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Equivalent</div>' +
+                '<div style="font-family:DM Mono,monospace;font-size:15px;font-weight:700;color:#78350f;">−' + eq + '</div>' +
+              '</div>' +
+              '<div style="background:#d1fae5;border:1px solid #a7f3d0;border-radius:6px;padding:6px 8px;text-align:center;">' +
+                '<div style="font-size:10px;color:#065f46;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Suggested</div>' +
+                '<div style="font-family:DM Mono,monospace;font-size:15px;font-weight:700;color:#064e3b;">' + sug + '</div>' +
+              '</div>' +
+            '</div>' + thmNote +
+          '</dd>');
+        }
         if (p.teachingHoursEquivalent != null) {
-          profileBits.push('<dt>Teaching-hr equiv.</dt><dd><strong>' + p.teachingHoursEquivalent + '</strong> hrs ' + (p.teachingHoursNote ? '<span style="color:var(--ink-3);font-size:12px;">— ' + esc(p.teachingHoursNote) + '</span>' : '') + '</dd>');
+          profileBits.push('<dt>Teaching-hr (legacy)</dt><dd><strong>' + p.teachingHoursEquivalent + '</strong> hrs ' + (p.teachingHoursNote ? '<span style="color:var(--ink-3);font-size:12px;">— ' + esc(p.teachingHoursNote) + '</span>' : '') + '</dd>');
         } else if (p.teachingHoursNote) {
-          profileBits.push('<dt>Teaching-hr equiv.</dt><dd style="font-size:12px;color:var(--ink-3);">— ' + esc(p.teachingHoursNote) + '</dd>');
+          profileBits.push('<dt>Teaching-hr (legacy)</dt><dd style="font-size:12px;color:var(--ink-3);">— ' + esc(p.teachingHoursNote) + '</dd>');
+        }
+        if (p.certificationTier) {
+          var tierColor = {
+            'Certificated': { bg: '#dcfce7', fg: '#14532d', border: '#86efac' },
+            'Classified':   { bg: '#dbeafe', fg: '#1e3a8a', border: '#93c5fd' },
+            'AM&C':         { bg: '#ede9fe', fg: '#4c1d95', border: '#c4b5fd' }
+          }[p.certificationTier] || { bg: 'var(--paper)', fg: 'var(--ink-2)', border: 'var(--border)' };
+          profileBits.push('<dt>Certification tier</dt><dd>' +
+            '<span style="display:inline-block;padding:3px 10px;border-radius:999px;background:' + tierColor.bg + ';color:' + tierColor.fg + ';border:1px solid ' + tierColor.border + ';font-size:11.5px;font-weight:600;">' + esc(p.certificationTier) + '</span>' +
+            (p.certificationTierNote ? '<div style="margin-top:4px;font-size:11.5px;color:var(--ink-3);font-style:italic;">' + esc(p.certificationTierNote) + '</div>' : '') +
+          '</dd>');
+        } else if (p.certificationTierNote) {
+          profileBits.push('<dt>Certification tier</dt><dd style="font-size:11.5px;color:var(--ink-3);font-style:italic;">' + esc(p.certificationTierNote) + '</dd>');
+        }
+        if (p.sheetNote) {
+          profileBits.push('<dt>Source-sheet note</dt><dd style="font-size:12.5px;color:var(--ink-2);"><em>' + esc(p.sheetNote) + '</em></dd>');
         }
         if (profileBits.length) {
           body += '<div class="rp-modal-section"><h3>Profile</h3><dl class="kv">' + profileBits.join('') + '</dl></div>';
