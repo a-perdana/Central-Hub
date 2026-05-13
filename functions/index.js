@@ -743,28 +743,63 @@ async function awardPoints(studentUid, points, opts = {}) {
     // Level is derived from totalPoints (1 point = 1 XP).
     const lvl = computeLevelFromTotalXp(totalPoints);
 
-    // Streak: bump if a new calendar day since lastDayISO.
+    // Streak: bump if a new calendar day since lastDayISO. Milestone
+    // bonuses (7-day +100, 30-day +250) are awarded inside this same
+    // transaction so the same calendar-day flip can never pay twice —
+    // `prevDay !== today` is the idempotency gate.
     const today = new Date().toISOString().slice(0, 10);
     const prevDay = cur.streak?.lastDayISO;
-    let streak = cur.streak || { current: 0, longest: 0, lastDayISO: null };
+    let streak = cur.streak || { current: 0, longest: 0, lastDayISO: null, milestonesPaid: [] };
+    let streakBonus = 0;
+    let milestoneHit = null;
     if (prevDay !== today) {
       // Was the last day exactly yesterday?
       const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const currentStreak = (prevDay === yesterday) ? (streak.current || 0) + 1 : 1;
+      const milestonesPaid = Array.isArray(streak.milestonesPaid) ? streak.milestonesPaid.slice() : [];
+
+      if (currentStreak >= 30 && !milestonesPaid.includes(30)) {
+        streakBonus  = POINTS.STREAK_MILESTONE_30;
+        milestoneHit = 30;
+        milestonesPaid.push(30);
+      } else if (currentStreak >= 7 && !milestonesPaid.includes(7)) {
+        streakBonus  = POINTS.STREAK_MILESTONE_7;
+        milestoneHit = 7;
+        milestonesPaid.push(7);
+      }
+
       streak = {
         current: currentStreak,
         longest: Math.max(currentStreak, streak.longest || 0),
         lastDayISO: today,
+        milestonesPaid,
       };
     }
 
+    // Re-fold the milestone bonus into the running totals + level so the
+    // doc commits in one shot.
+    const totalAfterBonus   = totalPoints   + streakBonus;
+    const weeklyAfterBonus  = weeklyPoints  + streakBonus;
+    const monthlyAfterBonus = monthlyPoints + streakBonus;
+    const lvlAfter = streakBonus ? computeLevelFromTotalXp(totalAfterBonus) : lvl;
+
     const update = {
       ...identity,
-      totalPoints, weeklyPoints, monthlyPoints,
-      level: lvl.level, levelXp: lvl.xpInLevel, levelXpRequired: lvl.xpRequired, levelProgress: lvl.progress,
+      totalPoints: totalAfterBonus,
+      weeklyPoints: weeklyAfterBonus,
+      monthlyPoints: monthlyAfterBonus,
+      level: lvlAfter.level, levelXp: lvlAfter.xpInLevel, levelXpRequired: lvlAfter.xpRequired, levelProgress: lvlAfter.progress,
       streak,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (milestoneHit) {
+      update.lastStreakMilestone = {
+        day: milestoneHit,
+        bonus: streakBonus,
+        awardedAt: admin.firestore.FieldValue.serverTimestamp(),
+        seen: false,
+      };
+    }
 
     // Activity counters (opt-in via opts.counter)
     if (opts.counter === "chapter")        update.chapterTestsCompleted = admin.firestore.FieldValue.increment(1);
