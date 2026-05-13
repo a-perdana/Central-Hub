@@ -695,6 +695,52 @@ service cloud.firestore {
       allow create, update, delete: if false;   // Cloud Function (admin SDK) only
     }
 
+    // ── Practice + Daily Challenge (Students Hub, 2026-05-13) ──
+    // practice_attempts: per-student self-paced runs over
+    // practice_questions / practice_assessments. NEVER feeds
+    // chapter_mastery or ease_growth (same boundary as
+    // practice_questions — see CLAUDE.md Common Mistake #33).
+    // Cloud Function will award `student_points` on submit; client
+    // never writes student_points directly.
+    //
+    // Doc id pattern: auto-id. Owning student creates + updates own
+    // doc while status=='in_progress'; once 'submitted' or 'scored'
+    // it becomes immutable for the student (admin can fix).
+    //
+    // mode ∈ {'practice', 'daily_challenge', 'tournament'} so the
+    // Cloud Function can apply per-mode point multipliers later.
+    match /practice_attempts/{attemptId} {
+      allow get: if isAuthorized() ||
+                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow list: if isAuthorized();
+      allow create: if isActiveStudent()
+                    && request.resource.data.studentUid == request.auth.uid
+                    && request.resource.data.status == 'in_progress'
+                    && request.resource.data.mode in ['practice', 'daily_challenge', 'tournament'];
+      // Owner can keep appending answers while in_progress and flip
+      // to submitted/scored exactly once. After that the doc is
+      // immutable for the student (admin still has the standard
+      // bypass via isAdmin / isAuthorized via the catch-all below).
+      allow update: if isActiveStudent()
+                    && resource.data.studentUid == request.auth.uid
+                    && resource.data.status == 'in_progress';
+      allow delete: if isAdmin();
+    }
+
+    // daily_challenges: one curated set per day per subject.
+    // Doc id pattern: '{YYYY-MM-DD}_{subjectId}' so the SH client
+    // can compute today's id without a query.
+    // Authored by HQ (admin / CH coordinator / director) or by a
+    // scheduled Cloud Function (admin SDK bypass) that rotates a
+    // fresh set every midnight. References practice_assessments
+    // (not raw practice_questions) so the same composer surfaces
+    // both bundles for tournaments AND daily-challenges.
+    match /daily_challenges/{challengeId} {
+      allow get, list: if isAuthorized() || isActiveStudent();
+      allow create, update: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+    }
+
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();
