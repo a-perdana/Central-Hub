@@ -339,6 +339,7 @@ const htmlFiles = [
   "question-bank.html",
   "practice-bank-admin.html",
   "practice-assessment-author.html",
+  "daily-challenge-admin.html",
   "diagrams.html",
   "page-access.html",
   "rules-viewer.html",

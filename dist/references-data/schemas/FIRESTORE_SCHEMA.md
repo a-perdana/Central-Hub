@@ -1140,6 +1140,65 @@ Three collections + one Cloud Function:
 
 ---
 
+### 23. Practice Attempts + Daily Challenges (Students Hub engagement, 2026-05-13)
+
+Two collections that wire the Practice Bank + Practice Assessments into student-facing self-paced runs. Same intent-and-boundary as §21 + §22: NEVER feeds `chapter_mastery` or `ease_growth`. Lives at the SH-engagement tier — point awards flow through `student_points` via a future Cloud Function trigger.
+
+#### `practice_attempts/{attemptId}`
+**PK:** Auto-id.
+**Fields:**
+- `studentUid → students.uid`
+- `studentName` (denormalised — keeps leaderboard render zero-join)
+- `schoolId → partner_schools.id` (denormalised at create — needed for scope filtering)
+- `classId → partner_schools.classes.id` (denormalised — used by class-scope queries)
+- `gradeLevel` (number — denormalised)
+- `subjectId` (`'math' | 'english' | 'science'`)
+- `mode` (`'practice' | 'daily_challenge' | 'tournament'`)
+- `sourceType` (`'free' | 'assessment' | 'challenge'`)
+  - `'free'`: ad-hoc picker run (no parent assessment, `itemIds[]` chosen client-side from `practice_questions`)
+  - `'assessment'`: ran an existing `practice_assessments/{id}` bundle (`assessmentId` populated)
+  - `'challenge'`: ran today's `daily_challenges/{challengeId}` (`challengeId` populated)
+- `assessmentId → practice_assessments.id | null`
+- `challengeId → daily_challenges.id | null`
+- `itemIds[]` (array of `practice_questions.id` — the actual items the runner served; for `'assessment'`/`'challenge'` this mirrors the parent's `itemIds[]` at attempt-start time so subsequent edits to the parent don't desync this run)
+- `topicGroup` (string — denormalised for free-mode runs by topic)
+- `responses[]` (map array — `{ itemId, answer, isCorrect, timeSpentMs, answeredAt }`)
+- `status` (`'in_progress' | 'submitted' | 'scored'`)
+- `correctCount` (number)
+- `attemptedCount` (number)
+- `rawScorePct` (number — `correctCount / itemIds.length * 100`)
+- `streakBest` (number — longest consecutive correct streak in this attempt, drives "🔥 perfect run" UI cues)
+- `pointsAwarded` (number — set by Cloud Function on submit; null until then)
+- `createdAt`, `submittedAt`
+
+**FKs:** `studentUid → students.uid` · `schoolId → partner_schools.id` · `classId` · `assessmentId → practice_assessments.id` · `challengeId → daily_challenges.id` · `itemIds[i] → practice_questions.id`.
+**Writers:** owning student creates own draft (`status=='in_progress'`, `studentUid==auth.uid`); owner can update fields while `in_progress`; once `submitted`/`scored` doc is immutable for student. `central_admin` can update freely (for manual regrade or moderation).
+**Read:** any authorised CH/AH/TH user (admin / staff lens) OR owning student (`studentUid==auth.uid`).
+**Notes:** Mirrors the `chapter_test_attempts` lifecycle but **never writes back to mastery**. The Cloud Function that maintains `student_points` reads this collection and applies a per-mode multiplier (e.g. practice 1×, daily_challenge 1.5×, tournament 2×).
+
+#### `daily_challenges/{challengeId}`
+**PK:** Deterministic `{YYYY-MM-DD}_{subjectId}` (e.g. `2026-05-13_math`). Lets the SH client compute today's id without a query.
+**Fields:**
+- `dateKey` (string — `'YYYY-MM-DD'`)
+- `subjectId` (`'math' | 'english' | 'science'`)
+- `title` (string — e.g. "Friday Algebra Sprint")
+- `description` (string)
+- `itemIds[]` (array of `practice_questions.id` — typically 5 items)
+- `itemCount` (number — denormalised)
+- `difficultyMix` (map)
+- `topicGroups[]` (denormalised union)
+- `opensAt`, `closesAt` (timestamps — typically `dateKey 00:00..23:59` local)
+- `status` (`'draft' | 'open' | 'closed'`)
+- `createdBy → users.uid | 'system'` (`'system'` when a future Cloud Function rotates challenges automatically)
+- `createdAt`, `updatedAt`
+
+**FKs:** `createdBy → users.uid` (or sentinel `'system'`) · each `itemIds[i] → practice_questions.id`.
+**Writers:** `central_admin` OR CH `coordinator` / `director`.
+**Read:** any authorised user OR `isActiveStudent()`.
+**Notes:** One challenge doc per (date × subject). The deterministic id makes "did I do today's?" a `get` not a `where`. A future Cloud Function may auto-rotate challenges from the published `practice_assessments` pool at midnight; until that lands, HQ authors today's challenge from `/practice-assessment-author` and writes the `daily_challenges` doc by hand (the same HQ surface composes both `practice_assessments` and `daily_challenges`).
+
+---
+
 ## Indexes (composite)
 
 Single-field indexes are auto-created by Firestore. Composites must be declared in `Central Hub/firestore.indexes.json`.
@@ -1180,6 +1239,9 @@ Single-field indexes are auto-created by Firestore. Composites must be declared 
 | `practice_assessments` | `subjectId ASC, status ASC, updatedAt DESC` | `practice-assessment-author.html` left-rail list (filter by subject + status, recent first) |
 | `practice_assessments` | `status ASC, mode ASC, publishedAt DESC` | future SH tournament/leaderboard pickers (published practice/tournament/daily-challenge by recency) |
 | `practice_ai_audit` | `actorUid ASC, at DESC` | HQ "my AI calls" audit pane |
+| `practice_attempts` | `studentUid ASC, submittedAt DESC` | SH "my recent practice runs" list |
+| `practice_attempts` | `classId ASC, mode ASC, submittedAt DESC` | SH class-scope daily-challenge leaderboard |
+| `daily_challenges` | `subjectId ASC, status ASC, dateKey DESC` | SH "today's challenge" lookup (filter by subject + open status, recent first) |
 
 All indexes are tracked in `Central Hub/firestore.indexes.json` and deployed via `firebase deploy --only firestore:indexes`. The local file is the **single source of truth** — `firebase deploy --force` will delete any index not present in the local file.
 

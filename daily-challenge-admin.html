@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Challenge Admin — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%236c5ce7'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <script src="firebase-config.js"></script>
+  <style>
+    :root { --accent: #6c5ce7; --accent-dk: #5848c7; --accent-2: #f5f3ff; --accent-cyan: #0891b2; }
+
+    .hero {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4338ca 60%, #0e7490 100%);
+      padding: 26px 40px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 90% 25%, rgba(8,145,178,.32) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-inner { max-width: 1080px; margin: 0 auto; position: relative; z-index: 1; }
+    .hero-eyebrow {
+      font-size: .65rem; font-weight: 700;
+      letter-spacing: .2em; text-transform: uppercase;
+      color: rgba(165,243,252,.85); margin-bottom: 6px;
+    }
+    .hero h1 {
+      font-family: 'Lora', serif; font-size: 1.85rem;
+      margin: 0 0 8px; line-height: 1.1; font-weight: 600;
+    }
+    .hero p { color: rgba(255,255,255,.78); font-size: .9rem; margin: 0; max-width: 620px; line-height: 1.5; }
+
+    .page-wrap { max-width: 1080px; margin: 28px auto 60px; padding: 0 24px; }
+
+    /* Day picker + 3-subject card row */
+    .day-bar {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 22px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .day-bar label { font-weight: 600; color: var(--ink); font-size: .9rem; }
+    .day-bar input[type="date"] {
+      padding: 8px 12px; border: 1.5px solid var(--border);
+      border-radius: 8px; font: inherit; font-size: .9rem;
+      background: #fff;
+    }
+    .day-bar input[type="date"]:focus { outline: none; border-color: var(--accent); }
+    .day-bar .today-btn {
+      background: var(--accent); color: #fff; border: none;
+      padding: 8px 16px; border-radius: 8px; font-weight: 600;
+      cursor: pointer; font-size: .85rem;
+    }
+    .day-bar .today-btn:hover { background: var(--accent-dk); }
+    .day-bar .day-meta { color: var(--ink-3); font-size: .82rem; margin-left: auto; }
+
+    .subj-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 880px) { .subj-grid { grid-template-columns: 1fr; } }
+
+    .subj-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow-sm);
+      transition: all .12s;
+    }
+    .subj-card:hover { box-shadow: var(--shadow); }
+    .subj-card.is-open { border-color: var(--accent); }
+    .subj-card.is-closed { opacity: .82; }
+
+    .subj-h {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+    .subj-h .glyph {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--accent-2); color: var(--accent-dk);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.15rem; flex-shrink: 0;
+    }
+    .subj-h .meta strong { display: block; font-weight: 700; color: var(--ink); }
+    .subj-h .meta span { font-size: .76rem; color: var(--ink-3); }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 99px;
+      font-size: .7rem; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-left: auto;
+    }
+    .status-pill.draft  { background: #f1f5f9; color: #475569; }
+    .status-pill.open   { background: #dcfce7; color: #166534; }
+    .status-pill.closed { background: #fef3c7; color: #92400e; }
+    .status-pill.none   { background: #fee2e2; color: #b91c1c; }
+
+    .subj-body label {
+      display: block;
+      font-size: .76rem; font-weight: 600; color: var(--ink-2);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 6px;
+    }
+    .subj-body select, .subj-body input {
+      width: 100%; padding: 9px 12px; font: inherit; font-size: .9rem;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      background: #fff;
+      margin-bottom: 10px;
+    }
+    .subj-body select:focus, .subj-body input:focus {
+      outline: none; border-color: var(--accent);
+    }
+
+    .subj-summary {
+      background: var(--paper);
+      border-radius: 8px; padding: 10px 12px;
+      font-size: .82rem; color: var(--ink-2);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .subj-summary .row { display: flex; justify-content: space-between; }
+    .subj-summary .row + .row { margin-top: 4px; }
+    .subj-summary strong { font-weight: 600; color: var(--ink); }
+
+    .subj-actions {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .subj-actions .btn {
+      flex: 1 1 auto; padding: 8px 12px; font-size: .82rem;
+    }
+
+    /* Recent challenges */
+    .recent-table {
+      width: 100%; border-collapse: collapse;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .recent-table th, .recent-table td {
+      padding: 10px 14px; text-align: left; font-size: .88rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .recent-table th {
+      background: var(--paper);
+      font-weight: 600; color: var(--ink-2);
+      font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .recent-table tr:last-child td { border-bottom: none; }
+
+    .toast-band {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      background: var(--ink); color: #fff;
+      padding: 10px 18px; border-radius: 10px;
+      font-size: .88rem;
+      box-shadow: 0 12px 32px rgba(0,0,0,.18);
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      z-index: 1000;
+    }
+    .toast-band.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  </style>
+</head>
+<body style="display:none">
+  <!-- SHARED_NAVBAR -->
+
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-eyebrow">Students Hub · Daily Challenge</div>
+      <h1>Set today's challenges</h1>
+      <p>Each weekday morning, students see a 5-question rotation per subject. Pick a published practice assessment, hit Publish, and it goes live for the class leaderboard. Same boundary as the rest of the practice bank — points only, never feeds chapter mastery or EASE growth.</p>
+    </div>
+  </section>
+
+  <main class="page-wrap">
+    <!-- Day picker -->
+    <div class="day-bar">
+      <label for="dayInput">Date</label>
+      <input type="date" id="dayInput">
+      <button type="button" class="today-btn" id="btnToday">Today</button>
+      <span class="day-meta" id="dayMeta">Loading…</span>
+    </div>
+
+    <!-- 3-subject grid -->
+    <div class="subj-grid">
+      <div class="subj-card" data-subj="math">
+        <div class="subj-h">
+          <span class="glyph">🧮</span>
+          <div class="meta"><strong>Math</strong><span>Year 7-8 pilot bank</span></div>
+          <span class="status-pill none" id="math-pill">No challenge</span>
+        </div>
+        <div class="subj-body">
+          <label>Practice assessment</label>
+          <select id="math-pick"><option value="">— pick a published assessment —</option></select>
+          <label>Title (visible to students)</label>
+          <input type="text" id="math-title" placeholder="Auto-filled from assessment, edit if you like">
+          <div class="subj-summary" id="math-summary">Pick an assessment to preview.</div>
+          <div class="subj-actions">
+            <button type="button" class="btn btn-primary" id="math-publish">Publish</button>
+            <button type="button" class="btn btn-secondary" id="math-close" disabled>Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="subj-card" data-subj="english">
+        <div class="subj-h">
+          <span class="glyph">📖</span>
+          <div class="meta"><strong>English</strong><span>Year 7-8 pilot bank</span></div>
+          <span class="status-pill none" id="english-pill">No challenge</span>
+        </div>
+        <div class="subj-body">
+          <label>Practice assessment</label>
+          <select id="english-pick"><option value="">— pick a published assessment —</option></select>
+          <label>Title (visible to students)</label>
+          <input type="text" id="english-title" placeholder="Auto-filled from assessment, edit if you like">
+          <div class="subj-summary" id="english-summary">Pick an assessment to preview.</div>
+          <div class="subj-actions">
+            <button type="button" class="btn btn-primary" id="english-publish">Publish</button>
+            <button type="button" class="btn btn-secondary" id="english-close" disabled>Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="subj-card" data-subj="science">
+        <div class="subj-h">
+          <span class="glyph">🔬</span>
+          <div class="meta"><strong>Science</strong><span>Year 7-8 pilot bank</span></div>
+          <span class="status-pill none" id="science-pill">No challenge</span>
+        </div>
+        <div class="subj-body">
+          <label>Practice assessment</label>
+          <select id="science-pick"><option value="">— pick a published assessment —</option></select>
+          <label>Title (visible to students)</label>
+          <input type="text" id="science-title" placeholder="Auto-filled from assessment, edit if you like">
+          <div class="subj-summary" id="science-summary">Pick an assessment to preview.</div>
+          <div class="subj-actions">
+            <button type="button" class="btn btn-primary" id="science-publish">Publish</button>
+            <button type="button" class="btn btn-secondary" id="science-close" disabled>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent challenges (last 14 days) -->
+    <h3 style="font-family:'Lora',serif; font-size:1.1rem; margin:0 0 12px">Recent challenges</h3>
+    <table class="recent-table" id="recentTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Subject</th>
+          <th>Title</th>
+          <th>Items</th>
+          <th>Status</th>
+          <th>Author</th>
+        </tr>
+      </thead>
+      <tbody id="recentBody">
+        <tr><td colspan="6" style="text-align:center; color:var(--ink-3); padding:24px">Loading…</td></tr>
+      </tbody>
+    </table>
+  </main>
+
+  <div class="toast-band" id="toast"></div>
+
+  <script type="module" src="auth-guard.js"></script>
+  <script type="module">
+    import {
+      collection, query, where, orderBy, limit, getDocs,
+      doc, getDoc, setDoc, updateDoc, serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const SUBJECTS = ['math', 'english', 'science'];
+    const SUBJ_LABEL = { math: 'Math', english: 'English', science: 'Science' };
+
+    const state = {
+      profile: null,
+      isAdmin: false,
+      canWrite: false,        // admin OR coordinator/director
+      dateKey: dateKey(new Date()),
+      assessmentsBySubj: {},  // subj → [{id, title, itemIds[], itemCount, difficultyMix, ...}]
+      todaysBySubj: {},       // subj → daily_challenges doc | null
+    };
+
+    function dateKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    document.addEventListener('authReady', boot);
+
+    async function boot() {
+      state.profile = window.userProfile;
+      state.isAdmin = state.profile?.role_centralhub === 'central_admin';
+      const sr = Array.isArray(state.profile?.ch_sub_roles) ? state.profile.ch_sub_roles : [];
+      state.canWrite = state.isAdmin || sr.includes('director') || sr.includes('coordinator');
+
+      if (!state.canWrite) {
+        document.body.style.display = '';
+        document.querySelector('.page-wrap').innerHTML =
+          '<div style="background:#fef3c7;color:#92400e;padding:24px;border-radius:10px;margin-top:20px"><strong>Not authorised.</strong> Daily Challenge admin is open to central_admin · director · coordinator.</div>';
+        return;
+      }
+      document.body.style.display = '';
+
+      // Wire date picker
+      const dayInput = document.getElementById('dayInput');
+      dayInput.value = state.dateKey;
+      dayInput.addEventListener('change', () => {
+        state.dateKey = dayInput.value || dateKey(new Date());
+        refreshDay();
+      });
+      document.getElementById('btnToday').addEventListener('click', () => {
+        state.dateKey = dateKey(new Date());
+        dayInput.value = state.dateKey;
+        refreshDay();
+      });
+
+      // Wire per-subject controls
+      SUBJECTS.forEach(s => {
+        document.getElementById(s + '-pick').addEventListener('change', () => onPickChange(s));
+        document.getElementById(s + '-publish').addEventListener('click', () => publish(s));
+        document.getElementById(s + '-close').addEventListener('click', () => closeChallenge(s));
+      });
+
+      // Initial loads
+      await Promise.all(SUBJECTS.map(loadAssessments));
+      await refreshDay();
+      await loadRecent();
+    }
+
+    // ─── Load published practice_assessments per subject ─────────
+    async function loadAssessments(subj) {
+      try {
+        const q = query(
+          collection(window.db, 'practice_assessments'),
+          where('subjectId', '==', subj),
+          where('status', '==', 'published'),
+          orderBy('updatedAt', 'desc'),
+          limit(50)
+        );
+        const snap = await getDocs(q);
+        state.assessmentsBySubj[subj] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderPicker(subj);
+      } catch (e) {
+        console.warn('[dc-admin] assessments fetch failed', subj, e.message);
+        state.assessmentsBySubj[subj] = [];
+        renderPicker(subj);
+      }
+    }
+
+    function renderPicker(subj) {
+      const sel = document.getElementById(subj + '-pick');
+      const list = state.assessmentsBySubj[subj] || [];
+      const opts = list.map(a =>
+        `<option value="${escAttr(a.id)}">${escHtml(a.title || '(untitled)')} · ${a.itemCount || 0} items</option>`
+      ).join('');
+      sel.innerHTML = '<option value="">— pick a published assessment —</option>' + opts;
+      if (list.length === 0) {
+        sel.innerHTML = '<option value="">No published assessments yet — author one first</option>';
+        sel.disabled = true;
+      } else {
+        sel.disabled = false;
+      }
+    }
+
+    function onPickChange(subj) {
+      const sel = document.getElementById(subj + '-pick');
+      const title = document.getElementById(subj + '-title');
+      const summary = document.getElementById(subj + '-summary');
+      const id = sel.value;
+      if (!id) {
+        title.value = '';
+        summary.textContent = 'Pick an assessment to preview.';
+        return;
+      }
+      const a = (state.assessmentsBySubj[subj] || []).find(x => x.id === id);
+      if (!a) return;
+      const today = state.todaysBySubj[subj];
+      title.value = today?.title || a.title || (SUBJ_LABEL[subj] + ' — daily rotation');
+      const mix = a.difficultyMix || {};
+      const mixLine = ['easy', 'medium', 'hard']
+        .filter(d => (mix[d] || 0) > 0)
+        .map(d => mix[d] + ' ' + d).join(' · ') || '—';
+      summary.innerHTML =
+        `<div class="row"><span>Items</span><strong>${a.itemCount || a.itemIds?.length || 0}</strong></div>` +
+        `<div class="row"><span>Difficulty mix</span><strong>${mixLine}</strong></div>` +
+        `<div class="row"><span>Topic groups</span><strong>${(a.topicGroups || []).join(', ') || '—'}</strong></div>`;
+    }
+
+    // ─── Refresh the day's 3 challenge cards ─────────────────────
+    async function refreshDay() {
+      document.getElementById('dayMeta').textContent =
+        new Date(state.dateKey + 'T00:00').toLocaleDateString('en-GB', {
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+        });
+      await Promise.all(SUBJECTS.map(fetchTodaysFor));
+      SUBJECTS.forEach(renderCard);
+    }
+
+    async function fetchTodaysFor(subj) {
+      const id = `${state.dateKey}_${subj}`;
+      try {
+        const snap = await getDoc(doc(window.db, 'daily_challenges', id));
+        state.todaysBySubj[subj] = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+      } catch (e) {
+        console.warn('[dc-admin] fetch failed', id, e.message);
+        state.todaysBySubj[subj] = null;
+      }
+    }
+
+    function renderCard(subj) {
+      const card = document.querySelector(`.subj-card[data-subj="${subj}"]`);
+      const pill = document.getElementById(subj + '-pill');
+      const sel  = document.getElementById(subj + '-pick');
+      const title = document.getElementById(subj + '-title');
+      const publishBtn = document.getElementById(subj + '-publish');
+      const closeBtn   = document.getElementById(subj + '-close');
+      const today = state.todaysBySubj[subj];
+
+      card.classList.remove('is-open', 'is-closed');
+
+      if (!today) {
+        pill.className = 'status-pill none'; pill.textContent = 'No challenge';
+        publishBtn.textContent = 'Publish';
+        closeBtn.disabled = true;
+        sel.value = '';
+        title.value = '';
+        document.getElementById(subj + '-summary').textContent = 'Pick an assessment to preview.';
+        return;
+      }
+
+      pill.className = 'status-pill ' + today.status;
+      pill.textContent = today.status.toUpperCase();
+      card.classList.add('is-' + today.status);
+
+      // Pre-select source assessment if we can match it
+      const guessId = today.sourceAssessmentId;
+      if (guessId) sel.value = guessId;
+      title.value = today.title || '';
+      const list = state.assessmentsBySubj[subj] || [];
+      const a = list.find(x => x.id === guessId);
+      if (a) onPickChange(subj);
+      else {
+        // Show the persisted shape even if source assessment isn't in the cached list
+        const mix = today.difficultyMix || {};
+        const mixLine = ['easy', 'medium', 'hard']
+          .filter(d => (mix[d] || 0) > 0)
+          .map(d => mix[d] + ' ' + d).join(' · ') || '—';
+        document.getElementById(subj + '-summary').innerHTML =
+          `<div class="row"><span>Items</span><strong>${today.itemCount}</strong></div>` +
+          `<div class="row"><span>Difficulty mix</span><strong>${mixLine}</strong></div>` +
+          `<div class="row"><span>Topic groups</span><strong>${(today.topicGroups || []).join(', ') || '—'}</strong></div>`;
+      }
+
+      publishBtn.textContent = today.status === 'open' ? 'Update' : 'Re-publish';
+      closeBtn.disabled = today.status === 'closed';
+    }
+
+    // ─── Publish / Update ───────────────────────────────────────
+    async function publish(subj) {
+      const sel = document.getElementById(subj + '-pick');
+      const titleInput = document.getElementById(subj + '-title');
+      const aid = sel.value;
+      if (!aid) { toast('Pick a practice assessment first'); return; }
+      const a = (state.assessmentsBySubj[subj] || []).find(x => x.id === aid);
+      if (!a) { toast('Assessment not found'); return; }
+      if (!Array.isArray(a.itemIds) || a.itemIds.length === 0) {
+        toast('Assessment has no items');
+        return;
+      }
+
+      const id = `${state.dateKey}_${subj}`;
+      const ref = doc(window.db, 'daily_challenges', id);
+      const exists = !!state.todaysBySubj[subj];
+
+      // Open/close window: midnight → 23:59:59 of dateKey, local time
+      const opens  = new Date(state.dateKey + 'T00:00:00');
+      const closes = new Date(state.dateKey + 'T23:59:59');
+
+      const payload = {
+        dateKey: state.dateKey,
+        subjectId: subj,
+        title: (titleInput.value || a.title || SUBJ_LABEL[subj] + ' — daily rotation').trim(),
+        description: a.description || '',
+        itemIds: a.itemIds,
+        itemCount: a.itemCount || a.itemIds.length,
+        difficultyMix: a.difficultyMix || {},
+        topicGroups: a.topicGroups || [],
+        sourceAssessmentId: aid,
+        opensAt: opens,
+        closesAt: closes,
+        status: 'open',
+        updatedAt: serverTimestamp(),
+      };
+      if (!exists) {
+        payload.createdBy = window.currentUser.uid;
+        payload.createdAt = serverTimestamp();
+      }
+
+      try {
+        await setDoc(ref, payload, { merge: true });
+        toast(exists ? 'Challenge updated ✓' : 'Challenge published ✓');
+        await fetchTodaysFor(subj);
+        renderCard(subj);
+        await loadRecent();
+      } catch (e) {
+        console.error('[dc-admin] publish failed', e);
+        toast('Couldn\'t publish: ' + (e.message || e.code));
+      }
+    }
+
+    async function closeChallenge(subj) {
+      const id = `${state.dateKey}_${subj}`;
+      try {
+        await updateDoc(doc(window.db, 'daily_challenges', id), {
+          status: 'closed',
+          updatedAt: serverTimestamp(),
+        });
+        toast('Challenge closed');
+        await fetchTodaysFor(subj);
+        renderCard(subj);
+        await loadRecent();
+      } catch (e) {
+        console.error('[dc-admin] close failed', e);
+        toast('Close failed');
+      }
+    }
+
+    // ─── Recent challenges (last ~14 across all subjects) ───────
+    async function loadRecent() {
+      const body = document.getElementById('recentBody');
+      try {
+        // Query each subject's most-recent 5 in parallel (uses
+        // subjectId+status+dateKey composite index already deployed).
+        // We don't filter by status here — show all so admin can spot
+        // closed/missing days at a glance.
+        const all = [];
+        await Promise.all(SUBJECTS.map(async (s) => {
+          const q = query(
+            collection(window.db, 'daily_challenges'),
+            where('subjectId', '==', s),
+            orderBy('dateKey', 'desc'),
+            limit(5)
+          );
+          const snap = await getDocs(q);
+          snap.forEach(d => all.push({ id: d.id, ...d.data() }));
+        }));
+        all.sort((a, b) =>
+          (b.dateKey || '').localeCompare(a.dateKey || '')
+          || (a.subjectId || '').localeCompare(b.subjectId || '')
+        );
+        if (all.length === 0) {
+          body.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--ink-3); padding:24px">Nothing published yet — pick an assessment above to set today\'s first challenge.</td></tr>';
+          return;
+        }
+        body.innerHTML = all.slice(0, 18).map(c => {
+          const when = new Date(c.dateKey + 'T00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+          const pill = `<span class="status-pill ${c.status}">${(c.status || '').toUpperCase()}</span>`;
+          return `<tr>
+            <td>${escHtml(when)} <span style="color:var(--ink-3);font-size:.78rem">${escHtml(c.dateKey || '')}</span></td>
+            <td>${escHtml(SUBJ_LABEL[c.subjectId] || c.subjectId)}</td>
+            <td>${escHtml(c.title || '')}</td>
+            <td>${c.itemCount || 0}</td>
+            <td>${pill}</td>
+            <td style="color:var(--ink-3); font-size:.82rem">${escHtml(c.createdBy === 'system' ? 'system' : (c.createdBy ? c.createdBy.slice(0, 6) + '…' : '—'))}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        console.warn('[dc-admin] recent load failed', e.message);
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:24px">Could not load recent challenges.</td></tr>';
+      }
+    }
+
+    // ─── Helpers ────────────────────────────────────────────────
+    let toastTimer = null;
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+    }
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      })[c]);
+    }
+    function escAttr(s) { return escHtml(s); }
+  </script>
+</body>
+</html>
