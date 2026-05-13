@@ -475,6 +475,13 @@
         <option value="gap_added">HR additions</option>
         <option value="gap-flagged">Gap-flagged (incomplete)</option>
       </select>
+      <select id="rpFilterTier">
+        <option value="">All tiers</option>
+        <option value="Certificated">Certificated</option>
+        <option value="Classified">Classified</option>
+        <option value="AM&amp;C">AM&amp;C</option>
+        <option value="none">No tier in source</option>
+      </select>
       <button class="reset" id="rpResetFilters">Reset</button>
     </div>
     <div class="rp-grid" id="rpGrid"></div>
@@ -620,7 +627,11 @@
           byTrack[t] = (byTrack[t] || 0) + 1;
         });
         var gapFlagged = DATA.positions.filter(function (p) { return !!p.gapFlag; }).length;
-        var withTeachingHrs = DATA.positions.filter(function (p) { return p.teachingHoursEquivalent != null; }).length;
+        var withTriplet = DATA.positions.filter(function (p) { return !!p.teachingHoursModel; }).length;
+        var byTier = { 'Certificated': 0, 'Classified': 0, 'AM&C': 0 };
+        DATA.positions.forEach(function (p) {
+          if (p.certificationTier && byTier[p.certificationTier] != null) byTier[p.certificationTier]++;
+        });
 
         var stats = [
           { label: 'Academic Hub roles',  value: byPlat.academichub, sub: 'school-side (AH)' },
@@ -630,7 +641,10 @@
           { label: 'Teachers track',      value: byTrack.teachers,   sub: 'CTS 2023 anchored' },
           { label: 'Specialists track',   value: byTrack.specialists, sub: 'CH hybrid (9/27 CTS)' },
           { label: 'Gap-flagged roles',   value: gapFlagged,         sub: 'source-incomplete' },
-          { label: 'Teaching-hr quoted',  value: withTeachingHrs,    sub: 'source-sheet 4-21 range' },
+          { label: 'Hours triplet rows',  value: withTriplet,        sub: 'Equivalent.pdf 24/E/S model' },
+          { label: 'Certificated tier',   value: byTier['Certificated'], sub: 'sertifikasi guru pathway' },
+          { label: 'Classified tier',     value: byTier['Classified'],   sub: 'classified staff' },
+          { label: 'AM&C tier',           value: byTier['AM&C'],         sub: 'Admin / Mgmt / Confidential' },
         ];
         $('rpStatRow').innerHTML = stats.map(function (s) {
           return '<div class="rp-stat">' +
@@ -1057,11 +1071,13 @@
         $('rpFilterCat').addEventListener('change', renderCatalogue);
         $('rpFilterTrack').addEventListener('change', renderCatalogue);
         $('rpFilterSource').addEventListener('change', renderCatalogue);
+        $('rpFilterTier').addEventListener('change', renderCatalogue);
         $('rpResetFilters').addEventListener('click', function () {
           $('rpSearch').value = '';
           $('rpFilterCat').value = '';
           $('rpFilterTrack').value = '';
           $('rpFilterSource').value = '';
+          $('rpFilterTier').value = '';
           renderCatalogue();
         });
       }
@@ -1070,6 +1086,7 @@
         var fc = $('rpFilterCat').value;
         var ft = $('rpFilterTrack').value;
         var fs = $('rpFilterSource').value;
+        var ftier = $('rpFilterTier').value;
 
         var filtered = DATA.positions.filter(function (p) {
           if (fc && p.category !== fc) return false;
@@ -1080,13 +1097,19 @@
           if (fs === 'source-sheet' && (p.source || '').indexOf('gap_added') >= 0) return false;
           if (fs === 'gap_added' && (p.source || '').indexOf('gap_added') < 0) return false;
           if (fs === 'gap-flagged' && !p.gapFlag) return false;
+          if (ftier) {
+            if (ftier === 'none' && p.certificationTier) return false;
+            if (ftier !== 'none' && p.certificationTier !== ftier) return false;
+          }
           if (q) {
             var hay = [
               p.title, p.description, p.code,
               (p.tags || []).join(' '),
               (p.cambridgeRefs || []).join(' '),
               (p.indonesianRefs || []).join(' '),
-              (p.competencyTrack || '')
+              (p.competencyTrack || ''),
+              (p.certificationTier || ''),
+              (p.sheetNote || '')
             ].join(' ').toLowerCase();
             if (hay.indexOf(q) < 0) return false;
           }
@@ -1112,7 +1135,16 @@
           else if (p.competencyTrack === 'specialists') trackPill = '<span class="pill track-s">Specialists track</span>';
           var gapPill = p.gapFlag ? '<span class="pill gap">gap-flagged</span>' : '';
           var addedPill = ((p.source || '').indexOf('gap_added') >= 0) ? '<span class="pill added">HR-added</span>' : '';
-          var thrs = p.teachingHoursEquivalent != null ? '<span class="pill">' + p.teachingHoursEquivalent + ' hrs</span>' : '';
+          var thrs = '';
+          if (p.teachingHoursModel && p.teachingHoursModel.suggested != null) {
+            thrs = '<span class="pill" title="Suggested teaching hours (Optimum ' + (p.teachingHoursModel.optimum != null ? p.teachingHoursModel.optimum : '—') + ' − Equivalent ' + (p.teachingHoursModel.equivalent != null ? p.teachingHoursModel.equivalent : '—') + ')">' + p.teachingHoursModel.suggested + ' h/wk</span>';
+          } else if (p.teachingHoursEquivalent != null) {
+            thrs = '<span class="pill">' + p.teachingHoursEquivalent + ' hrs</span>';
+          }
+          var tierPill = '';
+          if (p.certificationTier === 'Certificated')     tierPill = '<span class="pill" style="background:#dcfce7;color:#14532d;">Certificated</span>';
+          else if (p.certificationTier === 'Classified')  tierPill = '<span class="pill" style="background:#dbeafe;color:#1e3a8a;">Classified</span>';
+          else if (p.certificationTier === 'AM&C')        tierPill = '<span class="pill" style="background:#ede9fe;color:#4c1d95;">AM&amp;C</span>';
 
           return '<a class="rp-card" data-role="' + esc(p.id) + '" href="#" style="border-left-color:' + esc(cat.color) + '">' +
             '<div class="rp-card-head">' +
@@ -1121,7 +1153,7 @@
             '</div>' +
             '<div class="rp-card-title">' + esc(p.title) + '</div>' +
             '<div class="rp-card-desc">' + esc((p.description || '').slice(0, 180) + ((p.description || '').length > 180 ? '…' : '')) + '</div>' +
-            '<div class="rp-card-meta">' + trackPill + addedPill + gapPill + thrs + '</div>' +
+            '<div class="rp-card-meta">' + trackPill + tierPill + addedPill + gapPill + thrs + '</div>' +
           '</a>';
         }).join('');
 
@@ -1204,10 +1236,49 @@
         if (p.miNote) {
           profileBits.push('<dt>MI note</dt><dd style="font-size:12px;color:var(--ink-3);">' + esc(p.miNote) + '</dd>');
         }
+        if (p.teachingHoursModel) {
+          var thm = p.teachingHoursModel;
+          var opt = thm.optimum != null ? thm.optimum : '—';
+          var eq  = thm.equivalent != null ? thm.equivalent : '—';
+          var sug = thm.suggested != null ? thm.suggested : '—';
+          var thmNote = p.teachingHoursModelNote ? '<div style="margin-top:6px;font-size:11.5px;color:var(--ink-3);font-style:italic;">' + esc(p.teachingHoursModelNote) + '</div>' : '';
+          profileBits.push('<dt>Teaching-hours model</dt><dd>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:340px;">' +
+              '<div style="background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:6px 8px;text-align:center;">' +
+                '<div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Optimum</div>' +
+                '<div style="font-family:DM Mono,monospace;font-size:15px;font-weight:700;color:var(--ink);">' + opt + '</div>' +
+              '</div>' +
+              '<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;text-align:center;">' +
+                '<div style="font-size:10px;color:#92400e;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Equivalent</div>' +
+                '<div style="font-family:DM Mono,monospace;font-size:15px;font-weight:700;color:#78350f;">−' + eq + '</div>' +
+              '</div>' +
+              '<div style="background:#d1fae5;border:1px solid #a7f3d0;border-radius:6px;padding:6px 8px;text-align:center;">' +
+                '<div style="font-size:10px;color:#065f46;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Suggested</div>' +
+                '<div style="font-family:DM Mono,monospace;font-size:15px;font-weight:700;color:#064e3b;">' + sug + '</div>' +
+              '</div>' +
+            '</div>' + thmNote +
+          '</dd>');
+        }
         if (p.teachingHoursEquivalent != null) {
-          profileBits.push('<dt>Teaching-hr equiv.</dt><dd><strong>' + p.teachingHoursEquivalent + '</strong> hrs ' + (p.teachingHoursNote ? '<span style="color:var(--ink-3);font-size:12px;">— ' + esc(p.teachingHoursNote) + '</span>' : '') + '</dd>');
+          profileBits.push('<dt>Teaching-hr (legacy)</dt><dd><strong>' + p.teachingHoursEquivalent + '</strong> hrs ' + (p.teachingHoursNote ? '<span style="color:var(--ink-3);font-size:12px;">— ' + esc(p.teachingHoursNote) + '</span>' : '') + '</dd>');
         } else if (p.teachingHoursNote) {
-          profileBits.push('<dt>Teaching-hr equiv.</dt><dd style="font-size:12px;color:var(--ink-3);">— ' + esc(p.teachingHoursNote) + '</dd>');
+          profileBits.push('<dt>Teaching-hr (legacy)</dt><dd style="font-size:12px;color:var(--ink-3);">— ' + esc(p.teachingHoursNote) + '</dd>');
+        }
+        if (p.certificationTier) {
+          var tierColor = {
+            'Certificated': { bg: '#dcfce7', fg: '#14532d', border: '#86efac' },
+            'Classified':   { bg: '#dbeafe', fg: '#1e3a8a', border: '#93c5fd' },
+            'AM&C':         { bg: '#ede9fe', fg: '#4c1d95', border: '#c4b5fd' }
+          }[p.certificationTier] || { bg: 'var(--paper)', fg: 'var(--ink-2)', border: 'var(--border)' };
+          profileBits.push('<dt>Certification tier</dt><dd>' +
+            '<span style="display:inline-block;padding:3px 10px;border-radius:999px;background:' + tierColor.bg + ';color:' + tierColor.fg + ';border:1px solid ' + tierColor.border + ';font-size:11.5px;font-weight:600;">' + esc(p.certificationTier) + '</span>' +
+            (p.certificationTierNote ? '<div style="margin-top:4px;font-size:11.5px;color:var(--ink-3);font-style:italic;">' + esc(p.certificationTierNote) + '</div>' : '') +
+          '</dd>');
+        } else if (p.certificationTierNote) {
+          profileBits.push('<dt>Certification tier</dt><dd style="font-size:11.5px;color:var(--ink-3);font-style:italic;">' + esc(p.certificationTierNote) + '</dd>');
+        }
+        if (p.sheetNote) {
+          profileBits.push('<dt>Source-sheet note</dt><dd style="font-size:12.5px;color:var(--ink-2);"><em>' + esc(p.sheetNote) + '</em></dd>');
         }
         if (profileBits.length) {
           body += '<div class="rp-modal-section"><h3>Profile</h3><dl class="kv">' + profileBits.join('') + '</dl></div>';
