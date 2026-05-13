@@ -860,8 +860,30 @@
       // query goes out already narrowed — no flash of unfiltered data.
       await applyUrlFilters();
       loadStats();
-      loadFirstPage();
+      await loadFirstPage();
+      await openDeeplinkItem();
     });
+
+    // Deep-link from /practice-bank-flags: /question-bank?item=<id>
+    // Opens the edit modal for that item directly. Existing pacing
+    // deep-link (?subject=…&ref=…) was applied above; ?item= is the
+    // single-row override and only fires when both subject filter and
+    // ref aren't enough — i.e. flag triage.
+    async function openDeeplinkItem() {
+      const itemId = new URLSearchParams(window.location.search).get('item');
+      if (!itemId) return;
+      try {
+        const snap = await getDoc(doc(window.db, BANK, itemId));
+        if (!snap.exists()) {
+          toast('Item ' + itemId + ' no longer exists in this bank.');
+          return;
+        }
+        openItem(itemId);
+      } catch (e) {
+        console.error('[deeplink]', e);
+        toast('Could not load item: ' + e.message);
+      }
+    }
 
     // Deep-link entry from pacing pages: /question-bank?subject=biology&ref=1.1
     // Optional params: stage, difficulty, type, status — anything in

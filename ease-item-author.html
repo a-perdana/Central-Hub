@@ -922,7 +922,7 @@
     // rule will reject.
     let canAuthor = false;
 
-    document.addEventListener('authReady', () => {
+    document.addEventListener('authReady', async () => {
       const profile = window.userProfile || {};
       const isAdmin = profile.role_centralhub === 'central_admin';
       const sub = profile.ch_sub_roles || [];
@@ -941,8 +941,28 @@
       if (!canAuthor) document.body.classList.add('no-author');
       // Initial paint: stats (one-shot) + first page.
       loadStats();
-      loadFirstPage();
+      await loadFirstPage();
+      await openDeeplinkItem();
     });
+
+    // Deep-link from /practice-bank-flags: /ease-item-author?item=<id>
+    // Opens the edit modal for that item directly so HQ can fix flagged
+    // questions in one click instead of paging through the bank manually.
+    async function openDeeplinkItem() {
+      const itemId = new URLSearchParams(window.location.search).get('item');
+      if (!itemId) return;
+      try {
+        const snap = await getDoc(doc(window.db, 'ease_items', itemId));
+        if (!snap.exists()) {
+          toast('Item ' + itemId + ' no longer exists in this bank.');
+          return;
+        }
+        openItem(itemId);
+      } catch (e) {
+        console.error('[deeplink]', e);
+        toast('Could not load item: ' + e.message);
+      }
+    }
 
     document.getElementById('fSubject').addEventListener('change', resetAndReload);
     document.getElementById('fDifficulty').addEventListener('change', resetAndReload);

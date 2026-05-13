@@ -717,8 +717,29 @@
       if (!canAuthor) document.body.classList.add('no-author');
       seedSourceFileFilter();
       loadStats();
-      loadFirstPage();
+      await loadFirstPage();
+      await openDeeplinkItem();
     });
+
+    // Deep-link from /practice-bank-flags: /practice-bank-admin?item=<id>
+    // Opens the edit modal for that item directly. We verify the doc
+    // exists first so a stale flag (item since deleted) shows a toast
+    // instead of opening an empty "New item" modal.
+    async function openDeeplinkItem() {
+      const itemId = new URLSearchParams(window.location.search).get('item');
+      if (!itemId) return;
+      try {
+        const snap = await getDoc(doc(window.db, BANK, itemId));
+        if (!snap.exists()) {
+          toast('Item ' + itemId + ' no longer exists in this bank.');
+          return;
+        }
+        openItem(itemId);
+      } catch (e) {
+        console.error('[deeplink]', e);
+        toast('Could not load item: ' + e.message);
+      }
+    }
 
     function seedSourceFileFilter() {
       const sel = document.getElementById('fSourceFile');

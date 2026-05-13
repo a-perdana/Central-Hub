@@ -220,10 +220,39 @@
       font-size: .9rem;
       line-height: 1.55;
       color: var(--ink);
-      max-height: 200px;
+      max-height: 280px;
       overflow: auto;
+      position: relative;
     }
     .flag-stem code { background: rgba(0,0,0,.05); padding: 1px 4px; border-radius: 3px; font-size: 90%; }
+    .flag-stem img { max-width: 100%; height: auto; }
+    .flag-stem .stem-badge {
+      position: absolute; top: 6px; right: 8px;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--ink-3);
+      background: #fff;
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+    }
+    .flag-stem.is-current { border-left-color: #065f46; }
+    .flag-stem.is-current .stem-badge { color: #065f46; border-color: #a7f3d0; background: #ecfdf5; }
+    .btn-show-current {
+      padding: 4px 10px;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 99px;
+      color: #065f46;
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .btn-show-current:hover { background: #d1fae5; }
+    .btn-show-current:disabled { opacity: .5; cursor: default; }
+    .btn-show-current.is-loading { opacity: .6; cursor: progress; }
 
     .flag-note {
       font-size: .88rem;
@@ -395,8 +424,45 @@
 
   <script type="module">
     import {
-      collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp
+      collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    // Allowed-tag HTML sanitiser — mirrors the helper used by every
+    // bank authoring page so a stem rendered here matches what the
+    // editor / runner / preview shows. Strips scripts + event handlers,
+    // keeps math/img/formatting tags. https-only on <img>.
+    function sanitisePreviewHtml(html) {
+      if (!html) return '';
+      const tpl = document.createElement('template');
+      tpl.innerHTML = String(html);
+      const ALLOWED = new Set(['P','SPAN','IMG','BR','STRONG','EM','B','I','U','UL','OL','LI','TABLE','TR','TD','TH','TBODY','THEAD','SUP','SUB','DIV']);
+      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading']), '*': new Set([]) };
+      function walk(node) {
+        for (const child of [...node.childNodes]) {
+          if (child.nodeType !== 1) continue;
+          if (!ALLOWED.has(child.tagName)) {
+            child.replaceWith(document.createTextNode(child.textContent || ''));
+            continue;
+          }
+          const okSet = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS['*'];
+          for (const attr of [...child.attributes]) {
+            if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+          }
+          if (child.tagName === 'IMG') {
+            const src = child.getAttribute('src') || '';
+            if (!/^https?:\/\//i.test(src) && !src.startsWith('data:image/')) {
+              child.removeAttribute('src');
+            }
+            child.setAttribute('loading', 'lazy');
+            child.style.maxWidth = '100%';
+            child.style.height = 'auto';
+          }
+          walk(child);
+        }
+      }
+      walk(tpl.content);
+      return tpl.innerHTML;
+    }
 
     const BANK_DEEPLINK = {
       practice_questions:  'practice-bank-admin?item=',
@@ -476,7 +542,10 @@
       const reason   = f.reason || 'other';
       const status   = f.status || 'open';
       const isTriaged = status !== 'open';
-      const stemTrunc = (f.stemSnapshot || '').replace(/<[^>]+>/g, '').slice(0, 280);
+      // Stem snapshot is plaintext (first 500 chars of stem at flag time).
+      // Keep it as the AS-FLAGGED reference — even if HQ rewrites the item
+      // later, this captures what the observer actually saw.
+      const stemTrunc = (f.stemSnapshot || '').replace(/<[^>]+>/g, '').slice(0, 320);
       const bank = BANK_LABEL[f.collection] || f.collection || '—';
       const deeplink = BANK_DEEPLINK[f.collection] || 'practice-bank-admin?item=';
       const noteHtml = f.note ? `<p class="flag-note">${escHtml(f.note)}</p>` : '';
@@ -499,12 +568,21 @@
             <div style="margin-top:4px">${relDate(f.createdAt)}</div>
           </div>
         </div>
-        ${stemTrunc ? `<div class="flag-stem">${escHtml(stemTrunc)}${stemTrunc.length >= 280 ? '…' : ''}</div>` : ''}
+        ${stemTrunc ? `<div class="flag-stem" data-stem-pane="${escAttr(f.id)}">
+          <span class="stem-badge">As flagged</span>
+          ${escHtml(stemTrunc)}${stemTrunc.length >= 320 ? '…' : ''}
+        </div>` : ''}
+        <button type="button" class="btn-show-current"
+                data-show-current
+                data-id="${escAttr(f.id)}"
+                data-coll="${escAttr(f.collection)}"
+                data-itemid="${escAttr(f.itemId)}">↻ Show current version</button>
         ${noteHtml}
         ${triagedHtml}
         <div class="flag-flagger">Flagged by <strong>${flagger}</strong></div>
         <div class="flag-actions">
-          <a class="btn-open-item" href="${escAttr(deeplink + encodeURIComponent(f.itemId))}" target="_blank" rel="noopener">↗ Open item</a>
+          <a class="btn-open-item" href="${escAttr(deeplink + encodeURIComponent(f.itemId))}" target="_blank" rel="noopener"
+             title="Opens the authoring page with this question loaded in the edit modal">↗ Open in editor</a>
           <select class="newStatusSelect" data-id="${escAttr(f.id)}">
             <option value="">— flip status —</option>
             <option value="triaged">→ Triaged (looking at it)</option>
@@ -517,6 +595,45 @@
           <button type="button" class="btn-triage" data-id="${escAttr(f.id)}">Save</button>
         </div>
       </article>`;
+    }
+
+    async function showCurrentStem(flagId, coll, itemId, btn) {
+      const card = document.querySelector('article.flag-card[data-id="' + CSS.escape(flagId) + '"]');
+      if (!card) return;
+      btn.classList.add('is-loading');
+      btn.disabled = true;
+      try {
+        const snap = await getDoc(doc(window.db, coll, itemId));
+        if (!snap.exists()) {
+          toast('Item no longer exists in ' + coll, true);
+          btn.textContent = 'Item deleted';
+          return;
+        }
+        const data = snap.data();
+        // Prefer rich stemHtml; fall back to plain stem text.
+        const richHtml = data.stemHtml || escHtml(data.stem || '');
+        const safeHtml = sanitisePreviewHtml(richHtml);
+        let pane = card.querySelector('[data-stem-pane="' + CSS.escape(flagId) + '"]');
+        if (!pane) {
+          pane = document.createElement('div');
+          pane.className = 'flag-stem is-current';
+          pane.setAttribute('data-stem-pane', flagId);
+          // Insert before the show-current button.
+          btn.parentNode.insertBefore(pane, btn);
+        } else {
+          pane.classList.add('is-current');
+        }
+        pane.innerHTML = '<span class="stem-badge">Current</span>' + safeHtml;
+        btn.remove();
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          window.MathJax.typesetPromise([pane]).catch(() => {});
+        }
+      } catch (e) {
+        console.error('[showCurrent]', e);
+        toast('Could not load current version: ' + e.message, true);
+        btn.classList.remove('is-loading');
+        btn.disabled = false;
+      }
     }
 
     function applyFilters(flags) {
@@ -545,13 +662,18 @@
       list.querySelectorAll('.btn-triage').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.id;
-          const card = list.querySelector('article[data-id="' + id + '"]');
+          const card = list.querySelector('article[data-id="' + CSS.escape(id) + '"]');
           const newStatus = card.querySelector('.newStatusSelect').value;
           const note      = card.querySelector('.triageNoteInput').value;
           if (!newStatus) { toast('Pick a new status first', true); return; }
           btn.disabled = true;
           await triageFlag(id, newStatus, note);
           btn.disabled = false;
+        });
+      });
+      list.querySelectorAll('[data-show-current]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          showCurrentStem(btn.dataset.id, btn.dataset.coll, btn.dataset.itemid, btn);
         });
       });
 
