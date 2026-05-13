@@ -5556,14 +5556,27 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     function ready(cb) {
       if (window.db && window.currentUser) { cb(); return; }
-      const fire = () => { document.removeEventListener('authReady', fire); window.removeEventListener('authReady', fire); cb(); };
-      document.addEventListener('authReady', fire, { once: true });
-      window.addEventListener('authReady', fire, { once: true });
+      // Fire-once guard: authReady is dispatched on BOTH document and window,
+      // and we ALSO poll as a fallback. Without this guard the boot could run
+      // 2-3× per page-load → click handlers registered multiple times → one
+      // "+ New Note" click creates two (or three) notes.
+      let fired = false;
+      let poll = null;
+      const fire = () => {
+        if (fired) return;
+        fired = true;
+        document.removeEventListener('authReady', fire);
+        window.removeEventListener('authReady', fire);
+        if (poll) { clearInterval(poll); poll = null; }
+        cb();
+      };
+      document.addEventListener('authReady', fire);
+      window.addEventListener('authReady', fire);
       let waited = 0;
-      const poll = setInterval(() => {
+      poll = setInterval(() => {
         waited += 250;
-        if (window.db && window.currentUser) { clearInterval(poll); fire(); }
-        else if (waited > 8000) { clearInterval(poll); console.warn('[notes] auth never became ready'); }
+        if (window.db && window.currentUser) fire();
+        else if (waited > 8000) { clearInterval(poll); poll = null; console.warn('[notes] auth never became ready'); }
       }, 250);
     }
 
