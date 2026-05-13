@@ -319,6 +319,7 @@ const htmlFiles = [
   "mail-composer.html",
   "library.html",
   "network-health.html",
+  "students-overview.html",
   "competency-admin.html",
   "induction-admin.html",
   "my-induction.html",
