@@ -610,16 +610,21 @@
   <!-- Editor modal -->
   <div id="itemModal" class="modal-overlay" role="dialog" aria-hidden="true">
     <div class="modal" style="width: min(1100px, 100%); max-width: 1100px;">
-      <h2 id="iModalTitle">New chapter-test item</h2>
+      <h2 style="display:flex;align-items:center;gap:10px;padding-bottom:18px;border-bottom:1px solid var(--border);">
+        <span id="iModalTitle">New chapter-test item</span>
+        <span style="flex:1"></span>
+        <button id="iModalCancel" class="btn-secondary" type="button" style="font-size:13px">Cancel</button>
+        <button id="iModalSave" class="btn-primary" type="button" style="font-size:13px">Save item</button>
+      </h2>
       <div class="modal-body" style="padding: 0; display: flex; flex-direction: column;">
-        <div id="itemEditorMount" style="padding: 18px 22px;"></div>
-        <div id="editorLivePreview" style="border-top:1px solid var(--border);background:linear-gradient(180deg,#fafaff 0%,#fff 100%);padding:18px 22px;">
+        <div id="editorLivePreview" style="border-bottom:1px solid var(--border);background:linear-gradient(180deg,#fafaff 0%,#fff 100%);padding:18px 22px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
             <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-dk,#5b48d6);">Student preview</span>
             <span style="font-size:11px;color:var(--ink-3);">— live as you edit</span>
           </div>
           <div id="elpBody" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55;color:var(--ink);"></div>
         </div>
+        <div id="itemEditorMount" style="padding: 18px 22px;"></div>
       </div>
     </div>
   </div>
@@ -2366,6 +2371,42 @@
         onSave: async (payload) => { await save(payload); closeItem(); },
         onCancel: closeItem,
       });
+      // Hoist editor's own Save / Cancel buttons up to the modal
+      // header — header buttons proxy clicks down and mirror the
+      // disabled / "Saving…" label state so the visual contract is
+      // identical. Hide the in-editor button row.
+      const innerActions = mount.querySelector('.qe-actions');
+      const innerSave    = mount.querySelector('#qe-save');
+      const innerCancel  = mount.querySelector('#qe-cancel');
+      const hdrSave      = document.getElementById('iModalSave');
+      const hdrCancel    = document.getElementById('iModalCancel');
+      if (innerActions) innerActions.style.display = 'none';
+      hdrSave.onclick = () => {
+        if (!innerSave) return;
+        innerSave.click();
+        // If validate() rejected, surface the error region — header
+        // button sits at the top so the user could otherwise miss it.
+        setTimeout(() => {
+          const err = mount.querySelector('#qe-error');
+          if (err && err.style.display !== 'none' && err.textContent) {
+            err.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 0);
+      };
+      hdrCancel.onclick = () => innerCancel && innerCancel.click();
+      // Mirror save-button state (disabled + "Saving…") onto the header
+      // button. MutationObserver because the editor toggles the inner
+      // button text + disabled flag inside its own click handler.
+      if (innerSave) {
+        const sync = () => {
+          hdrSave.disabled = innerSave.disabled;
+          hdrSave.textContent = innerSave.textContent;
+        };
+        sync();
+        const mo = new MutationObserver(sync);
+        mo.observe(innerSave, { attributes: true, childList: true, characterData: true, subtree: true });
+        activeEditor._hdrObserver = mo;
+      }
     }
 
     // Live "Student preview" pane under the editor — refreshes on every
@@ -2413,7 +2454,11 @@
     }
     function closeItem() {
       document.getElementById('itemModal').classList.remove('is-open');
-      if (activeEditor) { activeEditor.destroy(); activeEditor = null; }
+      if (activeEditor) {
+        if (activeEditor._hdrObserver) { try { activeEditor._hdrObserver.disconnect(); } catch {} }
+        activeEditor.destroy();
+        activeEditor = null;
+      }
       diagramState = { diagramId: null, diagramDoc: null, originalDiagramId: null, placement: 'after' };
     }
 
