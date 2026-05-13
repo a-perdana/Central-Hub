@@ -271,15 +271,38 @@ service cloud.firestore {
     // Reads:
     //   - Self: a student can read their own doc.
     //   - Admin: central_admin, teachers_admin, AH admin can read all.
-    //   - Same-school staff: Phase 2 — TH teachers reading their own
-    //     class's students. Defer to the chapter_test_attempts rule
-    //     when that collection ships; for Phase 1 admin-read is enough.
+    //   - Same-school AH leadership (school_principal /
+    //     academic_coordinator / cambridge_coordinator): reads only
+    //     students at their own school. Powers AH /student-roster.
+    //   - Same-school TH staff (subject_teacher / subject_leader):
+    //     reads only students at their own school. Powers TH
+    //     /student-approvals + per-class views.
+    //
+    // `list` cannot inspect the target doc's schoolId, so it gates on
+    // role + sub-role only and trusts the client to pass a
+    // `where('schoolId','==',ownSchool)` filter. Same trust-the-filter
+    // pattern as `chapter_test_attempts.list` / `weekly_progress.list`.
+    // `get` enforces the same-school constraint per-doc.
     match /students/{uid} {
       allow get:    if isSignedIn() && (
-                         request.auth.uid == uid ||
-                         isAdmin() || isAHAdmin() || isTHAdmin()
+                         request.auth.uid == uid
+                         || isAdmin() || isAHAdmin() || isTHAdmin()
+                         || (isAcademicUser()
+                             && userProfile().schoolId == resource.data.schoolId
+                             && 'ah_sub_roles' in userProfile()
+                             && userProfile().ah_sub_roles is list
+                             && userProfile().ah_sub_roles.hasAny(['school_principal','academic_coordinator','cambridge_coordinator']))
+                         || isTeacherAtSchool(resource.data.schoolId)
                        );
-      allow list:   if isAdmin() || isAHAdmin() || isTHAdmin();
+      allow list:   if isAdmin() || isAHAdmin() || isTHAdmin()
+                       || (isAcademicUser()
+                           && 'ah_sub_roles' in userProfile()
+                           && userProfile().ah_sub_roles is list
+                           && userProfile().ah_sub_roles.hasAny(['school_principal','academic_coordinator','cambridge_coordinator']))
+                       || (isTeachersUser()
+                           && 'th_sub_roles' in userProfile()
+                           && userProfile().th_sub_roles is list
+                           && userProfile().th_sub_roles.hasAny(['subject_teacher','subject_leader']));
       allow delete: if isAdmin();
 
       // Self-CREATE on first login. uid pinned, emailLower pinned, status pinned.
