@@ -744,6 +744,49 @@ service cloud.firestore {
       allow create, update, delete: if false;   // Cloud Function (admin SDK) only
     }
 
+    // ── HQ Observer Question Flags (2026-05-13) ────────────────
+    // Lightweight bug-report channel from inside Students Hub runners.
+    // Only active students whose students/{uid}.is_hq_observer == true
+    // can create rows (rule reads the student doc directly). HQ Subject
+    // Specialists run as observer-student accounts during pilot QA so
+    // they can flag bad items mid-runner without leaving the page.
+    //
+    // Specialists triage from CH /practice-bank-flags. The collection
+    // is intentionally generic across `practice_questions`,
+    // `chapter_test_items` and `ease_items` — the row carries
+    // `itemId` + `collection` so the queue links to the right author/admin.
+    //
+    // Schema spec: docs/FIRESTORE_SCHEMA.md §23.
+    match /practice_question_flags/{flagId} {
+      function isObserverStudent() {
+        return isSignedIn()
+               && exists(/databases/$(database)/documents/students/$(request.auth.uid))
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
+      }
+      function isCHReviewer() {
+        return isAdmin()
+               || (isAuthorized() && userProfileExists()
+                   && ('ch_sub_roles' in userProfile())
+                   && userProfile().ch_sub_roles is list
+                   && userProfile().ch_sub_roles.hasAny(['director', 'coordinator']));
+      }
+      allow get, list: if isCHReviewer();
+      allow create: if isObserverStudent()
+                    && request.resource.data.flaggerUid == request.auth.uid
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.itemId is string
+                    && request.resource.data.collection in ['practice_questions', 'chapter_test_items', 'ease_items'];
+      // CH reviewers can flip status (open → triaged / fixed / wontfix / duplicate)
+      // and append a triage note. Flagger fields stay immutable.
+      allow update: if isCHReviewer()
+                    && request.resource.data.flaggerUid     == resource.data.flaggerUid
+                    && request.resource.data.itemId         == resource.data.itemId
+                    && request.resource.data.collection     == resource.data.collection
+                    && request.resource.data.createdAt      == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
     // ── Practice + Daily Challenge (Students Hub, 2026-05-13) ──
     // practice_attempts: per-student self-paced runs over
     // practice_questions / practice_assessments. NEVER feeds

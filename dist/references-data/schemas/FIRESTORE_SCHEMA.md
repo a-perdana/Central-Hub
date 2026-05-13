@@ -127,7 +127,7 @@ The catalogue below groups collections by the business domain they serve. Within
 
 #### `students/{uid}`
 **PK:** Firebase Auth UID (Google SSO). Owned by **Students Hub**.
-**Fields:** `uid`, `email`, `emailLower` (lookup key), `displayName`, `photoURL`, `schoolId →partner_schools.id` (nullable until class picker resolves), `school` (denormalised), `classId →partner_schools/{id}/classes/{classId}` (nullable until class picker), `className` (denormalised), `gradeLevel` (number), `status` (`'needs_class'` | `'pending_approval'` | `'active'` | `'rejected'` | `'graduated'`), `createdAt`, `classPickedAt`, `approvedAt`, `approvedBy →users.uid`, `lastLoginAt`.
+**Fields:** `uid`, `email`, `emailLower` (lookup key), `displayName`, `photoURL`, `schoolId →partner_schools.id` (nullable until class picker resolves), `school` (denormalised), `classId →partner_schools/{id}/classes/{classId}` (nullable until class picker), `className` (denormalised), `gradeLevel` (number), `status` (`'needs_class'` | `'pending_approval'` | `'active'` | `'rejected'` | `'graduated'`), `is_hq_observer` (bool, optional — when `true` the SH runners reveal the HQ Observer Strip so the student can flag bad questions; set by `central_admin` via Firebase Console for pilot QA), `createdAt`, `classPickedAt`, `approvedAt`, `approvedBy →users.uid`, `lastLoginAt`.
 **FKs:** `schoolId → partner_schools.id` · `classId → partner_schools/{id}/classes/{classId}` · `approvedBy → users.uid` (the teacher / admin who approved).
 **Writers:**
 - Self-CREATE on first Google SSO. Rule pins `uid == auth.uid`, `emailLower == lowercase(token.email)`, `status == 'needs_class'` so a student can't bootstrap themselves to `active` or impersonate another uid.
@@ -1196,6 +1196,29 @@ Two collections that wire the Practice Bank + Practice Assessments into student-
 **Writers:** `central_admin` OR CH `coordinator` / `director`.
 **Read:** any authorised user OR `isActiveStudent()`.
 **Notes:** One challenge doc per (date × subject). The deterministic id makes "did I do today's?" a `get` not a `where`. A future Cloud Function may auto-rotate challenges from the published `practice_assessments` pool at midnight; until that lands, HQ authors today's challenge from `/practice-assessment-author` and writes the `daily_challenges` doc by hand (the same HQ surface composes both `practice_assessments` and `daily_challenges`).
+
+#### `practice_question_flags/{flagId}` — HQ observer bug reports (2026-05-13)
+**PK:** Auto-id.
+**Fields:**
+- `itemId` (string — references the flagged item's doc id, but **not a strong FK** — item may be archived / renamed between flag time and triage)
+- `collection` (`'practice_questions' | 'chapter_test_items' | 'ease_items'` — tells the triage queue which authoring page to deeplink to)
+- `subjectId` · `topicGroup` · `difficulty` · `type` — denormalised facets so the queue page can filter without fetching item docs
+- `reason` (string — one of `formatting`, `ambiguous`, `wrong_answer`, `off_curriculum`, `culturally_inappropriate`, `duplicate`, `other`)
+- `note` (string — free-text, max 280 chars)
+- `stemSnapshot` (string — first 500 chars of the stem at flag time; survives item rewrites/archive)
+- `flaggerUid → users.uid | students.uid`
+- `flaggerName` · `flaggerEmail` — denormalised so the queue table doesn't N+1
+- `schoolId → partner_schools.id | null` — denormalised; future "flags per school" stat
+- `status` (`'open' | 'triaged' | 'fixed' | 'wontfix' | 'duplicate'`)
+- `triagedBy → users.uid | null` (`null` until status leaves `open`)
+- `triageNote` (string)
+- `triagedAt` (timestamp | null)
+- `createdAt` (serverTimestamp)
+
+**FKs:** `itemId → {practice_questions | chapter_test_items | ease_items}.id` (loose); `flaggerUid → students.uid`; `schoolId → partner_schools.id`; `triagedBy → users.uid`.
+**Writers:** Observer students (`students/{uid}.is_hq_observer == true` AND `status == 'active'`) can create rows with `status: 'open'`. CH reviewers (`central_admin` OR `ch_sub_roles ∈ {director, coordinator}`) can update `status` + `triageNote` + `triagedAt` + `triagedBy`; flagger / item / createdAt fields are immutable. `central_admin` only for delete.
+**Read:** CH reviewers only (`central_admin` OR `director` OR `coordinator`). Students cannot read each other's flags or their own back.
+**Notes:** Generic across all 3 question banks so the same observer-strip + triage queue covers chapter tests, EASE growth, and practice. The collection name kept the `practice_question_flags` slug for back-compat with the first SH surface (practice-run), even though it routes flags for chapter tests + EASE items too. NEVER deleted by client — admin triages by flipping status. Stem snapshot is the audit trail when the upstream item is rewritten/archived between flag time and review.
 
 ---
 

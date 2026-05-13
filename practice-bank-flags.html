@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Question Flags Queue — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%23f59e0b'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <script>
+    // Match the rest of the bank pages — never let MathJax eat $…$ as
+    // inline math. Currency / variable literals would italicise.
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]'], ['$$', '$$']] },
+      svg: { fontCache: 'global' },
+      options: { renderActions: { addMenu: [] } },
+    };
+  </script>
+  <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root { --accent: #f59e0b; --accent-dk: #d97706; --accent-2: #fffbeb; }
+
+    .hero {
+      background: linear-gradient(135deg, #422006 0%, #92400e 30%, #d97706 70%, #f59e0b 100%);
+      padding: 28px 40px 0;
+      color: #fff;
+      position: relative; overflow: hidden;
+    }
+    .hero-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex; align-items: flex-start; gap: 32px;
+      flex-wrap: wrap; position: relative; z-index: 1;
+    }
+    .hero-title { flex: 1 1 320px; min-width: 280px; }
+    .hero-eyebrow {
+      font-size: .65rem; font-weight: 700;
+      letter-spacing: .2em; text-transform: uppercase;
+      color: rgba(254,243,199,.85);
+      margin-bottom: 6px;
+    }
+    .hero h1 {
+      font-family: 'Lora', serif; font-size: 2rem;
+      margin: 0 0 8px; line-height: 1.1; font-weight: 600;
+    }
+    .hero p {
+      color: rgba(255,255,255,.78); font-size: .92rem;
+      margin: 0; max-width: 580px; line-height: 1.5;
+    }
+    .hero-kpis { display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero-kpi {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 12px; padding: 14px 18px;
+      min-width: 130px; backdrop-filter: blur(4px);
+    }
+    .hero-kpi.hero-kpi-primary {
+      background: rgba(254,243,199,.18);
+      border-color: rgba(254,243,199,.4);
+      min-width: 170px;
+    }
+    .hero-kpi-num {
+      font-family: 'Lora', serif;
+      font-size: 2.4rem; line-height: 1;
+      font-weight: 600; color: #fff;
+      font-feature-settings: 'tnum';
+    }
+    .hero-kpi-primary .hero-kpi-num { font-size: 2.8rem; }
+    .hero-kpi-lbl {
+      font-size: 10px; font-weight: 600;
+      letter-spacing: .12em; text-transform: uppercase;
+      color: rgba(255,255,255,.6);
+      margin-top: 6px;
+    }
+    .hero-kpi-primary .hero-kpi-lbl { color: rgba(254,243,199,.85); }
+    .hero-signature {
+      max-width: 1200px; margin: 22px auto 0;
+      border-top: 1px solid rgba(255,255,255,.1);
+      padding: 10px 0 12px;
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      font-size: 11px; color: rgba(255,255,255,.5);
+    }
+    .hero-signature .sig-dot {
+      width: 3px; height: 3px;
+      background: rgba(255,255,255,.3);
+      border-radius: 50%;
+    }
+    .page-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 32px 80px; }
+
+    /* Tab strip */
+    .tabs {
+      display: flex; gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 22px;
+    }
+    .tab {
+      padding: 10px 18px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-family: inherit; font-size: 13.5px;
+      color: var(--ink-3); cursor: pointer;
+      font-weight: 500;
+      transition: color .12s, border-color .12s;
+    }
+    .tab:hover { color: var(--ink); }
+    .tab.is-active {
+      color: var(--accent-dk);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+    .tab .count {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      background: var(--paper);
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .tab.is-active .count {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* Filter row */
+    .filter-row {
+      display: flex; gap: 8px;
+      align-items: center; flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .filter-row select {
+      padding: 7px 11px;
+      font-family: inherit; font-size: 12.5px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink-2);
+    }
+    .filter-row .label {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+
+    /* Flag cards */
+    .flag-list { display: flex; flex-direction: column; gap: 14px; }
+    .flag-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .flag-card:hover { border-color: var(--accent); box-shadow: 0 4px 12px -4px rgba(245,158,11,.18); }
+    .flag-card.is-triaged { opacity: .65; }
+    .flag-head {
+      display: flex; justify-content: space-between; gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .flag-head .left {
+      flex: 1 1 auto; min-width: 200px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: .76rem;
+      color: var(--ink-3);
+      word-break: break-all;
+    }
+    .flag-head .left .item-id {
+      color: var(--ink);
+      font-weight: 600;
+      font-size: .86rem;
+    }
+    .flag-head .meta {
+      font-size: .75rem;
+      color: var(--ink-3);
+      white-space: nowrap;
+    }
+    .reason-chip {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .02em;
+      text-transform: capitalize;
+      margin-right: 6px;
+    }
+    .reason-chip.r-formatting       { background: #fef3c7; color: #92400e; }
+    .reason-chip.r-ambiguous        { background: #ede9fe; color: #5b21b6; }
+    .reason-chip.r-wrong_answer     { background: #fee2e2; color: #b91c1c; }
+    .reason-chip.r-off_curriculum   { background: #e0e7ff; color: #3730a3; }
+    .reason-chip.r-culturally_inappropriate { background: #fecaca; color: #991b1b; }
+    .reason-chip.r-duplicate        { background: #d1fae5; color: #065f46; }
+    .reason-chip.r-other            { background: #f3f4f6; color: #374151; }
+
+    .status-chip {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .status-chip.s-open       { background: #fee2e2; color: #b91c1c; }
+    .status-chip.s-triaged    { background: #fef3c7; color: #92400e; }
+    .status-chip.s-fixed      { background: #d1fae5; color: #065f46; }
+    .status-chip.s-wontfix    { background: #e5e7eb; color: #4b5563; }
+    .status-chip.s-duplicate  { background: #ede9fe; color: #5b21b6; }
+
+    .flag-stem {
+      background: var(--paper);
+      border-left: 3px solid var(--accent);
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: .9rem;
+      line-height: 1.55;
+      color: var(--ink);
+      max-height: 200px;
+      overflow: auto;
+    }
+    .flag-stem code { background: rgba(0,0,0,.05); padding: 1px 4px; border-radius: 3px; font-size: 90%; }
+
+    .flag-note {
+      font-size: .88rem;
+      color: var(--ink-2);
+      margin: 0 0 10px;
+      font-style: italic;
+    }
+    .flag-note::before { content: '" '; }
+    .flag-note::after  { content: ' "'; }
+
+    .flag-flagger {
+      font-size: .76rem;
+      color: var(--ink-3);
+    }
+
+    .flag-actions {
+      display: flex; gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .flag-actions select {
+      padding: 6px 10px;
+      font-family: inherit; font-size: 12.5px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .flag-actions input[type="text"] {
+      flex: 1 1 240px;
+      padding: 6px 10px;
+      font-family: inherit; font-size: 12.5px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      min-width: 0;
+    }
+    .btn-triage {
+      padding: 6px 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-triage:hover { background: var(--accent-dk); }
+    .btn-triage:disabled { background: #d1d5db; cursor: default; }
+
+    .btn-open-item {
+      padding: 6px 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 12.5px;
+      color: var(--ink-2);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .btn-open-item:hover { border-color: var(--accent); color: var(--accent-dk); }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--ink-3);
+    }
+    .empty-state .glyph { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state h3 { font-family: 'Lora', serif; color: var(--ink); margin: 0 0 6px; }
+    .empty-state p { margin: 0; font-size: .9rem; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: .9rem;
+      box-shadow: 0 8px 24px -6px rgba(0,0,0,.3);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: opacity .2s, transform .2s;
+      z-index: 100;
+    }
+    .toast.is-visible { opacity: 1; transform: translateY(0); }
+    .toast.is-error { background: #b91c1c; }
+  </style>
+</head>
+<body style="display:none">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-title">
+        <div class="hero-eyebrow">HQ Triage Queue</div>
+        <h1>Question Flags</h1>
+        <p>HQ Subject Specialists running through Students Hub as observers can flag questions mid-runner. Triage them here. <strong>Flags route to <code>practice_question_flags</code> across all 3 banks</strong> — practice / chapter-test / EASE.</p>
+      </div>
+      <div class="hero-kpis">
+        <div class="hero-kpi hero-kpi-primary">
+          <div class="hero-kpi-num" id="kpiOpen">—</div>
+          <div class="hero-kpi-lbl">Open flags</div>
+        </div>
+        <div class="hero-kpi">
+          <div class="hero-kpi-num" id="kpiToday">—</div>
+          <div class="hero-kpi-lbl">Today</div>
+        </div>
+        <div class="hero-kpi">
+          <div class="hero-kpi-num" id="kpiFixed">—</div>
+          <div class="hero-kpi-lbl">Fixed</div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-signature">
+      <b id="sigTotal">—</b>
+      <span class="sig-dot"></span>
+      <span>across <b id="sigCollections">practice / chapter / ease</b></span>
+    </div>
+  </section>
+
+  <main class="page-wrap">
+
+    <div class="tabs">
+      <button class="tab is-active" data-status="open">Open <span class="count" id="tabOpenCount">0</span></button>
+      <button class="tab" data-status="triaged">Triaged <span class="count" id="tabTriagedCount">0</span></button>
+      <button class="tab" data-status="fixed">Fixed <span class="count" id="tabFixedCount">0</span></button>
+      <button class="tab" data-status="wontfix">Won't fix <span class="count" id="tabWontfixCount">0</span></button>
+      <button class="tab" data-status="duplicate">Duplicate <span class="count" id="tabDupCount">0</span></button>
+    </div>
+
+    <div class="filter-row">
+      <span class="label">Filter:</span>
+      <select id="filterCollection">
+        <option value="all">All banks</option>
+        <option value="practice_questions">Practice Questions</option>
+        <option value="chapter_test_items">Chapter Test Items</option>
+        <option value="ease_items">EASE Items</option>
+      </select>
+      <select id="filterReason">
+        <option value="all">All reasons</option>
+        <option value="formatting">Formatting</option>
+        <option value="ambiguous">Ambiguous</option>
+        <option value="wrong_answer">Wrong answer</option>
+        <option value="off_curriculum">Off-curriculum</option>
+        <option value="culturally_inappropriate">Culturally inappropriate</option>
+        <option value="duplicate">Duplicate</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div id="flagList" class="flag-list"></div>
+
+    <div id="emptyState" class="empty-state" hidden>
+      <div class="glyph">✓</div>
+      <h3>Inbox zero</h3>
+      <p>No flags in this state. Run a smoke test from Students Hub to generate one.</p>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+    import {
+      collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const BANK_DEEPLINK = {
+      practice_questions:  'practice-bank-admin?item=',
+      chapter_test_items:  'question-bank?item=',
+      ease_items:          'ease-item-author?item=',
+    };
+    const BANK_LABEL = {
+      practice_questions:  'practice',
+      chapter_test_items:  'chapter-test',
+      ease_items:          'EASE',
+    };
+
+    const state = {
+      flags:           [],
+      currentStatus:   'open',
+      currentColl:     'all',
+      currentReason:   'all',
+    };
+
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      })[c]);
+    }
+    function escAttr(s) { return escHtml(s); }
+
+    function relDate(ts) {
+      try {
+        const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
+        if (!d) return '—';
+        const diff = Date.now() - d.getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 1)  return 'just now';
+        if (m < 60) return m + 'm ago';
+        const h = Math.floor(m / 60);
+        if (h < 24) return h + 'h ago';
+        const days = Math.floor(h / 24);
+        if (days < 7) return days + 'd ago';
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      } catch { return '—'; }
+    }
+    function isToday(ts) {
+      try {
+        const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
+        if (!d) return false;
+        const today = new Date();
+        return d.getFullYear() === today.getFullYear()
+            && d.getMonth() === today.getMonth()
+            && d.getDate() === today.getDate();
+      } catch { return false; }
+    }
+
+    function toast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.toggle('is-error', !!isError);
+      t.classList.add('is-visible');
+      setTimeout(() => t.classList.remove('is-visible'), 2400);
+    }
+
+    async function triageFlag(flagId, newStatus, note) {
+      try {
+        await updateDoc(doc(window.db, 'practice_question_flags', flagId), {
+          status:     newStatus,
+          triageNote: (note || '').slice(0, 280),
+          triagedBy:  window.currentUser.uid,
+          triagedAt:  serverTimestamp(),
+        });
+        toast('Flag updated → ' + newStatus, false);
+      } catch (e) {
+        console.error('[triage]', e);
+        toast('Update failed: ' + e.message, true);
+      }
+    }
+
+    function flagCard(f) {
+      const reason   = f.reason || 'other';
+      const status   = f.status || 'open';
+      const isTriaged = status !== 'open';
+      const stemTrunc = (f.stemSnapshot || '').replace(/<[^>]+>/g, '').slice(0, 280);
+      const bank = BANK_LABEL[f.collection] || f.collection || '—';
+      const deeplink = BANK_DEEPLINK[f.collection] || 'practice-bank-admin?item=';
+      const noteHtml = f.note ? `<p class="flag-note">${escHtml(f.note)}</p>` : '';
+      const flagger = `${escHtml(f.flaggerName || 'Anon')} · ${escHtml(f.flaggerEmail || '')}`;
+
+      const triagedHtml = isTriaged && f.triageNote
+        ? `<p class="flag-note" style="border-left:3px solid #065f46;padding-left:10px;color:#065f46;font-style:normal">HQ: ${escHtml(f.triageNote)}</p>`
+        : '';
+
+      return `
+      <article class="flag-card ${isTriaged ? 'is-triaged' : ''}" data-id="${escAttr(f.id)}">
+        <div class="flag-head">
+          <div class="left">
+            <div class="item-id">${escHtml(f.itemId)}</div>
+            <div>${escHtml(bank)} · ${escHtml(f.subjectId || '—')} · ${escHtml(f.difficulty || '—')} · ${escHtml(f.type || '—')}</div>
+          </div>
+          <div class="meta">
+            <span class="reason-chip r-${escAttr(reason)}">${escHtml(reason.replace(/_/g,' '))}</span>
+            <span class="status-chip s-${escAttr(status)}">${escHtml(status)}</span>
+            <div style="margin-top:4px">${relDate(f.createdAt)}</div>
+          </div>
+        </div>
+        ${stemTrunc ? `<div class="flag-stem">${escHtml(stemTrunc)}${stemTrunc.length >= 280 ? '…' : ''}</div>` : ''}
+        ${noteHtml}
+        ${triagedHtml}
+        <div class="flag-flagger">Flagged by <strong>${flagger}</strong></div>
+        <div class="flag-actions">
+          <a class="btn-open-item" href="${escAttr(deeplink + encodeURIComponent(f.itemId))}" target="_blank" rel="noopener">↗ Open item</a>
+          <select class="newStatusSelect" data-id="${escAttr(f.id)}">
+            <option value="">— flip status —</option>
+            <option value="triaged">→ Triaged (looking at it)</option>
+            <option value="fixed">→ Fixed</option>
+            <option value="wontfix">→ Won't fix</option>
+            <option value="duplicate">→ Duplicate</option>
+            <option value="open">→ Re-open</option>
+          </select>
+          <input type="text" class="triageNoteInput" data-id="${escAttr(f.id)}" placeholder="Optional triage note (max 280)" maxlength="280">
+          <button type="button" class="btn-triage" data-id="${escAttr(f.id)}">Save</button>
+        </div>
+      </article>`;
+    }
+
+    function applyFilters(flags) {
+      return flags.filter(f => {
+        if (state.currentStatus !== 'all' && (f.status || 'open') !== state.currentStatus) return false;
+        if (state.currentColl   !== 'all' && f.collection !== state.currentColl) return false;
+        if (state.currentReason !== 'all' && f.reason !== state.currentReason) return false;
+        return true;
+      });
+    }
+
+    function render() {
+      const filtered = applyFilters(state.flags);
+      const list = document.getElementById('flagList');
+      const empty = document.getElementById('emptyState');
+
+      if (filtered.length === 0) {
+        list.innerHTML = '';
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+        list.innerHTML = filtered.map(flagCard).join('');
+      }
+
+      // Wire row actions
+      list.querySelectorAll('.btn-triage').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const card = list.querySelector('article[data-id="' + id + '"]');
+          const newStatus = card.querySelector('.newStatusSelect').value;
+          const note      = card.querySelector('.triageNoteInput').value;
+          if (!newStatus) { toast('Pick a new status first', true); return; }
+          btn.disabled = true;
+          await triageFlag(id, newStatus, note);
+          btn.disabled = false;
+        });
+      });
+
+      // Counters
+      const byStatus = { open: 0, triaged: 0, fixed: 0, wontfix: 0, duplicate: 0 };
+      let todayCount = 0;
+      state.flags.forEach(f => {
+        const s = f.status || 'open';
+        if (s in byStatus) byStatus[s]++;
+        if (isToday(f.createdAt)) todayCount++;
+      });
+      document.getElementById('tabOpenCount').textContent     = byStatus.open;
+      document.getElementById('tabTriagedCount').textContent  = byStatus.triaged;
+      document.getElementById('tabFixedCount').textContent    = byStatus.fixed;
+      document.getElementById('tabWontfixCount').textContent  = byStatus.wontfix;
+      document.getElementById('tabDupCount').textContent      = byStatus.duplicate;
+      document.getElementById('kpiOpen').textContent          = byStatus.open;
+      document.getElementById('kpiToday').textContent         = todayCount;
+      document.getElementById('kpiFixed').textContent         = byStatus.fixed;
+      document.getElementById('sigTotal').textContent         = state.flags.length + ' total';
+
+      // Re-typeset MathJax in case stem snapshots have inline math
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([list]).catch(() => {});
+      }
+    }
+
+    function wireTabs() {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('is-active'));
+          tab.classList.add('is-active');
+          state.currentStatus = tab.dataset.status;
+          render();
+        });
+      });
+      document.getElementById('filterCollection').addEventListener('change', (e) => {
+        state.currentColl = e.target.value;
+        render();
+      });
+      document.getElementById('filterReason').addEventListener('change', (e) => {
+        state.currentReason = e.target.value;
+        render();
+      });
+    }
+
+    window.addEventListener('authReady', () => {
+      wireTabs();
+
+      // Realtime subscription — newest first. Capped at 200 to keep
+      // reads tame; if the queue grows past that, add a per-status query.
+      const q = query(
+        collection(window.db, 'practice_question_flags'),
+        orderBy('createdAt', 'desc')
+      );
+      onSnapshot(q, snap => {
+        state.flags = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        render();
+      }, err => {
+        console.error('[flags] snapshot', err);
+        toast('Could not load flags: ' + err.message, true);
+      });
+    });
+  </script>
+</body>
+</html>
