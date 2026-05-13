@@ -683,6 +683,15 @@ const POINTS = {
   EASE_GROWTH_STRONG_BONUS: 50,        // growthVsPrev >= 5
   STREAK_MILESTONE_7:   100,
   STREAK_MILESTONE_30:  250,
+  // SH engagement (2026-05-13) — practice + daily-challenge
+  PRACTICE_BASE: 20,                    // attempting a run at all
+  DAILY_CHALLENGE_BASE: 50,             // higher floor than free practice
+  TOURNAMENT_BASE: 75,                  // reserved for future /tournaments page
+  PRACTICE_PER_CORRECT: 5,              // correctCount * this
+  PRACTICE_RUN_STREAK_3: 10,            // bestStreak >= 3 within the run
+  PRACTICE_RUN_STREAK_5: 20,            // bestStreak >= 5 within the run
+  PRACTICE_PERFECT_BONUS: 30,           // rawScorePct === 100
+  DAILY_CHALLENGE_FIRST_BONUS: 25,      // first daily-challenge submit of the day for this (uid, subj)
 };
 
 function levelXpRequired(level) {
@@ -761,6 +770,9 @@ async function awardPoints(studentUid, points, opts = {}) {
     if (opts.counter === "chapter")        update.chapterTestsCompleted = admin.firestore.FieldValue.increment(1);
     if (opts.counter === "ease")           update.easeSessionsCompleted = admin.firestore.FieldValue.increment(1);
     if (opts.counter === "chapter_perfect") update.perfectScores       = admin.firestore.FieldValue.increment(1);
+    if (opts.counter === "practice")        update.practiceRunsCompleted = admin.firestore.FieldValue.increment(1);
+    if (opts.counter === "daily_challenge") update.dailyChallengesCompleted = admin.firestore.FieldValue.increment(1);
+    if (opts.counter === "practice_perfect") update.perfectScores       = admin.firestore.FieldValue.increment(1);
 
     if (!snap.exists) {
       update.createdAt = admin.firestore.FieldValue.serverTimestamp();
@@ -848,6 +860,104 @@ exports.awardEaseSessionPoints = onDocumentWritten(
     } catch (e) { /* no growth doc yet — first window */ }
 
     await awardPoints(studentUid, points, { counter: "ease" });
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
+// 6b. awardPracticeAttemptPoints — on practice_attempts write (2026-05-13)
+//    Fires on transition INTO 'submitted' (or 'scored', for parity
+//    with chapter test pipeline). Mode-aware point formula:
+//
+//      practice         : base 20  + 5/correct + run-streak + perfect
+//      daily_challenge  : base 50  + 5/correct + run-streak + perfect
+//                                  + 25 first-of-day-per-subject bonus
+//      tournament       : base 75  (reserved — no /tournaments page yet)
+//
+//    Writes the awarded total back to practice_attempts.pointsAwarded
+//    so the student dashboard can render it without re-deriving.
+//    NEVER touches chapter_mastery / ease_growth — same boundary as
+//    practice_questions / practice_assessments (CLAUDE.md #33).
+// ───────────────────────────────────────────────────────────────
+exports.awardPracticeAttemptPoints = onDocumentWritten(
+  { document: "practice_attempts/{attemptId}", region: "asia-southeast1" },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+    if (!after) return;
+
+    const SCORED = new Set(["submitted", "scored"]);
+    const wasScored = before && SCORED.has(before.status);
+    const isScored  = SCORED.has(after.status);
+    if (!isScored || wasScored) return;       // only fire on transition INTO scored
+
+    const studentUid = after.studentUid;
+    if (!studentUid) return;
+
+    // No re-entry guard needed for the pointsAwarded writeback below:
+    // that update keeps status==='submitted' on both sides of the
+    // transition, so wasScored becomes true and the early-return at
+    // top of this handler bails out.
+
+    const mode         = after.mode || "practice";
+    const correctCount = Number(after.correctCount || 0);
+    const bestStreak   = Number(after.streakBest || 0);
+    const scorePct     = Number(after.rawScorePct || 0);
+    const subjectId    = after.subjectId;
+    const challengeId  = after.challengeId;
+
+    // Base by mode
+    let points;
+    let counter;
+    if (mode === "daily_challenge") {
+      points  = POINTS.DAILY_CHALLENGE_BASE;
+      counter = "daily_challenge";
+    } else if (mode === "tournament") {
+      points  = POINTS.TOURNAMENT_BASE;
+      counter = "practice";
+    } else {
+      points  = POINTS.PRACTICE_BASE;
+      counter = "practice";
+    }
+
+    // Per-correct
+    points += correctCount * POINTS.PRACTICE_PER_CORRECT;
+
+    // Run-internal streak
+    if      (bestStreak >= 5) points += POINTS.PRACTICE_RUN_STREAK_5;
+    else if (bestStreak >= 3) points += POINTS.PRACTICE_RUN_STREAK_3;
+
+    // Perfect run
+    const isPerfect = scorePct >= 100;
+    if (isPerfect) {
+      points += POINTS.PRACTICE_PERFECT_BONUS;
+      counter = mode === "daily_challenge" ? "daily_challenge" : "practice_perfect";
+    }
+
+    // Daily-challenge first-of-day-per-subject bonus
+    if (mode === "daily_challenge" && challengeId) {
+      try {
+        const dup = await db.collection("practice_attempts")
+          .where("studentUid", "==", studentUid)
+          .where("challengeId", "==", challengeId)
+          .where("status", "in", ["submitted", "scored"])
+          .get();
+        if (dup.size <= 1) points += POINTS.DAILY_CHALLENGE_FIRST_BONUS;
+      } catch (e) { /* silent — first-bonus is nice-to-have, not load-bearing */ }
+    }
+
+    await awardPoints(studentUid, points, { counter });
+
+    // Write pointsAwarded back so SH can render it in the summary screen
+    // + recent-runs list. Best-effort: a failure here doesn't void the
+    // point award (already committed above).
+    try {
+      await event.data.after.ref.update({
+        pointsAwarded: points,
+        pointsAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn("[awardPracticeAttemptPoints] pointsAwarded writeback failed", e.message);
+    }
   }
 );
 
