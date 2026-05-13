@@ -1903,6 +1903,24 @@
       // options / wrong correctAnswer / dollar-sign math glitches
       // before save. Delegated listener keeps it cheap and survives
       // the MCQ ↔ short_answer mid-edit re-render (wireEditor reruns).
+      //
+      // Rich-source fallback subtlety: ExamView-imported items seed
+      // the option textareas with placeholder text like "(image) ;…"
+      // (the upstream `option_text` column). We DON'T want to render
+      // that placeholder in the live preview — we want the imported
+      // optionsHtml[i] (which carries the real <img>). But once HQ
+      // edits the textarea, their keystrokes must win immediately.
+      // We tag each text input with data-edited=1 on first input.
+      // renderEditorLivePreview reads that flag to decide whether to
+      // prefer the textarea value or the imported rich source.
+      const markEdited = (e) => {
+        const t = e.target;
+        if (!t || !t.dataset) return;
+        if (t.id === 'qeStem' || (t.classList && t.classList.contains('qe-option-text'))) {
+          t.dataset.edited = '1';
+        }
+      };
+      mount.addEventListener('input', markEdited);
       const fireLive = () => {
         try { renderEditorLivePreview(readEditorPayload(mount)); }
         catch (e) { console.warn('[practice-bank] live preview render failed', e); }
@@ -1920,9 +1938,17 @@
       // items live with <img> tags inside optionsHtml + diagramStoragePath
       // pointing at the CH bucket. Preview should mirror what students
       // see, not the stripped textbox content.
+      //
+      // Precedence rule: imported items seed the textarea with
+      // upstream `option_text` placeholders like "(image) ;…". Rich
+      // optionsHtml carries the real <img>. Until HQ edits the textbox
+      // (tracked via data-edited=1), the rich source wins; after the
+      // first keystroke the live text wins so edits show immediately.
       const ei = editingItem || {};
-      const stemRich = ei.stemHtml || cur.stem || '';
-      const stemHtml = stemRich
+      const mountEl = document.getElementById('itemEditorMount');
+      const stemEdited = mountEl?.querySelector('#qeStem')?.dataset.edited === '1';
+      const stemRich = (stemEdited || !ei.stemHtml) ? (cur.stem || '') : ei.stemHtml;
+      const stemHtml = (stemRich && stemRich.trim())
         ? sanitisePreviewHtml(stemRich)
         : '<em style="color:var(--ink-3)">(stem empty)</em>';
       // Diagram thumbnail if attached. hydrateImages resolves the
@@ -1940,16 +1966,21 @@
         const correctLetter = (cur.correctAnswer || '').toString().toUpperCase();
         const correctIdx = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
         const optsHtml = Array.isArray(ei.optionsHtml) ? ei.optionsHtml : [];
+        const optEditedFlags = Array.from(
+          (mountEl || document).querySelectorAll('input.qe-option-text')
+        ).reduce((acc, inp) => {
+          acc[Number(inp.dataset.optIdx)] = inp.dataset.edited === '1';
+          return acc;
+        }, {});
         answersHtml = '<div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;">'
           + cur.options.map((o, i) => {
               const isCorrect = i === correctIdx;
-              // Prefer rich optionsHtml (imported items carry <img> tags
-              // and inline math here). Fall back to the live textarea
-              // text so HQ edits show up immediately. Empty → grey hint.
-              const rich = optsHtml[i];
+              // Same precedence rule as stem: imported rich source wins
+              // until HQ types into that specific option textbox.
+              const useLive = optEditedFlags[i] || !optsHtml[i];
+              const src = useLive ? o : optsHtml[i];
               let text;
-              if (rich && rich.trim()) text = sanitisePreviewHtml(rich);
-              else if (o && o.trim()) text = sanitisePreviewHtml(o);
+              if (src && src.trim()) text = sanitisePreviewHtml(src);
               else text = `<span style="color:var(--ink-3);font-style:italic">Option ${String.fromCharCode(65+i)} empty</span>`;
               return `<div class="elp-opt" style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border:1px solid ${isCorrect ? '#10b981' : 'var(--border)'};background:${isCorrect ? '#d1fae5' : '#fff'};border-radius:8px;font-size:13.5px;">
                 <span style="font-weight:700;min-width:20px;color:${isCorrect ? '#047857' : 'var(--ink-2)'}">${String.fromCharCode(65+i)}</span>
