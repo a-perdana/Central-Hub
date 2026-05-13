@@ -1220,6 +1220,25 @@ Two collections that wire the Practice Bank + Practice Assessments into student-
 **Read:** CH reviewers only (`central_admin` OR `director` OR `coordinator`). Students cannot read each other's flags or their own back.
 **Notes:** Generic across all 3 question banks so the same observer-strip + triage queue covers chapter tests, EASE growth, and practice. The collection name kept the `practice_question_flags` slug for back-compat with the first SH surface (practice-run), even though it routes flags for chapter tests + EASE items too. NEVER deleted by client — admin triages by flipping status. Stem snapshot is the audit trail when the upstream item is rewritten/archived between flag time and review.
 
+#### `practice_question_endorsements/{itemId_specialistUid}` — HQ observer good-question stars (2026-05-14)
+**PK:** Deterministic `{itemId}_{specialistUid}`. Idempotent — re-saving the same (item, specialist) pair updates in place; specialists can edit their tag set or comment without producing duplicate rows.
+**Fields:**
+- `itemId` (string — references the endorsed item's doc id)
+- `collection` (`'practice_questions' | 'chapter_test_items' | 'ease_items'` — tells the browse page which authoring page to deeplink to)
+- `subjectId` · `topicGroup` · `difficulty` · `type` — denormalised facets so the browse page can filter without fetching item docs
+- `specialistUid → students.uid` (the HQ observer; rule pins it to `auth.uid`)
+- `specialistName` · `specialistEmail` — denormalised for the queue
+- `comment` (string — free-text, max 280 chars)
+- `tags[]` (`'curriculum-aligned' | 'exam-style' | 'conceptual'` — subset of 3, rule-validated)
+- `createdAt` · `updatedAt`
+
+**FKs:** `itemId → {practice_questions | chapter_test_items | ease_items}.id` (loose, same as flags); `specialistUid → students.uid` (HQ observer's student doc).
+**Writers:** Observer students (`students/{uid}.is_hq_observer == true` AND `status == 'active'`). Doc id must match `{itemId}_{auth.uid}` so a specialist can't write under someone else's id. Re-saving updates in place. Owner can delete own row to retract the endorsement; `central_admin` can delete any (moderation).
+**Read:** CH reviewers (`central_admin` OR `director` OR `coordinator`) can list + get; observer can `get` own row for the prefill / edit flow. No cross-observer read for students.
+**Notes:** Companion to `practice_question_flags` — same observer-student gate + same browse charter, but the relationship is "I like this question" not "this question has a problem". The host item doc gets a denormalised `endorseCount` (number) + `endorsedBy[]` (uid[]) field via a separate back-write — per-collection rule (`practice_questions` / `chapter_test_items` / `ease_items`) lets observer students update those two fields only (`hasOnly(['endorseCount', 'endorsedBy'])`). Best-effort: if a back-write fails (e.g. concurrent admin write rejects the increment), the count drifts. A future CH cron / Cloud Function can re-derive from this canonical collection.
+
+**`{practice_questions | chapter_test_items | ease_items}.endorseCount` + `.endorsedBy[]`** — denormalised aggregate fields on the host item, maintained client-side by the SH observer strip. NOT load-bearing — the source of truth is `practice_question_endorsements`. Don't read these in trust-sensitive code paths; re-aggregate from the canonical collection when accuracy matters (e.g. on a CH ranking page that affects what assessments specialists select). For SH leaderboard-style display where ~off-by-one drift is harmless, reading the denormalised count is fine.
+
 ---
 
 ## Indexes (composite)

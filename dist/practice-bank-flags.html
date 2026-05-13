@@ -222,10 +222,39 @@
       font-size: .9rem;
       line-height: 1.55;
       color: var(--ink);
-      max-height: 200px;
+      max-height: 280px;
       overflow: auto;
+      position: relative;
     }
     .flag-stem code { background: rgba(0,0,0,.05); padding: 1px 4px; border-radius: 3px; font-size: 90%; }
+    .flag-stem img { max-width: 100%; height: auto; }
+    .flag-stem .stem-badge {
+      position: absolute; top: 6px; right: 8px;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--ink-3);
+      background: #fff;
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+    }
+    .flag-stem.is-current { border-left-color: #065f46; }
+    .flag-stem.is-current .stem-badge { color: #065f46; border-color: #a7f3d0; background: #ecfdf5; }
+    .btn-show-current {
+      padding: 4px 10px;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 99px;
+      color: #065f46;
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .btn-show-current:hover { background: #d1fae5; }
+    .btn-show-current:disabled { opacity: .5; cursor: default; }
+    .btn-show-current.is-loading { opacity: .6; cursor: progress; }
 
     .flag-note {
       font-size: .88rem;
@@ -1712,6 +1741,11 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V3"/><path d="M4 4h13l-2 4 2 4H4"/></svg>
               <span class="nav-item-label">Question Flags</span>
             </a>
+            <a href="practice-bank-endorsements" class="ch-dd-item" data-nav-page="practice-bank-endorsements" data-nav-key="practice-bank-endorsements">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+              <span class="nav-item-label">Starred Questions</span>
+            </a>
           </div>
         </div>
       </div>
@@ -2132,6 +2166,7 @@
           <a href="practice-assessment-author"   class="mobile-nav-link" data-mob-page="practice-assessment-author">Practice Assessment Author</a>
           <a href="daily-challenge-admin"        class="mobile-nav-link" data-mob-page="daily-challenge-admin">Daily Challenge Admin</a>
           <a href="practice-bank-flags"          class="mobile-nav-link" data-mob-page="practice-bank-flags">Question Flags</a>
+          <a href="practice-bank-endorsements"   class="mobile-nav-link" data-mob-page="practice-bank-endorsements">Starred Questions</a>
         </div>
       </div>
 
@@ -2262,7 +2297,7 @@
         performance:['cambridge-standards','academic-standards-ah','references','roles-positions',
                      'appraisals','school-appraisals','teacher-appraisals','school-visits',
                      'chapter-test-author','ease-item-author','ease-window-admin','ease-bank-browser','question-bank','diagrams',
-                     'practice-bank-admin','practice-assessment-author','daily-challenge-admin','practice-bank-flags'],
+                     'practice-bank-admin','practice-assessment-author','daily-challenge-admin','practice-bank-flags','practice-bank-endorsements'],
         specialist: ['specialist-path','specialist-portfolio','specialist-certificates','my-induction'],
         admin:      ['console','page-access','rules-viewer',
                      'mail-composer','survey-console','reports','feedback-management',
@@ -3298,8 +3333,45 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
   <script type="module">
     import {
-      collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp
+      collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc, serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    // Allowed-tag HTML sanitiser — mirrors the helper used by every
+    // bank authoring page so a stem rendered here matches what the
+    // editor / runner / preview shows. Strips scripts + event handlers,
+    // keeps math/img/formatting tags. https-only on <img>.
+    function sanitisePreviewHtml(html) {
+      if (!html) return '';
+      const tpl = document.createElement('template');
+      tpl.innerHTML = String(html);
+      const ALLOWED = new Set(['P','SPAN','IMG','BR','STRONG','EM','B','I','U','UL','OL','LI','TABLE','TR','TD','TH','TBODY','THEAD','SUP','SUB','DIV']);
+      const ALLOWED_ATTRS = { IMG: new Set(['src','alt','width','height','loading']), '*': new Set([]) };
+      function walk(node) {
+        for (const child of [...node.childNodes]) {
+          if (child.nodeType !== 1) continue;
+          if (!ALLOWED.has(child.tagName)) {
+            child.replaceWith(document.createTextNode(child.textContent || ''));
+            continue;
+          }
+          const okSet = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS['*'];
+          for (const attr of [...child.attributes]) {
+            if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+          }
+          if (child.tagName === 'IMG') {
+            const src = child.getAttribute('src') || '';
+            if (!/^https?:\/\//i.test(src) && !src.startsWith('data:image/')) {
+              child.removeAttribute('src');
+            }
+            child.setAttribute('loading', 'lazy');
+            child.style.maxWidth = '100%';
+            child.style.height = 'auto';
+          }
+          walk(child);
+        }
+      }
+      walk(tpl.content);
+      return tpl.innerHTML;
+    }
 
     const BANK_DEEPLINK = {
       practice_questions:  'practice-bank-admin?item=',
@@ -3379,7 +3451,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const reason   = f.reason || 'other';
       const status   = f.status || 'open';
       const isTriaged = status !== 'open';
-      const stemTrunc = (f.stemSnapshot || '').replace(/<[^>]+>/g, '').slice(0, 280);
+      // Stem snapshot is plaintext (first 500 chars of stem at flag time).
+      // Keep it as the AS-FLAGGED reference — even if HQ rewrites the item
+      // later, this captures what the observer actually saw.
+      const stemTrunc = (f.stemSnapshot || '').replace(/<[^>]+>/g, '').slice(0, 320);
       const bank = BANK_LABEL[f.collection] || f.collection || '—';
       const deeplink = BANK_DEEPLINK[f.collection] || 'practice-bank-admin?item=';
       const noteHtml = f.note ? `<p class="flag-note">${escHtml(f.note)}</p>` : '';
@@ -3402,12 +3477,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div style="margin-top:4px">${relDate(f.createdAt)}</div>
           </div>
         </div>
-        ${stemTrunc ? `<div class="flag-stem">${escHtml(stemTrunc)}${stemTrunc.length >= 280 ? '…' : ''}</div>` : ''}
+        ${stemTrunc ? `<div class="flag-stem" data-stem-pane="${escAttr(f.id)}">
+          <span class="stem-badge">As flagged</span>
+          ${escHtml(stemTrunc)}${stemTrunc.length >= 320 ? '…' : ''}
+        </div>` : ''}
+        <button type="button" class="btn-show-current"
+                data-show-current
+                data-id="${escAttr(f.id)}"
+                data-coll="${escAttr(f.collection)}"
+                data-itemid="${escAttr(f.itemId)}">↻ Show current version</button>
         ${noteHtml}
         ${triagedHtml}
         <div class="flag-flagger">Flagged by <strong>${flagger}</strong></div>
         <div class="flag-actions">
-          <a class="btn-open-item" href="${escAttr(deeplink + encodeURIComponent(f.itemId))}" target="_blank" rel="noopener">↗ Open item</a>
+          <a class="btn-open-item" href="${escAttr(deeplink + encodeURIComponent(f.itemId))}" target="_blank" rel="noopener"
+             title="Opens the authoring page with this question loaded in the edit modal">↗ Open in editor</a>
           <select class="newStatusSelect" data-id="${escAttr(f.id)}">
             <option value="">— flip status —</option>
             <option value="triaged">→ Triaged (looking at it)</option>
@@ -3420,6 +3504,45 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <button type="button" class="btn-triage" data-id="${escAttr(f.id)}">Save</button>
         </div>
       </article>`;
+    }
+
+    async function showCurrentStem(flagId, coll, itemId, btn) {
+      const card = document.querySelector('article.flag-card[data-id="' + CSS.escape(flagId) + '"]');
+      if (!card) return;
+      btn.classList.add('is-loading');
+      btn.disabled = true;
+      try {
+        const snap = await getDoc(doc(window.db, coll, itemId));
+        if (!snap.exists()) {
+          toast('Item no longer exists in ' + coll, true);
+          btn.textContent = 'Item deleted';
+          return;
+        }
+        const data = snap.data();
+        // Prefer rich stemHtml; fall back to plain stem text.
+        const richHtml = data.stemHtml || escHtml(data.stem || '');
+        const safeHtml = sanitisePreviewHtml(richHtml);
+        let pane = card.querySelector('[data-stem-pane="' + CSS.escape(flagId) + '"]');
+        if (!pane) {
+          pane = document.createElement('div');
+          pane.className = 'flag-stem is-current';
+          pane.setAttribute('data-stem-pane', flagId);
+          // Insert before the show-current button.
+          btn.parentNode.insertBefore(pane, btn);
+        } else {
+          pane.classList.add('is-current');
+        }
+        pane.innerHTML = '<span class="stem-badge">Current</span>' + safeHtml;
+        btn.remove();
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          window.MathJax.typesetPromise([pane]).catch(() => {});
+        }
+      } catch (e) {
+        console.error('[showCurrent]', e);
+        toast('Could not load current version: ' + e.message, true);
+        btn.classList.remove('is-loading');
+        btn.disabled = false;
+      }
     }
 
     function applyFilters(flags) {
@@ -3448,13 +3571,18 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       list.querySelectorAll('.btn-triage').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.id;
-          const card = list.querySelector('article[data-id="' + id + '"]');
+          const card = list.querySelector('article[data-id="' + CSS.escape(id) + '"]');
           const newStatus = card.querySelector('.newStatusSelect').value;
           const note      = card.querySelector('.triageNoteInput').value;
           if (!newStatus) { toast('Pick a new status first', true); return; }
           btn.disabled = true;
           await triageFlag(id, newStatus, note);
           btn.disabled = false;
+        });
+      });
+      list.querySelectorAll('[data-show-current]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          showCurrentStem(btn.dataset.id, btn.dataset.coll, btn.dataset.itemid, btn);
         });
       });
 

@@ -414,12 +414,24 @@ service cloud.firestore {
     // - Versioning: editing an in-use item should bump version + write a
     //   new doc; the rule does not enforce this — UI does.
     match /chapter_test_items/{itemId} {
+      function isObserverStudent() {
+        return isSignedIn()
+               && exists(/databases/$(database)/documents/students/$(request.auth.uid))
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
+      }
       allow get, list: if isAuthorized() || isActiveStudent();
       // Authoring (create / update) open to admin + CH coordinator;
       // delete restricted to admin only — coordinators can author
       // and archive but not erase. Mirrors the ease_items policy
       // (2026-05-12) so the two banks share the same boundary.
-      allow create, update: if isAdmin() || isCHCoordinator();
+      // Observer back-write for endorsement denormalisation —
+      // endorseCount + endorsedBy only.
+      allow update: if isAdmin() || isCHCoordinator() ||
+        ( isObserverStudent()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['endorseCount', 'endorsedBy']) );
+      allow create: if isAdmin() || isCHCoordinator();
       allow delete: if isAdmin();
     }
 
@@ -474,8 +486,24 @@ service cloud.firestore {
     // questions carrying isPublic) — Pearson textbook origin is pilot-
     // internal only. Active-student is the lowest read tier.
     match /practice_questions/{itemId} {
+      function isObserverStudent() {
+        return isSignedIn()
+               && exists(/databases/$(database)/documents/students/$(request.auth.uid))
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
+      }
       allow get, list: if isAuthorized() || isActiveStudent();
-      allow create, update: if isAdmin() || isCHCoordinator();
+      // Observer back-write for endorsement denormalisation — pure
+      // increment/decrement on endorseCount + arrayUnion/Remove on
+      // endorsedBy. Any other field change still requires admin /
+      // coordinator. Rule does NOT verify the count delta — that's
+      // best-effort denormalisation; a Cloud Function backfill could
+      // periodically re-derive from practice_question_endorsements.
+      allow update: if isAdmin() || isCHCoordinator() ||
+        ( isObserverStudent()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['endorseCount', 'endorsedBy']) );
+      allow create: if isAdmin() || isCHCoordinator();
       allow delete: if isAdmin();
     }
 
@@ -651,6 +679,12 @@ service cloud.firestore {
     //   - parent_share_tokens: anyone with the token gets the read
     //     (rule allows by id), but never list.
     match /ease_items/{itemId} {
+      function isObserverStudent() {
+        return isSignedIn()
+               && exists(/databases/$(database)/documents/students/$(request.auth.uid))
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
+      }
       allow get, list: if isAuthorized() || isActiveStudent();
       // Authoring (create / update) open to admin + CH coordinator
       // (subject specialists). Delete is admin-only — coordinators
@@ -658,7 +692,13 @@ service cloud.firestore {
       // is destructive: latihan re-imports recreate by uuid, but
       // HQ-authored items are gone for good, and any in-flight
       // ease_responses pointing at the doc become orphan refs.
-      allow create, update: if isAdmin() || isCHCoordinator();
+      // Observer back-write for endorsement denormalisation —
+      // endorseCount + endorsedBy only.
+      allow update: if isAdmin() || isCHCoordinator() ||
+        ( isObserverStudent()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['endorseCount', 'endorsedBy']) );
+      allow create: if isAdmin() || isCHCoordinator();
       allow delete: if isAdmin();
     }
 
@@ -811,6 +851,67 @@ service cloud.firestore {
                     && request.resource.data.collection     == resource.data.collection
                     && request.resource.data.createdAt      == resource.data.createdAt;
       allow delete: if isAdmin();
+    }
+
+    // ── HQ Observer Question Endorsements (2026-05-14) ──────────
+    // Companion to practice_question_flags. Same observer-student
+    // gate, same CH reviewer browse, but the relationship is "I like
+    // this question" rather than "this question has a problem".
+    //
+    // Doc id: `{itemId}_{specialistUid}` — deterministic, idempotent.
+    // Re-saving on the same item is an update (specialists can tweak
+    // their tag set or comment); Remove deletes the doc.
+    // The item doc gets denormalised endorseCount + endorsedBy[] via
+    // a separate back-write (rule per-collection above). When the two
+    // diverge a CH cron / Cloud Function can re-derive from these
+    // canonical endorsement rows.
+    //
+    // Tags allowed: {'curriculum-aligned', 'exam-style', 'conceptual'}.
+    // Schema spec: docs/FIRESTORE_SCHEMA.md.
+    match /practice_question_endorsements/{endorsementId} {
+      function isObserverStudent() {
+        return isSignedIn()
+               && exists(/databases/$(database)/documents/students/$(request.auth.uid))
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
+               && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
+      }
+      function isCHReviewer() {
+        return isAdmin()
+               || (isAuthorized() && userProfileExists()
+                   && ('ch_sub_roles' in userProfile())
+                   && userProfile().ch_sub_roles is list
+                   && userProfile().ch_sub_roles.hasAny(['director', 'coordinator']));
+      }
+      function validTagsArray(tags) {
+        return tags is list
+               && tags.size() <= 3
+               && tags.hasOnly(['curriculum-aligned', 'exam-style', 'conceptual']);
+      }
+      // Observer can read own row (for the prefill / edit flow); CH
+      // reviewers can read everyone's.
+      allow get:  if isCHReviewer()
+                  || (isObserverStudent() && resource.data.specialistUid == request.auth.uid);
+      allow list: if isCHReviewer();
+      // Owner observer creates / updates own endorsement. Doc id must
+      // match `{itemId}_{auth.uid}` so a specialist can't write under
+      // someone else's id. Both create + update validate the tags
+      // allowlist + the collection enum.
+      allow create: if isObserverStudent()
+                    && request.resource.data.specialistUid == request.auth.uid
+                    && endorsementId == request.resource.data.itemId + '_' + request.auth.uid
+                    && request.resource.data.itemId is string
+                    && request.resource.data.collection in ['practice_questions', 'chapter_test_items', 'ease_items']
+                    && validTagsArray(request.resource.data.tags);
+      allow update: if isObserverStudent()
+                    && resource.data.specialistUid == request.auth.uid
+                    && request.resource.data.specialistUid == request.auth.uid
+                    && request.resource.data.itemId        == resource.data.itemId
+                    && request.resource.data.collection    == resource.data.collection
+                    && validTagsArray(request.resource.data.tags);
+      // Owner observer can revoke own endorsement. central_admin can
+      // delete any (moderation).
+      allow delete: if isAdmin()
+                    || (isObserverStudent() && resource.data.specialistUid == request.auth.uid);
     }
 
     // ── Practice + Daily Challenge (Students Hub, 2026-05-13) ──
