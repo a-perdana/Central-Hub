@@ -108,29 +108,62 @@
       color: var(--ink); margin: 8px 0 14px;
     }
 
-    /* Treemap (SVG, vanilla) */
-    .rp-treemap-wrap {
+    /* Horizontal bar chart */
+    .rp-bars-wrap {
       background: var(--white); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px; margin-bottom: 22px;
+      border-radius: var(--radius); padding: 18px 20px; margin-bottom: 22px;
     }
-    #rpTreemap { width: 100%; height: 380px; display: block; }
-    .rp-treemap-rect { cursor: pointer; transition: opacity .15s; }
-    .rp-treemap-rect:hover { opacity: 0.85; }
-    .rp-treemap-label { font-family: 'DM Sans', sans-serif; pointer-events: none; fill: #fff; font-weight: 600; }
-    .rp-treemap-count { font-family: 'DM Mono', monospace; pointer-events: none; fill: rgba(255,255,255,0.85); }
-
-    /* Legend / category pills */
-    .rp-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-    .rp-legend-pill {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 4px 10px; border-radius: 999px;
-      background: var(--white); border: 1px solid var(--border);
-      font-size: 12px; color: var(--ink-2); cursor: pointer;
-      transition: border-color .15s, background .15s;
+    .rp-bars-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px dashed var(--border-soft);
+      font-size: 12px; color: var(--ink-3);
     }
-    .rp-legend-pill .dot { width: 9px; height: 9px; border-radius: 50%; }
-    .rp-legend-pill.active { background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk); }
-    .rp-legend-pill:hover { border-color: var(--accent); }
+    .rp-bars-head .total { font-family: 'DM Mono', monospace; color: var(--ink-2); }
+    .rp-bars-head .total strong { color: var(--ink); font-weight: 700; }
+    .rp-bar-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(120px, 2.6fr) 56px;
+      align-items: center; gap: 14px;
+      padding: 8px 6px; border-radius: 8px;
+      cursor: pointer; transition: background .15s;
+    }
+    .rp-bar-row:hover { background: var(--paper); }
+    .rp-bar-row + .rp-bar-row { margin-top: 2px; }
+    .rp-bar-label {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 12.5px; color: var(--ink-2); font-weight: 500;
+      min-width: 0;
+    }
+    .rp-bar-label .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.6);
+    }
+    .rp-bar-label .lbl {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .rp-bar-row:hover .rp-bar-label .lbl { color: var(--ink); }
+    .rp-bar-track {
+      position: relative; height: 18px;
+      background: var(--border-soft); border-radius: 6px; overflow: hidden;
+    }
+    .rp-bar-fill {
+      position: absolute; inset: 0 auto 0 0;
+      border-radius: 6px;
+      transition: width .35s ease, opacity .15s;
+      opacity: 0.92;
+    }
+    .rp-bar-row:hover .rp-bar-fill { opacity: 1; }
+    .rp-bar-count {
+      text-align: right;
+      font-family: 'DM Mono', monospace; font-size: 12.5px;
+      color: var(--ink); font-weight: 600;
+    }
+    .rp-bar-count .pct {
+      display: block;
+      font-size: 10.5px; color: var(--ink-3); font-weight: 500;
+      margin-top: 1px;
+    }
 
     /* Org Chart (mermaid + fallback) */
     .rp-diagram-wrap {
@@ -418,9 +451,12 @@
     <div class="rp-stat-row" id="rpStatRow"></div>
 
     <h2 class="rp-h2">Headcount distribution by category</h2>
-    <div class="rp-treemap-wrap">
-      <div class="rp-legend" id="rpTreemapLegend"></div>
-      <svg id="rpTreemap" viewBox="0 0 800 380" preserveAspectRatio="none"></svg>
+    <div class="rp-bars-wrap">
+      <div class="rp-bars-head">
+        <span>Click any row to filter the catalogue by that category.</span>
+        <span class="total"><strong id="rpBarsTotal">—</strong> positions across <strong id="rpBarsCats">—</strong> categories</span>
+      </div>
+      <div id="rpBars"></div>
     </div>
 
     <div id="rpDisclaimers"></div>
@@ -570,7 +606,7 @@
         // Build everything
         renderStatRow();
         renderDisclaimers();
-        renderTreemap();
+        renderBars();
         renderHeatmap();
         renderCatalogueFilters();
         renderCatalogue();
@@ -666,8 +702,8 @@
         $('rpDisclaimers').innerHTML = html;
       }
 
-      // ── Overview: treemap (vanilla SVG, squarified-lite) ──────────────
-      function renderTreemap() {
+      // ── Overview: horizontal bar chart ────────────────────────────────
+      function renderBars() {
         var counts = {};
         DATA.positions.forEach(function (p) { counts[p.category] = (counts[p.category] || 0) + 1; });
         var items = DATA.categories.map(function (c) {
@@ -675,113 +711,47 @@
         }).filter(function (x) { return x.value > 0; })
           .sort(function (a, b) { return b.value - a.value; });
 
-        // Legend
-        var legendHtml = items.map(function (it) {
-          return '<span class="rp-legend-pill" data-cat="' + esc(it.id) + '">' +
-            '<span class="dot" style="background:' + esc(it.color) + '"></span>' +
-            esc(it.label) + ' <strong style="margin-left:4px;color:' + esc(it.color) + '">' + it.value + '</strong>' +
-          '</span>';
-        }).join('');
-        $('rpTreemapLegend').innerHTML = legendHtml;
-        Array.prototype.forEach.call(document.querySelectorAll('.rp-legend-pill'), function (el) {
-          el.addEventListener('click', function () {
-            $('rpFilterCat').value = el.dataset.cat;
-            renderCatalogue();
-            var tabBtn = document.querySelector('.rp-tab[data-tab="catalogue"]');
-            if (tabBtn) tabBtn.click();
-          });
-        });
-
-        // Layout — slice-and-dice (simple). 800 × 380 viewport.
-        var svg = $('rpTreemap');
-        svg.innerHTML = '';
-        var W = 800, H = 380;
         var total = items.reduce(function (acc, it) { return acc + it.value; }, 0);
-        // Two-row split: bigger items in top row, smaller in bottom.
-        var split = Math.ceil(items.length / 2);
-        var topItems = items.slice(0, split);
-        var botItems = items.slice(split);
-        var topTotal = topItems.reduce(function (a, b) { return a + b.value; }, 0);
-        var botTotal = botItems.reduce(function (a, b) { return a + b.value; }, 0);
-        var rowSplit = total > 0 ? (topTotal / total) * H : H;
-        var minRow = 90, maxRow = H - 90;
-        if (rowSplit < minRow) rowSplit = minRow;
-        if (rowSplit > maxRow) rowSplit = maxRow;
-        if (botItems.length === 0) rowSplit = H;
+        var maxVal = items.length ? items[0].value : 1;
 
-        var ns = 'http://www.w3.org/2000/svg';
-        function drawRow(rowItems, y, rowH, rowTotal) {
-          var x = 0;
-          rowItems.forEach(function (it) {
-            var w = rowTotal > 0 ? (it.value / rowTotal) * W : 0;
-            var rect = document.createElementNS(ns, 'rect');
-            rect.setAttribute('x', x);
-            rect.setAttribute('y', y);
-            rect.setAttribute('width', w);
-            rect.setAttribute('height', rowH);
-            rect.setAttribute('fill', it.color);
-            rect.setAttribute('class', 'rp-treemap-rect');
-            rect.setAttribute('data-cat', it.id);
-            svg.appendChild(rect);
+        $('rpBarsTotal').textContent = total;
+        $('rpBarsCats').textContent = items.length;
 
-            if (w > 70 && rowH > 30) {
-              var lines = wrapText(it.label, Math.max(8, w / 7));
-              var lh = 14;
-              var startY = y + rowH / 2 - (lines.length * lh) / 2 + 4;
-              lines.forEach(function (ln, i) {
-                var t = document.createElementNS(ns, 'text');
-                t.setAttribute('x', x + w / 2);
-                t.setAttribute('y', startY + i * lh);
-                t.setAttribute('text-anchor', 'middle');
-                t.setAttribute('font-size', '13');
-                t.setAttribute('class', 'rp-treemap-label');
-                t.textContent = ln;
-                svg.appendChild(t);
-              });
-              var c = document.createElementNS(ns, 'text');
-              c.setAttribute('x', x + w / 2);
-              c.setAttribute('y', startY + lines.length * lh + 4);
-              c.setAttribute('text-anchor', 'middle');
-              c.setAttribute('font-size', '12');
-              c.setAttribute('class', 'rp-treemap-count');
-              c.textContent = it.value + ' roles';
-              svg.appendChild(c);
-            } else if (w > 30 && rowH > 24) {
-              var c2 = document.createElementNS(ns, 'text');
-              c2.setAttribute('x', x + w / 2);
-              c2.setAttribute('y', y + rowH / 2 + 5);
-              c2.setAttribute('text-anchor', 'middle');
-              c2.setAttribute('font-size', '13');
-              c2.setAttribute('class', 'rp-treemap-count');
-              c2.textContent = it.value;
-              svg.appendChild(c2);
-            }
-            x += w;
-          });
+        $('rpBars').innerHTML = items.map(function (it) {
+          var widthPct = maxVal > 0 ? (it.value / maxVal) * 100 : 0;
+          var sharePct = total > 0 ? Math.round((it.value / total) * 100) : 0;
+          // Linear gradient: solid colour fading slightly to the right for visual lift
+          var grad = 'linear-gradient(90deg, ' + it.color + ' 0%, ' + it.color + 'd9 100%)';
+          return '<div class="rp-bar-row" data-cat="' + esc(it.id) + '" role="button" tabindex="0" aria-label="Filter catalogue by ' + esc(it.label) + '">' +
+            '<div class="rp-bar-label">' +
+              '<span class="dot" style="background:' + esc(it.color) + '"></span>' +
+              '<span class="lbl">' + esc(it.label) + '</span>' +
+            '</div>' +
+            '<div class="rp-bar-track">' +
+              '<div class="rp-bar-fill" style="width:' + widthPct.toFixed(1) + '%;background:' + grad + ';"></div>' +
+            '</div>' +
+            '<div class="rp-bar-count">' + it.value +
+              '<span class="pct">' + sharePct + '%</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+        function jumpToCatalogue(catId) {
+          $('rpFilterCat').value = catId;
+          renderCatalogue();
+          var tabBtn = document.querySelector('.rp-tab[data-tab="catalogue"]');
+          if (tabBtn) tabBtn.click();
         }
-        drawRow(topItems, 0, rowSplit, topTotal);
-        if (botItems.length) drawRow(botItems, rowSplit, H - rowSplit, botTotal);
 
-        // Click handler
-        Array.prototype.forEach.call(svg.querySelectorAll('.rp-treemap-rect'), function (r) {
-          r.addEventListener('click', function () {
-            $('rpFilterCat').value = r.dataset.cat;
-            renderCatalogue();
-            var tabBtn = document.querySelector('.rp-tab[data-tab="catalogue"]');
-            if (tabBtn) tabBtn.click();
+        Array.prototype.forEach.call($('rpBars').querySelectorAll('.rp-bar-row'), function (row) {
+          row.addEventListener('click', function () { jumpToCatalogue(row.dataset.cat); });
+          row.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              jumpToCatalogue(row.dataset.cat);
+            }
           });
         });
-      }
-      function wrapText(s, maxChars) {
-        var words = String(s).split(/\s+/);
-        var lines = [], cur = '';
-        words.forEach(function (w) {
-          if (!cur) { cur = w; return; }
-          if ((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
-          else { lines.push(cur); cur = w; }
-        });
-        if (cur) lines.push(cur);
-        return lines.slice(0, 2);
       }
 
       // ── Mermaid loader ─────────────────────────────────────────────────
