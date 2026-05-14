@@ -538,6 +538,21 @@
       <button class="checklist-tab active" data-tab="director">Director</button>
       <button class="checklist-tab" data-tab="coordinator" id="coordinatorTab" style="display:none">Coordinator</button>
     </nav>
+    <!-- Cross-link to the matching 90-day handbook for the active tab.
+         Updated by JS whenever currentPlatform changes; hidden when no
+         handbook exists for the active platform. -->
+    <a id="pairedHandbookLink" href="handbook" target="_self"
+       style="display:none;margin-top:14px;align-self:flex-start;
+              padding:6px 12px;border-radius:8px;
+              background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);
+              color:rgba(255,255,255,0.88);font-size:12.5px;font-weight:600;
+              text-decoration:none;line-height:1.3;
+              align-items:center;gap:6px;
+              transition:background .12s, border-color .12s;">
+      <span aria-hidden="true">📕</span>
+      <span id="pairedHandbookLabel">Open paired 90-day handbook</span>
+      <span aria-hidden="true" style="opacity:.7;">↗</span>
+    </a>
   </div>
 </section>
 
@@ -796,6 +811,31 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     document.getElementById('emptyAddBtn').style.display = '';
   }
 
+  // Paired-handbook mapping. Each weekly-checklist tab (data-tab value)
+  // maps to its paired handbook id in induction_programs. Null means
+  // no paired handbook (yet) for that platform — link stays hidden.
+  // Same-hub handbooks (director, coordinator on CH) get target=_self;
+  // cross-hub deep-links use target=_blank (handled via the hostFor map
+  // in the link builder). Handbook host is centralhub.eduversal.org
+  // for these — the link is in-tab.
+  const PAIRED_HANDBOOK = {
+    director:    { id: 'eduversal_director_first_90_days_v1',           label: 'Director · 90-day handbook' },
+    coordinator: { id: 'eduversal_subject_specialist_first_90_days_v1', label: 'Subject Specialist · 90-day handbook' },
+  };
+  function updatePairedHandbookLink(platform) {
+    const link = document.getElementById('pairedHandbookLink');
+    const labelEl = document.getElementById('pairedHandbookLabel');
+    const m = PAIRED_HANDBOOK[platform];
+    if (!link) return;
+    if (!m) {
+      link.style.display = 'none';
+      return;
+    }
+    link.href = `handbook?id=${encodeURIComponent(m.id)}`;
+    labelEl.textContent = m.label;
+    link.style.display = 'inline-flex';
+  }
+
   // Tab click handlers
   document.querySelectorAll('.checklist-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -808,11 +848,13 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
           `Admin — manage ${getPlatformLabel(currentPlatform)} tasks for this week`;
       }
       updateHeroSub();
+      updatePairedHandbookLink(currentPlatform);
       loadWeek(currentWeek);
       loadEssentials();
     });
   });
 
+  updatePairedHandbookLink(currentPlatform);
   updateHeroSub();
   // Load teaching_schedule first so week labels can show "Semester II · Week 15"
   loadWeekSchedule().then(() => {
