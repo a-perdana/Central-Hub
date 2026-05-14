@@ -3057,6 +3057,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       font-variant-numeric: tabular-nums; flex-shrink: 0;
     }
     .hb-facet.active .count { background: rgba(255,255,255,0.22); color: #fff; }
+    .hb-facet.is-empty { opacity: 0.5; }
+    .hb-facet.is-empty .count { background: #f3f4f6; color: var(--ink-3); }
+    .hb-facet.active.is-empty .count { background: rgba(255,255,255,0.22); color: #fff; }
     @media (max-width: 960px) {
       .hb-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -3144,6 +3147,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       font-weight: 500;
     }
     .hb-card-meta .pill.firestore { background: #ddd6fe; color: #5b21b6; }
+    /* Role-operational handbook variant — pink accent stripe so the eye
+       tells DSL/operational cards apart from induction cards. Icon
+       background swaps too. */
+    .hb-card.hb-card-role {
+      box-shadow: inset 4px 0 0 #db2777;
+    }
+    .hb-card.hb-card-role:hover {
+      background: #fdf2f8; border-color: #fbcfe8;
+      box-shadow: inset 4px 0 0 #db2777, 0 6px 18px -10px rgba(219,39,119,0.32);
+    }
+    .hb-card.hb-card-role .hb-card-icon {
+      background: #fce7f3; color: #9d174d;
+    }
 
     /* ── READER MODE — full redesign (canonical CH hero + 2-col TOC layout) ──
        The reader uses the same mor page-hero as browser mode (and /references),
@@ -3446,6 +3462,47 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
     .hb-obs-cycle li b { color: var(--ink); font-weight: 600; }
 
+    /* Escalation ladder — vertical list with level number on the left.
+       Connector line between rungs gives the "ladder" affordance. */
+    .hb-ladder { list-style: none; padding: 0; margin: 0; }
+    .hb-ladder-step {
+      display: flex; gap: 14px; align-items: stretch;
+      padding: 12px 0; position: relative;
+    }
+    .hb-ladder-step + .hb-ladder-step { border-top: 1px dashed var(--border); }
+    .hb-ladder-num {
+      flex: 0 0 44px; height: 44px; border-radius: 10px;
+      background: var(--accent); color: #fff;
+      font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .hb-ladder-step:nth-child(1) .hb-ladder-num { background: #a78bfa; }
+    .hb-ladder-step:nth-child(2) .hb-ladder-num { background: #8b5cf6; }
+    .hb-ladder-step:nth-child(3) .hb-ladder-num { background: #7c3aed; }
+    .hb-ladder-step:nth-child(4) .hb-ladder-num { background: #5b21b6; }
+    .hb-ladder-body { flex: 1; min-width: 0; }
+    .hb-ladder-label {
+      font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 4px;
+    }
+    .hb-ladder-desc { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+
+    /* Key contacts — card grid (lean: taxonomy + purpose only; actual
+       contact details live in restricted CentralHub records, not here). */
+    .hb-contacts {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+    }
+    .hb-contact {
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; border-left: 3px solid var(--accent);
+    }
+    .hb-contact-id {
+      font-family: 'DM Mono', monospace; font-size: 10px;
+      color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .hb-contact-label { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }
+    .hb-contact-purpose { font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+
     /* Open items section */
     .hb-open-items { list-style: none; padding: 0; margin: 0; }
     .hb-open-items li {
@@ -3510,23 +3567,23 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="hero-title">
         <div class="hero-eyebrow">Network-wide</div>
         <h1>Handbooks</h1>
-        <p>Eduversal induction handbooks — JSON-first sources at <code>docs/induction/handbook-*.json</code>, mirrored to <code>induction_programs</code> Firestore on seed. Pick a handbook to open the full reader with print-to-PDF.</p>
+        <p>Eduversal handbook surface — Year-1 induction tracks at <code>docs/induction/</code> and role-operational quick-refs at <code>docs/handbooks/</code>, both mirrored to <code>induction_programs</code> Firestore on seed.</p>
       </div>
       <div class="hero-kpis">
         <div class="hero-kpi hero-kpi-primary">
           <div class="hero-kpi-num" id="heroKpiTotal">—</div>
           <div class="hero-kpi-lbl">Handbooks indexed</div>
-          <div class="hero-kpi-sub">Year-1 induction tracks</div>
+          <div class="hero-kpi-sub" id="heroKpiTotalSub">induction + role tracks</div>
         </div>
         <div class="hero-kpi">
-          <div class="hero-kpi-num">3</div>
-          <div class="hero-kpi-lbl">Audiences</div>
-          <div class="hero-kpi-sub">Teacher · Principal · Specialist</div>
+          <div class="hero-kpi-num" id="heroKpiInduction">—</div>
+          <div class="hero-kpi-lbl">Induction</div>
+          <div class="hero-kpi-sub">Year-1 mentee tracks</div>
         </div>
         <div class="hero-kpi">
-          <div class="hero-kpi-num" id="heroKpiBuild">—</div>
-          <div class="hero-kpi-lbl">Last build</div>
-          <div class="hero-kpi-sub">induction_programs seed</div>
+          <div class="hero-kpi-num" id="heroKpiRole">—</div>
+          <div class="hero-kpi-lbl">Role / operational</div>
+          <div class="hero-kpi-sub">specialist quick-refs</div>
         </div>
       </div>
     </div>
@@ -3546,6 +3603,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="hb-facets" id="hbFacets" role="tablist" aria-label="Filter by category">
         <button class="hb-facet active" data-cat="all" role="tab" aria-selected="true"><span>All</span><span class="count" id="cntAll">0</span></button>
         <button class="hb-facet" data-cat="induction" role="tab" aria-selected="false"><span>Induction Handbooks</span><span class="count" id="cntInduction">0</span></button>
+        <button class="hb-facet" data-cat="role" role="tab" aria-selected="false"><span>Role &amp; Operational</span><span class="count" id="cntRole">0</span></button>
       </div>
     </div>
   </div>
@@ -3556,9 +3614,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <span class="hb-section-caret" aria-hidden="true">▸</span>
         <h2 class="hb-section-title">Induction Handbooks</h2>
         <span class="hb-section-count" data-count-for="induction">0</span>
-        <p class="hb-section-blurb">Year-1 induction tracks per audience. Source-of-truth in <code>docs/induction/handbook-*.json</code>; Firestore <code>induction_programs</code> reverted on every seed.</p>
+        <p class="hb-section-blurb">Year-1 induction tracks per audience. Charter NN1-NN5 bound. Source-of-truth in <code>docs/induction/handbook-*.json</code>; Firestore <code>induction_programs</code> reverted on every seed.</p>
       </summary>
       <div class="hb-grid" id="hbGridInduction">
+        <div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">Loading handbooks…</div>
+      </div>
+    </details>
+
+    <details class="hb-section" data-cat="role" open>
+      <summary class="hb-section-head">
+        <span class="hb-section-caret" aria-hidden="true">▸</span>
+        <h2 class="hb-section-title">Role &amp; Operational</h2>
+        <span class="hb-section-count" data-count-for="role">0</span>
+        <p class="hb-section-blurb">Specialist-role quick-refs (DSL onboarding etc.). Source-of-truth in <code>docs/handbooks/*.json</code>; same Firestore collection, different <code>handbookKind</code>.</p>
+      </summary>
+      <div class="hb-grid" id="hbGridRole">
         <div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">Loading handbooks…</div>
       </div>
     </details>
@@ -3674,52 +3744,45 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     document.getElementById('btnPrint').addEventListener('click', () => window.print());
   }
 
-  /* ── Browser mode (Round 1 — single 'Induction Handbooks' facet) ─── */
+  /* ── Browser mode (partitioned by handbookKind) ─────────────────── */
   function bootBrowserMode() {
-    // Hero KPIs — total count + last-build date (today, since we don't
-    // ship a build-time timestamp on induction_programs).
-    document.getElementById('heroKpiTotal').textContent = allHandbooks.length;
-    document.getElementById('heroKpiBuild').textContent =
-      new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    // Partition: induction (handbookKind unset OR explicitly 'induction')
+    // vs role-operational (handbookKind='role-operational').
+    const partition = (kind) => allHandbooks.filter(hb => {
+      const k = hb.handbookKind || 'induction';
+      return kind === 'induction' ? (k === 'induction') : (k === 'role-operational');
+    });
+    const induction = partition('induction');
+    const role = partition('role-operational');
 
-    // Render cards into the induction section grid. Each card is a plain
-    // anchor with ?id=X — clicking navigates to reader mode (full page
-    // load, mode dispatch on next authReady). This keeps the browser ↔
-    // reader transition outside JS state.
-    const grid = document.getElementById('hbGridInduction');
+    // Hero KPIs — total + per-category breakdown + last build (today).
+    document.getElementById('heroKpiTotal').textContent = allHandbooks.length;
+    document.getElementById('heroKpiInduction').textContent = induction.length;
+    document.getElementById('heroKpiRole').textContent = role.length;
+
     if (!allHandbooks.length) {
-      grid.innerHTML = '<div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">No handbooks indexed yet. Run <code>scripts/induction/seed-induction-programs.js</code>.</div>';
+      const msg = '<div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">No handbooks indexed yet. Run <code>scripts/induction/seed-induction-programs.js</code>.</div>';
+      document.getElementById('hbGridInduction').innerHTML = msg;
+      document.getElementById('hbGridRole').innerHTML = msg;
       return;
     }
-    grid.innerHTML = allHandbooks.map(hb => {
-      const audience = [
-        hb.audience?.platform,
-        hb.audience?.subRole || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null),
-      ].filter(Boolean).join(' · ');
-      const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
-      return `
-        <a class="hb-card" href="handbook?id=${encodeURIComponent(hb.id)}">
-          <div class="hb-card-head">
-            <div class="hb-card-icon">📕</div>
-            <div>
-              <div class="hb-card-title">${escapeHtml(hb.title || hb.id)}</div>
-            </div>
-          </div>
-          <div class="hb-card-desc">${escapeHtml(hb.subtitle || '')}</div>
-          <div class="hb-card-meta">
-            ${audience ? `<span class="pill">${escapeHtml(audience)}</span>` : ''}
-            ${hb.version ? `<span class="pill">v${escapeHtml(hb.version)}</span>` : ''}
-            ${stages ? `<span class="pill">${stages} stages</span>` : ''}
-            <span class="pill firestore">induction_programs</span>
-          </div>
-        </a>
-      `;
-    }).join('');
+    renderCardGrid('hbGridInduction', induction);
+    renderCardGrid('hbGridRole', role);
 
-    // Seed counts
+    // Seed counts (chip + section count badge for each cat)
     document.getElementById('cntAll').textContent = allHandbooks.length;
-    document.getElementById('cntInduction').textContent = allHandbooks.length;
-    document.querySelector('[data-count-for="induction"]').textContent = allHandbooks.length;
+    document.getElementById('cntInduction').textContent = induction.length;
+    document.getElementById('cntRole').textContent = role.length;
+    document.querySelector('[data-count-for="induction"]').textContent = induction.length;
+    document.querySelector('[data-count-for="role"]').textContent = role.length;
+    // Dim facet chip when its category is empty (defensive — if role
+    // section is empty during early Round 2 transitions).
+    document.querySelectorAll('.hb-facet').forEach(b => {
+      const cat = b.dataset.cat;
+      if (cat === 'all') return;
+      const n = parseInt(document.getElementById('cnt' + cat.charAt(0).toUpperCase() + cat.slice(1))?.textContent || '0', 10);
+      b.classList.toggle('is-empty', n === 0);
+    });
 
     // Wire facets, search, sticky-toolbar shadow.
     document.querySelectorAll('.hb-facet').forEach(btn => {
@@ -3741,6 +3804,47 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         { threshold: 0 }
       ).observe(sentinel);
     } catch (_) { /* IO unsupported — no shadow, harmless */ }
+  }
+
+  /* Render an array of handbook docs into a target #grid as cards.
+     DSL handbook (and future role-operational docs) get a different
+     icon + accent stripe so they read as a separate genre at a glance. */
+  function renderCardGrid(gridId, handbooks) {
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
+    if (!handbooks.length) {
+      grid.innerHTML = '<div class="hb-loading" style="grid-column:1/-1;padding:24px;text-align:center;color:var(--ink-3);font-size:12.5px;font-style:italic;">No handbooks in this category yet.</div>';
+      return;
+    }
+    grid.innerHTML = handbooks.map(hb => {
+      const audience = [
+        hb.audience?.platform,
+        hb.audience?.subRole || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null),
+      ].filter(Boolean).join(' · ');
+      const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
+      const isRoleOps = hb.handbookKind === 'role-operational';
+      // Card icon: 📕 for induction tracks (year-long journey), 🛡 for
+      // role-operational (DSL etc. — protection / readiness vibe).
+      const icon = isRoleOps ? '🛡' : '📕';
+      const cardCls = isRoleOps ? 'hb-card hb-card-role' : 'hb-card';
+      return `
+        <a class="${cardCls}" href="handbook?id=${encodeURIComponent(hb.id)}">
+          <div class="hb-card-head">
+            <div class="hb-card-icon">${icon}</div>
+            <div>
+              <div class="hb-card-title">${escapeHtml(hb.title || hb.id)}</div>
+            </div>
+          </div>
+          <div class="hb-card-desc">${escapeHtml(hb.subtitle || '')}</div>
+          <div class="hb-card-meta">
+            ${audience ? `<span class="pill">${escapeHtml(audience)}</span>` : ''}
+            ${hb.version ? `<span class="pill">v${escapeHtml(hb.version)}</span>` : ''}
+            ${stages ? `<span class="pill">${stages} stages</span>` : ''}
+            <span class="pill firestore">induction_programs</span>
+          </div>
+        </a>
+      `;
+    }).join('');
   }
 
   let _browserActiveFacet = 'all';
@@ -3856,6 +3960,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       ${hb.designPhilosophy ? renderDesignPhilosophy(hb.designPhilosophy) : ''}
       ${hb.rolesAndResponsibilities ? renderRoles(hb.rolesAndResponsibilities) : ''}
+      ${hb.escalationLadder ? renderEscalationLadder(hb.escalationLadder) : ''}
+      ${hb.keyContacts ? renderKeyContacts(hb.keyContacts) : ''}
 
       <section class="hb-sec" id="hb-sec-stages">
         <h2 class="hb-sec-h">Stages <span class="count">${stagesArr.length}</span></h2>
@@ -3880,7 +3986,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   }
 
   function renderDesignPhilosophy(dp) {
-    const phasesOrWindows = dp.fourPhases || dp.fourWindows;
+    // Schema variants across handbooks: induction tracks use fourPhases /
+    // fourWindows; operational quick-refs (DSL etc.) use a generic phases[].
+    // Accept all three.
+    const phasesOrWindows = dp.fourPhases || dp.fourWindows || dp.phases;
     const count = Array.isArray(phasesOrWindows) ? phasesOrWindows.length : 0;
     return `
       <section class="hb-sec" id="hb-sec-design">
@@ -3904,8 +4013,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   }
 
   function renderRoles(rar) {
-    const order = ['mentee', 'mentor', 'schoolLeader', 'foundationRepresentative', 'eduversalHQ'];
-    const present = order.filter(k => rar[k]);
+    // Known taxonomy first (induction handbooks); append any handbook-
+    // specific keys (e.g. DSL operational handbook adds dsl/deputyDsl/
+    // principal/foundationRep/externalAgencies) after the known order so
+    // new schemas don't drop roles or require code changes.
+    const knownOrder = ['mentee', 'mentor', 'schoolLeader', 'foundationRepresentative', 'eduversalHQ',
+                        'dsl', 'deputyDsl', 'principal', 'foundationRep', 'externalAgencies'];
+    const knownPresent = knownOrder.filter(k => rar[k]);
+    const extraKeys = Object.keys(rar).filter(k => !knownOrder.includes(k));
+    const present = [...knownPresent, ...extraKeys];
     const cards = present
       .map(k => {
         const r = rar[k];
@@ -3934,7 +4050,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       schoolLeader: 'School Leader',
       foundationRepresentative: 'Foundation Rep',
       eduversalHQ: 'Eduversal',
-    })[k] || k;
+      dsl: 'DSL',
+      deputyDsl: 'Deputy DSL',
+      principal: 'Principal',
+      foundationRep: 'Foundation Rep',
+      externalAgencies: 'External agencies',
+    })[k] || k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
   }
 
   function renderStage(stage, index) {
@@ -3984,6 +4105,52 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     `;
   }
 
+  /* ── Escalation ladder (DSL handbook + future policy docs) ────────
+     Renders a vertical ladder with level numbers + label + description.
+     Visually conveys "go up one rung" hierarchy. */
+  function renderEscalationLadder(el) {
+    const levels = Array.isArray(el.levels) ? el.levels : [];
+    if (!levels.length) return '';
+    return `
+      <section class="hb-sec" id="hb-sec-escalation">
+        <h2 class="hb-sec-h">Escalation ladder <span class="count">${levels.length} levels</span></h2>
+        ${el.description ? `<p class="hb-sec-text">${escapeHtml(el.description)}</p>` : ''}
+        <ol class="hb-ladder">
+          ${levels.map(l => `
+            <li class="hb-ladder-step">
+              <span class="hb-ladder-num">L${l.level}</span>
+              <div class="hb-ladder-body">
+                <div class="hb-ladder-label">${escapeHtml(l.label || '')}</div>
+                ${l.description ? `<div class="hb-ladder-desc">${escapeHtml(l.description)}</div>` : ''}
+              </div>
+            </li>
+          `).join('')}
+        </ol>
+      </section>
+    `;
+  }
+
+  /* ── Key contacts (DSL handbook + future operational handbooks) ──── */
+  function renderKeyContacts(kc) {
+    const cats = Array.isArray(kc.categories) ? kc.categories : [];
+    if (!cats.length) return '';
+    return `
+      <section class="hb-sec" id="hb-sec-contacts">
+        <h2 class="hb-sec-h">Key contacts <span class="count">${cats.length}</span></h2>
+        ${kc.description ? `<p class="hb-sec-text">${escapeHtml(kc.description)}</p>` : ''}
+        <div class="hb-contacts">
+          ${cats.map(c => `
+            <div class="hb-contact">
+              <div class="hb-contact-id">${escapeHtml(c.id || '')}</div>
+              <div class="hb-contact-label">${escapeHtml(c.label || '')}</div>
+              ${c.purpose ? `<div class="hb-contact-purpose">${escapeHtml(c.purpose)}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
   function renderObservationCycle(c) {
     const rotation = Array.isArray(c.rotation) ? c.rotation : [];
     const totalLabel = c.totalObservations
@@ -4017,6 +4184,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     items.push(`<li><a href="#hb-sec-charter">Charter</a></li>`);
     if (hb.designPhilosophy) items.push(`<li><a href="#hb-sec-design">Design philosophy</a></li>`);
     if (hb.rolesAndResponsibilities) items.push(`<li><a href="#hb-sec-roles">Roles &amp; responsibilities</a></li>`);
+    if (hb.escalationLadder) items.push(`<li><a href="#hb-sec-escalation">Escalation ladder</a></li>`);
+    if (hb.keyContacts) items.push(`<li><a href="#hb-sec-contacts">Key contacts</a></li>`);
     if (stages.length) {
       items.push(`<li style="margin-top:8px;"><a href="#hb-sec-stages"><strong>Stages</strong></a></li>`);
       stages.forEach((s, i) => {
