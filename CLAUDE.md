@@ -38,14 +38,12 @@ For full schema + collection catalogue, see [`docs/FIRESTORE_SCHEMA.md`](../docs
 
 ## Auth Pattern
 
-Every protected page (all except `login.html`) loads `auth-guard.js` as a module:
+Every protected page (all except `login.html`) loads `auth-guard.js` as a module. **Use plain `<body>` — never `<body style="display:none">`** (CH auth-guard toggles `visibility`, not `display` — see Common Mistakes #14):
 ```html
 <body>
   <script src="firebase-config.js"></script>
   <script type="module" src="auth-guard.js"></script>
 ```
-
-> **Don't inline `style="display:none"` on `<body>`** — CH auth-guard toggles `document.body.style.visibility` (hidden → visible) and never touches `display`. An inline `display:none` survives the visibility flip and freezes the page blank. See Common Mistakes #14.
 
 > **Listen for `authReady` on `document`, not `window`** — see Common Mistakes #13. Past silent-failure mode.
 
@@ -168,7 +166,10 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 | `nav_config/{docId}` | Admin-editable navbar config. **PK is mixed:** `nav_config/v1` for CH (legacy, supports columns + nested submenu groups, in-place editor in `partials/navbar.html`); `nav_config/academichub` and `nav_config/teachershub` for AH/TH (flat shape `{platform, items:[{key,label,hidden}], updatedAt}`, edited via shared `shared-design/nav-edit-simple.js`). | each hub's admin |
 | `school_appraisals_archive_v1/{docId}` | **Tombstone (retired 2026-05-03).** No client code reads/writes; central_admin only for forensics. Active appraisal collection is `school_appraisals_v2`. | central_admin only |
 | `teacher_kpi_submissions/{uid}_{periodId}` | TH self-assessment (CH is rules host). Requires `schoolId` on write; composite index `(periodId, schoolId)` registered. | TH owner |
-| `job_positions` · `interview_question_sets` · `job_applications` · `interview_scorecards` · `job_application_audit` · `mail` | **Careers Module** (TH-owned). CH only matters as rules host. Helpers `hasTHSubRole`, `isInterviewer`, `isHiringManager`, `hasHiringPower`, `isHiringMgrSameSchool` live in `firestore.rules` "CAREERS + INTERVIEW MODULE" block. | TH-owned |
+| `job_positions` · `interview_question_sets` · `job_applications` · `interview_scorecards` · `job_application_audit` | **Careers Module** (TH-owned). CH only matters as rules host. Helpers `hasTHSubRole`, `isInterviewer`, `isHiringManager`, `hasHiringPower`, `isHiringMgrSameSchool` live in `firestore.rules` "CAREERS + INTERVIEW MODULE" block. | TH-owned |
+| `mail/{auto}` | **Retired 2026-05-06.** Legacy Firebase Trigger Email queue — replaced by Resend mail-service (see "Mail Composer + Resend Mail-Service" section). Kept readable for forensics; do NOT enqueue new docs. | central_admin (forensic only) |
+| `chapter_test_diagrams/{diagramId}` | Diagram binaries referenced by `chapter_test_items.diagramRefs[]`. Mirrored from IGCSE Tools by `scripts/migration/copy-igcse-diagrams-to-ch-bucket.js` + `import-igcse-diagrams-to-chapter-bank.js`. Migration audit doc lives in same migration script trio. | central_admin (migration scripts) |
+| `student_points/{uid}` · `school_leaderboards/{boardId}` · `daily_challenges/{date}` · `practice_attempts/{attemptId}` · `chapter_mastery/{studentUid}_{subjectId}_{unitCode}` | **SH Gamification + mastery aggregates (2026-05-12 / 2026-05-13).** Cloud-Function-only writes for `student_points` + `school_leaderboards` (`awardChapterTestPoints` / `awardEaseSessionPoints` / `awardPracticeAttemptPoints` / `rebuildLeaderboards` / `resetLeaderboardWindows` / `rotateDailyChallenges` triggers). `practice_attempts` is student-self-write while `status:'in_progress'`, immutable post-submit. `chapter_mastery` is `onChapterAttemptWritten` Cloud Function only. **NEVER feeds formal grading** — boundary same as `practice_questions` (root CLAUDE.md #33). Read by SH `/leaderboard`, `/daily-challenge`, `/practice*`, `/index`, `/how-points-work`. Schema: `docs/FIRESTORE_SCHEMA.md` §20. | various (Cloud Function for the aggregates; student for own `practice_attempts`) |
 
 **Timestamp:** `createdAt` (serverTimestamp). NEVER `timestamp`.
 
@@ -196,7 +197,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 - `index.html` (`/`) — dashboard with sidebar (DAILY / NETWORK / OPERATIONS / INSIGHTS / ADMIN) + stats row + hero + upcoming events + announcements
 - `login.html` — login (no auth-guard)
 
-**Network:** `schools` (writes `partner_schools`, UI label kept as "Schools"), `staff`, `event-calendar`, `academic-calendar` (admin **⚙ Year Settings** writes `calendar_settings/current` — single source of truth for all date/term data), `network-health`
+**Network:** `schools` (writes `partner_schools`, UI label kept as "Schools"), `staff`, `roles-positions`, `event-calendar` (= `school-events.html`), `academic-calendar` (admin **⚙ Year Settings** writes `calendar_settings/current` — single source of truth for all date/term data), `network-health`, `pilot-enrolment`
 
 **Communications:** `announcements`, `messageboard`, `documents` (`central_documents`), `library`, `mail-composer`, `notifications`
 
@@ -206,7 +207,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 
 **Survey + Certificates:** `surveys`, `survey-console`, `certificates`, `certificate-verify` (no auth guard)
 
-**Admin tooling:** `console`, `page-access`, `competency-admin`, `induction-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `feedback-management`, `rules-viewer`, `design-system`
+**Admin tooling:** `console`, `page-access`, `competency-admin`, `induction-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `feedback-management`, `rules-viewer`, `design-system`, `weekly-checklist`, `settings`, `diagrams` (per-subject diagram repository)
 
 **Specialist CPD (4-page set for HQ Subject Specialists):** `specialist-framework`, `specialist-path`, `specialist-portfolio`, `specialist-certificates`
 
@@ -217,6 +218,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 **References & Standards (2026-05-09):** `references` — single HQ surface for every framework / audit / handbook / Cambridge standard / Indonesian regulation. 6 tabs · 49 docs · search + `?doc=<id>` deep-link + localStorage MRU-5 recently-viewed. References-data lives in `dist/references-data/` (build copies from monorepo `docs/` + AH/CH `resources/`). AH and TH `/references` fetch this cross-origin (CORS-open).
 
 **Principal Evaluation Module (Phase-2, 2026-05-09):**
+- `principal-coaching-hub` — mentor's overview of all assigned coaching relationships (per-coachee cards + cycle progress + last-session date + quick-launch button into `principal-coaching-session`). `ch_sub_roles.director` only.
 - `principal-coaching-session` — mentor session form, `ch_sub_roles.director` only. 5-stage agenda from `principal-coaching-framework-v1.json`. Logged sessions immutable. Foundation Reps **excluded at rule level** for coaching confidentiality. Doc id: `{principalUid}_{YYYY-MM-DD}`.
 - `principal-360-admin` — central_admin tooling for 360 cycle launch. Create cycle (`{principalUid}_{academicYear}_{window}` doc id), open/close, generate cohort-specific respond links, monitor per-cohort response counts + composite F3. Replaces "admin manually creates cycle docs in Firestore". Director sees in navbar via page-access seed.
 - AH-side principal pages (`principal-observation-entry`, `principal-appraisal-entry`, `principal-360-respond`, `principal-360-results`, `principal-coaching-view`) live in Academic Hub but write to collections whose rules are hosted here. See `firestore.rules` "Principal Evaluation Module" block.
@@ -229,6 +231,12 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 - `question-bank` (2026-05-11) — Standalone bank for **`chapter_test_items` only**. Subject / Year / Type / Difficulty / Status filters, draft → published → archived lifecycle, `usedInTestIds[]` in-use guard, versioning via `parentItemId`. URL slug kept as `question-bank` for stability + page-access doc id; surfaced in the navbar as "Chapter Test Item Bank" since 2026-05-11. Same `chapter_test_items` collection that `chapter-test-author` writes to — Chapter Test Author composes items into a test envelope (`chapter_tests.itemIds[]`) and can inline-create new items, while this page is the standalone CRUD + reuse surface across all tests. **EASE items are out of scope here** — they need a pilotPhase / seenCount / correctRate calibration bootstrap at create time, so `ease_items` writes are routed exclusively through `ease-item-author`. visible_to=[director, coordinator].
 - `practice-assessment-author` (2026-05-12) — 3-panel composer for `practice_assessments`. Left rail = user's draft/published/archived list. Middle = picker with two tabs: **Manual Browse** (paginated table over `practice_questions` with subject + difficulty + topic group + type filters + stem-token array-contains search) and **AI Suggest** (free-text intent + structured difficulty mix + topic-group chips → `practiceBankAiSuggest` callable → ranked suggestions with rationale + per-row "Add" + "Add all"). Right rail = basket (drag-stale ordering preserved by `itemIds[]` order; live difficulty-mix preview; remove buttons). Save / Publish / Archive / Delete in the basket footer. Items referenced by id — no cloning. visible_to=[director, coordinator]. Same `sanitisePreviewHtml()` allowlist + MathJax config as `practice-bank-admin.html` (`$…$` is NEVER inline math — currency / variable literals).
 - `practice-bank-flags` (2026-05-13) — HQ Observer triage queue for `practice_question_flags`. Realtime onSnapshot capped at 200 newest rows, 5 status tabs (open / triaged / fixed / wontfix / duplicate) × 2 filter selects (bank + reason). Each row deeplinks to the right authoring page per `collection`: `practice_questions` → `/practice-bank-admin`, `chapter_test_items` → `/question-bank`, `ease_items` → `/ease-item-author`. Triage actions flip `status` + `triagedAt` + `triagedBy` + optional 280-char `triageNote`. visible_to=[director, coordinator]; admin/director bypass page-access. Build manifest entry in `build.js`; navbar entry in the Pacing Assessments dropdown column (under "Practice Questions" subheader) — see root CLAUDE.md "HQ Observer Flag System" for the full end-to-end flow.
+- `practice-bank-admin` (2026-05-12) — CRUD page for `practice_questions`. Subject / topicGroup / difficulty / type / status filters; archive/unarchive; per-row preview modal; import audit. visible_to=[director, coordinator]. Same MathJax + sanitiser config as `practice-assessment-author` (`$…$` is NEVER inline math).
+- `practice-bank-endorsements` (post-2026-05-13) — HQ "verified" endorsement queue: tags individual practice items with `cambridgeStandardRefs[]` + `endorsedBy` + `endorsedAt` so SH leaderboard / tournament UIs can prefer endorsed items. Read-only for non-endorsers. visible_to=[director, coordinator].
+- `daily-challenge-admin` (post-2026-05-13) — Manual override + monitoring for `rotateDailyChallenges` Cloud Function. Force-rotate today's challenge, preview tomorrow's, lock a specific `practice_assessments` bundle as the next pick. visible_to=[director, coordinator].
+
+**Students-Hub admin surfaces (2026-05-13):**
+- `students-overview` — HQ network-wide student roster (cross-school, cross-grade). Filter by school + grade + status + observer flag. Row actions: open student profile · flip `is_hq_observer` · graduate · reactivate. central_admin only — TH/AH already cover own-school flows; this is the network-wide HQ surface.
 
 **Pilot helper scripts** in `scripts/chapter-tests/`:
 - `seed-sample-chapter-tests.js` — 3 published Year 7 chapter tests (Math 7Ni.01 Integers, English 7E.01 Reading, Science 7Bp.01 Cells), 8 items each, mix of types so all auto-grading paths run during smoke test. `--dry` / `--wipe`.
