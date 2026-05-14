@@ -3145,104 +3145,346 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
     .hb-card-meta .pill.firestore { background: #ddd6fe; color: #5b21b6; }
 
-    /* Reader-mode back-link — visible only when ?id=X in URL (reader mode).
-       Sits inside the existing toolbar block, before the handbook select. */
-    .hb-back-link {
-      font-size: 12.5px; color: var(--accent-dk); text-decoration: none;
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 6px 10px; border-radius: 6px;
+    /* ── READER MODE — full redesign (canonical CH hero + 2-col TOC layout) ──
+       The reader uses the same mor page-hero as browser mode (and /references),
+       then a 240px sticky TOC sidebar + content area underneath. Section
+       anchors + scroll-spy give the user a sense of where they are inside a
+       300+ task handbook. Print CSS collapses the TOC + toolbar so the
+       content prints clean. */
+
+    /* Reader-only hero variant carries 3 KPI tiles (Duration / Stages /
+       Audience) populated at render time. Reuses .hero rules from above. */
+    .hero-reader-back {
+      position: absolute; top: 16px; left: 32px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 8px;
+      background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85);
+      font-size: 12px; font-weight: 600; text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      z-index: 2; transition: background .12s, color .12s;
+    }
+    .hero-reader-back:hover { background: rgba(255,255,255,0.18); color: #fff; }
+    .hero-reader-back::before { content: '←'; font-weight: 700; }
+
+    /* Compact reader toolbar — handbook switcher + print button. Sits
+       UNDER the hero (not sticky overlapping it). Sticky once hero
+       scrolls past so the user can still switch handbooks mid-scroll. */
+    .hb-reader-toolbar {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: saturate(160%) blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .hb-reader-toolbar .label {
+      font-size: 11px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .hb-reader-toolbar select {
+      padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: 13px; background: #fff; color: var(--ink);
+      min-width: 260px;
+    }
+    .hb-reader-toolbar select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .hb-reader-toolbar .btn-print {
+      margin-left: auto; padding: 7px 14px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
       transition: background .12s;
     }
-    .hb-back-link:hover { background: var(--accent-2); }
-    .hb-back-link::before { content: '←'; font-weight: 600; }
+    .hb-reader-toolbar .btn-print:hover { background: var(--accent-dk); }
+    .hb-reader-toolbar .btn-print svg { width: 14px; height: 14px; }
 
-    /* Original reader styles — preserved below for ?id=X mode */
+    /* Two-column layout: sticky TOC + content. Wraps to single column
+       at narrow widths; TOC becomes a horizontal scroll-strip on mobile. */
+    .hb-reader-layout {
+      max-width: 1200px; margin: 0 auto; padding: 0 32px 80px;
+      display: grid; grid-template-columns: 240px 1fr;
+      gap: 36px; align-items: start;
+    }
+    @media (max-width: 960px) {
+      .hb-reader-layout { grid-template-columns: 1fr; gap: 18px; padding: 0 20px 60px; }
+    }
 
-    .toolbar {
-      position: sticky; top: 0; z-index: 50;
-      background: #fff; border-bottom: 1px solid var(--border);
-      padding: 14px 40px; display: flex; align-items: center; gap: 18px;
+    /* TOC sidebar — anchors keyed to section ids set at render time
+       (hb-sec-charter, hb-sec-design, hb-sec-roles, hb-sec-stages,
+       hb-sec-stage-<n>, hb-sec-open). */
+    .hb-toc {
+      position: sticky; top: 64px;   /* below reader toolbar */
+      padding-top: 24px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      scrollbar-width: thin;
     }
-    .toolbar select {
-      padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
-      font-family: inherit; font-size: 14px; background: #fff; color: var(--ink);
-      min-width: 280px;
+    @media (max-width: 960px) {
+      .hb-toc {
+        position: relative; top: auto; max-height: none; padding-top: 14px;
+        border-bottom: 1px solid var(--border); padding-bottom: 14px;
+      }
     }
-    .toolbar select:focus { outline: none; border-color: var(--accent); }
-    .toolbar .btn-print {
-      margin-left: auto; padding: 8px 16px; background: var(--accent); color: #fff;
-      border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    .hb-toc-title {
+      font-size: 10.5px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .hb-toc ul { list-style: none; padding: 0; margin: 0; }
+    .hb-toc li { margin: 1px 0; }
+    .hb-toc a {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 6px;
+      font-size: 13px; color: var(--ink-2); text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .hb-toc a:hover { background: #fafbfc; color: var(--ink); }
+    .hb-toc a.active {
+      background: var(--accent-2); color: var(--accent-dk);
+      border-left-color: var(--accent); font-weight: 600;
+    }
+    .hb-toc a.toc-sub { padding-left: 22px; font-size: 12.5px; color: var(--ink-3); }
+    .hb-toc a.toc-sub.active { color: var(--accent-dk); }
+    .hb-toc-divider {
+      height: 1px; background: var(--border); margin: 8px 0;
+    }
+
+    /* Content column */
+    .hb-content { padding-top: 24px; min-width: 0; }
+
+    /* Section wrappers — h2 anchor + content card */
+    .hb-sec {
+      margin-bottom: 36px;
+      scroll-margin-top: 80px;   /* offset for sticky toolbar */
+    }
+    .hb-sec-h {
+      font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600;
+      color: var(--ink); margin: 0 0 14px;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .hb-sec-h .count {
+      font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .hb-sec-text { font-size: 14px; line-height: 1.65; color: var(--ink-2); margin: 0 0 16px; }
+
+    /* Charter callout — refined */
+    .hb-charter {
+      background: linear-gradient(135deg, #faf5ff 0%, #fdf2f8 100%);
+      border: 1px solid var(--accent-2); border-radius: 12px;
+      padding: 18px 22px; font-size: 13px; color: #4c1d95;
+      display: flex; gap: 14px; align-items: flex-start;
+      margin-bottom: 36px;
+    }
+    .hb-charter::before {
+      content: '⚖'; font-size: 22px; line-height: 1; flex-shrink: 0;
+      color: var(--accent);
+    }
+    .hb-charter strong { display: block; font-weight: 700; margin-bottom: 4px; color: #3b0764; font-size: 13.5px; }
+    .hb-charter code { background: rgba(108,92,231,0.12); padding: 1px 6px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; }
+
+    /* Design philosophy — windows displayed as a horizontal timeline
+       (gradient progress bar + window labels) rather than disconnected
+       cards. Reads as one continuous year. */
+    .hb-timeline {
+      margin: 18px 0 4px;
+      display: grid; grid-template-columns: repeat(var(--windows, 4), 1fr);
+      gap: 2px;
+      border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .hb-tl-cell {
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
+      border-right: 1px solid var(--accent-2);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .hb-tl-cell:last-child { border-right: none; }
+    .hb-tl-cell:nth-child(1) { background: linear-gradient(180deg, #ede9fe 0%, #faf5ff 100%); }
+    .hb-tl-cell:nth-child(2) { background: linear-gradient(180deg, #ddd6fe 0%, #faf5ff 100%); }
+    .hb-tl-cell:nth-child(3) { background: linear-gradient(180deg, #c4b5fd 0%, #faf5ff 100%); }
+    .hb-tl-cell:nth-child(4) { background: linear-gradient(180deg, #a78bfa 0%, #faf5ff 100%); }
+    .hb-tl-label {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .hb-tl-days { font-size: 13px; font-weight: 700; color: var(--ink); font-feature-settings: 'tnum'; }
+    .hb-tl-priority { font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+    .hb-tl-success {
+      font-size: 11.5px; font-style: italic; color: var(--ink-2); line-height: 1.45;
+      padding-top: 6px; border-top: 1px dashed rgba(108,92,231,0.3);
+    }
+    .hb-tl-success b { color: var(--accent-dk); font-style: normal; font-weight: 700; }
+    @media (max-width: 720px) {
+      .hb-timeline { grid-template-columns: 1fr; }
+      .hb-tl-cell { border-right: none; border-bottom: 1px solid var(--accent-2); }
+      .hb-tl-cell:last-child { border-bottom: none; }
+    }
+
+    /* Roles grid — refined cards */
+    .hb-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+    .hb-role {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .hb-role:hover { border-color: var(--accent-2); box-shadow: 0 4px 14px -10px rgba(108,92,231,0.2); }
+    .hb-role-label {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
       display: inline-flex; align-items: center; gap: 6px;
     }
-    .toolbar .btn-print:hover { background: var(--accent-dk); }
-    .toolbar .btn-print svg { width: 14px; height: 14px; }
-
-    .handbook-page { max-width: 880px; margin: 0 auto; padding: 32px 40px 80px; }
-
-    .hb-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid var(--accent); }
-    .hb-eyebrow { font-size: 11px; font-weight: 500; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-    .hb-title { font-family: 'Lora', serif; font-size: 2.2rem; font-weight: 600; color: var(--ink); line-height: 1.2; margin-bottom: 8px; }
-    .hb-subtitle { font-size: 14px; color: var(--ink-2); line-height: 1.5; }
-    .hb-meta {
-      display: flex; gap: 24px; flex-wrap: wrap; margin-top: 14px;
-      font-size: 12px; color: var(--ink-3);
+    .hb-role-label::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
     }
-    .hb-meta span strong { color: var(--ink-2); }
-
-    .hb-charter-box {
-      background: linear-gradient(180deg, #ddd6fe 0%, #fff 100%);
-      border: 1px solid var(--accent); border-radius: 12px;
-      padding: 16px 20px; margin-bottom: 28px; font-size: 13px; color: #4c1d95;
+    .hb-role .role-name { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 8px; line-height: 1.3; }
+    .hb-role .role-ownership {
+      font-size: 12px; line-height: 1.5; color: var(--ink-2);
+      padding: 8px 10px; background: #faf5ff; border-radius: 6px; margin-bottom: 8px;
+      border-left: 2px solid var(--accent);
     }
-    .hb-charter-box strong { display: block; font-weight: 700; margin-bottom: 4px; color: #3b0764; }
+    .hb-role .role-ownership strong { color: var(--accent-dk); }
+    .hb-role ul { padding-left: 18px; margin: 6px 0 0; }
+    .hb-role li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin-bottom: 4px; }
 
-    .hb-section { margin-bottom: 32px; }
-    .hb-section-h { font-family: 'Lora', serif; font-size: 1.3rem; font-weight: 600; color: var(--ink); margin-bottom: 12px; padding-top: 8px; }
-    .hb-section-text { font-size: 14px; line-height: 1.6; color: var(--ink-2); margin-bottom: 14px; }
-
-    .hb-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px; }
-    .hb-role-card { background: #fafafa; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-    .hb-role-card .role-label { font-size: 11px; font-weight: 700; color: var(--accent-dk); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-    .hb-role-card .role-resp { font-size: 12px; line-height: 1.5; color: var(--ink-2); margin-top: 4px; }
-    .hb-role-card ul { padding-left: 16px; margin-top: 6px; }
-    .hb-role-card li { font-size: 12px; line-height: 1.55; color: var(--ink-2); margin-bottom: 3px; }
-
+    /* Stages — accordion list. Default-open for the active scroll-spy
+       section, others stay open too (this is a reader; scrolling
+       through is the use-case). User can collapse to scan. */
     .hb-stage {
       border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
-      margin-bottom: 18px; background: #fff;
+      margin-bottom: 14px; background: #fff;
+      scroll-margin-top: 80px;
     }
+    .hb-stage[open] { box-shadow: 0 4px 14px -10px rgba(15,23,42,0.12); }
     .hb-stage-head {
+      list-style: none; cursor: pointer;
       background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
-      padding: 16px 22px; border-bottom: 1px solid var(--accent-2);
+      padding: 16px 22px;
+      border-bottom: 1px solid transparent;
+      display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+      transition: background .12s;
     }
-    .hb-stage-name { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
-    .hb-stage-days { font-size: 12px; color: var(--accent-dk); font-weight: 600; }
-    .hb-stage-narrative { font-size: 13px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
+    .hb-stage-head::-webkit-details-marker { display: none; }
+    .hb-stage[open] .hb-stage-head { border-bottom-color: var(--accent-2); }
+    .hb-stage-head:hover { background: linear-gradient(180deg, #ede9fe 0%, #faf5ff 100%); }
+    .hb-stage-caret {
+      color: var(--accent); font-size: 11px; transition: transform .15s;
+      width: 14px; display: inline-block;
+    }
+    .hb-stage[open] .hb-stage-caret { transform: rotate(90deg); }
+    .hb-stage-name { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0; }
+    .hb-stage-days {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      background: var(--accent-2); padding: 2px 8px; border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+    }
+    .hb-stage-tasks-pill {
+      font-size: 11px; color: var(--ink-3); font-weight: 500;
+      margin-left: auto;
+    }
+    .hb-stage-narrative {
+      font-size: 13px; color: var(--ink-2); line-height: 1.55;
+      padding: 14px 22px; background: #fafbfc; border-bottom: 1px solid var(--border);
+    }
 
+    /* Task rows inside stages — refined typography + meta layout */
     .hb-task { padding: 14px 22px; border-top: 1px solid var(--border); }
     .hb-task:first-of-type { border-top: none; }
     .hb-task-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
-    .hb-task-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin-bottom: 8px; }
-    .hb-task-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; }
-    .hb-tag { padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+    .hb-task-desc { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-bottom: 8px; }
+    .hb-task-meta { display: flex; gap: 5px; flex-wrap: wrap; font-size: 11px; align-items: center; }
+    .hb-tag {
+      padding: 2px 8px; border-radius: 999px; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
     .hb-tag.role { background: #f3f4f6; color: #4b5563; }
     .hb-tag.mentor { background: #fef3c7; color: #92400e; }
-    .hb-tag.minutes { background: #e0e7ff; color: #3730a3; }
-    .hb-tag.cts { background: var(--accent-2); color: var(--accent-dk); font-family: 'DM Mono', monospace; }
-    .hb-tag.skl { background: #d1fae5; color: #065f46; }
-    .hb-tag.pigp { background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace; }
+    .hb-tag.mentor::before { content: '👤'; font-size: 10px; }
+    .hb-tag.minutes { background: #e0e7ff; color: #3730a3; font-feature-settings: 'tnum'; }
+    .hb-tag.minutes::before { content: '⏱'; font-size: 10px; }
+    .hb-tag.cts { background: var(--accent-2); color: var(--accent-dk); font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    .hb-tag.skl { background: #d1fae5; color: #065f46; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    .hb-tag.pigp { background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.signoff { background: #ddd6fe; color: #5b21b6; font-weight: 700; }
+    .hb-tag.signoff::before { content: '✓'; font-weight: 800; }
 
-    .hb-substage-h { font-size: 13px; font-weight: 700; color: var(--accent-dk); padding: 12px 22px; background: #fafafa; border-top: 1px solid var(--border); }
-
-    .hb-obs-cycle {
-      background: #fafafa; border: 1px solid var(--border); border-radius: 10px;
-      padding: 14px 16px; margin: 14px 0;
+    .hb-substage-h {
+      font-size: 12.5px; font-weight: 700; color: var(--accent-dk);
+      padding: 10px 22px; background: #fafafa; border-top: 1px solid var(--border);
+      letter-spacing: 0.04em; text-transform: uppercase;
     }
-    .hb-obs-cycle h4 { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
-    .hb-obs-cycle ol { padding-left: 22px; }
-    .hb-obs-cycle li { font-size: 12px; line-height: 1.6; color: var(--ink-2); margin-bottom: 6px; }
+
+    /* Observation / walkthrough cycle — visual rotation list */
+    .hb-obs-cycle {
+      background: linear-gradient(135deg, #fafbfc 0%, #faf5ff 100%);
+      border: 1px solid var(--accent-2); border-radius: 10px;
+      padding: 14px 18px; margin: 14px 22px;
+    }
+    .hb-obs-cycle h4 {
+      font-size: 13px; font-weight: 700; color: var(--accent-dk); margin: 0 0 10px;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .hb-obs-cycle h4::before { content: '🔄'; font-size: 13px; }
+    .hb-obs-cycle ol {
+      list-style: none; counter-reset: rot; padding-left: 0; margin: 0;
+      display: grid; gap: 6px;
+    }
+    .hb-obs-cycle li {
+      counter-increment: rot;
+      padding: 8px 12px 8px 36px; position: relative;
+      background: rgba(255,255,255,0.6); border-radius: 6px;
+      font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+    }
+    .hb-obs-cycle li::before {
+      content: counter(rot);
+      position: absolute; left: 10px; top: 8px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-feature-settings: 'tnum';
+    }
     .hb-obs-cycle li b { color: var(--ink); font-weight: 600; }
+
+    /* Open items section */
+    .hb-open-items { list-style: none; padding: 0; margin: 0; }
+    .hb-open-items li {
+      padding: 10px 14px 10px 32px; position: relative;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      font-size: 13px; line-height: 1.55; color: #78350f;
+      margin-bottom: 6px;
+    }
+    .hb-open-items li::before {
+      content: '◆'; position: absolute; left: 12px; top: 10px;
+      color: #d97706; font-size: 10px;
+    }
+
+    .hb-loading { padding: 60px 40px; text-align: center; color: var(--ink-3); }
+
+    /* PRINT — clean single-column layout, hide chrome */
+    @media print {
+      .navbar, #navbar-container, .hero-reader-back,
+      .hb-reader-toolbar, .hb-toc, .hb-section-blurb { display: none !important; }
+      body { background: #fff !important; }
+      .hero { padding: 14px 24px; }
+      .hero h1 { font-size: 1.6rem; }
+      .hero p { font-size: 12px; }
+      .hero-kpis { gap: 8px; padding-bottom: 14px; }
+      .hero-kpi { padding: 8px 12px; min-width: 100px; }
+      .hero-kpi-num { font-size: 1.4rem; }
+      .hero-kpi-primary .hero-kpi-num { font-size: 1.4rem; }
+      .hb-reader-layout {
+        grid-template-columns: 1fr; max-width: 100%; padding: 0 24px 20px;
+      }
+      .hb-content { padding-top: 16px; }
+      .hb-stage { break-inside: avoid; box-shadow: none; }
+      .hb-stage[open] .hb-stage-head { border-bottom-color: var(--border); }
+      .hb-task { break-inside: avoid; }
+      .hb-charter { background: #fef3c7 !important; border-color: #fde68a !important; }
+      a { color: var(--ink) !important; text-decoration: none !important; }
+      details[open] > * { display: block; }  /* force-open all accordions for print */
+    }
+    @page { margin: 18mm; }
 
     .hb-loading { padding: 60px 40px; text-align: center; color: var(--ink-3); }
 
@@ -3328,11 +3570,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   </main>
 </div>
 
-<!-- Reader mode (when ?id=X in URL) — single-handbook detail view + print -->
+<!-- Reader mode (when ?id=X in URL) — full canonical hero + sticky TOC + content -->
 <div class="hb-reader">
-  <div class="toolbar" id="toolbar">
-    <a href="handbook" class="hb-back-link" id="btnBackToBrowser">Back to all handbooks</a>
-    <label for="hbSelect" style="font-size: 12px; font-weight: 600; color: var(--ink-2);">Handbook:</label>
+  <header class="hero" id="hbReaderHero">
+    <a href="handbook" class="hero-reader-back">Back to all handbooks</a>
+    <div class="hero-inner">
+      <div class="hero-title">
+        <div class="hero-eyebrow" id="hbReaderEyebrow">Loading…</div>
+        <h1 id="hbReaderTitle">Loading handbook…</h1>
+        <p id="hbReaderSubtitle">&nbsp;</p>
+      </div>
+      <div class="hero-kpis" id="hbReaderKpis">
+        <!-- populated at render time: duration / stages / audience -->
+      </div>
+    </div>
+  </header>
+
+  <div class="hb-reader-toolbar">
+    <span class="label">Handbook</span>
     <select id="hbSelect">
       <option value="">Loading…</option>
     </select>
@@ -3342,8 +3597,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     </button>
   </div>
 
-  <div class="handbook-page" id="hbContent">
-    <div class="hb-loading">Loading handbook…</div>
+  <div class="hb-reader-layout">
+    <aside class="hb-toc" id="hbToc" aria-label="Section navigation">
+      <div class="hb-toc-title">On this page</div>
+      <ul id="hbTocList"><li><a href="#" style="color:var(--ink-3);">Loading…</a></li></ul>
+    </aside>
+    <div class="hb-content" id="hbContent">
+      <div class="hb-loading">Loading handbook…</div>
+    </div>
   </div>
 </div>
 
@@ -3539,124 +3800,165 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
   }
 
+  /* ── renderHandbook ─ populates hero KPI tiles + TOC + content sections ── */
+  let _scrollSpyObserver = null;   // disposed + recreated per render
+
   function renderHandbook(id) {
     const hb = allHandbooks.find(h => h.id === id);
+    const content = document.getElementById('hbContent');
     if (!hb) {
-      document.getElementById('hbContent').innerHTML = '<div class="hb-loading">Pick a handbook from the dropdown.</div>';
+      content.innerHTML = '<div class="hb-loading">Pick a handbook from the dropdown.</div>';
+      document.getElementById('hbTocList').innerHTML = '';
       return;
     }
-    const stages = Array.isArray(hb.stages) ? hb.stages : [];
-    const stageBlocks = stages.map(renderStage).join('');
 
+    // Hero — eyebrow + title + subtitle + 3 KPI tiles
     const audienceLine = [
       hb.audience?.platform,
       hb.audience?.subRole || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null),
     ].filter(Boolean).join(' · ');
+    const stagesArr = Array.isArray(hb.stages) ? hb.stages : [];
 
-    document.getElementById('hbContent').innerHTML = `
-      <div class="hb-header">
-        <div class="hb-eyebrow">Eduversal Induction Handbook · v${escapeHtml(hb.version || '?')}</div>
-        <h1 class="hb-title">${escapeHtml(hb.title || hb.id)}</h1>
-        <div class="hb-subtitle">${escapeHtml(hb.subtitle || '')}</div>
-        <div class="hb-meta">
-          ${audienceLine ? `<span><strong>Audience:</strong> ${escapeHtml(audienceLine)}</span>` : ''}
-          ${hb.duration?.totalDays ? `<span><strong>Duration:</strong> ${hb.duration.totalDays} days</span>` : ''}
-          ${hb.publishedOn ? `<span><strong>Published:</strong> ${escapeHtml(hb.publishedOn)}</span>` : ''}
-          ${hb.publishedBy ? `<span><strong>By:</strong> ${escapeHtml(hb.publishedBy)}</span>` : ''}
+    document.getElementById('hbReaderEyebrow').textContent =
+      `Eduversal Induction Handbook · v${hb.version || '?'}`;
+    document.getElementById('hbReaderTitle').textContent = hb.title || hb.id;
+    document.getElementById('hbReaderSubtitle').textContent = hb.subtitle || '';
+
+    document.getElementById('hbReaderKpis').innerHTML = `
+      <div class="hero-kpi hero-kpi-primary">
+        <div class="hero-kpi-num">${hb.duration?.totalDays || '—'}</div>
+        <div class="hero-kpi-lbl">Days</div>
+        <div class="hero-kpi-sub">${hb.duration?.totalMonths ? hb.duration.totalMonths + ' months' : 'Year-1 induction'}</div>
+      </div>
+      <div class="hero-kpi">
+        <div class="hero-kpi-num">${stagesArr.length}</div>
+        <div class="hero-kpi-lbl">Stages</div>
+        <div class="hero-kpi-sub">${hb.publishedOn || ''}</div>
+      </div>
+      <div class="hero-kpi">
+        <div class="hero-kpi-num" style="font-size:1.1rem;font-family:'DM Sans',sans-serif;">${escapeHtml(audienceLine || 'Network')}</div>
+        <div class="hero-kpi-lbl">Audience</div>
+        <div class="hero-kpi-sub">platform · sub-role</div>
+      </div>
+    `;
+
+    // Content — single column, section anchors id'd for TOC + scroll-spy.
+    // Section id pattern: hb-sec-<key>; stage ids: hb-sec-stage-<index>.
+    const stageBlocks = stagesArr.map((s, i) => renderStage(s, i)).join('');
+
+    content.innerHTML = `
+      <aside class="hb-charter" id="hb-sec-charter">
+        <div>
+          <strong>This handbook sits under the Eduversal Induction Charter.</strong>
+          Year-1 induction data does not feed network appraisal scoring. Mentor + mentee + school leader all read the same source. Edits go through <code>docs/induction/handbook-*.json</code> + <code>scripts/induction/seed-induction-programs.js</code> — never Firestore directly.
         </div>
-      </div>
-
-      <div class="hb-charter-box">
-        <strong>This handbook sits under the Eduversal Induction Charter.</strong>
-        Year-1 induction data does not feed network appraisal scoring. Mentor + mentee + school leader all read the same source. Edits go through <code>docs/induction/handbook-*.json</code> + <code>scripts/induction/seed-induction-programs.js</code> — not Firestore directly.
-      </div>
+      </aside>
 
       ${hb.designPhilosophy ? renderDesignPhilosophy(hb.designPhilosophy) : ''}
       ${hb.rolesAndResponsibilities ? renderRoles(hb.rolesAndResponsibilities) : ''}
 
-      <div class="hb-section">
-        <h2 class="hb-section-h">Stages</h2>
+      <section class="hb-sec" id="hb-sec-stages">
+        <h2 class="hb-sec-h">Stages <span class="count">${stagesArr.length}</span></h2>
         ${stageBlocks || '<div class="hb-task-desc">No stages defined.</div>'}
-      </div>
+      </section>
 
       ${hb.openItems?.length ? `
-        <div class="hb-section">
-          <h2 class="hb-section-h">Open items</h2>
-          <ul style="padding-left:20px;">
-            ${hb.openItems.map(o => `<li class="hb-section-text" style="margin-bottom:6px;">${escapeHtml(o)}</li>`).join('')}
+        <section class="hb-sec" id="hb-sec-open">
+          <h2 class="hb-sec-h">Open items <span class="count">${hb.openItems.length}</span></h2>
+          <ul class="hb-open-items">
+            ${hb.openItems.map(o => `<li>${escapeHtml(o)}</li>`).join('')}
           </ul>
-        </div>
+        </section>
       ` : ''}
     `;
+
+    buildTOC(hb, stagesArr);
+    initScrollSpy();
+    // Scroll to top whenever a new handbook is loaded (handles select-
+    // dropdown switching between handbooks mid-scroll).
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
   }
 
   function renderDesignPhilosophy(dp) {
     const phasesOrWindows = dp.fourPhases || dp.fourWindows;
+    const count = Array.isArray(phasesOrWindows) ? phasesOrWindows.length : 0;
     return `
-      <div class="hb-section">
-        <h2 class="hb-section-h">Design philosophy</h2>
-        ${dp.summary ? `<p class="hb-section-text">${escapeHtml(dp.summary)}</p>` : ''}
+      <section class="hb-sec" id="hb-sec-design">
+        <h2 class="hb-sec-h">Design philosophy${count ? ` <span class="count">${count} windows</span>` : ''}</h2>
+        ${dp.summary ? `<p class="hb-sec-text">${escapeHtml(dp.summary)}</p>` : ''}
         ${Array.isArray(phasesOrWindows) ? `
-          <div class="hb-roles">
+          <div class="hb-timeline" style="--windows: ${count};">
             ${phasesOrWindows.map(p => `
-              <div class="hb-role-card">
-                <div class="role-label">${escapeHtml(p.label)}</div>
-                <div class="role-resp" style="font-weight:600;color:var(--ink);">
-                  ${escapeHtml(p.weeks || p.days || '')}
-                </div>
-                ${p.cognitivePriority ? `<div class="role-resp">${escapeHtml(p.cognitivePriority)}</div>` : ''}
-                ${p.leadershipPriority ? `<div class="role-resp">${escapeHtml(p.leadershipPriority)}</div>` : ''}
-                ${p.successSignal ? `<div class="role-resp" style="margin-top:6px;font-style:italic;"><strong>Success:</strong> ${escapeHtml(p.successSignal)}</div>` : ''}
+              <div class="hb-tl-cell">
+                <div class="hb-tl-label">${escapeHtml(p.label)}</div>
+                <div class="hb-tl-days">${escapeHtml(p.weeks || p.days || '')}</div>
+                ${p.cognitivePriority ? `<div class="hb-tl-priority">${escapeHtml(p.cognitivePriority)}</div>` : ''}
+                ${p.leadershipPriority ? `<div class="hb-tl-priority">${escapeHtml(p.leadershipPriority)}</div>` : ''}
+                ${p.successSignal ? `<div class="hb-tl-success"><b>Success:</b> ${escapeHtml(p.successSignal)}</div>` : ''}
               </div>
             `).join('')}
           </div>
         ` : ''}
-      </div>
+      </section>
     `;
   }
 
   function renderRoles(rar) {
     const order = ['mentee', 'mentor', 'schoolLeader', 'foundationRepresentative', 'eduversalHQ'];
-    const cards = order
-      .filter(k => rar[k])
+    const present = order.filter(k => rar[k]);
+    const cards = present
       .map(k => {
         const r = rar[k];
         const items = Array.isArray(r.responsibilities) ? r.responsibilities : [];
         return `
-          <div class="hb-role-card">
-            <div class="role-label">${escapeHtml(r.label || k)}</div>
-            ${r.ownership ? `<div class="role-resp"><strong>Ownership:</strong> ${escapeHtml(r.ownership)}</div>` : ''}
+          <div class="hb-role">
+            <div class="hb-role-label">${roleLabelFor(k)}</div>
+            <div class="role-name">${escapeHtml(r.label || k)}</div>
+            ${r.ownership ? `<div class="role-ownership"><strong>Ownership:</strong> ${escapeHtml(r.ownership)}</div>` : ''}
             ${items.length ? `<ul>${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
           </div>
         `;
       }).join('');
     return `
-      <div class="hb-section">
-        <h2 class="hb-section-h">Roles and responsibilities</h2>
+      <section class="hb-sec" id="hb-sec-roles">
+        <h2 class="hb-sec-h">Roles &amp; responsibilities <span class="count">${present.length}</span></h2>
         <div class="hb-roles">${cards}</div>
-      </div>
+      </section>
     `;
   }
 
-  function renderStage(stage) {
+  function roleLabelFor(k) {
+    return ({
+      mentee: 'Mentee',
+      mentor: 'Mentor',
+      schoolLeader: 'School Leader',
+      foundationRepresentative: 'Foundation Rep',
+      eduversalHQ: 'Eduversal',
+    })[k] || k;
+  }
+
+  function renderStage(stage, index) {
     const tasks = Array.isArray(stage.tasks) ? stage.tasks : [];
     const subStages = Array.isArray(stage.subStages) ? stage.subStages : [];
     const cycle = stage.observationCycle || stage.walkthroughCycle;
+    const totalTaskCount = tasks.length + subStages.reduce((acc, ss) => acc + (Array.isArray(ss.tasks) ? ss.tasks.length : 0), 0);
 
     return `
-      <div class="hb-stage">
-        <div class="hb-stage-head">
-          <div class="hb-stage-name">${escapeHtml(stage.label || stage.stageId)}</div>
-          <div class="hb-stage-days">Day ${stage.dayStart} → ${stage.dayEnd}</div>
-          ${stage.narrative ? `<div class="hb-stage-narrative">${escapeHtml(stage.narrative)}</div>` : ''}
-        </div>
+      <details class="hb-stage" id="hb-sec-stage-${index}" open>
+        <summary class="hb-stage-head">
+          <span class="hb-stage-caret" aria-hidden="true">▸</span>
+          <h3 class="hb-stage-name">${escapeHtml(stage.label || stage.stageId)}</h3>
+          <span class="hb-stage-days">Day ${stage.dayStart} → ${stage.dayEnd}</span>
+          ${totalTaskCount ? `<span class="hb-stage-tasks-pill">${totalTaskCount} task${totalTaskCount === 1 ? '' : 's'}</span>` : ''}
+        </summary>
+        ${stage.narrative ? `<div class="hb-stage-narrative">${escapeHtml(stage.narrative)}</div>` : ''}
         ${tasks.map(renderTask).join('')}
         ${cycle ? renderObservationCycle(cycle) : ''}
         ${subStages.map(ss => `
           <div class="hb-substage-h">${escapeHtml(ss.label || ss.subStageId)}</div>
           ${(ss.tasks || []).map(renderTask).join('')}
         `).join('')}
-      </div>
+      </details>
     `;
   }
 
@@ -3684,23 +3986,73 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
   function renderObservationCycle(c) {
     const rotation = Array.isArray(c.rotation) ? c.rotation : [];
+    const totalLabel = c.totalObservations
+      ? `${c.totalObservations} observations`
+      : (c.totalWalkthroughs ? `${c.totalWalkthroughs} walkthroughs` : 'Rotation');
     return `
-      <div class="hb-task">
-        <div class="hb-obs-cycle">
-          <h4>${c.totalObservations ? c.totalObservations : c.totalWalkthroughs || ''} ${c.totalObservations ? 'observations' : 'walkthroughs'} — rotation</h4>
-          <ol>
-            ${rotation.map(r => `
-              <li>
-                ${r.month ? `<b>Month ${r.month}</b> · ` : ''}
-                ${r.walkthroughs ? `<b>Walkthroughs ${r.walkthroughs}</b> · ` : ''}
-                ${escapeHtml(r.label || r.type || '')}${r.scored === false ? ' (unscored)' : (r.scored === true ? ' (scored)' : '')}
-                ${r.description ? `<br><span style="color:var(--ink-3);">${escapeHtml(r.description)}</span>` : ''}
-              </li>
-            `).join('')}
-          </ol>
-        </div>
+      <div class="hb-obs-cycle">
+        <h4>${escapeHtml(totalLabel)} — rotation</h4>
+        <ol>
+          ${rotation.map(r => `
+            <li>
+              ${r.month ? `<b>Month ${r.month}</b> · ` : ''}
+              ${r.walkthroughs ? `<b>Walkthroughs ${r.walkthroughs}</b> · ` : ''}
+              ${escapeHtml(r.label || r.type || '')}${r.scored === false ? ' (unscored)' : (r.scored === true ? ' (scored)' : '')}
+              ${r.description ? `<br><span style="color:var(--ink-3);">${escapeHtml(r.description)}</span>` : ''}
+            </li>
+          `).join('')}
+        </ol>
       </div>
     `;
+  }
+
+  /* ── TOC + scroll-spy ─────────────────────────────────────────────
+     TOC items are <a href="#hb-sec-...">; scroll-spy highlights the
+     anchor whose target is most visible in the viewport. Smooth-scroll
+     to anchor on click; rely on browser-native behavior + CSS
+     scroll-margin-top on each section to clear the sticky toolbar. */
+  function buildTOC(hb, stages) {
+    const list = document.getElementById('hbTocList');
+    const items = [];
+    items.push(`<li><a href="#hb-sec-charter">Charter</a></li>`);
+    if (hb.designPhilosophy) items.push(`<li><a href="#hb-sec-design">Design philosophy</a></li>`);
+    if (hb.rolesAndResponsibilities) items.push(`<li><a href="#hb-sec-roles">Roles &amp; responsibilities</a></li>`);
+    if (stages.length) {
+      items.push(`<li style="margin-top:8px;"><a href="#hb-sec-stages"><strong>Stages</strong></a></li>`);
+      stages.forEach((s, i) => {
+        items.push(`<li><a class="toc-sub" href="#hb-sec-stage-${i}">${escapeHtml(s.label || s.stageId)}</a></li>`);
+      });
+    }
+    if (Array.isArray(hb.openItems) && hb.openItems.length) {
+      items.push(`<li class="hb-toc-divider" aria-hidden="true"></li>`);
+      items.push(`<li><a href="#hb-sec-open">Open items</a></li>`);
+    }
+    list.innerHTML = items.join('');
+  }
+
+  function initScrollSpy() {
+    if (_scrollSpyObserver) _scrollSpyObserver.disconnect();
+    const anchors = document.querySelectorAll('#hbTocList a[href^="#"]');
+    if (!anchors.length) return;
+    const targets = [...anchors]
+      .map(a => document.querySelector(a.getAttribute('href')))
+      .filter(Boolean);
+    if (!targets.length) return;
+
+    const setActive = (id) => {
+      anchors.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+    };
+
+    _scrollSpyObserver = new IntersectionObserver((entries) => {
+      // Pick the topmost intersecting entry — gives a stable active
+      // highlight when multiple sections are visible at once.
+      const visible = entries
+        .filter(e => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible[0]) setActive(visible[0].target.id);
+    }, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+
+    targets.forEach(t => _scrollSpyObserver.observe(t));
   }
 
   function escapeHtml(s) {
