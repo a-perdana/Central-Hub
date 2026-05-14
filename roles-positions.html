@@ -783,9 +783,56 @@
     }
 
     .rp-grid {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .rp-grid-inner {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 14px;
     }
+    .rp-catalogue-controls {
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+      margin-bottom: 6px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .rp-catalogue-meta {
+      margin-left: auto; font-size: 11.5px; color: var(--ink-3);
+      background: var(--border-soft); padding: 5px 10px; border-radius: 999px;
+    }
+    .rp-cat-accordion {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .rp-cat-accordion-head {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; cursor: pointer; user-select: none;
+      background: linear-gradient(180deg, var(--paper) 0%, var(--white) 100%);
+      transition: background 0.15s;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .rp-cat-accordion-head:hover { background: var(--accent-2); }
+    .rp-cat-accordion-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .rp-cat-accordion-name {
+      font-weight: 700; font-size: 13px; color: var(--ink);
+      letter-spacing: 0.02em;
+    }
+    .rp-cat-accordion-count {
+      margin-left: auto; font-size: 11.5px; color: var(--ink-3);
+      background: var(--border-soft); padding: 3px 9px; border-radius: 999px;
+    }
+    .rp-cat-accordion-caret { font-size: 14px; color: var(--ink-3); transition: transform 0.15s; }
+    .rp-cat-accordion.is-collapsed .rp-cat-accordion-caret { transform: rotate(-90deg); }
+    .rp-cat-accordion.is-collapsed .rp-cat-accordion-body { display: none; }
+    .rp-cat-accordion-body { padding: 14px 16px 16px; }
+    /* Per-category accent on accordion top border */
+    .rp-cat-accordion--academic_leadership { border-top: 3px solid var(--c-lead); }
+    .rp-cat-accordion--academic_operations { border-top: 3px solid var(--c-ops); }
+    .rp-cat-accordion--teaching_staff      { border-top: 3px solid var(--c-teach); }
+    .rp-cat-accordion--student_support     { border-top: 3px solid var(--c-supp); }
+    .rp-cat-accordion--administration      { border-top: 3px solid var(--c-admin); }
+    .rp-cat-accordion--communications      { border-top: 3px solid var(--c-comms); }
+    .rp-cat-accordion--hq_central          { border-top: 3px solid var(--c-hq); }
+    .rp-cat-accordion--compliance          { border-top: 3px solid var(--c-comp); }
     .rp-card {
       background: var(--white); border: 1px solid var(--border);
       border-left: 4px solid var(--accent);
@@ -2008,10 +2055,15 @@
         html += '</div>';
 
         html += '<div class="rp-pathways-grid">';
+        // Only the first non-empty family is open by default — rest collapse to keep
+        // the tab compact. User can Expand all from the controls above.
+        var firstNonEmptyShown = false;
         FAMILY_ORDER.forEach(function (fam) {
           var members = byFamily[fam.id];
           if (!members || members.length === 0) return;
-          html += renderPathwayFamily(fam, members, outgoing, incoming);
+          var isFirst = !firstNonEmptyShown;
+          firstNonEmptyShown = true;
+          html += renderPathwayFamily(fam, members, outgoing, incoming, !isFirst);
         });
         html += '</div>';
 
@@ -2049,13 +2101,14 @@
 
       var PATHWAYS_BOUND = false;
 
-      function renderPathwayFamily(fam, members, outgoing, incoming) {
+      function renderPathwayFamily(fam, members, outgoing, incoming, startCollapsed) {
         // Find entry-level roles (no incoming pathway edges within active set)
         var entries = members.filter(function (m) { return incoming[m.id].length === 0; });
         var terminals = members.filter(function (m) { return outgoing[m.id].length === 0; });
 
+        var collapsedCls = startCollapsed ? ' is-collapsed' : '';
         var html = '';
-        html += '<div class="rp-pathway-family rp-pathway-family--' + fam.id + '">';
+        html += '<div class="rp-pathway-family rp-pathway-family--' + fam.id + collapsedCls + '">';
         html += '  <div class="rp-pathway-family-header" role="button" tabindex="0">';
         html += '    <span class="rp-pathway-family-icon">' + fam.icon + '</span>';
         html += '    <div class="rp-pathway-family-meta">';
@@ -2149,13 +2202,13 @@
       function renderHeatmap() {
         var wrap = $('rpHeatmapWrap');
         var systems = [
-          { key: 'kpi',                    label: 'KPI' },
-          { key: 'appraisal_v2',           label: 'Appraisal v2.1' },
-          { key: 'principal_appraisal_v1', label: 'Principal Appraisal v1' },
-          { key: 'competency.teachers',    label: 'Competency: Teachers (CTS)' },
-          { key: 'competency.leaders',     label: 'Competency: Leaders (CSLS)' },
-          { key: 'competency.specialists', label: 'Competency: Specialists' },
-          { key: 'induction',              label: 'Induction (PIGP)' },
+          { key: 'kpi',                    short: 'KPI',             full: 'KPI (school-level Key Performance Indicators)' },
+          { key: 'appraisal_v2',           short: 'Appraisal v2.1',  full: 'Appraisal v2.1 (network-wide teacher appraisal)' },
+          { key: 'principal_appraisal_v1', short: 'Principal Apprs', full: 'Principal Appraisal v1 (Eduversal HQ leadership cycle)' },
+          { key: 'competency.teachers',    short: 'Comp: Teach',     full: 'Competency: Teachers (CTS — Cambridge Teacher Standards 2023)' },
+          { key: 'competency.leaders',     short: 'Comp: Lead',      full: 'Competency: Leaders (CSLS — Cambridge School Leader Standards 2023)' },
+          { key: 'competency.specialists', short: 'Comp: Spec',      full: 'Competency: Specialists (Eduversal CH hybrid track, 9/27 CTS)' },
+          { key: 'induction',              short: 'Induction',       full: 'Induction (PIGP — Program Induksi Guru Pemula, Permendiknas 27/2010)' },
         ];
 
         // Build filter pills row + summary stats
@@ -2211,7 +2264,9 @@
         html += '<div class="rp-heatmap-shell">';
         html += '<table class="rp-heatmap">';
         html += '<thead><tr><th class="role-h">Role</th>';
-        systems.forEach(function (s) { html += '<th class="rotate">' + esc(s.label) + '</th>'; });
+        systems.forEach(function (s) {
+          html += '<th class="rotate" title="' + esc(s.full) + '">' + esc(s.short) + '</th>';
+        });
         html += '<th class="role-h" style="text-align:center;width:50px;">Coverage</th></tr></thead><tbody>';
 
         var catOrder = DATA.categories.slice().sort(function (a, b) { return a.order - b.order; });
@@ -2236,8 +2291,8 @@
             html += '</td>';
             systems.forEach(function (s) {
               var hit = rs.indexOf(s.key) >= 0;
-              if (hit) html += '<td class="cell yes" title="' + esc(s.label) + ' applies">✓</td>';
-              else     html += '<td class="cell no" title="Not applicable">·</td>';
+              if (hit) html += '<td class="cell yes" title="' + esc(s.full) + ' applies">✓</td>';
+              else     html += '<td class="cell no" title="' + esc(s.full) + ' — not applicable">·</td>';
             });
             html += '<td class="cell coverage" title="' + coverage + ' of ' + systems.length + ' rating systems apply">' + coverage + '</td>';
             html += '</tr>';
@@ -2340,53 +2395,47 @@
           grid.innerHTML = '<div class="rp-empty">No positions match your filters.</div>';
           return;
         }
-        grid.innerHTML = filtered.map(function (p) {
-          var cat = CAT_BY_ID[p.category];
-          var trackPill = '';
-          if (p.competencyTrack === 'teachers')    trackPill = '<span class="pill track-t">Teachers track</span>';
-          else if (p.competencyTrack === 'leaders')    trackPill = '<span class="pill track-l">Leaders track</span>';
-          else if (p.competencyTrack === 'specialists') trackPill = '<span class="pill track-s">Specialists track</span>';
-          var gapPill = p.gapFlag ? '<span class="pill gap">gap-flagged</span>' : '';
-          var addedPill = ((p.source || '').indexOf('gap_added') >= 0) ? '<span class="pill added">HR-added</span>' : '';
-          var thrs = '';
-          if (p.teachingHoursModel && p.teachingHoursModel.suggested != null) {
-            thrs = '<span class="pill" title="Suggested teaching hours (Optimum ' + (p.teachingHoursModel.optimum != null ? p.teachingHoursModel.optimum : '—') + ' − Equivalent ' + (p.teachingHoursModel.equivalent != null ? p.teachingHoursModel.equivalent : '—') + ')">' + p.teachingHoursModel.suggested + ' h/wk</span>';
-          } else if (p.teachingHoursEquivalent != null) {
-            thrs = '<span class="pill">' + p.teachingHoursEquivalent + ' hrs</span>';
-          }
-          var tierPill = '';
-          if (p.certificationTier === 'Certificated')     tierPill = '<span class="pill" style="background:#dcfce7;color:#14532d;">Certificated</span>';
-          else if (p.certificationTier === 'Classified')  tierPill = '<span class="pill" style="background:#dbeafe;color:#1e3a8a;">Classified</span>';
-          else if (p.certificationTier === 'AM&C')        tierPill = '<span class="pill" style="background:#ede9fe;color:#4c1d95;">AM&amp;C</span>';
 
-          // Indonesian source-term gloss (extract just the term, drop staffing tail)
-          var localTerm = '';
-          if (p.localTermNote) {
-            var m = p.localTermNote.match(/Indonesian:\s*"([^"]+)"/);
-            if (m) localTerm = m[1];
-            else if (/Source term:\s*"([^"]+)"/.test(p.localTermNote)) {
-              var sm = p.localTermNote.match(/Source term:\s*"([^"]+)"/);
-              if (sm && sm[1].toLowerCase() !== p.title.toLowerCase()) localTerm = sm[1];
-            }
-          }
-          var localHtml = localTerm ? '<div class="rp-card-local">↪ ' + esc(localTerm) + '</div>' : '';
+        // Group filtered roles by category for accordion sections
+        var byCat = {};
+        filtered.forEach(function (p) {
+          if (!byCat[p.category]) byCat[p.category] = [];
+          byCat[p.category].push(p);
+        });
+        var catOrder = DATA.categories.slice().sort(function (a, b) { return a.order - b.order; });
+        var orderedCats = catOrder.filter(function (c) { return byCat[c.id] && byCat[c.id].length > 0; });
 
-          var depCls = p.deprecated ? ' rp-card--deprecated' : '';
-          return '<a class="rp-card rp-card--' + esc(p.category) + depCls + '" data-role="' + esc(p.id) + '" href="#" role="button" tabindex="0">' +
-            '<div class="rp-card-head">' +
-              '<span class="rp-card-cat-row">' +
-                '<span class="rp-card-cat-dot rp-card-cat-dot--' + esc(p.category) + '"></span>' +
-                '<span class="rp-card-cat" style="color:' + esc(cat.color) + '">' + esc(cat.label) + '</span>' +
-              '</span>' +
-              '<span class="rp-card-code">' + esc(p.code || '—') + '</span>' +
+        // Default: first 3 categories open, rest collapsed
+        // If a search query is active, keep all open so users see results everywhere
+        var hasSearch = !!q;
+        var html = '';
+        html += '<div class="rp-catalogue-controls">' +
+          '<button type="button" class="rp-tree-btn" data-cat-action="expand-all">Expand all categories</button>' +
+          '<button type="button" class="rp-tree-btn" data-cat-action="collapse-all">Collapse all</button>' +
+          '<span class="rp-catalogue-meta">' + filtered.length + ' roles across ' + orderedCats.length + ' categories</span>' +
+        '</div>';
+
+        orderedCats.forEach(function (c, idx) {
+          var members = byCat[c.id];
+          var collapsedCls = (!hasSearch && idx >= 3) ? ' is-collapsed' : '';
+          html += '<section class="rp-cat-accordion rp-cat-accordion--' + esc(c.id) + collapsedCls + '">' +
+            '<header class="rp-cat-accordion-head" role="button" tabindex="0">' +
+              '<span class="rp-tree-dot rp-tree-dot--' + esc(c.id) + '"></span>' +
+              '<span class="rp-cat-accordion-name">' + esc(c.label) + '</span>' +
+              '<span class="rp-cat-accordion-count">' + members.length + ' role' + (members.length === 1 ? '' : 's') + '</span>' +
+              '<span class="rp-cat-accordion-caret">▾</span>' +
+            '</header>' +
+            '<div class="rp-cat-accordion-body">' +
+              '<div class="rp-grid-inner">' +
+                members.map(renderCatalogueCard).join('') +
+              '</div>' +
             '</div>' +
-            '<div class="rp-card-title">' + esc(p.title) + '</div>' +
-            localHtml +
-            '<div class="rp-card-desc">' + esc((p.description || '').slice(0, 180) + ((p.description || '').length > 180 ? '…' : '')) + '</div>' +
-            '<div class="rp-card-meta">' + trackPill + tierPill + addedPill + gapPill + thrs + '</div>' +
-          '</a>';
-        }).join('');
+          '</section>';
+        });
 
+        grid.innerHTML = html;
+
+        // Wire card clicks + keyboard
         Array.prototype.forEach.call(grid.querySelectorAll('.rp-card'), function (a) {
           a.addEventListener('click', function (e) {
             e.preventDefault();
@@ -2399,6 +2448,73 @@
             }
           });
         });
+
+        // Wire accordion toggles + expand/collapse-all controls
+        Array.prototype.forEach.call(grid.querySelectorAll('.rp-cat-accordion-head'), function (head) {
+          var section = head.closest('.rp-cat-accordion');
+          head.addEventListener('click', function () { section.classList.toggle('is-collapsed'); });
+          head.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              section.classList.toggle('is-collapsed');
+            }
+          });
+        });
+        Array.prototype.forEach.call(grid.querySelectorAll('[data-cat-action]'), function (btn) {
+          btn.addEventListener('click', function () {
+            var action = btn.dataset.catAction;
+            Array.prototype.forEach.call(grid.querySelectorAll('.rp-cat-accordion'), function (sec) {
+              if (action === 'expand-all') sec.classList.remove('is-collapsed');
+              else if (action === 'collapse-all') sec.classList.add('is-collapsed');
+            });
+          });
+        });
+      }
+
+      function renderCatalogueCard(p) {
+        var cat = CAT_BY_ID[p.category];
+        var trackPill = '';
+        if (p.competencyTrack === 'teachers')    trackPill = '<span class="pill track-t">Teachers track</span>';
+        else if (p.competencyTrack === 'leaders')    trackPill = '<span class="pill track-l">Leaders track</span>';
+        else if (p.competencyTrack === 'specialists') trackPill = '<span class="pill track-s">Specialists track</span>';
+        var gapPill = p.gapFlag ? '<span class="pill gap">gap-flagged</span>' : '';
+        var addedPill = ((p.source || '').indexOf('gap_added') >= 0) ? '<span class="pill added">HR-added</span>' : '';
+        var thrs = '';
+        if (p.teachingHoursModel && p.teachingHoursModel.suggested != null) {
+          thrs = '<span class="pill" title="Suggested teaching hours (Optimum ' + (p.teachingHoursModel.optimum != null ? p.teachingHoursModel.optimum : '—') + ' − Equivalent ' + (p.teachingHoursModel.equivalent != null ? p.teachingHoursModel.equivalent : '—') + ')">' + p.teachingHoursModel.suggested + ' h/wk</span>';
+        } else if (p.teachingHoursEquivalent != null) {
+          thrs = '<span class="pill">' + p.teachingHoursEquivalent + ' hrs</span>';
+        }
+        var tierPill = '';
+        if (p.certificationTier === 'Certificated')     tierPill = '<span class="pill" style="background:#dcfce7;color:#14532d;">Certificated</span>';
+        else if (p.certificationTier === 'Classified')  tierPill = '<span class="pill" style="background:#dbeafe;color:#1e3a8a;">Classified</span>';
+        else if (p.certificationTier === 'AM&C')        tierPill = '<span class="pill" style="background:#ede9fe;color:#4c1d95;">AM&amp;C</span>';
+
+        var localTerm = '';
+        if (p.localTermNote) {
+          var m = p.localTermNote.match(/Indonesian:\s*"([^"]+)"/);
+          if (m) localTerm = m[1];
+          else if (/Source term:\s*"([^"]+)"/.test(p.localTermNote)) {
+            var sm = p.localTermNote.match(/Source term:\s*"([^"]+)"/);
+            if (sm && sm[1].toLowerCase() !== p.title.toLowerCase()) localTerm = sm[1];
+          }
+        }
+        var localHtml = localTerm ? '<div class="rp-card-local">↪ ' + esc(localTerm) + '</div>' : '';
+
+        var depCls = p.deprecated ? ' rp-card--deprecated' : '';
+        return '<a class="rp-card rp-card--' + esc(p.category) + depCls + '" data-role="' + esc(p.id) + '" href="#" role="button" tabindex="0">' +
+          '<div class="rp-card-head">' +
+            '<span class="rp-card-cat-row">' +
+              '<span class="rp-card-cat-dot rp-card-cat-dot--' + esc(p.category) + '"></span>' +
+              '<span class="rp-card-cat" style="color:' + esc(cat.color) + '">' + esc(cat.label) + '</span>' +
+            '</span>' +
+            '<span class="rp-card-code">' + esc(p.code || '—') + '</span>' +
+          '</div>' +
+          '<div class="rp-card-title">' + esc(p.title) + '</div>' +
+          localHtml +
+          '<div class="rp-card-desc">' + esc((p.description || '').slice(0, 180) + ((p.description || '').length > 180 ? '…' : '')) + '</div>' +
+          '<div class="rp-card-meta">' + trackPill + tierPill + addedPill + gapPill + thrs + '</div>' +
+        '</a>';
       }
 
       // ── Source issues ──────────────────────────────────────────────────
