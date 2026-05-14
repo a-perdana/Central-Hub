@@ -637,6 +637,27 @@
     .rp-issue.low    .rp-issue-id .sev { color: #64748b; }
     .rp-issue-title { font-weight: 600; color: var(--ink); font-size: 13px; margin-bottom: 4px; }
     .rp-issue-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+    .rp-issue.is-resolved {
+      opacity: 0.78; border-left-color: #16a34a !important;
+      background: linear-gradient(180deg, #f0fdf4 0%, var(--white) 60%);
+    }
+    .rp-issue.is-resolved .rp-issue-title { color: var(--ink-2); }
+    .rp-issue-resolved {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; color: #14532d;
+      background: #dcfce7; border: 1px solid #86efac;
+      padding: 2px 8px; border-radius: 999px; margin-left: 10px;
+      letter-spacing: 0.02em;
+    }
+    .rp-issue-resolved code {
+      font-family: 'DM Mono', monospace; font-size: 10px;
+      background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px;
+    }
+    .rp-issue-resolution {
+      margin-top: 8px; padding: 8px 10px;
+      background: #ecfdf5; border-left: 3px solid #16a34a;
+      border-radius: 4px; font-size: 12px; color: #14532d; line-height: 1.55;
+    }
 
     .rp-disclaimer {
       background: #fef3c7; border: 1px solid #fde68a; border-left: 4px solid #d97706;
@@ -836,11 +857,12 @@
         $('metaTotal').textContent = DATA.positions.length;
         $('metaCategories').textContent = DATA.categories.length;
         $('metaGapAdded').textContent = DATA.positions.filter(function (p) { return (p.source || '').indexOf('gap_added') >= 0; }).length;
-        $('metaSourceIssues').textContent = (DATA.openSourceIssues || []).length;
+        var openIssues = (DATA.openSourceIssues || []).filter(function (i) { return i.status !== 'resolved'; }).length;
+        $('metaSourceIssues').textContent = openIssues;
         $('metaVersion').textContent = 'v' + DATA.version;
         $('metaDate').textContent = DATA.effective_date;
         $('cntCatalogue').textContent = DATA.positions.length;
-        $('cntIssues').textContent = (DATA.openSourceIssues || []).length;
+        $('cntIssues').textContent = openIssues;
 
         // Build everything
         renderStatRow();
@@ -1681,15 +1703,30 @@
       // ── Source issues ──────────────────────────────────────────────────
       function renderIssues() {
         var issues = (DATA.openSourceIssues || []).slice().sort(function (a, b) {
+          // Resolved issues drop to the bottom; among the rest, severity order
+          var aResolved = a.status === 'resolved' ? 1 : 0;
+          var bResolved = b.status === 'resolved' ? 1 : 0;
+          if (aResolved !== bResolved) return aResolved - bResolved;
           var rank = { high: 0, medium: 1, low: 2 };
           return (rank[a.severity] || 9) - (rank[b.severity] || 9);
         });
         $('rpIssues').innerHTML = issues.map(function (i) {
-          return '<div class="rp-issue ' + esc(i.severity) + '">' +
+          var resolvedCls = i.status === 'resolved' ? ' is-resolved' : '';
+          var statusBadge = '';
+          if (i.status === 'resolved') {
+            var by = i.resolved_by ? ' via <code>' + esc(i.resolved_by) + '</code>' : '';
+            var on = i.resolved_date ? ' on ' + esc(i.resolved_date) : '';
+            statusBadge = '<span class="rp-issue-resolved">✓ Resolved' + by + on + '</span>';
+          }
+          var resolutionNotes = i.resolution_notes
+            ? '<div class="rp-issue-resolution">' + esc(i.resolution_notes) + '</div>'
+            : '';
+          return '<div class="rp-issue ' + esc(i.severity) + resolvedCls + '">' +
             '<div class="rp-issue-id">' + esc(i.id) + '<span class="sev">' + esc(i.severity) + '</span></div>' +
             '<div>' +
-              '<div class="rp-issue-title">' + esc(i.title) + '</div>' +
+              '<div class="rp-issue-title">' + esc(i.title) + statusBadge + '</div>' +
               '<div class="rp-issue-desc">' + esc(i.description) + '</div>' +
+              resolutionNotes +
             '</div>' +
           '</div>';
         }).join('');
