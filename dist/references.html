@@ -3077,25 +3077,47 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
        user can hide it. Recent stays auto-shown (matches Linear/Notion
        pattern: latest doc is the strongest re-entry signal). */
     .ref-shelf { max-width: 1200px; margin: 8px auto 0; padding: 0 32px; }
+    /* Shelf rows (Recently opened + For your role chip strips).
+       Two-line layout: label header on top, chips below in the SAME
+       4-col grid as the facet bar — every aligned column lines up across
+       facets / recents / role-pins / section heads. The eye scans one
+       vertical rule down the page instead of staggered chip widths. */
     .ref-shelf-row {
-      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      display: flex; flex-direction: column; gap: 8px;
       font-size: 12px; padding: 6px 0;
     }
     .ref-shelf-label {
       font-size: 10.5px; font-weight: 700; color: var(--ink-3);
-      text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .ref-shelf-chips {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
     }
     .ref-shelf-chip {
-      cursor: pointer; padding: 4px 10px; border-radius: 8px;
+      cursor: pointer; padding: 7px 12px; border-radius: 8px;
       background: var(--white); color: var(--ink-2);
-      border: 1px solid var(--border); font-size: 11.5px; font-weight: 500;
-      display: inline-flex; align-items: center; gap: 5px;
-      max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border: 1px solid var(--border); font-size: 12px; font-weight: 500;
+      display: flex; align-items: center; gap: 6px;
+      min-width: 0;   /* allow ellipsis inside grid track */
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       transition: background .12s, border-color .12s, color .12s;
+      font-family: inherit; text-align: left;
+    }
+    /* Inner label span gets the ellipsis treatment so the leading icon
+       (::before pseudo) doesn't get clipped when titles overflow. */
+    .ref-shelf-chip > span {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
     }
     .ref-shelf-chip:hover { background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk); }
-    .ref-shelf-chip.recent::before { content: '↻'; color: var(--accent); font-size: 11px; }
-    .ref-shelf-chip.role::before { content: '★'; color: var(--accent); font-size: 11px; }
+    .ref-shelf-chip::before { font-size: 11px; flex-shrink: 0; }
+    .ref-shelf-chip.recent::before { content: '↻'; color: var(--accent); }
+    .ref-shelf-chip.role::before { content: '★'; color: var(--accent); }
+    @media (max-width: 960px) {
+      .ref-shelf-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 
     .ref-quick {
       max-width: 1200px; margin: 4px auto 0; padding: 0 32px;
@@ -3740,6 +3762,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       .ref-results { padding: 16px 14px 60px; }
       .ref-grid { grid-template-columns: 1fr; }
       .ref-facets { grid-template-columns: 1fr; }  /* stack facets on phone */
+      .ref-shelf-chips { grid-template-columns: 1fr; }  /* stack recents + role pins */
       .ref-section-blurb { display: none; }  /* free vertical space — title + count carry the section identity */
       .ref-search { max-width: none; }
 
@@ -3818,7 +3841,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   <div class="ref-shelf" id="recentBar" style="display:none;">
     <div class="ref-shelf-row">
       <span class="ref-shelf-label">Recently opened</span>
-      <span id="recentChips"></span>
+      <div class="ref-shelf-chips" id="recentChips"></div>
     </div>
   </div>
 
@@ -3826,7 +3849,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
        collapsed for plain users where the rail rarely matches anything) -->
   <details class="ref-quick" id="refQuick" style="display:none;">
     <summary><span id="refQuickLabel">For your role</span></summary>
-    <div class="ref-shelf-row" id="refQuickChips" style="padding-top:4px;"></div>
+    <div class="ref-shelf-chips" id="refQuickChips" style="margin-top:6px;"></div>
   </details>
 
   <main class="ref-results" id="refResults">
@@ -4481,7 +4504,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                 data-path="${escapeHtml(it.path)}"
                 data-kind="${escapeHtml(it.kind)}"
                 data-title="${escapeHtml(it.title)}"
-                title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</button>
+                title="${escapeHtml(it.title)}"><span>${escapeHtml(it.title)}</span></button>
       `).join('');
       chipBox.querySelectorAll('.ref-shelf-chip').forEach(el => {
         el.addEventListener('click', () => openDoc({
@@ -4540,7 +4563,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                  data-path="${escapeHtml(r.path)}"
                  data-kind="${escapeHtml(r.kind)}"
                  data-title="${escapeHtml(r.title)}"
-                 title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</button>`
+                 title="${escapeHtml(r.title)}"><span>${escapeHtml(r.title)}</span></button>`
       ).join('');
       slot.querySelectorAll('.ref-shelf-chip').forEach(el => {
         el.addEventListener('click', () => openDoc({ path: el.dataset.path, kind: el.dataset.kind, title: el.dataset.title }));
