@@ -3274,6 +3274,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       .rp-org-branch::before { display: none; }
     }
 
+    /* Full-width FR/GM panel — escapes the 240px branch column */
+    .rp-org-frgm-panel {
+      margin-top: 18px; width: 100%; max-width: 100%;
+      background: var(--paper); border: 1px solid var(--border); border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .rp-org-frgm-panel .rp-div-grid { padding: 0; }
+
     /* Division group cards (L2 under FR/GM) — full-width stacked */
     .rp-div-grid {
       display: flex; flex-direction: column;
@@ -3333,19 +3341,30 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       width: 1px; flex: 1; background: var(--border); min-height: 60px;
     }
     .rp-leader-col {
-      display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+      display: flex; flex-direction: column; align-items: stretch; gap: 8px;
       min-width: 0;
     }
     .rp-leader-line-label {
-      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
       color: var(--ink-3); text-align: center; padding-bottom: 4px;
-      white-space: nowrap;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .rp-leader-col--principal .rp-leader-line-label { color: var(--c-lead); }
     .rp-leader-col--guidance  .rp-leader-line-label { color: var(--c-supp); }
-    .rp-leader-col .rp-org-card { padding: 14px 12px 12px; }
-    .rp-leader-col .rp-org-card-title { font-size: 13.5px; }
-    .rp-leader-col .rp-org-card-icon { width: 32px; height: 32px; font-size: 17px; }
+    .rp-leader-col .rp-org-card {
+      padding: 18px 16px 14px;
+      min-height: 140px;
+    }
+    .rp-leader-col .rp-org-card-title {
+      font-size: 14.5px; font-weight: 600;
+    }
+    .rp-leader-col .rp-org-card-sub {
+      font-size: 12px; color: var(--ink-3); white-space: normal;
+    }
+    .rp-leader-col .rp-org-card-meta {
+      white-space: nowrap;
+    }
+    .rp-leader-col .rp-org-card-icon { width: 38px; height: 38px; font-size: 18px; }
     /* Hide empty-line placeholder noise — only show if there's something to expand */
     .rp-leader-col .rp-org-expand--leaf { display: none; }
 
@@ -4030,6 +4049,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
 
         html += '<div class="rp-org-row" data-count="' + topReports.length + '">';
+        // FR/GM gets its expanded subtree moved out to a full-width panel below the row,
+        // so we collect its data and render the panel after the row closes.
+        var frgmPanelHtml = '';
         topReports.forEach(function (childId) {
           var p = POS_BY_ID[childId];
           if (!p) return;
@@ -4051,11 +4073,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           }
           html += '  </div>';
 
-          // Special handling: FR/GM gets division-grouped L2 layout
+          // Special handling: FR/GM gets the expand BUTTON inside the branch column,
+          // but the expanding PANEL is rendered outside the row (full-width).
           if (childId === 'foundation_representative' && subKids.length > 0) {
-            html += renderFRGMDivisions(subKids, childrenOf);
+            html += '  <button type="button" class="rp-org-expand" data-branch-id="foundation_representative">';
+            html += '    <span class="rp-org-expand-caret">▾</span> Show team';
+            html += '  </button>';
+            // Build the full-width panel HTML separately
+            frgmPanelHtml = renderFRGMPanel(subKids, childrenOf);
           } else if (subKids.length > 0) {
-            // Generic L1 subtree (collapsed by default)
+            // Generic L1 subtree (inside the branch column, narrow)
             html += '  <button type="button" class="rp-org-expand" data-branch-id="' + esc(childId) + '">';
             html += '    <span class="rp-org-expand-caret">▾</span> Show team';
             html += '  </button>';
@@ -4073,6 +4100,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           html += '</div>'; // .rp-org-branch
         });
         html += '</div>'; // .rp-org-row
+
+        // Full-width FR/GM expand panel — outside the row so division cards get the
+        // entire chart width (~1200px) instead of being trapped in a 240px branch column.
+        if (frgmPanelHtml) {
+          html += frgmPanelHtml;
+        }
 
         // Global tree controls (apply to currently-open subtrees)
         var controls = ''
@@ -4151,8 +4184,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       }
 
-      // Build 6 division group cards for FR/GM's 25 children
-      function renderFRGMDivisions(frgmChildren, childrenOf) {
+      // Build the full-width FR/GM expand panel (rendered outside .rp-org-row)
+      function renderFRGMPanel(frgmChildren, childrenOf) {
         // Bucket children
         var buckets = { support: [], hq_depts: [] };
         DIVISIONS.forEach(function (d) { buckets['div_' + d.id] = []; });
@@ -4165,20 +4198,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
 
         var html = '';
-        html += '  <button type="button" class="rp-org-expand" data-branch-id="foundation_representative">';
-        html += '    <span class="rp-org-expand-caret">▾</span> Show team';
-        html += '  </button>';
-        html += '  <div class="rp-org-subtree" data-branch-tree="foundation_representative" hidden>';
-        html += '    <div class="rp-div-grid">';
+        html += '<div class="rp-org-subtree rp-org-frgm-panel" data-branch-tree="foundation_representative" hidden>';
+        html += '  <div class="rp-div-grid">';
 
-        // 4 divisions
         DIVISIONS.forEach(function (d) {
           var ids = buckets['div_' + d.id];
           if (!ids || ids.length === 0) return;
           html += renderDivisionCard(d, ids, childrenOf);
         });
 
-        // Support Services bucket
         if (buckets.support.length > 0) {
           html += renderBucketCard({
             id: 'support',
@@ -4189,7 +4217,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           }, buckets.support, childrenOf);
         }
 
-        // HQ-level Dept Coordinators bucket (dual-report to FR/GM + hq_director)
         if (buckets.hq_depts.length > 0) {
           html += renderBucketCard({
             id: 'hq_depts',
@@ -4200,8 +4227,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           }, buckets.hq_depts, childrenOf);
         }
 
-        html += '    </div>'; // .rp-div-grid
-        html += '  </div>'; // .rp-org-subtree
+        html += '  </div>'; // .rp-div-grid
+        html += '</div>'; // .rp-org-subtree (full-width panel)
         return html;
       }
 
