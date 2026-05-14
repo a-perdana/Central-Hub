@@ -3613,8 +3613,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .rp-heatmap th.role-h { background: var(--paper); }
     .rp-heatmap th.rotate {
       writing-mode: vertical-rl; transform: rotate(180deg);
-      height: 100px; white-space: nowrap;
-      padding: 8px 4px; text-align: left;
+      height: 140px; white-space: nowrap;
+      padding: 10px 6px; text-align: left;
+      font-weight: 600; letter-spacing: 0.02em;
     }
     .rp-heatmap td {
       padding: 7px 10px; background: var(--white);
@@ -3630,12 +3631,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       background: var(--paper); color: var(--ink);
       font-weight: 700; font-size: 12px;
     }
-    /* Category section row inside heatmap */
+    /* Category section row inside heatmap — clickable accordion header */
+    .rp-heatmap-cat-row { cursor: pointer; }
     .rp-heatmap-cat-row td.rp-heatmap-cat-cell {
       background: linear-gradient(180deg, var(--paper) 0%, var(--white) 100%);
       border-color: var(--border);
       padding: 10px 14px;
       font-size: 12px;
+      transition: background 0.15s;
+    }
+    .rp-heatmap-cat-row:hover td.rp-heatmap-cat-cell { background: var(--accent-2); }
+    .rp-heatmap-cat-row:focus { outline: none; }
+    .rp-heatmap-cat-row:focus-visible td.rp-heatmap-cat-cell {
+      box-shadow: inset 0 0 0 2px var(--accent);
     }
     .rp-heatmap-cat-inner {
       display: flex; align-items: center; gap: 10px;
@@ -3648,6 +3656,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       margin-left: auto; font-size: 11px; color: var(--ink-3);
       background: var(--border-soft); padding: 2px 8px; border-radius: 999px;
     }
+    .rp-heatmap-cat-caret {
+      font-size: 13px; color: var(--ink-3); transition: transform 0.15s;
+    }
+    .rp-heatmap-cat-row.is-collapsed .rp-heatmap-cat-caret { transform: rotate(-90deg); }
 
     /* Catalogue */
     .rp-filter-bar {
@@ -4964,15 +4976,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         html += '</div>';
 
         html += '<div class="rp-pathways-grid">';
-        // Only the first non-empty family is open by default — rest collapse to keep
-        // the tab compact. User can Expand all from the controls above.
-        var firstNonEmptyShown = false;
+        // Default: ALL families collapsed. User opens what they want via click or Expand all.
         FAMILY_ORDER.forEach(function (fam) {
           var members = byFamily[fam.id];
           if (!members || members.length === 0) return;
-          var isFirst = !firstNonEmptyShown;
-          firstNonEmptyShown = true;
-          html += renderPathwayFamily(fam, members, outgoing, incoming, !isFirst);
+          html += renderPathwayFamily(fam, members, outgoing, incoming, true);
         });
         html += '</div>';
 
@@ -5179,22 +5187,27 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         html += '<th class="role-h" style="text-align:center;width:50px;">Coverage</th></tr></thead><tbody>';
 
         var catOrder = DATA.categories.slice().sort(function (a, b) { return a.order - b.order; });
+        // Default: ALL categories collapsed. User opens what they want via click or Expand all.
+        // If a single-category filter is active, that category opens automatically.
         catOrder.forEach(function (c) {
           var members = byCat[c.id];
           if (!members || members.length === 0) return;
-          // Category section row
-          html += '<tr class="rp-heatmap-cat-row" data-cat="' + esc(c.id) + '">';
+          var collapsed = !(HEATMAP_FILTER && HEATMAP_FILTER === c.id);
+          var rowCls = 'rp-heatmap-cat-row' + (collapsed ? ' is-collapsed' : '');
+          // Category section row (clickable accordion header)
+          html += '<tr class="' + rowCls + '" data-cat="' + esc(c.id) + '" role="button" tabindex="0">';
           html += '<td colspan="' + (systems.length + 2) + '" class="rp-heatmap-cat-cell">';
           html += '<div class="rp-heatmap-cat-inner">';
           html += '<span class="rp-tree-dot rp-tree-dot--' + esc(c.id) + '"></span>';
           html += '<span class="rp-heatmap-cat-name">' + esc(c.label) + '</span>';
           html += '<span class="rp-heatmap-cat-count">' + members.length + ' role' + (members.length === 1 ? '' : 's') + '</span>';
+          html += '<span class="rp-heatmap-cat-caret">▾</span>';
           html += '</div>';
           html += '</td></tr>';
           members.forEach(function (p) {
             var rs = p.ratingSystems || [];
             var coverage = rs.length;
-            html += '<tr>';
+            html += '<tr class="rp-heatmap-role-row" data-cat-row="' + esc(c.id) + '"' + (collapsed ? ' hidden' : '') + '>';
             html += '<td class="role">' + esc(p.title);
             if (p.code) html += ' <small>code ' + esc(p.code) + '</small>';
             html += '</td>';
@@ -5227,6 +5240,22 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             renderHeatmap();
           });
         }
+        // Category accordion toggle
+        Array.prototype.forEach.call(wrap.querySelectorAll('.rp-heatmap-cat-row'), function (row) {
+          var toggle = function () {
+            var catId = row.dataset.cat;
+            var nowCollapsed = !row.classList.contains('is-collapsed');
+            row.classList.toggle('is-collapsed', nowCollapsed);
+            Array.prototype.forEach.call(
+              wrap.querySelectorAll('.rp-heatmap-role-row[data-cat-row="' + catId + '"]'),
+              function (r) { r.hidden = nowCollapsed; }
+            );
+          };
+          row.addEventListener('click', toggle);
+          row.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+          });
+        });
       }
 
       // ── Catalogue ──────────────────────────────────────────────────────
@@ -5324,9 +5353,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           '<span class="rp-catalogue-meta">' + filtered.length + ' roles across ' + orderedCats.length + ' categories</span>' +
         '</div>';
 
-        orderedCats.forEach(function (c, idx) {
+        orderedCats.forEach(function (c) {
           var members = byCat[c.id];
-          var collapsedCls = (!hasSearch && idx >= 3) ? ' is-collapsed' : '';
+          // Default: ALL categories collapsed. Search results force open so nothing hides.
+          var collapsedCls = hasSearch ? '' : ' is-collapsed';
           html += '<section class="rp-cat-accordion rp-cat-accordion--' + esc(c.id) + collapsedCls + '">' +
             '<header class="rp-cat-accordion-head" role="button" tabindex="0">' +
               '<span class="rp-tree-dot rp-tree-dot--' + esc(c.id) + '"></span>' +
