@@ -500,6 +500,16 @@ const refAssetMap = [
   ["permendiknas/no-27-2010-pigp.json", path.join("..", "docs", "research", "permendiknas", "no-27-2010-pigp.json")],
   ["permendiknas/no-16-2007.json",      path.join("..", "docs", "research", "permendiknas", "no-16-2007.json")],
 
+  // ── Organization (Framework v1.0 + Lampiran V + roles catalogue) ─
+  // Canonical eduversal-side org-topology references. The roles catalogue
+  // itself stays in resources/roles-positions.json and is rendered by the
+  // dedicated /roles-positions surface — references-data only mirrors a
+  // copy here so the search index can pick up its content and the manifest
+  // can deep-link to it.
+  ["organization/organizational-meeting-framework-v1-2026.json", path.join("..", "docs", "research", "eduversal", "organizational-meeting-framework-v1-2026.json")],
+  ["organization/partner-school-org-structure-lampiran-v.json",  path.join("..", "docs", "research", "eduversal", "partner-school-org-structure-lampiran-v.json")],
+  ["organization/roles-positions.json",                          path.join("resources", "roles-positions.json")],
+
   // ── Schemas & Governance ────────────────────────────────────
   ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "architecture", "FIRESTORE_SCHEMA.md")],
   ["schemas/DESIGN_SYSTEM.md",                     path.join("..", "docs", "architecture", "DESIGN_SYSTEM.md")],

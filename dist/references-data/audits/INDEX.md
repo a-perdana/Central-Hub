@@ -15,6 +15,8 @@ This is the single canonical map of how Eduversal modules link to each other. If
 | **HQS** | HQ Subject Specialist | CH | `coordinator` + `ch_subjects[]` | 7 per network |
 | **HQD** | HQ Director | CH | `director` | 2 per network (Primary, Secondary) |
 
+> **Role-by-role applicability matrix:** open the **Competency × Role Heatmap** tab on CH `/roles-positions` for the live view of which rating system / competency track applies to each of the ~115 catalogued positions. The catalogue itself (reportsTo, careerPathway, cambridgeRefs, certificationTier, teachingHoursModel) lives in [`Central Hub/resources/roles-positions.json`](../../Central%20Hub/resources/roles-positions.json) and is sourced from the **School Organizational & Meeting Framework v1.0 (2026)** + partner-school **Lampiran V**.
+
 ## The Four Pilot Flags
 
 `partner_schools/{schoolId}.enabled_systems[]` controls per-school module rollout. Audience-tier expansion (per EPDP §6.7) is Phase-2 — current implementation is single-flag-per-system.

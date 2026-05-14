@@ -245,6 +245,9 @@
     .ref-card.cat-schema    { --cat-stripe: #475569; --cat-wash: #f8fafc; --cat-border: #cbd5e1; }
     .ref-card.cat-schema    .ref-card-icon { background: #f3f4f6; color: #374151; }
 
+    .ref-card.cat-organization { --cat-stripe: #1d4ed8; --cat-wash: #eff6ff; --cat-border: #bfdbfe; }
+    .ref-card.cat-organization .ref-card-icon { background: #dbeafe; color: #1e3a8a; }
+
     /* Apply the palette to every card. Left stripe via box-shadow inset
        (no layout shift), hover wash via background-color, hover border
        via cat-border. Inset shadow stacks with the existing 18px 20px
@@ -801,6 +804,7 @@
     <button class="ref-tab" data-tab="cambridge">Cambridge Standards <span class="count" id="cntCambridge">5</span></button>
     <button class="ref-tab" data-tab="permen">Permendiknas / Permendikbud <span class="count" id="cntPermen">3</span></button>
     <button class="ref-tab" data-tab="schemas">Schemas &amp; Governance <span class="count" id="cntSchemas">10</span></button>
+    <button class="ref-tab" data-tab="organization">Organization <span class="count" id="cntOrganization">3</span></button>
   </nav>
 
   <main>
@@ -851,6 +855,14 @@
         Governance documents: the SQL-style Firestore catalogue, design system tokens, contributing rules and the binding Induction Charter.
       </p>
       <div class="ref-grid" id="gridSchemas"></div>
+    </section>
+
+    <!-- Tab 7: Organization (Framework v1.0 + Lampiran V + Roles catalogue) -->
+    <section class="ref-panel" data-panel="organization">
+      <p class="ref-intro">
+        Network-wide organisational sources. The <strong>School Organizational &amp; Meeting Framework v1.0 (2026)</strong> is the canonical reports-to topology; <strong>Lampiran V</strong> is the partner-school operational realisation. The Roles &amp; Positions catalogue is rendered by the dedicated <a href="roles-positions" style="color:var(--accent-dk);font-weight:600;">/roles-positions</a> surface (org chart, career pathways, competency × role heatmap) — this card is a deep-link.
+      </p>
+      <div class="ref-grid" id="gridOrganization"></div>
     </section>
   </main>
 
@@ -971,6 +983,15 @@
         // Per-module schema specs
         { id: 'weekly-checklists-schema',   title: 'Weekly Checklists Schema',             desc: 'Spec for the 8 weekly-checklist tracks: recurring_tasks, fortnightly_tasks, monthly_tasks, termly_tasks, yearly_arc, induction_overlay.', kind: 'md',   path: 'schemas/weekly-checklists-SCHEMA.md', meta: ['MD'], tags: ['weekly-checklist','schema'], connectedTo: ['weekly-arc','weekly-checklists'] },
       ],
+      organization: [
+        // Canonical eduversal-side org topology + roles catalogue.
+        // The roles catalogue itself is rendered by the /roles-positions
+        // surface (5 perspectives over the same JSON) — this card is a
+        // launcher so users land on the right tool instead of the raw JSON.
+        { id: 'org-framework-v1',   title: 'School Org & Meeting Framework v1.0 (2026)',  desc: 'Canonical reports-to topology — Partner-School Edition. Four non-negotiables: NN1 Principal+Counselor at same level under FR/GM, NN2 divisional symmetry, NN3 strict hierarchy, NN4 Support Services report direct to FR/GM. Drives the /roles-positions Org Chart tab.', kind: 'json', path: 'organization/organizational-meeting-framework-v1-2026.json', meta: ['JSON', 'authoritative'], tags: ['org-framework','reports-to','NN1','NN2','NN3','NN4','partner-school','authoritative'], connectedTo: ['lampiran-v','roles-catalogue'] },
+        { id: 'lampiran-v',         title: 'Partner-School Lampiran V (operational)',    desc: 'Specific partner school (SMP+SMA only) operational org chart. Complements Framework v1.0: 11 extra support roles (admin, discipline coord, cashier, technician, dormitory tutors, security, cleaning, kitchen, canteen), Wali Kelas as 6-sub-role pastoral hub, visual confirmation of NN1+NN4.', kind: 'json', path: 'organization/partner-school-org-structure-lampiran-v.json', meta: ['JSON'], tags: ['lampiran-v','partner-school','operational','wali-kelas'], connectedTo: ['org-framework-v1','roles-catalogue'] },
+        { id: 'roles-catalogue',    title: 'Roles & Positions Catalogue ↗',              desc: '~115 positions × 8 categories. Each row carries reportsTo[], directReports[], careerPathway[], cambridgeRefs[], competencyTrack, ratingSystems[], teachingHoursModel + certificationTier. Rendered by /roles-positions across 6 tabs (Overview · Org Chart · Career Pathways · Competency × Role Heatmap · Catalogue · Source Issues).', kind: 'external', path: 'roles-positions', meta: ['live', 'tool'], tags: ['roles','positions','catalogue','HR','careerPathway','heatmap'], connectedTo: ['org-framework-v1','lampiran-v','competency-teachers','competency-leaders'] },
+      ],
     };
 
     /* ── Boot ─────────────────────────────────────────────────────── */
@@ -1024,11 +1045,12 @@
       });
 
       // Render static manifests
-      renderGrid('frameworks', MANIFEST.frameworks);
-      renderGrid('audits',     MANIFEST.audits);
-      renderGrid('cambridge',  MANIFEST.cambridge);
-      renderGrid('permen',     MANIFEST.permen);
-      renderGrid('schemas',    MANIFEST.schemas);
+      renderGrid('frameworks',   MANIFEST.frameworks);
+      renderGrid('audits',       MANIFEST.audits);
+      renderGrid('cambridge',    MANIFEST.cambridge);
+      renderGrid('permen',       MANIFEST.permen);
+      renderGrid('schemas',      MANIFEST.schemas);
+      renderGrid('organization', MANIFEST.organization);
 
       // Curated rails — independent of handbook fetch (only reads MANIFEST),
       // so render synchronously before kicking off the Firestore round-trip.
@@ -1044,7 +1066,7 @@
       await loadHandbooks();
 
       // Total counter
-      const total = MANIFEST.frameworks.length + MANIFEST.audits.length + MANIFEST.cambridge.length + MANIFEST.permen.length + MANIFEST.schemas.length + (handbookCache?.length || 0);
+      const total = MANIFEST.frameworks.length + MANIFEST.audits.length + MANIFEST.cambridge.length + MANIFEST.permen.length + MANIFEST.schemas.length + MANIFEST.organization.length + (handbookCache?.length || 0);
       document.getElementById('metaTotalDocs').innerHTML = `<strong>${total}</strong> docs`;
 
       // Search bar wiring
@@ -1107,6 +1129,13 @@
       if (docParam) {
         const item = findManifestById(docParam);
         if (item) {
+          // External-kind entries point at a sibling page, not a doc inside
+          // the references-data folder — modal viewer can't render them.
+          // Navigate instead so the deep-link still lands on the right surface.
+          if (item.kind === 'external') {
+            window.location.href = item.path;
+            return;
+          }
           openDoc({ path: item.path, kind: item.kind, title: item.title });
         }
       }
@@ -1238,7 +1267,7 @@
 
     function flatManifest() {
       const out = [];
-      for (const cat of ['frameworks','audits','cambridge','permen','schemas']) {
+      for (const cat of ['frameworks','audits','cambridge','permen','schemas','organization']) {
         for (const item of (MANIFEST[cat] || [])) {
           if (item.kind === 'index') continue; // skip group-only cards
           out.push({ ...item, _cat: cat });
@@ -1329,7 +1358,7 @@
 
     /* ── Manifest lookup (for deep-link) ───────────────────────────── */
     function findManifestById(id) {
-      for (const panel of ['frameworks','audits','cambridge','permen','schemas']) {
+      for (const panel of ['frameworks','audits','cambridge','permen','schemas','organization']) {
         const items = MANIFEST[panel] || [];
         for (const item of items) {
           // Direct id hit. Index cards have no path of their own — fall back
@@ -1467,13 +1496,17 @@
         });
       });
       // Connected-doc chips — open the linked doc in the same modal.
+      // External-kind targets (e.g. /roles-positions) navigate the browser
+      // instead, since the modal viewer can't render a full HTML surface.
       grid.querySelectorAll('[data-action="open-conn"]').forEach(el => {
         const fire = (e) => {
           e.preventDefault();
           e.stopPropagation();
           const id = el.dataset.id;
           const target = findManifestById(id);
-          if (target) openDoc({ path: target.path, kind: target.kind, title: target.title });
+          if (!target) return;
+          if (target.kind === 'external') { window.location.href = target.path; return; }
+          openDoc({ path: target.path, kind: target.kind, title: target.title });
         };
         el.addEventListener('click', fire);
         el.addEventListener('keydown', (e) => {
@@ -1528,6 +1561,25 @@
         const cls = m === 'JSON' ? 'json' : m === 'MD' ? 'md' : m === 'live' ? 'live' : (m.toLowerCase().includes('forward') || m.toLowerCase().includes('binding') ? 'firestore' : '');
         return `<span class="pill ${cls}">${escapeHtml(m)}</span>`;
       }).join('');
+      // External-kind cards (e.g. /roles-positions) navigate to a sibling
+      // page instead of opening the in-modal viewer. Real <a href> with no
+      // data-action so the global open-doc handler doesn't intercept it.
+      if (item.kind === 'external') {
+        return `
+          <a class="ref-card ${catCls}" href="${escapeHtml(item.path)}" data-path="${escapeHtml(item.path)}">
+            <div class="ref-card-head">
+              <div class="ref-card-icon">${icon}</div>
+              <div>
+                <div class="ref-card-title">${escapeHtml(item.title)}</div>
+              </div>
+            </div>
+            <div class="ref-card-desc">${escapeHtml(item.desc)}</div>
+            <div class="ref-card-meta">${meta}</div>
+            ${renderTags(item.tags)}
+            ${renderConnections(item.connectedTo)}
+          </a>
+        `;
+      }
       return `
         <a class="ref-card ${catCls}" href="#" data-action="open-doc" data-path="${escapeHtml(item.path)}" data-kind="${escapeHtml(item.kind)}" data-title="${escapeHtml(item.title)}">
           <div class="ref-card-head">
@@ -1573,10 +1625,12 @@
         cambridge: 'cat-cambridge',
         permen: 'cat-permen',
         schemas: 'cat-schema',
+        organization: 'cat-organization',
       })[panel] || '';
     }
 
     function iconFor(kind, panel) {
+      if (kind === 'external') return '↗';
       if (kind === 'md') return '📄';
       if (kind === 'json') return '{ }';
       if (kind === 'firestore') return '🔥';
@@ -1723,7 +1777,7 @@
     function buildReverseIndex() {
       if (_reverseIndex) return _reverseIndex;
       const idx = {};
-      for (const cat of ['frameworks','audits','cambridge','permen','schemas']) {
+      for (const cat of ['frameworks','audits','cambridge','permen','schemas','organization']) {
         for (const item of (MANIFEST[cat] || [])) {
           if (!Array.isArray(item.connectedTo)) continue;
           // Index entries themselves have no openable path; skip them as
@@ -1752,7 +1806,7 @@
     }
 
     function idForPath(path) {
-      for (const panel of ['frameworks','audits','cambridge','permen','schemas']) {
+      for (const panel of ['frameworks','audits','cambridge','permen','schemas','organization']) {
         const items = MANIFEST[panel] || [];
         for (const it of items) {
           if (it.path === path) return it.id;

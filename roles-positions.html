@@ -1282,6 +1282,49 @@
         return '';
       }
 
+      // Map a cambridge/indonesian/rating-system reference to the canonical
+      // doctrine doc in /references. Returns null when no obvious mapping
+      // exists (a future ref family can be added by extending this list).
+      function doctrineLinkFor(ref) {
+        if (/^CTS\s+\d/i.test(ref))   return { id: 'cts-2023',           label: 'Cambridge Teacher Standards 2023' };
+        if (/^CSLS\s+\d/i.test(ref))  return { id: 'csls-2023',          label: 'Cambridge School Leader Standards 2023' };
+        if (/^PIGP\b/i.test(ref))     return { id: 'permen-pigp',        label: 'Permendiknas 27/2010 — PIGP' };
+        if (/^SKL\b/i.test(ref))      return { id: 'permen-skl',         label: 'Permendikdasmen 10/2025 — SKL' };
+        return null;
+      }
+      function trackDoctrineLinkFor(track) {
+        if (track === 'teachers')    return { id: 'competency-teachers', label: 'Teaching Competency Framework' };
+        if (track === 'leaders')     return { id: 'competency-leaders',  label: 'Leadership Competency Framework' };
+        if (track === 'specialists') return { id: 'spec-backfill',       label: 'Specialist Content Backfill v1' };
+        return null;
+      }
+      function ratingSystemDoctrineLinkFor(rs) {
+        if (rs === 'appraisal_v2')           return { id: 'appraisal-v2',           label: 'Teacher Appraisal v2.1' };
+        if (rs === 'principal_appraisal_v1') return { id: 'principal-appraisal-v1', label: 'Principal Appraisal v1' };
+        if (rs === 'competency.teachers')    return { id: 'competency-teachers',    label: 'Teaching Competency Framework' };
+        if (rs === 'competency.leaders')     return { id: 'competency-leaders',     label: 'Leadership Competency Framework' };
+        if (rs === 'kpi')                    return { id: 'kpi-extensions',         label: 'Teacher KPI Extensions v1' };
+        return null;
+      }
+      // Render a deduped "View doctrine ↗" chip row that deep-links to
+      // /references?doc=<id>. dl-friendly: returns full <dt>/<dd> string or ''.
+      function renderDoctrineChips(label, links) {
+        if (!links || !links.length) return '';
+        var seen = {};
+        var deduped = links.filter(function (l) {
+          if (!l || seen[l.id]) return false;
+          seen[l.id] = true;
+          return true;
+        });
+        if (!deduped.length) return '';
+        var chips = deduped.map(function (l) {
+          return '<a class="chip" href="references?doc=' + encodeURIComponent(l.id) +
+                 '" style="text-decoration:none;color:var(--accent-dk);background:var(--accent-2);border-color:var(--accent-2);font-weight:600;" title="Open in References">' +
+                 esc(l.label) + ' ↗</a>';
+        }).join('');
+        return '<dt>' + esc(label) + '</dt><dd><div class="chip-row">' + chips + '</div></dd>';
+      }
+
       // ── Boot ───────────────────────────────────────────────────────────
       document.addEventListener('authReady', boot);
 
@@ -2731,6 +2774,15 @@
             p.tags.map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join('') +
           '</div></dd>');
         }
+        // Doctrine backlinks — deep-link Cambridge / Indonesian reference
+        // families into /references so the reader can jump from "CTS 4.1"
+        // to the canonical standard text in one click.
+        var doctrineLinks = []
+          .concat((p.cambridgeRefs   || []).map(doctrineLinkFor))
+          .concat((p.indonesianRefs || []).map(doctrineLinkFor))
+          .filter(Boolean);
+        var doctrineRow = renderDoctrineChips('View doctrine', doctrineLinks);
+        if (doctrineRow) crossBits.push(doctrineRow);
         if (crossBits.length) {
           body += '<div class="rp-modal-section"><h3>Cross-references</h3><dl class="kv">' + crossBits.join('') + '</dl></div>';
         }
@@ -2755,6 +2807,14 @@
             p.ratingSystems.map(function (r) { return '<span class="chip">' + esc(r) + '</span>'; }).join('') +
           '</div></dd>');
         }
+        // Doctrine backlinks — competency track + each rating system maps
+        // to a canonical framework JSON / appraisal doc in /references.
+        var frameworkLinks = []
+          .concat([trackDoctrineLinkFor(p.competencyTrack)])
+          .concat((p.ratingSystems || []).map(ratingSystemDoctrineLinkFor))
+          .filter(Boolean);
+        var frameworkRow = renderDoctrineChips('View framework', frameworkLinks);
+        if (frameworkRow) platBits.push(frameworkRow);
         if (platBits.length) {
           body += '<div class="rp-modal-section"><h3>Eduversal platform mapping</h3><dl class="kv">' + platBits.join('') + '</dl></div>';
         }
