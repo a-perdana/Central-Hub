@@ -3398,6 +3398,36 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       font-size: 11px; color: var(--ink-3); font-weight: 500;
       margin-left: auto;
     }
+    /* Weekly-checklist cross-ref strip inside a stage. Sits between
+       narrative + tasks. Shows anchoredWeeks + clickable task IDs. */
+    .hb-stage-cl-strip {
+      font-size: 12px; color: var(--ink-2);
+      padding: 10px 22px 12px;
+      background: linear-gradient(180deg, #ecfeff 0%, #fff 100%);
+      border-bottom: 1px solid #cffafe;
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
+    }
+    .hb-stage-cl-strip::before { content: '📅'; font-size: 12px; }
+    .hb-stage-cl-strip .label {
+      font-size: 10.5px; font-weight: 700; color: #0e7490;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .hb-stage-cl-strip .week-anchor {
+      font-size: 12px; color: #0e7490; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; background: #cffafe;
+      font-variant-numeric: tabular-nums;
+    }
+    .hb-stage-cl-strip .cl-task-id {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      padding: 2px 7px; border-radius: 4px;
+      background: #f0f9ff; color: #0c4a6e; border: 1px solid #bae6fd;
+    }
+    /* Task-level weekly-checklist task-ids (smaller, inline pill) */
+    .hb-tag.cl {
+      background: #f0f9ff; color: #0c4a6e; font-family: 'DM Mono', monospace;
+      border: 1px solid #bae6fd; font-size: 10.5px;
+    }
+    .hb-tag.cl::before { content: '📅'; font-size: 9px; }
     .hb-stage-narrative {
       font-size: 13px; color: var(--ink-2); line-height: 1.55;
       padding: 14px 22px; background: #fafbfc; border-bottom: 1px solid var(--border);
@@ -3928,6 +3958,37 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     document.getElementById('hbReaderTitle').textContent = hb.title || hb.id;
     document.getElementById('hbReaderSubtitle').textContent = hb.subtitle || '';
 
+    // Hero KPI tiles: standard 3 (Days / Stages / Audience). If handbook
+    // declares a weeklyChecklistLink, add a 4th tile that deep-links to
+    // the matching /weekly-checklist surface on the audience's hub.
+    // Pairs with the anchoredWeeks + weeklyChecklistTaskIds strips inside
+    // each stage — handbook = "why+how", checklist = "what to do this week".
+    //
+    // Cross-hub URL routing: each hub has its own weekly-checklist.html;
+    // pick the right host by audience.platform.
+    const weeklyChecklistTile = (() => {
+      if (!hb.weeklyChecklistLink) return '';
+      const host = ({
+        academichub:  'https://academichub.eduversal.org',
+        teachershub:  'https://teachershub.eduversal.org',
+        centralhub:   'https://centralhub.eduversal.org',
+      })[hb.audience?.platform] || '';
+      const platformParam = hb.weeklyChecklistLink.replace(/-/g, '_');
+      const url = host
+        ? `${host}/weekly-checklist?platform=${encodeURIComponent(platformParam)}`
+        : `weekly-checklist?platform=${encodeURIComponent(platformParam)}`;
+      const sameHub = hb.audience?.platform === 'centralhub';
+      const targetAttr = sameHub ? '' : 'target="_blank" rel="noopener"';
+      return `
+        <a class="hero-kpi" href="${url}" ${targetAttr}
+           style="text-decoration:none;border-color:rgba(165,243,252,0.5);background:linear-gradient(135deg, rgba(14,116,144,0.32) 0%, rgba(14,116,144,0.18) 100%);"
+           title="Open the matching weekly checklist">
+          <div class="hero-kpi-num" style="font-size:1rem;font-family:'DM Sans',sans-serif;color:#cffafe;">Weekly Checklist ↗</div>
+          <div class="hero-kpi-lbl" style="color:rgba(207,250,254,0.85);">Paired with</div>
+          <div class="hero-kpi-sub" style="color:rgba(207,250,254,0.6);">${escapeHtml(hb.weeklyChecklistLabel || hb.weeklyChecklistLink)}</div>
+        </a>
+      `;
+    })();
     document.getElementById('hbReaderKpis').innerHTML = `
       <div class="hero-kpi hero-kpi-primary">
         <div class="hero-kpi-num">${hb.duration?.totalDays || '—'}</div>
@@ -3944,6 +4005,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="hero-kpi-lbl">Audience</div>
         <div class="hero-kpi-sub">platform · sub-role</div>
       </div>
+      ${weeklyChecklistTile}
     `;
 
     // Content — single column, section anchors id'd for TOC + scroll-spy.
@@ -4064,6 +4126,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     const cycle = stage.observationCycle || stage.walkthroughCycle;
     const totalTaskCount = tasks.length + subStages.reduce((acc, ss) => acc + (Array.isArray(ss.tasks) ? ss.tasks.length : 0), 0);
 
+    // Weekly-checklist cross-ref strip: shows where this stage sits on
+    // the 40-week academic year arc AND which checklist tasks the
+    // mentee will hit during this stage's days. Skipped silently when
+    // neither field is set (induction handbooks omit it).
+    const anchoredWeeks = stage.anchoredWeeks;
+    const stageClTaskIds = Array.isArray(stage.weeklyChecklistTaskIds) ? stage.weeklyChecklistTaskIds : [];
+    const clStrip = (anchoredWeeks || stageClTaskIds.length) ? `
+      <div class="hb-stage-cl-strip">
+        <span class="label">Weekly checklist</span>
+        ${anchoredWeeks ? `<span class="week-anchor">${escapeHtml(anchoredWeeks)}</span>` : ''}
+        ${stageClTaskIds.map(id => `<span class="cl-task-id">${escapeHtml(id)}</span>`).join('')}
+      </div>
+    ` : '';
+
     return `
       <details class="hb-stage" id="hb-sec-stage-${index}" open>
         <summary class="hb-stage-head">
@@ -4073,6 +4149,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           ${totalTaskCount ? `<span class="hb-stage-tasks-pill">${totalTaskCount} task${totalTaskCount === 1 ? '' : 's'}</span>` : ''}
         </summary>
         ${stage.narrative ? `<div class="hb-stage-narrative">${escapeHtml(stage.narrative)}</div>` : ''}
+        ${clStrip}
         ${tasks.map(renderTask).join('')}
         ${cycle ? renderObservationCycle(cycle) : ''}
         ${subStages.map(ss => `
@@ -4087,6 +4164,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     const cts  = Array.isArray(t.cambridgeStandardRefs) ? t.cambridgeStandardRefs : [];
     const skl  = Array.isArray(t.skl_dimensions) ? t.skl_dimensions : [];
     const pigp = Array.isArray(t.pigp_articleRefs) ? t.pigp_articleRefs : [];
+    // Task-level cross-ref to specific weekly-checklist task IDs (e.g.
+    // CC-W08-001). Optional — most tasks don't have it; lights up only
+    // for stages that explicitly map to checklist rows.
+    const cl   = Array.isArray(t.weeklyChecklistTaskIds) ? t.weeklyChecklistTaskIds : [];
     return `
       <div class="hb-task">
         <div class="hb-task-title">${escapeHtml(t.title || t.taskId)}</div>
@@ -4100,6 +4181,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           ${cts.map(c => `<span class="hb-tag cts">CTS ${escapeHtml(c)}</span>`).join('')}
           ${skl.map(s => `<span class="hb-tag skl">SKL: ${escapeHtml(s)}</span>`).join('')}
           ${pigp.map(p => `<span class="hb-tag pigp">PIGP ${escapeHtml(p)}</span>`).join('')}
+          ${cl.map(c => `<span class="hb-tag cl" title="Weekly-checklist task ${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('')}
         </div>
       </div>
     `;
