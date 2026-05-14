@@ -646,7 +646,7 @@ onAuthStateChanged(auth, async (user) => {
         createdAt:      serverTimestamp(),
       };
       // Pre-fill from staff/{...} record if HQ has seeded one for this email.
-      // See "Staff ↔ users bridge" section in /docs/FIRESTORE_SCHEMA.md.
+      // See "Staff ↔ users bridge" section in /docs/architecture/FIRESTORE_SCHEMA.md.
       await applyStaffBridge(db, user, newProfile);
       await setDoc(userRef, newProfile);
       profile = newProfile;

@@ -501,10 +501,10 @@ const refAssetMap = [
   ["permendiknas/no-16-2007.json",      path.join("..", "docs", "research", "permendiknas", "no-16-2007.json")],
 
   // ── Schemas & Governance ────────────────────────────────────
-  ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "FIRESTORE_SCHEMA.md")],
-  ["schemas/DESIGN_SYSTEM.md",                     path.join("..", "docs", "DESIGN_SYSTEM.md")],
-  ["schemas/CONTRIBUTING-FIRESTORE.md",            path.join("..", "docs", "CONTRIBUTING-FIRESTORE.md")],
-  ["schemas/db-diagram.md",                        path.join("..", "docs", "db-diagram.md")],
+  ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "architecture", "FIRESTORE_SCHEMA.md")],
+  ["schemas/DESIGN_SYSTEM.md",                     path.join("..", "docs", "architecture", "DESIGN_SYSTEM.md")],
+  ["schemas/CONTRIBUTING-FIRESTORE.md",            path.join("..", "docs", "architecture", "CONTRIBUTING-FIRESTORE.md")],
+  ["schemas/db-diagram.md",                        path.join("..", "docs", "architecture", "db-diagram.md")],
   ["schemas/INDUCTION_CHARTER.md",                 path.join("..", "docs", "induction", "INDUCTION_CHARTER.md")],
   ["schemas/INDUCTION_CHARTER.json",               path.join("..", "docs", "induction", "INDUCTION_CHARTER.json")],
   ["schemas/induction-firestore-schema.json",     path.join("..", "docs", "induction", "firestore-schema.json")],

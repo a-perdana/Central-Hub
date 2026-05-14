@@ -670,7 +670,7 @@ exports.calibrateEaseItems = onSchedule(
 // school_leaderboards/{board}. Both collections are RULE-LOCKED for
 // client writes — only admin SDK (these functions) can write.
 //
-// Schema host: docs/FIRESTORE_SCHEMA.md §20.
+// Schema host: docs/architecture/FIRESTORE_SCHEMA.md §20.
 // Award rules table also documented there.
 // ═══════════════════════════════════════════════════════════════
 

@@ -263,7 +263,7 @@ Plus reuse of existing collections:
 - `competency_framework/leaders` (CPD recommendations sourced from observation findings)
 - `appraisal_cycles` (annual appraisal cycle metadata)
 
-**Schema anchor:** `docs/FIRESTORE_SCHEMA.md` §17 (new section) to be added.
+**Schema anchor:** `docs/architecture/FIRESTORE_SCHEMA.md` §17 (new section) to be added.
 **Rule pattern:** existing `induction_*` and `competency_*` collection rules will be **copied directly**.
 
 ---
@@ -412,7 +412,7 @@ Four specific decisions:
 | Charter NN1+NN2 rule pattern | EPDP NN1+NN2 copy directly | [`Central Hub/firestore.rules`](../../Central%20Hub/firestore.rules) "INDUCTION MODULE" |
 | Cambridge cross-ref popover | rubric P1–P8 + appraisal F1–F5 chips auto-wired | existing `cambridge-crossref.js` |
 | `weekly_progress` doc-id pattern | EPDP cadence checklist same pattern | `${uid}_${ACADEMIC_YEAR}_w${week}_school_principal` |
-| `induction_*` collection family | `principal_*` is a direct copy | `docs/FIRESTORE_SCHEMA.md` §16 |
+| `induction_*` collection family | `principal_*` is a direct copy | `docs/architecture/FIRESTORE_SCHEMA.md` §16 |
 | Teacher Appraisal v2.1 schema | Principal Appraisal v1.0 same shape | `appraisal-framework-v2.json` |
 | Mentor certification ledger | EPDP adds `principal_observer` cert type to existing collection | existing |
 | Three-track competency (`teachers`/`leaders`/`specialists`) | EPDP sources Priority Development Area suggestions from `leaders` track | existing |

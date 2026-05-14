@@ -891,7 +891,7 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 **FKs:** `studentUid → students.uid`.
 **Writers:** student writes own doc on submit (current MVP); Phase 3 Cloud Function recomputes server-side.
 **Read:** owner; same-school staff; admin.
-**Notes:** Cross-window comparability is unreliable until items are calibrated; UI must label early windows as "window-specific norm" before window 4. See `docs/STUDENTS-HUB-ARCHITECTURE.md` §7.
+**Notes:** Cross-window comparability is unreliable until items are calibrated; UI must label early windows as "window-specific norm" before window 4. See `docs/architecture/STUDENTS-HUB-ARCHITECTURE.md` §7.
 
 ---
 
@@ -1226,6 +1226,8 @@ Two collections that wire the Practice Bank + Practice Assessments into student-
 - `itemId` (string — references the endorsed item's doc id)
 - `collection` (`'practice_questions' | 'chapter_test_items' | 'ease_items'` — tells the browse page which authoring page to deeplink to)
 - `subjectId` · `topicGroup` · `difficulty` · `type` — denormalised facets so the browse page can filter without fetching item docs
+- `stemSnapshot` (string — first 500 chars of the item's `stemHtml` (preferred) or `stem`; mirrors `practice_question_flags.stemSnapshot` so the CH browse page can render a 3-line preview without N+1-fetching every item)
+- `sourceCode` (string | null — denormalised from the item)
 - `specialistUid → students.uid` (the HQ observer; rule pins it to `auth.uid`)
 - `specialistName` · `specialistEmail` — denormalised for the queue
 - `comment` (string — free-text, max 280 chars)
