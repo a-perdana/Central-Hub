@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Induction Handbook — CentralHub</title>
+  <title>Handbooks — CentralHub</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +12,244 @@
   <!-- SHARED_NAVBAR -->
   <style>
     :root { --accent: #6c5ce7; --accent-dk: #4e3db8; --accent-2: #ddd6fe; }
+    body { background: var(--paper); }
+
+    /* Dual-mode visibility toggle. JS flips a class on <body> based on
+       URL: 'is-browser-mode' shows the grid view, 'is-reader-mode' shows
+       the single-handbook reader. Both modes pre-rendered in HTML for
+       fast first paint; CSS hides the inactive one. */
+    body.is-reader-mode  .hb-browser { display: none; }
+    body.is-browser-mode .hb-reader  { display: none; }
+
+    /* ── Browser-mode shell (mirrors /references pattern) ─────────── */
+
+    /* Hero — canonical CH page-hero (matches /references, question-bank, etc.) */
+    .hero {
+      background: linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5a4ed1 75%, #6c5ce7 100%);
+      padding: 28px 40px 0; color: #fff; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 85% 20%, rgba(108,92,231,.35) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex; align-items: flex-start; gap: 32px; flex-wrap: wrap;
+      position: relative; z-index: 1;
+    }
+    .hero-title { flex: 1 1 320px; min-width: 280px; }
+    .hero-eyebrow {
+      font-size: .65rem; font-weight: 700; letter-spacing: .2em;
+      text-transform: uppercase; color: rgba(196,181,253,.85); margin-bottom: 6px;
+    }
+    .hero h1 {
+      font-family: 'Lora', serif; font-size: 2rem; margin: 0 0 8px;
+      line-height: 1.1; font-weight: 600; letter-spacing: -.01em;
+    }
+    .hero p { color: rgba(255,255,255,.72); font-size: .92rem; margin: 0; max-width: 540px; line-height: 1.5; }
+    .hero p code { background: rgba(255,255,255,.12); padding: 1px 6px; border-radius: 3px; color: #ddd6fe; font-family: 'DM Mono', monospace; font-size: 11.5px; }
+    .hero-kpis { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; padding-bottom: 28px; }
+    .hero-kpi {
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px; padding: 14px 18px; min-width: 130px; backdrop-filter: blur(4px);
+    }
+    .hero-kpi.hero-kpi-primary {
+      background: linear-gradient(135deg, rgba(108,92,231,.32) 0%, rgba(108,92,231,.18) 100%);
+      border-color: rgba(196,181,253,.4); min-width: 170px;
+    }
+    .hero-kpi-num {
+      font-family: 'Lora', serif; font-size: 2.4rem; line-height: 1; font-weight: 600;
+      letter-spacing: -.02em; color: #fff; font-feature-settings: 'tnum';
+    }
+    .hero-kpi-primary .hero-kpi-num { font-size: 2.8rem; }
+    .hero-kpi-lbl { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.6); margin-top: 6px; }
+    .hero-kpi-primary .hero-kpi-lbl { color: rgba(221,214,254,.85); }
+    .hero-kpi-sub { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 3px; font-weight: 400; }
+    @media (max-width: 720px) {
+      .hero { padding: 22px 22px 0; }
+      .hero h1 { font-size: 1.55rem; }
+      .hero-kpi-primary .hero-kpi-num { font-size: 2.2rem; }
+      .hero-kpi-num { font-size: 1.8rem; }
+    }
+
+    /* Sticky search toolbar — search + facet chips. Round 1 has a single
+       'Induction Handbooks' facet; future rounds add Role / Mentor / Policy
+       chips by appending to .hb-facets in the markup. */
+    .hb-toolbar {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--paper);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .15s, background .15s;
+    }
+    .hb-toolbar.is-stuck {
+      background: rgba(248,250,252,0.94);
+      backdrop-filter: saturate(160%) blur(8px);
+      box-shadow: 0 6px 16px -16px rgba(15,23,42,0.4);
+    }
+    .hb-toolbar-inner {
+      max-width: 1200px; margin: 0 auto; padding: 16px 32px 12px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .hb-search-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .hb-search {
+      flex: 1; min-width: 260px; max-width: 560px; position: relative;
+      display: flex; align-items: center;
+    }
+    .hb-search svg {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      width: 18px; height: 18px; color: var(--ink-3); pointer-events: none;
+    }
+    .hb-search input {
+      width: 100%; padding: 11px 36px 11px 42px;
+      font-family: inherit; font-size: 14px; font-weight: 500;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: #fff; color: var(--ink);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    .hb-search input::placeholder { color: var(--ink-3); font-weight: 400; }
+    .hb-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .hb-search-clear {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--ink-3);
+      font-size: 18px; padding: 2px 8px; border-radius: 6px; line-height: 1;
+    }
+    .hb-search-clear:hover { color: var(--ink); background: #f3f4f6; }
+    .hb-search-info { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+    /* Facet chips. Single 'Induction Handbooks' chip in Round 1 — sits
+       beside 'All' for symmetry. Grid layout matches /references so when
+       future categories land (Role, Mentor, Policy) the row fills naturally
+       to 4 cols. */
+    .hb-facets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+    .hb-facet {
+      padding: 9px 14px; font-size: 13px; font-weight: 600;
+      color: var(--ink-2); background: #fff;
+      border: 1px solid var(--border); border-radius: 9px;
+      cursor: pointer; user-select: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      transition: background .12s, border-color .12s, color .12s;
+      text-align: left; min-width: 0;
+      font-family: inherit;
+    }
+    .hb-facet > span:first-child {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+    }
+    .hb-facet:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--ink); }
+    .hb-facet.active {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .hb-facet .count {
+      display: inline-block; padding: 1px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums; flex-shrink: 0;
+    }
+    .hb-facet.active .count { background: rgba(255,255,255,0.22); color: #fff; }
+    @media (max-width: 960px) {
+      .hb-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Results: accordion sections with handbook cards inside. Round 1 ships
+       a single section open by default (Induction Handbooks) — when more
+       categories arrive, default-closed semantics from /references apply. */
+    .hb-results { max-width: 1200px; margin: 0 auto; padding: 22px 32px 80px; }
+    .hb-results-empty {
+      display: none; padding: 60px 20px; text-align: center;
+      color: var(--ink-3); font-size: 13px;
+    }
+    .hb-results-empty.visible { display: block; }
+    .hb-results-empty strong { color: var(--ink-2); display: block; margin-bottom: 6px; font-size: 14px; }
+
+    .hb-section {
+      margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: #fff; overflow: hidden;
+    }
+    .hb-section.is-hidden { display: none; }
+    .hb-section[open] { box-shadow: 0 4px 14px -10px rgba(15,23,42,0.18); }
+    .hb-section-head {
+      list-style: none; cursor: pointer;
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid transparent;
+      transition: background .12s, border-color .15s;
+      user-select: none;
+    }
+    .hb-section-head::-webkit-details-marker { display: none; }
+    .hb-section[open] .hb-section-head { border-bottom-color: var(--border); }
+    .hb-section-head:hover { background: #fafbfc; }
+    .hb-section-caret {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; margin-right: 4px;
+      color: var(--accent); font-size: 11px; font-weight: 700;
+      transition: transform .15s;
+      align-self: center;
+    }
+    .hb-section[open] .hb-section-caret { transform: rotate(90deg); }
+    .hb-section-title {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink); margin: 0;
+    }
+    .hb-section-count {
+      font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums;
+    }
+    .hb-section-blurb { font-size: 12px; color: var(--ink-3); margin-left: auto; max-width: 540px; line-height: 1.5; text-align: right; }
+    .hb-section-blurb code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'DM Mono', monospace; }
+
+    .hb-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px; padding: 18px 20px 22px;
+    }
+    .hb-card.filtered-out { display: none !important; }
+    .hb-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 18px 20px 18px 22px;
+      display: flex; flex-direction: column; gap: 10px;
+      text-decoration: none; color: inherit;
+      box-shadow: inset 4px 0 0 #7c3aed;   /* induction palette */
+      transition: border-color .15s, transform .12s, box-shadow .15s, background .15s;
+    }
+    .hb-card:hover {
+      transform: translateY(-1px); background: #faf5ff; border-color: #ddd6fe;
+      box-shadow: inset 4px 0 0 #7c3aed, 0 6px 18px -10px rgba(124,58,237,0.32);
+    }
+    .hb-card-head { display: flex; align-items: flex-start; gap: 10px; }
+    .hb-card-icon {
+      flex: 0 0 36px; width: 36px; height: 36px; border-radius: 9px;
+      background: #ede9fe; color: #5b21b6;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .hb-card-title { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+    .hb-card-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+    .hb-card-meta {
+      margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--border);
+      display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--ink-3);
+    }
+    .hb-card-meta .pill {
+      padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: var(--ink-2);
+      font-weight: 500;
+    }
+    .hb-card-meta .pill.firestore { background: #ddd6fe; color: #5b21b6; }
+
+    /* Reader-mode back-link — visible only when ?id=X in URL (reader mode).
+       Sits inside the existing toolbar block, before the handbook select. */
+    .hb-back-link {
+      font-size: 12.5px; color: var(--accent-dk); text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 6px 10px; border-radius: 6px;
+      transition: background .12s;
+    }
+    .hb-back-link:hover { background: var(--accent-2); }
+    .hb-back-link::before { content: '←'; font-weight: 600; }
+
+    /* Original reader styles — preserved below for ?id=X mode */
 
     .toolbar {
       position: sticky; top: 0; z-index: 50;
@@ -116,19 +354,90 @@
 </head>
 <body>
 
-<div class="toolbar" id="toolbar">
-  <label for="hbSelect" style="font-size: 12px; font-weight: 600; color: var(--ink-2);">Handbook:</label>
-  <select id="hbSelect">
-    <option value="">Loading…</option>
-  </select>
-  <button class="btn-print" id="btnPrint" title="Use your browser's Save-as-PDF option in the print dialog.">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-    Print / Save as PDF
-  </button>
+<!-- Browser mode (default — when no ?id= in URL) -->
+<div class="hb-browser">
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-title">
+        <div class="hero-eyebrow">Network-wide</div>
+        <h1>Handbooks</h1>
+        <p>Eduversal induction handbooks — JSON-first sources at <code>docs/induction/handbook-*.json</code>, mirrored to <code>induction_programs</code> Firestore on seed. Pick a handbook to open the full reader with print-to-PDF.</p>
+      </div>
+      <div class="hero-kpis">
+        <div class="hero-kpi hero-kpi-primary">
+          <div class="hero-kpi-num" id="heroKpiTotal">—</div>
+          <div class="hero-kpi-lbl">Handbooks indexed</div>
+          <div class="hero-kpi-sub">Year-1 induction tracks</div>
+        </div>
+        <div class="hero-kpi">
+          <div class="hero-kpi-num">3</div>
+          <div class="hero-kpi-lbl">Audiences</div>
+          <div class="hero-kpi-sub">Teacher · Principal · Specialist</div>
+        </div>
+        <div class="hero-kpi">
+          <div class="hero-kpi-num" id="heroKpiBuild">—</div>
+          <div class="hero-kpi-lbl">Last build</div>
+          <div class="hero-kpi-sub">induction_programs seed</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Sticky search + facet bar (single-facet Round 1 — adds more as content lands) -->
+  <div class="hb-toolbar" id="hbToolbar">
+    <div class="hb-toolbar-inner">
+      <div class="hb-search-row">
+        <div class="hb-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="hbBrowserSearch" placeholder="Search handbooks…" autocomplete="off" aria-label="Search handbooks">
+          <button class="hb-search-clear" id="hbBrowserSearchClear" style="display:none;" aria-label="Clear search">×</button>
+        </div>
+        <span class="hb-search-info" id="hbBrowserSearchInfo" aria-live="polite"></span>
+      </div>
+      <div class="hb-facets" id="hbFacets" role="tablist" aria-label="Filter by category">
+        <button class="hb-facet active" data-cat="all" role="tab" aria-selected="true"><span>All</span><span class="count" id="cntAll">0</span></button>
+        <button class="hb-facet" data-cat="induction" role="tab" aria-selected="false"><span>Induction Handbooks</span><span class="count" id="cntInduction">0</span></button>
+      </div>
+    </div>
+  </div>
+
+  <main class="hb-results" id="hbResults">
+    <details class="hb-section" data-cat="induction" open>
+      <summary class="hb-section-head">
+        <span class="hb-section-caret" aria-hidden="true">▸</span>
+        <h2 class="hb-section-title">Induction Handbooks</h2>
+        <span class="hb-section-count" data-count-for="induction">0</span>
+        <p class="hb-section-blurb">Year-1 induction tracks per audience. Source-of-truth in <code>docs/induction/handbook-*.json</code>; Firestore <code>induction_programs</code> reverted on every seed.</p>
+      </summary>
+      <div class="hb-grid" id="hbGridInduction">
+        <div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">Loading handbooks…</div>
+      </div>
+    </details>
+
+    <div class="hb-results-empty" id="hbResultsEmpty">
+      <strong>No matches</strong>
+      Try a broader term or clear the search.
+    </div>
+  </main>
 </div>
 
-<div class="handbook-page" id="hbContent">
-  <div class="hb-loading">Loading handbook…</div>
+<!-- Reader mode (when ?id=X in URL) — single-handbook detail view + print -->
+<div class="hb-reader">
+  <div class="toolbar" id="toolbar">
+    <a href="handbook" class="hb-back-link" id="btnBackToBrowser">Back to all handbooks</a>
+    <label for="hbSelect" style="font-size: 12px; font-weight: 600; color: var(--ink-2);">Handbook:</label>
+    <select id="hbSelect">
+      <option value="">Loading…</option>
+    </select>
+    <button class="btn-print" id="btnPrint" title="Use your browser's Save-as-PDF option in the print dialog.">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print / Save as PDF
+    </button>
+  </div>
+
+  <div class="handbook-page" id="hbContent">
+    <div class="hb-loading">Loading handbook…</div>
+  </div>
 </div>
 
 <script src="firebase-config.js"></script>
@@ -140,37 +449,188 @@
   const db = window.db;
   let allHandbooks = [];
 
+  /* Dual-mode dispatcher. /handbook → browser grid view; /handbook?id=X
+     → reader (existing single-handbook detail). Mode is decided once on
+     authReady from the URL; navigation between modes is a full page-load
+     (back-link is a plain <a href="handbook">, card click is also a
+     plain anchor with ?id=). No SPA — simpler + the print/PDF flow stays
+     intact for the reader. */
   document.addEventListener('authReady', async () => {
     try {
       const snap = await getDocs(query(collection(db, 'induction_programs'), limit(50)));
       allHandbooks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const select = document.getElementById('hbSelect');
-      select.innerHTML = '';
-      allHandbooks.forEach(hb => {
-        const opt = document.createElement('option');
-        opt.value = hb.id;
-        opt.textContent = hb.title || hb.id;
-        select.appendChild(opt);
-      });
+
       const params = new URLSearchParams(window.location.search);
-      const requested = params.get('id') || allHandbooks[0]?.id;
-      if (requested && allHandbooks.find(h => h.id === requested)) {
-        select.value = requested;
+      const requestedId = params.get('id');
+      const inReaderMode = !!requestedId && allHandbooks.find(h => h.id === requestedId);
+
+      if (inReaderMode) {
+        document.body.classList.add('is-reader-mode');
+        bootReaderMode(requestedId);
+      } else {
+        document.body.classList.add('is-browser-mode');
+        bootBrowserMode();
       }
-      select.addEventListener('change', () => {
-        const newId = select.value;
-        const url = new URL(window.location.href);
-        url.searchParams.set('id', newId);
-        window.history.replaceState({}, '', url);
-        renderHandbook(newId);
-      });
-      renderHandbook(select.value);
     } catch (err) {
       console.error('boot', err);
-      document.getElementById('hbContent').innerHTML = `<div class="hb-loading" style="color:#991b1b;">Could not load: ${escapeHtml(err.message || err.code || 'unknown')}</div>`;
+      // Surface error in whichever container is visible — reader mode
+      // by default since that's the legacy code-path. Browser mode users
+      // see the empty grid plus this banner.
+      const errBanner = `<div class="hb-loading" style="color:#991b1b;">Could not load: ${escapeHtml(err.message || err.code || 'unknown')}</div>`;
+      const readerEl = document.getElementById('hbContent');
+      const browserEl = document.getElementById('hbGridInduction');
+      if (readerEl) readerEl.innerHTML = errBanner;
+      if (browserEl) browserEl.innerHTML = errBanner;
     }
-    document.getElementById('btnPrint').addEventListener('click', () => window.print());
   });
+
+  /* ── Reader mode (existing single-handbook detail view) ──────────── */
+  function bootReaderMode(requestedId) {
+    const select = document.getElementById('hbSelect');
+    select.innerHTML = '';
+    allHandbooks.forEach(hb => {
+      const opt = document.createElement('option');
+      opt.value = hb.id;
+      opt.textContent = hb.title || hb.id;
+      select.appendChild(opt);
+    });
+    select.value = requestedId;
+    select.addEventListener('change', () => {
+      const newId = select.value;
+      const url = new URL(window.location.href);
+      url.searchParams.set('id', newId);
+      window.history.replaceState({}, '', url);
+      renderHandbook(newId);
+    });
+    renderHandbook(requestedId);
+    document.getElementById('btnPrint').addEventListener('click', () => window.print());
+  }
+
+  /* ── Browser mode (Round 1 — single 'Induction Handbooks' facet) ─── */
+  function bootBrowserMode() {
+    // Hero KPIs — total count + last-build date (today, since we don't
+    // ship a build-time timestamp on induction_programs).
+    document.getElementById('heroKpiTotal').textContent = allHandbooks.length;
+    document.getElementById('heroKpiBuild').textContent =
+      new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+
+    // Render cards into the induction section grid. Each card is a plain
+    // anchor with ?id=X — clicking navigates to reader mode (full page
+    // load, mode dispatch on next authReady). This keeps the browser ↔
+    // reader transition outside JS state.
+    const grid = document.getElementById('hbGridInduction');
+    if (!allHandbooks.length) {
+      grid.innerHTML = '<div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">No handbooks indexed yet. Run <code>scripts/induction/seed-induction-programs.js</code>.</div>';
+      return;
+    }
+    grid.innerHTML = allHandbooks.map(hb => {
+      const audience = [
+        hb.audience?.platform,
+        hb.audience?.subRole || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null),
+      ].filter(Boolean).join(' · ');
+      const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
+      return `
+        <a class="hb-card" href="handbook?id=${encodeURIComponent(hb.id)}">
+          <div class="hb-card-head">
+            <div class="hb-card-icon">📕</div>
+            <div>
+              <div class="hb-card-title">${escapeHtml(hb.title || hb.id)}</div>
+            </div>
+          </div>
+          <div class="hb-card-desc">${escapeHtml(hb.subtitle || '')}</div>
+          <div class="hb-card-meta">
+            ${audience ? `<span class="pill">${escapeHtml(audience)}</span>` : ''}
+            ${hb.version ? `<span class="pill">v${escapeHtml(hb.version)}</span>` : ''}
+            ${stages ? `<span class="pill">${stages} stages</span>` : ''}
+            <span class="pill firestore">induction_programs</span>
+          </div>
+        </a>
+      `;
+    }).join('');
+
+    // Seed counts
+    document.getElementById('cntAll').textContent = allHandbooks.length;
+    document.getElementById('cntInduction').textContent = allHandbooks.length;
+    document.querySelector('[data-count-for="induction"]').textContent = allHandbooks.length;
+
+    // Wire facets, search, sticky-toolbar shadow.
+    document.querySelectorAll('.hb-facet').forEach(btn => {
+      btn.addEventListener('click', () => applyBrowserFacet(btn.dataset.cat));
+    });
+    const sInput = document.getElementById('hbBrowserSearch');
+    const sClear = document.getElementById('hbBrowserSearchClear');
+    sInput.addEventListener('input', () => applyBrowserSearch(sInput.value));
+    sClear.addEventListener('click', () => { sInput.value = ''; applyBrowserSearch(''); sInput.focus(); });
+
+    // Sticky-shadow IntersectionObserver — same pattern as /references.
+    const toolbar = document.getElementById('hbToolbar');
+    const sentinel = document.createElement('div');
+    sentinel.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;pointer-events:none;';
+    toolbar.parentNode.insertBefore(sentinel, toolbar);
+    try {
+      new IntersectionObserver(
+        ([e]) => toolbar.classList.toggle('is-stuck', !e.isIntersecting),
+        { threshold: 0 }
+      ).observe(sentinel);
+    } catch (_) { /* IO unsupported — no shadow, harmless */ }
+  }
+
+  let _browserActiveFacet = 'all';
+
+  function applyBrowserFacet(cat) {
+    _browserActiveFacet = cat || 'all';
+    document.querySelectorAll('.hb-facet').forEach(b => {
+      const on = b.dataset.cat === _browserActiveFacet;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.hb-section').forEach(sec => {
+      const show = _browserActiveFacet === 'all' || sec.dataset.cat === _browserActiveFacet;
+      sec.classList.toggle('is-hidden', !show);
+      // Round 1: induction is the only category and starts open. Picking
+      // 'all' or 'induction' both keep it open; future categories will
+      // get the same auto-open-on-pick treatment as /references.
+      sec.open = show;
+    });
+    const sInput = document.getElementById('hbBrowserSearch');
+    applyBrowserSearch(sInput ? sInput.value : '');
+  }
+
+  function applyBrowserSearch(qRaw) {
+    const q = qRaw.trim().toLowerCase();
+    const sClear = document.getElementById('hbBrowserSearchClear');
+    const sInfo  = document.getElementById('hbBrowserSearchInfo');
+    sClear.style.display = q ? '' : 'none';
+
+    let totalMatches = 0;
+    document.querySelectorAll('.hb-section').forEach(sec => {
+      const sectionCat = sec.dataset.cat;
+      const inFacet = _browserActiveFacet === 'all' || _browserActiveFacet === sectionCat;
+      let sectionMatches = 0;
+      sec.querySelectorAll('.hb-card').forEach(card => {
+        if (!inFacet) { card.classList.add('filtered-out'); return; }
+        if (!q) { card.classList.remove('filtered-out'); sectionMatches++; return; }
+        const text = (card.textContent || '').toLowerCase();
+        const match = text.includes(q);
+        card.classList.toggle('filtered-out', !match);
+        if (match) sectionMatches++;
+      });
+      const hideSection = !inFacet || (q && sectionMatches === 0);
+      sec.classList.toggle('is-hidden', hideSection);
+      const countEl = sec.querySelector('[data-count-for]');
+      if (countEl) countEl.textContent = sectionMatches;
+      if (inFacet) totalMatches += sectionMatches;
+    });
+
+    const emptyState = document.getElementById('hbResultsEmpty');
+    if (emptyState) emptyState.classList.toggle('visible', q !== '' && totalMatches === 0);
+
+    if (!q) {
+      sInfo.textContent = _browserActiveFacet === 'all' ? '' : `${totalMatches} in this facet`;
+    } else {
+      sInfo.textContent = `${totalMatches} match${totalMatches === 1 ? '' : 'es'}`;
+    }
+  }
 
   function renderHandbook(id) {
     const hb = allHandbooks.find(h => h.id === id);
