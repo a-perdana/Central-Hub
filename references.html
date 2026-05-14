@@ -406,6 +406,12 @@
     .ref-card.cat-induction { --cat-stripe: #7c3aed; --cat-wash: #faf5ff; --cat-border: #ddd6fe; }
     .ref-card.cat-induction .ref-card-icon { background: #ede9fe; color: #5b21b6; }
 
+    /* Role-operational handbook variant — pink so the eye distinguishes
+       Charter-bound Year-1 induction tracks (mor 📕) from 90-day role
+       onboarding (pink 🛡). Mirrors /handbook browser palette. */
+    .ref-card.cat-handbook-roleop { --cat-stripe: #db2777; --cat-wash: #fdf2f8; --cat-border: #fbcfe8; }
+    .ref-card.cat-handbook-roleop .ref-card-icon { background: #fce7f3; color: #9d174d; }
+
     .ref-card.cat-framework { --cat-stripe: #0891b2; --cat-wash: #f0fdff; --cat-border: #a5f3fc; }
     .ref-card.cat-framework .ref-card-icon { background: #cffafe; color: #0e7490; }
 
@@ -944,7 +950,7 @@
       </div>
       <div class="ref-facets" id="refFacets" role="tablist" aria-label="Filter by category">
         <button class="ref-facet active" data-cat="all" role="tab" aria-selected="true"><span>All</span><span class="count" id="cntAll">0</span></button>
-        <button class="ref-facet" data-cat="handbooks" role="tab" aria-selected="false"><span>Induction Handbooks</span><span class="count" id="cntHandbooks">0</span></button>
+        <button class="ref-facet" data-cat="handbooks" role="tab" aria-selected="false"><span>Handbooks</span><span class="count" id="cntHandbooks">0</span></button>
         <button class="ref-facet" data-cat="frameworks" role="tab" aria-selected="false"><span>Frameworks</span><span class="count" id="cntFrameworks">0</span></button>
         <button class="ref-facet" data-cat="audits" role="tab" aria-selected="false"><span>Cross-Module Audits</span><span class="count" id="cntAudits">0</span></button>
         <button class="ref-facet" data-cat="cambridge" role="tab" aria-selected="false"><span>Cambridge Standards</span><span class="count" id="cntCambridge">0</span></button>
@@ -974,9 +980,9 @@
     <details class="ref-section" data-cat="handbooks">
       <summary class="ref-section-head">
         <span class="ref-section-caret" aria-hidden="true">▸</span>
-        <h2 class="ref-section-title">Induction Handbooks</h2>
+        <h2 class="ref-section-title">Handbooks</h2>
         <span class="ref-section-count" data-count-for="handbooks">0</span>
-        <p class="ref-section-blurb">3 handbooks that govern Year-1 induction. Source in <code>docs/induction/handbook-*.json</code>; Firestore copies reverted on every seed.</p>
+        <p class="ref-section-blurb">Year-1 induction tracks (📕 Charter NN1-NN5 bound) + role-operational 90-day onboarding (🛡 paired with weekly-checklist). Source: <code>docs/induction/</code> + <code>docs/handbooks/</code>; seeded via <code>scripts/induction/seed-induction-programs.js</code>.</p>
       </summary>
       <div class="ref-grid" id="gridHandbooks"></div>
     </details>
@@ -1749,24 +1755,52 @@
           return;
         }
 
-        grid.innerHTML = handbookCache.map(hb => {
+        // Sort: induction tracks first (charter-bound, foundational),
+        // then role-operational handbooks. Same ordering as /handbook
+        // browser shell so the two surfaces feel like the same data.
+        const sortedHandbooks = [...handbookCache].sort((a, b) => {
+          const aKind = a.handbookKind || 'induction';
+          const bKind = b.handbookKind || 'induction';
+          if (aKind === bKind) return (a.title || a.id).localeCompare(b.title || b.id);
+          return aKind === 'induction' ? -1 : 1;
+        });
+
+        grid.innerHTML = sortedHandbooks.map(hb => {
           const audience = [hb.audience?.platform, hb.audience?.subRole || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null)].filter(Boolean).join(' · ');
           const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
+          const isRoleOp = hb.handbookKind === 'role-operational';
+          // Card icon + accent palette match /handbook browser:
+          //   induction (Charter NN1-NN5 bound) → 📕 mor cat-induction
+          //   role-operational (90-day ramp)    → 🛡 pink (custom inline)
+          const icon = isRoleOp ? '🛡' : '📕';
+          const catCls = isRoleOp ? 'cat-handbook-roleop' : 'cat-induction';
+          const days = hb.duration?.totalDays;
+          const checklistLink = hb.weeklyChecklistLink;
           // Per-audience consult hint — handbook content is JSON-first
-          // (docs/induction/handbook-*.json), Firestore copies are reverted
-          // on next seed. So editing means: edit JSON + bump version + re-seed.
+          // (docs/induction/handbook-*.json OR docs/handbooks/*.json),
+          // Firestore copies reverted on every seed. So editing means:
+          // edit JSON + bump version + re-seed.
           const consultText = (() => {
             const sub = hb.audience?.subRole;
-            if (sub === 'subject_teacher')   return 'Editing the new subject teacher year-1 induction flow (TH /my-induction stages, journal/pulse cadence). JSON-first: edit docs/induction/handbook-subject-teacher-v2.json + re-seed.';
-            if (sub === 'school_principal')  return 'Editing the new principal year-1 induction flow (AH /MyInduction stages, Listen→Diagnose→Act→Anchor windows). JSON-first: edit docs/induction/handbook-principal-v1.json + re-seed.';
-            if (sub === 'subject_specialist')return 'Editing the new Subject Specialist year-1 induction flow (CH /my-induction 4-window timeline + 10-walkthrough cycle). JSON-first: edit docs/induction/handbook-specialist-v1.json + re-seed.';
-            return 'Editing the induction flow for the audience above. JSON-first — never edit the Firestore induction_programs doc directly (reverted on next seed).';
+            // Induction handbooks
+            if (sub === 'subject_teacher')   return 'Editing the new subject teacher Year-1 induction flow (TH /my-induction stages, journal/pulse cadence). JSON-first: edit docs/induction/handbook-subject-teacher-v2.json + re-seed.';
+            if (sub === 'school_principal')  return 'Editing the new principal Year-1 induction flow (AH /MyInduction stages, Listen→Diagnose→Act→Anchor windows). JSON-first: edit docs/induction/handbook-principal-v1.json + re-seed.';
+            if (sub === 'subject_specialist')return 'Editing the new Subject Specialist Year-1 induction flow (CH /my-induction 4-window timeline + 10-walkthrough cycle). JSON-first: edit docs/induction/handbook-specialist-v1.json + re-seed.';
+            // Role-operational handbooks (paired with weekly-checklist)
+            if (sub === 'dsl')                       return 'Editing DSL onboarding (90-day Triage Readiness → Case Confidence → Network Embed). Charter-bound but no weekly-checklist track. JSON-first: edit docs/handbooks/dsl-first-90-days-v1.json + re-seed.';
+            if (sub === 'cambridge_coordinator')     return 'Editing Cambridge Coordinator onboarding. Pairs with cambridge-coordinator weekly-checklist (40-week ops). JSON-first: edit docs/handbooks/cambridge-coordinator-first-90-days-v1.json + re-seed.';
+            if (sub === 'academic_coordinator')      return 'Editing Academic Coordinator onboarding. Pairs with academic-coordinator weekly-checklist (40-week ops). JSON-first: edit docs/handbooks/academic-coordinator-first-90-days-v1.json + re-seed.';
+            if (sub === 'subject_leader')            return 'Editing Subject Leader onboarding. Pairs with subject-leader weekly-checklist (40-week ops). JSON-first: edit docs/handbooks/subject-leader-first-90-days-v1.json + re-seed.';
+            if (sub === 'director')                  return 'Editing Director onboarding. Pairs with director weekly-checklist (40-week network ops). JSON-first: edit docs/handbooks/director-first-90-days-v1.json + re-seed.';
+            if (sub === 'coordinator')               return 'Editing Subject Specialist operational onboarding (separate from the Year-1 induction handbook). Pairs with subject-specialist weekly-checklist (40-week ops). JSON-first: edit docs/handbooks/subject-specialist-first-90-days-v1.json + re-seed.';
+            if (sub === 'foundation_representative') return 'Editing Foundation Rep onboarding. Pairs with foundation-representative weekly-checklist (40-week governance ops). JSON-first: edit docs/handbooks/foundation-rep-first-90-days-v1.json + re-seed.';
+            return 'Editing this handbook. JSON-first — never edit the Firestore induction_programs doc directly (reverted on next seed).';
           })();
           const consult = renderWhenToConsult(consultText);
           return `
-            <a class="ref-card cat-induction" href="handbook?id=${encodeURIComponent(hb.id)}" data-id="${escapeHtml(hb.id)}" data-action="open-handbook" target="_self">
+            <a class="ref-card ${catCls}" href="handbook?id=${encodeURIComponent(hb.id)}" data-id="${escapeHtml(hb.id)}" data-action="open-handbook" target="_self">
               <div class="ref-card-head">
-                <div class="ref-card-icon">📕</div>
+                <div class="ref-card-icon">${icon}</div>
                 <div>
                   <div class="ref-card-title">${escapeHtml(hb.title || hb.id)}</div>
                 </div>
@@ -1776,7 +1810,8 @@
               <div class="ref-card-meta">
                 ${audience ? `<span class="pill">${escapeHtml(audience)}</span>` : ''}
                 ${hb.version ? `<span class="pill">v${escapeHtml(hb.version)}</span>` : ''}
-                ${stages ? `<span class="pill">${stages} stages</span>` : ''}
+                ${days ? `<span class="pill">${days}d</span>` : (stages ? `<span class="pill">${stages} stages</span>` : '')}
+                ${checklistLink ? `<span class="pill" style="background:#cffafe;color:#0e7490;">📅 ${escapeHtml(checklistLink)}</span>` : ''}
                 <span class="pill firestore">induction_programs</span>
               </div>
             </a>
