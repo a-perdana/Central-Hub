@@ -3274,6 +3274,93 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       .rp-org-branch::before { display: none; }
     }
 
+    /* Division group cards (L2 under FR/GM) */
+    .rp-div-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      padding: 4px;
+    }
+    .rp-div-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .rp-div-card--bucket {
+      background: linear-gradient(180deg, #fafbff 0%, var(--white) 100%);
+    }
+    .rp-div-card--support { border-top: 3px solid var(--c-admin); }
+    .rp-div-card--hq      { border-top: 3px solid var(--c-hq); }
+    .rp-div-header {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding-bottom: 12px; margin-bottom: 14px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .rp-div-badge {
+      background: var(--accent-2); color: var(--accent-dk);
+      font: 700 11px/1 'DM Sans', sans-serif; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 10px; border-radius: 999px;
+    }
+    .rp-div-badge--support { background: #fecaca; color: var(--c-admin); }
+    .rp-div-badge--hq      { background: #dbeafe; color: var(--c-hq); }
+    .rp-div-fullname {
+      font-size: 13px; font-weight: 500; color: var(--ink-2); flex: 1;
+    }
+    .rp-div-meta {
+      font-size: 11px; color: var(--ink-3); background: var(--border-soft);
+      padding: 3px 9px; border-radius: 10px;
+    }
+
+    /* Dual-line pair: Principal + Guidance side-by-side */
+    .rp-div-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      position: relative;
+    }
+    /* Connector line between dual-leader pair */
+    .rp-div-pair::after {
+      content: 'paralel'; position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+      font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--ink-3); background: var(--white); padding: 2px 8px;
+      border: 1px dashed var(--border); border-radius: 10px;
+      z-index: 1;
+    }
+    .rp-leader-col {
+      display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+      min-width: 0;
+    }
+    .rp-leader-line-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--ink-3); text-align: center; padding-bottom: 4px;
+    }
+    .rp-leader-col--principal .rp-leader-line-label { color: var(--c-lead); }
+    .rp-leader-col--guidance  .rp-leader-line-label { color: var(--c-supp); }
+    .rp-leader-col .rp-org-card { padding: 12px 10px 10px; }
+    .rp-leader-col .rp-org-card-title { font-size: 13px; }
+    .rp-leader-col .rp-org-card-icon { width: 30px; height: 30px; font-size: 16px; }
+
+    /* Inline expand button (smaller than top-level) */
+    .rp-org-expand--inline {
+      padding: 5px 10px; font-size: 11px; margin-top: 6px;
+    }
+
+    /* Subtree inside division card — softer styling */
+    .rp-div-card .rp-org-subtree {
+      margin-top: 10px;
+      background: var(--paper);
+    }
+
+    @media (max-width: 920px) {
+      .rp-div-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .rp-div-pair { grid-template-columns: 1fr; }
+      .rp-div-pair::after { display: none; }
+    }
+
     /* Heatmap */
     .rp-heatmap-wrap {
       background: var(--white); border: 1px solid var(--border);
@@ -3881,6 +3968,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         return Object.keys(seen).length;
       }
 
+      // Division grouping for FR/GM children — per Framework v1.0 §3 dual-line model.
+      // Each division surfaces as a single L2 group card; expanding it shows the
+      // Principal + Guidance pair side-by-side (instructional line + welfare line).
+      var DIVISIONS = [
+        { id: 'kg',  label: 'KG Division',  fullName: 'Kindergarten',  principalId: 'principal_kg',  guidanceId: 'guidance_kg'  },
+        { id: 'sd',  label: 'SD Division',  fullName: 'Primary School',principalId: 'principal_sd',  guidanceId: 'guidance_sd'  },
+        { id: 'smp', label: 'SMP Division', fullName: 'Middle School', principalId: 'principal_smp', guidanceId: 'guidance_smp' },
+        { id: 'sma', label: 'SMA Division', fullName: 'High School',   principalId: 'principal_sma', guidanceId: 'guidance_sma' }
+      ];
+      var DIVISION_PRINCIPAL_IDS = DIVISIONS.map(function (d) { return d.principalId; });
+      var DIVISION_GUIDANCE_IDS  = DIVISIONS.map(function (d) { return d.guidanceId; });
+      var DIVISION_ALL_IDS       = DIVISION_PRINCIPAL_IDS.concat(DIVISION_GUIDANCE_IDS);
+
+      // Categorize a FR/GM child into one of 6 buckets
+      function classifyFRGMChild(p) {
+        if (!p) return 'support'; // safe default
+        var idx = DIVISION_ALL_IDS.indexOf(p.id);
+        if (idx >= 0) {
+          // Find which division it belongs to
+          for (var i = 0; i < DIVISIONS.length; i++) {
+            if (DIVISIONS[i].principalId === p.id || DIVISIONS[i].guidanceId === p.id) {
+              return 'div_' + DIVISIONS[i].id;
+            }
+          }
+        }
+        // Detect HQ-level dept coordinators (dual-report to FR/GM + hq_director)
+        if (p.reportsTo && p.reportsTo.length > 1 && p.reportsTo.indexOf('hq_director') >= 0) {
+          return 'hq_depts';
+        }
+        return 'support';
+      }
+
       var ORG_CHART_BOUND = false;
       function renderOrgChart() {
         var el = $('rpOrgChart');
@@ -3888,11 +4007,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         var topReports = childrenOf.foundation_board || [];
         var totalDesc = countDescendants('foundation_board', childrenOf);
 
-        // ── Hybrid layout: top 2 levels as horizontal cards, deeper levels as inline tree ──
+        // ── Hybrid layout: root + L1 + L2 division groups + deeper tree ──
         var html = '';
         html += '<div class="rp-orgchart">';
 
-        // Root card (CEO-style top node)
+        // Root card
         html += '<div class="rp-org-root">';
         html += '  <div class="rp-org-card rp-org-card--root">';
         html += '    <div class="rp-org-card-icon">⬢</div>';
@@ -3902,12 +4021,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         html += '  </div>';
         html += '</div>';
 
-        // Connector down to row
         if (topReports.length > 0) {
           html += '<div class="rp-org-trunk"></div>';
         }
 
-        // Row of L1 cards (direct reports of foundation_board), each carrying its own subtree
         html += '<div class="rp-org-row" data-count="' + topReports.length + '">';
         topReports.forEach(function (childId) {
           var p = POS_BY_ID[childId];
@@ -3930,8 +4047,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           }
           html += '  </div>';
 
-          // Subtree (initially hidden)
-          if (subKids.length > 0) {
+          // Special handling: FR/GM gets division-grouped L2 layout
+          if (childId === 'foundation_representative' && subKids.length > 0) {
+            html += renderFRGMDivisions(subKids, childrenOf);
+          } else if (subKids.length > 0) {
+            // Generic L1 subtree (collapsed by default)
             html += '  <button type="button" class="rp-org-expand" data-branch-id="' + esc(childId) + '">';
             html += '    <span class="rp-org-expand-caret">▾</span> Show team';
             html += '  </button>';
@@ -4025,6 +4145,149 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             if (pid) openRole(pid);
           }
         });
+      }
+
+      // Build 6 division group cards for FR/GM's 25 children
+      function renderFRGMDivisions(frgmChildren, childrenOf) {
+        // Bucket children
+        var buckets = { support: [], hq_depts: [] };
+        DIVISIONS.forEach(function (d) { buckets['div_' + d.id] = []; });
+
+        frgmChildren.forEach(function (childId) {
+          var p = POS_BY_ID[childId];
+          var bucket = classifyFRGMChild(p);
+          if (!buckets[bucket]) buckets[bucket] = [];
+          buckets[bucket].push(childId);
+        });
+
+        var html = '';
+        html += '  <button type="button" class="rp-org-expand" data-branch-id="foundation_representative">';
+        html += '    <span class="rp-org-expand-caret">▾</span> Show team';
+        html += '  </button>';
+        html += '  <div class="rp-org-subtree" data-branch-tree="foundation_representative" hidden>';
+        html += '    <div class="rp-div-grid">';
+
+        // 4 divisions
+        DIVISIONS.forEach(function (d) {
+          var ids = buckets['div_' + d.id];
+          if (!ids || ids.length === 0) return;
+          html += renderDivisionCard(d, ids, childrenOf);
+        });
+
+        // Support Services bucket
+        if (buckets.support.length > 0) {
+          html += renderBucketCard({
+            id: 'support',
+            label: 'Support Services',
+            sub: 'Marketing · Finance · Facility · Admin · Legal',
+            iconChar: '◆',
+            tone: 'support'
+          }, buckets.support, childrenOf);
+        }
+
+        // HQ-level Dept Coordinators bucket (dual-report to FR/GM + hq_director)
+        if (buckets.hq_depts.length > 0) {
+          html += renderBucketCard({
+            id: 'hq_depts',
+            label: 'HQ-Level Dept Coordinators',
+            sub: 'Dual-report to FR/GM + Eduversal HQ',
+            iconChar: '⬡',
+            tone: 'hq'
+          }, buckets.hq_depts, childrenOf);
+        }
+
+        html += '    </div>'; // .rp-div-grid
+        html += '  </div>'; // .rp-org-subtree
+        return html;
+      }
+
+      function renderDivisionCard(d, ids, childrenOf) {
+        var principalId = d.principalId;
+        var guidanceId = d.guidanceId;
+        var pPrincipal = POS_BY_ID[principalId];
+        var pGuidance  = POS_BY_ID[guidanceId];
+        if (!pPrincipal && !pGuidance) return '';
+
+        // Count descendants per line
+        var pDesc = pPrincipal ? countDescendants(principalId, childrenOf) : 0;
+        var gDesc = pGuidance  ? countDescendants(guidanceId,  childrenOf) : 0;
+        var totalDiv = pDesc + gDesc;
+
+        var html = '';
+        html += '<div class="rp-div-card">';
+        html += '  <div class="rp-div-header">';
+        html += '    <span class="rp-div-badge">' + esc(d.label) + '</span>';
+        html += '    <span class="rp-div-fullname">' + esc(d.fullName) + '</span>';
+        html += '    <span class="rp-div-meta">' + totalDiv + ' staff</span>';
+        html += '  </div>';
+
+        // Dual-line pair: Principal + Guidance side-by-side
+        html += '  <div class="rp-div-pair">';
+        if (pPrincipal) {
+          html += renderLeaderCard(pPrincipal, 'Instructional Line', childrenOf, 'principal');
+        }
+        if (pGuidance) {
+          html += renderLeaderCard(pGuidance, 'Welfare & Counselling Line', childrenOf, 'guidance');
+        }
+        html += '  </div>';
+        html += '</div>';
+        return html;
+      }
+
+      function renderLeaderCard(p, lineLabel, childrenOf, role) {
+        var lbl = p.title.replace(/\s*\(.*?\)\s*$/, '');
+        var subKids = childrenOf[p.id] || [];
+        var subDesc = countDescendants(p.id, childrenOf);
+        var html = '';
+        html += '<div class="rp-leader-col rp-leader-col--' + role + '">';
+        html += '  <div class="rp-leader-line-label">' + esc(lineLabel) + '</div>';
+        html += '  <div class="rp-org-card rp-org-card--' + p.category + '" data-pos-id="' + esc(p.id) + '" tabindex="0" role="button">';
+        html += '    <div class="rp-org-card-icon">👤</div>';
+        html += '    <div class="rp-org-card-title">' + esc(lbl) + '</div>';
+        html += '    <div class="rp-org-card-sub">' + (role === 'principal' ? 'leads instructional staff' : 'leads welfare staff') + '</div>';
+        if (subKids.length > 0) {
+          html += '    <div class="rp-org-card-meta">' + subKids.length + ' direct'
+                + (subDesc > subKids.length ? ' · ' + subDesc + ' total' : '') + '</div>';
+        }
+        html += '  </div>';
+        if (subKids.length > 0) {
+          html += '  <button type="button" class="rp-org-expand rp-org-expand--inline" data-branch-id="' + esc(p.id) + '">';
+          html += '    <span class="rp-org-expand-caret">▾</span> Show ' + (role === 'principal' ? 'instructional team' : 'welfare team');
+          html += '  </button>';
+          html += '  <div class="rp-org-subtree" data-branch-tree="' + esc(p.id) + '" hidden>';
+          html += '    <div class="rp-tree" role="tree">';
+          for (var i = 0; i < subKids.length; i++) {
+            html += renderTreeNode(subKids[i], childrenOf, 0, false);
+          }
+          html += '    </div>';
+          html += '  </div>';
+        } else {
+          html += '  <div class="rp-org-expand rp-org-expand--leaf">No direct reports</div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      function renderBucketCard(bucket, ids, childrenOf) {
+        var html = '';
+        html += '<div class="rp-div-card rp-div-card--bucket rp-div-card--' + bucket.tone + '">';
+        html += '  <div class="rp-div-header">';
+        html += '    <span class="rp-div-badge rp-div-badge--' + bucket.tone + '">' + bucket.iconChar + ' ' + esc(bucket.label) + '</span>';
+        html += '    <span class="rp-div-fullname">' + esc(bucket.sub) + '</span>';
+        html += '    <span class="rp-div-meta">' + ids.length + ' role' + (ids.length === 1 ? '' : 's') + '</span>';
+        html += '  </div>';
+        html += '  <button type="button" class="rp-org-expand rp-org-expand--inline" data-branch-id="bucket_' + bucket.id + '">';
+        html += '    <span class="rp-org-expand-caret">▾</span> Show roles';
+        html += '  </button>';
+        html += '  <div class="rp-org-subtree" data-branch-tree="bucket_' + bucket.id + '" hidden>';
+        html += '    <div class="rp-tree" role="tree">';
+        for (var i = 0; i < ids.length; i++) {
+          html += renderTreeNode(ids[i], childrenOf, 0, false);
+        }
+        html += '    </div>';
+        html += '  </div>';
+        html += '</div>';
+        return html;
       }
 
       function renderTreeNode(id, childrenOf, depth, isRoot) {
