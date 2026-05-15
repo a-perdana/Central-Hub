@@ -3429,36 +3429,77 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .hb-role ul { padding-left: 18px; margin: 6px 0 0; }
     .hb-role li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin-bottom: 4px; }
 
-    /* Stages — accordion list. Default-open for the active scroll-spy
-       section, others stay open too (this is a reader; scrolling
-       through is the use-case). User can collapse to scan. */
+    /* Stages — accordion list with editorial banner header. Default-open
+       for the active scroll-spy section, others stay open too (this is
+       a reader; scrolling through is the use-case). User can collapse
+       to scan. The banner carries a large Lora stage number on the
+       left, a window glyph (emoji) inferred from the stage label, the
+       stage name itself, and the day range / task count pills. */
     .hb-stage {
       border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
-      margin-bottom: 14px; background: #fff;
+      margin-bottom: 18px; background: #fff;
       scroll-margin-top: 80px;
     }
     .hb-stage[open] { box-shadow: 0 4px 14px -10px rgba(15,23,42,0.12); }
     .hb-stage-head {
       list-style: none; cursor: pointer;
-      background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
-      padding: 16px 22px;
+      background: linear-gradient(135deg, #ede9fe 0%, #faf5ff 60%, #fff 100%);
+      padding: 18px 22px 16px;
       border-bottom: 1px solid transparent;
-      display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
       transition: background .12s;
+      position: relative;
+    }
+    .hb-stage-head::before {
+      /* Decorative top accent strip — mor → cyan gradient across the
+         full banner width. Reinforces the editorial "chapter heading"
+         feel without obscuring text. */
+      content: ''; position: absolute; left: 0; right: 0; top: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 35%, var(--cyan) 100%);
     }
     .hb-stage-head::-webkit-details-marker { display: none; }
     .hb-stage[open] .hb-stage-head { border-bottom-color: var(--accent-2); }
-    .hb-stage-head:hover { background: linear-gradient(180deg, #ede9fe 0%, #faf5ff 100%); }
+    .hb-stage-head:hover { background: linear-gradient(135deg, #ddd6fe 0%, #ede9fe 60%, #faf5ff 100%); }
     .hb-stage-caret {
       color: var(--accent); font-size: 11px; transition: transform .15s;
-      width: 14px; display: inline-block;
+      width: 14px; display: inline-block; align-self: center;
     }
     .hb-stage[open] .hb-stage-caret { transform: rotate(90deg); }
-    .hb-stage-name { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0; }
+    /* Big Lora stage number — sits at the left of the banner like a
+       book chapter number. Tabular for alignment. */
+    .hb-stage-num {
+      font-family: 'Lora', serif;
+      font-size: 2.4rem; font-weight: 600;
+      color: var(--accent);
+      line-height: 1; letter-spacing: -0.02em;
+      font-feature-settings: 'tnum';
+      flex-shrink: 0;
+      width: 48px; text-align: center;
+    }
+    /* Window glyph — emoji inferred from stage.label keywords
+       (Listen 🌱 / Diagnose 🔍 / Act 🎯 / Anchor ⚓ / fallback 📕).
+       Sits between the number and the stage name. */
+    .hb-stage-glyph {
+      font-size: 24px; line-height: 1;
+      flex-shrink: 0;
+      filter: saturate(1.1);
+    }
+    .hb-stage-name-block { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+    .hb-stage-name {
+      font-family: 'Lora', serif;
+      font-size: 18px; font-weight: 600; color: var(--ink); margin: 0;
+      line-height: 1.25;
+    }
+    .hb-stage-eyebrow {
+      font-size: 10.5px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
     .hb-stage-days {
       font-size: 11px; font-weight: 700; color: var(--accent-dk);
-      background: var(--accent-2); padding: 2px 8px; border-radius: 999px;
+      background: rgba(255,255,255,0.7); padding: 4px 10px; border-radius: 999px;
       font-variant-numeric: tabular-nums;
+      border: 1px solid var(--accent-2);
     }
     .hb-stage-tasks-pill {
       font-size: 11px; color: var(--ink-3); font-weight: 500;
@@ -3499,11 +3540,36 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       padding: 14px 22px; background: #fafbfc; border-bottom: 1px solid var(--border);
     }
 
-    /* Task rows inside stages — refined typography + meta layout */
-    .hb-task { padding: 14px 22px; border-top: 1px solid var(--border); }
+    /* Task rows inside stages — refined typography + meta layout.
+       Each task gets a category glyph (emoji) inferred from its
+       evidenceType, sitting to the left of the title like a list
+       bullet. Generic ◆ falls back when evidenceType is missing. */
+    .hb-task {
+      padding: 16px 22px 14px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 4px 14px;
+      align-items: start;
+    }
     .hb-task:first-of-type { border-top: none; }
-    .hb-task-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
-    .hb-task-desc { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-bottom: 8px; }
+    .hb-task-glyph {
+      grid-row: 1 / span 3;
+      font-size: 20px; line-height: 1;
+      margin-top: 1px;
+      filter: saturate(1.1);
+      user-select: none;
+    }
+    .hb-task-title {
+      grid-column: 2;
+      font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    .hb-task-desc {
+      grid-column: 2;
+      font-size: 14px; color: var(--ink-2); line-height: 1.65; margin-bottom: 10px;
+    }
+    .hb-task-meta { grid-column: 2; }
     .hb-task-meta { display: flex; gap: 5px; flex-wrap: wrap; font-size: 11px; align-items: center; }
     .hb-tag {
       padding: 2px 8px; border-radius: 999px; font-weight: 500;
@@ -3517,6 +3583,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .hb-tag.cts { background: var(--accent-2); color: var(--accent-dk); font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.skl { background: #d1fae5; color: #065f46; font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.pigp { background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    /* ES chip (Eduversal Academic Standards — 4th chip family, 2026-05-15).
+       Cyan-deep (#0e7490) on cyan-100 (#cffafe) — Eduversal's 2nd brand
+       colour. cambridge-crossref.js auto-wires .hb-tag.es into the ES
+       popover (manifest.json lookup + deep-link to /references). */
+    .hb-tag.es { background: #cffafe; color: #0e7490; font-family: 'DM Mono', monospace; font-size: 10.5px; }
     /* Charter Non-Negotiables — purple ⚖ chip. Click pops a tooltip
        showing the rule verbatim from INDUCTION_CHARTER.json (loaded
        lazily, cached). Parallel to cts/skl/pigp pattern but Charter is
@@ -4345,6 +4416,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     })[k] || k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
   }
 
+  // Window glyph inference — handbook stage labels often contain a
+  // window verb (Listen / Diagnose / Act / Anchor) or a stage type
+  // keyword (Survival / Foundation / Mastery / Integration / Pre-arrival /
+  // Sense-making / Apprenticeship / Solo / Strategic). Map the most
+  // common keywords to expressive emoji so each stage banner reads at
+  // a glance. Falls back to 📕 (handbook book) when nothing matches.
+  function stageGlyph(label) {
+    const s = String(label || '').toLowerCase();
+    // Four-window AH principal arc
+    if (/\blisten\b/.test(s))                  return '🌱';
+    if (/\bdiagnose\b/.test(s))                return '🔍';
+    if (/\bact\b/.test(s))                     return '🎯';
+    if (/\banchor\b/.test(s))                  return '⚓';
+    // TH subject-teacher arc
+    if (/\bsurvival\b/.test(s))                return '🛟';
+    if (/\bfoundation\b/.test(s))              return '🧱';
+    if (/\bmastery\b/.test(s))                 return '🎓';
+    if (/\bintegration\b/.test(s))             return '🔗';
+    if (/\bfamiliariz/.test(s))                return '👋';
+    if (/\bmeeting\b|\bpreparation\b/.test(s)) return '📝';
+    // CH specialist arc
+    if (/\bsense.?making\b/.test(s))           return '🧭';
+    if (/\bapprentice/.test(s))                return '🤝';
+    if (/\bsolo\b|\bpractice\b/.test(s))       return '🚶';
+    if (/\bstrategic\b|\bcontribution\b/.test(s)) return '♟';
+    // Generic stage types
+    if (/\bpre.?arrival\b|\bstage 0\b/.test(s)) return '🛬';
+    if (/\bobserv/.test(s))                    return '👁';
+    if (/\breflection\b|\bretrospect/.test(s)) return '🪞';
+    return '📕';
+  }
+
   function renderStage(stage, index) {
     const tasks = Array.isArray(stage.tasks) ? stage.tasks : [];
     const subStages = Array.isArray(stage.subStages) ? stage.subStages : [];
@@ -4365,11 +4468,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       </div>
     ` : '';
 
+    const stageName = stage.label || stage.stageId;
+    const stageGly  = stageGlyph(stageName);
+    const stageNum  = String(index + 1).padStart(2, '0');
+
     return `
       <details class="hb-stage" id="hb-sec-stage-${index}" open>
         <summary class="hb-stage-head">
           <span class="hb-stage-caret" aria-hidden="true">▸</span>
-          <h3 class="hb-stage-name">${escapeHtml(stage.label || stage.stageId)}</h3>
+          <span class="hb-stage-num" aria-hidden="true">${stageNum}</span>
+          <span class="hb-stage-glyph" aria-hidden="true">${stageGly}</span>
+          <span class="hb-stage-name-block">
+            <span class="hb-stage-eyebrow">Stage ${index + 1}</span>
+            <h3 class="hb-stage-name">${escapeHtml(stageName)}</h3>
+          </span>
           <span class="hb-stage-days">Day ${stage.dayStart} → ${stage.dayEnd}</span>
           ${totalTaskCount ? `<span class="hb-stage-tasks-pill">${totalTaskCount} task${totalTaskCount === 1 ? '' : 's'}</span>` : ''}
         </summary>
@@ -4385,10 +4497,34 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     `;
   }
 
+  // Task category glyph — inferred from evidenceType field, with
+  // generic ◆ fallback when missing. Keeps the row aligned even if
+  // authoring forgot to set evidenceType.
+  function taskGlyph(t) {
+    const ev = String(t.evidenceType || '').toLowerCase();
+    if (ev === 'observation' || ev === 'walkthrough') return '👁';
+    if (ev === 'meeting' || ev === 'briefing')        return '🗣';
+    if (ev === 'journal' || ev === 'reflection')      return '✍';
+    if (ev === 'report' || ev === 'document')         return '📋';
+    if (ev === 'plan' || ev === 'planning')           return '🗺';
+    if (ev === 'delivery' || ev === 'execute')        return '🎯';
+    if (ev === 'review' || ev === 'feedback')         return '🔄';
+    if (ev === 'training' || ev === 'cpd')            return '🎓';
+    if (ev === 'audit' || ev === 'check')             return '✅';
+    if (ev === 'survey' || ev === 'pulse')            return '📊';
+    if (ev === 'data' || ev === 'analysis')           return '📈';
+    return '◆';
+  }
+
   function renderTask(t) {
     const cts  = Array.isArray(t.cambridgeStandardRefs) ? t.cambridgeStandardRefs : [];
     const skl  = Array.isArray(t.skl_dimensions) ? t.skl_dimensions : [];
     const pigp = Array.isArray(t.pigp_articleRefs) ? t.pigp_articleRefs : [];
+    // ES — Eduversal Academic Standards madde refs (4th chip family,
+    // 2026-05-15). Same schema convention as cambridgeStandardRefs[].
+    // cambridge-crossref.js auto-wires .hb-tag.es chips into the ES
+    // popover (manifest.json lookup + deep-link to /references).
+    const es   = Array.isArray(t.eduversalStandardRefs) ? t.eduversalStandardRefs : [];
     // Task-level cross-ref to specific weekly-checklist task IDs (e.g.
     // CC-W08-001). Optional — most tasks don't have it; lights up only
     // for stages that explicitly map to checklist rows.
@@ -4402,6 +4538,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                     .filter(Boolean).map(n => 'NN' + n);
     return `
       <div class="hb-task">
+        <span class="hb-task-glyph" aria-hidden="true">${taskGlyph(t)}</span>
         <div class="hb-task-title">${escapeHtml(t.title || t.taskId)}</div>
         ${t.description ? `<div class="hb-task-desc">${escapeHtml(t.description)}</div>` : ''}
         <div class="hb-task-meta">
@@ -4413,6 +4550,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           ${cts.map(c => `<span class="hb-tag cts">CTS ${escapeHtml(c)}</span>`).join('')}
           ${skl.map(s => `<span class="hb-tag skl">SKL: ${escapeHtml(s)}</span>`).join('')}
           ${pigp.map(p => `<span class="hb-tag pigp">PIGP ${escapeHtml(p)}</span>`).join('')}
+          ${es.map(e => `<span class="hb-tag es">ES ${escapeHtml(e)}</span>`).join('')}
           ${nn.map(n => `<span class="hb-tag nn" role="button" tabindex="0" data-nn="${escapeHtml(n)}" title="Charter ${escapeHtml(n)} — click for full rule">${escapeHtml(n)}</span>`).join('')}
           ${cl.map(c => `<span class="hb-tag cl" title="Weekly-checklist task ${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('')}
         </div>
@@ -4543,6 +4681,5 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 </script>
-<script src="cambridge-crossref.js" defer></script>
 </body>
 </html>

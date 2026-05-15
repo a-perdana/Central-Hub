@@ -322,6 +322,111 @@
     .hb-reader-toolbar .btn-print:hover { background: var(--accent-dk); }
     .hb-reader-toolbar .btn-print svg { width: 14px; height: 14px; }
 
+    /* ── Sticky reading-progress bar (under the reader toolbar) ──
+       Tracks the active stage during scroll, shows a 0-100% completion
+       bar (based on localStorage task ticks), and a "Stage N / total"
+       chip with the inferred window glyph. Companion to the
+       per-task checkbox feature. Hidden on mobile to keep room. */
+    .hb-progress {
+      position: sticky; top: 56px; z-index: 39;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%);
+      backdrop-filter: saturate(160%) blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px 12px;
+      display: flex; align-items: center; gap: 16px;
+      font-size: 12.5px; color: var(--ink-2);
+    }
+    .hb-progress-stage {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-weight: 600; color: var(--ink);
+      flex-shrink: 0;
+    }
+    .hb-progress-stage .glyph { font-size: 16px; line-height: 1; }
+    .hb-progress-stage .num {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: var(--accent-2); color: var(--accent-dk);
+      padding: 2px 7px; border-radius: 999px; font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .hb-progress-days {
+      font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    .hb-progress-track {
+      flex: 1; height: 6px; min-width: 80px;
+      background: var(--accent-2); border-radius: 999px; overflow: hidden;
+      position: relative;
+    }
+    .hb-progress-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 50%, var(--cyan) 100%);
+      border-radius: 999px;
+      transition: width .25s ease-out;
+      width: 0;
+    }
+    .hb-progress-count {
+      font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+      flex-shrink: 0; min-width: 56px; text-align: right;
+    }
+    .hb-progress-count b { color: var(--accent-dk); font-weight: 700; }
+    .hb-progress-reset {
+      font-size: 11px; padding: 4px 8px; border-radius: 6px;
+      background: transparent; color: var(--ink-3); border: 1px solid transparent;
+      cursor: pointer; font-family: inherit;
+      transition: color .12s, border-color .12s;
+      flex-shrink: 0;
+    }
+    .hb-progress-reset:hover { color: var(--accent-dk); border-color: var(--accent-2); }
+    @media (max-width: 720px) {
+      .hb-progress { display: none; }
+    }
+
+    /* Per-task checkbox — sits inside the .hb-task grid cell where the
+       glyph used to live. When checked, strikes through the title and
+       fades the row. Persists in localStorage keyed by handbook id +
+       task id. Personal-use feature; not synced to Firestore. */
+    .hb-task-check {
+      grid-row: 1 / span 3;
+      width: 22px; height: 22px;
+      appearance: none; -webkit-appearance: none;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      background: #fff; cursor: pointer;
+      margin-top: 2px;
+      transition: background .12s, border-color .12s;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .hb-task-check:hover { border-color: var(--accent); }
+    .hb-task-check:checked {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .hb-task-check:checked::after {
+      content: ''; position: absolute;
+      left: 6px; top: 2px;
+      width: 6px; height: 11px;
+      border: solid #fff; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .hb-task:has(.hb-task-check:checked) {
+      background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+    }
+    .hb-task:has(.hb-task-check:checked) .hb-task-title {
+      text-decoration: line-through;
+      text-decoration-color: var(--ink-3);
+      color: var(--ink-3);
+    }
+    .hb-task:has(.hb-task-check:checked) .hb-task-desc { opacity: 0.6; }
+    .hb-task:has(.hb-task-check:checked) .hb-task-glyph {
+      /* The glyph still renders inside the same grid cell as the
+         checkbox — overlap is fine, both sit at grid-row 1/span 3 but
+         the checkbox is opaque on top. Fade the emoji so the check
+         dominates. */
+      opacity: 0.35;
+    }
+    /* When checkbox is rendered, hide the glyph entirely to avoid the
+       overlap completely. JS only adds the checkbox in reader mode. */
+    .hb-task.has-check .hb-task-glyph { display: none; }
+
     /* Two-column layout: sticky TOC + content. Wraps to single column
        at narrow widths; TOC becomes a horizontal scroll-strip on mobile. */
     .hb-reader-layout {
@@ -691,6 +796,11 @@
     .hb-tag.cts { background: var(--accent-2); color: var(--accent-dk); font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.skl { background: #d1fae5; color: #065f46; font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.pigp { background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    /* ES chip (Eduversal Academic Standards — 4th chip family, 2026-05-15).
+       Cyan-deep (#0e7490) on cyan-100 (#cffafe) — Eduversal's 2nd brand
+       colour. cambridge-crossref.js auto-wires .hb-tag.es into the ES
+       popover (manifest.json lookup + deep-link to /references). */
+    .hb-tag.es { background: #cffafe; color: #0e7490; font-family: 'DM Mono', monospace; font-size: 10.5px; }
     /* Charter Non-Negotiables — purple ⚖ chip. Click pops a tooltip
        showing the rule verbatim from INDUCTION_CHARTER.json (loaded
        lazily, cached). Parallel to cts/skl/pigp pattern but Charter is
@@ -980,6 +1090,23 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       Print / Save as PDF
     </button>
+  </div>
+
+  <!-- Sticky reading-progress bar — JS populates the stage label,
+       glyph, day range, fill %, and N/M count from scroll position +
+       localStorage ticks. Hidden on mobile via CSS. -->
+  <div class="hb-progress" id="hbProgress" role="status" aria-live="polite" hidden>
+    <span class="hb-progress-stage">
+      <span class="glyph" id="hbProgressGlyph">📕</span>
+      <span class="num" id="hbProgressNum">Stage —</span>
+      <span id="hbProgressName">Reading…</span>
+    </span>
+    <span class="hb-progress-days" id="hbProgressDays"></span>
+    <div class="hb-progress-track" aria-hidden="true">
+      <div class="hb-progress-fill" id="hbProgressFill"></div>
+    </div>
+    <span class="hb-progress-count"><b id="hbProgressDone">0</b> / <span id="hbProgressTotal">0</span></span>
+    <button class="hb-progress-reset" id="hbProgressReset" type="button" title="Clear my checkmarks for this handbook">Reset</button>
   </div>
 
   <div class="hb-reader-layout">
@@ -1623,6 +1750,11 @@
     const cts  = Array.isArray(t.cambridgeStandardRefs) ? t.cambridgeStandardRefs : [];
     const skl  = Array.isArray(t.skl_dimensions) ? t.skl_dimensions : [];
     const pigp = Array.isArray(t.pigp_articleRefs) ? t.pigp_articleRefs : [];
+    // ES — Eduversal Academic Standards madde refs (4th chip family,
+    // 2026-05-15). Same schema convention as cambridgeStandardRefs[].
+    // cambridge-crossref.js auto-wires .hb-tag.es chips into the ES
+    // popover (manifest.json lookup + deep-link to /references).
+    const es   = Array.isArray(t.eduversalStandardRefs) ? t.eduversalStandardRefs : [];
     // Task-level cross-ref to specific weekly-checklist task IDs (e.g.
     // CC-W08-001). Optional — most tasks don't have it; lights up only
     // for stages that explicitly map to checklist rows.
@@ -1648,6 +1780,7 @@
           ${cts.map(c => `<span class="hb-tag cts">CTS ${escapeHtml(c)}</span>`).join('')}
           ${skl.map(s => `<span class="hb-tag skl">SKL: ${escapeHtml(s)}</span>`).join('')}
           ${pigp.map(p => `<span class="hb-tag pigp">PIGP ${escapeHtml(p)}</span>`).join('')}
+          ${es.map(e => `<span class="hb-tag es">ES ${escapeHtml(e)}</span>`).join('')}
           ${nn.map(n => `<span class="hb-tag nn" role="button" tabindex="0" data-nn="${escapeHtml(n)}" title="Charter ${escapeHtml(n)} — click for full rule">${escapeHtml(n)}</span>`).join('')}
           ${cl.map(c => `<span class="hb-tag cl" title="Weekly-checklist task ${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('')}
         </div>
