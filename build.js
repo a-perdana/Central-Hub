@@ -647,6 +647,14 @@ if (fs.existsSync("tokens.css")) {
   console.log("Copied: tokens.css");
 }
 
+// -- Copy Eduversal master logo (white-on-transparent, 600x176)
+// Used by login + navbar across all hubs; mail templates pull this from
+// https://centralhub.eduversal.org/eduversal-logo-white.png
+if (fs.existsSync("eduversal-logo-white.png")) {
+  fs.copyFileSync("eduversal-logo-white.png", path.join("dist", "eduversal-logo-white.png"));
+  console.log("Copied: eduversal-logo-white.png");
+}
+
 // references-viewer schema-aware modal renderer — local-then-shared
 // fallback pattern (mirrors nav-edit-simple). Used by references.html.
 ['references-viewer.js', 'references-viewer.css'].forEach(name => {
