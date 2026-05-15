@@ -3856,6 +3856,48 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .rp-modal-section h3 .count { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--ink-3); font-size: 11px; }
     .rp-modal-section-body { animation: rpSectionFade 0.18s ease-out; }
     @keyframes rpSectionFade { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Paired handbook cards inside role-detail modal. Two variants:
+       induction (mor, 📕) and role-operational (pink, 🛡). Click →
+       /handbook?id=X. Mirrors the same colour palette as /handbook
+       browser + /references Handbooks facet for visual consistency. */
+    .rp-handbook-cards { display: flex; flex-direction: column; gap: 8px; }
+    .rp-handbook-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: 10px;
+      text-decoration: none; color: inherit;
+      border: 1px solid var(--border);
+      background: var(--white);
+      transition: border-color .15s, transform .12s, box-shadow .15s, background .15s;
+    }
+    .rp-handbook-card.is-induction {
+      box-shadow: inset 4px 0 0 #7c3aed;
+    }
+    .rp-handbook-card.is-induction:hover {
+      background: #faf5ff; border-color: #ddd6fe;
+      box-shadow: inset 4px 0 0 #7c3aed, 0 4px 14px -8px rgba(124,58,237,0.28);
+      transform: translateY(-1px);
+    }
+    .rp-handbook-card.is-roleop {
+      box-shadow: inset 4px 0 0 #db2777;
+    }
+    .rp-handbook-card.is-roleop:hover {
+      background: #fdf2f8; border-color: #fbcfe8;
+      box-shadow: inset 4px 0 0 #db2777, 0 4px 14px -8px rgba(219,39,119,0.28);
+      transform: translateY(-1px);
+    }
+    .rp-handbook-card-icon {
+      flex: 0 0 36px; width: 36px; height: 36px; border-radius: 9px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .rp-handbook-card.is-induction .rp-handbook-card-icon { background: #ede9fe; color: #5b21b6; }
+    .rp-handbook-card.is-roleop   .rp-handbook-card-icon { background: #fce7f3; color: #9d174d; }
+    .rp-handbook-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .rp-handbook-card-label { font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.3; }
+    .rp-handbook-card-kind { font-size: 11.5px; color: var(--ink-3); line-height: 1.4; }
+    .rp-handbook-card-arrow { color: var(--ink-3); font-size: 14px; flex-shrink: 0; }
+    .rp-handbook-card:hover .rp-handbook-card-arrow { color: var(--accent); }
     /* Sticky table-of-contents pills inside modal */
     .rp-modal-toc {
       position: sticky; top: 0; z-index: 2;
@@ -4177,6 +4219,37 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       var POS_BY_ID = {};
       var POS_BY_PLATFORM = { centralhub: [], academichub: [], teachershub: [] };
       var CAT_BY_ID = {};
+
+      // ── Handbook mapping ───────────────────────────────────────────────
+      // Position id → list of paired handbooks in induction_programs/.
+      // One position can have multiple handbooks (e.g. HQ Subject Specialist
+      // has both an induction track + an operational first-90-days handbook).
+      // One handbook can map to multiple position ids (school_principal
+      // induction track applies to principal_general + principal_sd/smp/sma/kg).
+      // 10 handbooks (3 induction + 7 role-operational) wired across ~13 ids.
+      var HANDBOOKS_BY_POSITION = {
+        // Induction tracks (Charter NN1-NN5 bound — Year-1 mentee journeys)
+        teacher:                    [{ id: 'handbook_subject_teacher_v2', kind: 'induction', label: 'Subject Teacher · Year-1 induction' }],
+        homeroom_teacher:           [{ id: 'handbook_subject_teacher_v2', kind: 'induction', label: 'Subject Teacher · Year-1 induction' }],
+        homeroom_teacher_sd:        [{ id: 'handbook_subject_teacher_v2', kind: 'induction', label: 'Subject Teacher · Year-1 induction' }],
+        principal_general:          [{ id: 'eduversal_principal_v1',      kind: 'induction', label: 'School Principal · Year-1 induction' }],
+        principal_kg:               [{ id: 'eduversal_principal_v1',      kind: 'induction', label: 'School Principal · Year-1 induction' }],
+        principal_sd:               [{ id: 'eduversal_principal_v1',      kind: 'induction', label: 'School Principal · Year-1 induction' }],
+        principal_smp:              [{ id: 'eduversal_principal_v1',      kind: 'induction', label: 'School Principal · Year-1 induction' }],
+        principal_sma:              [{ id: 'eduversal_principal_v1',      kind: 'induction', label: 'School Principal · Year-1 induction' }],
+        // HQ Subject Specialist has BOTH induction + operational handbooks
+        hq_subject_specialist:      [
+          { id: 'eduversal_specialist_v1',                              kind: 'induction',      label: 'Subject Specialist · Year-1 induction' },
+          { id: 'eduversal_subject_specialist_first_90_days_v1',        kind: 'role-operational', label: 'Subject Specialist · 90-day operational' },
+        ],
+        // Role-operational handbooks (paired with weekly-checklist tracks)
+        designated_safeguarding_lead: [{ id: 'eduversal_dsl_first_90_days_v1',                  kind: 'role-operational', label: 'DSL · 90-day operational' }],
+        cambridge_coordinator:        [{ id: 'eduversal_cambridge_coordinator_first_90_days_v1', kind: 'role-operational', label: 'Cambridge Coordinator · 90-day operational' }],
+        academic_coordinator:         [{ id: 'eduversal_academic_coordinator_first_90_days_v1',  kind: 'role-operational', label: 'Academic Coordinator · 90-day operational' }],
+        subject_leader:               [{ id: 'eduversal_subject_leader_first_90_days_v1',       kind: 'role-operational', label: 'Subject Leader · 90-day operational' }],
+        hq_director:                  [{ id: 'eduversal_director_first_90_days_v1',             kind: 'role-operational', label: 'Director · 90-day operational' }],
+        foundation_representative:    [{ id: 'eduversal_foundation_rep_first_90_days_v1',       kind: 'role-operational', label: 'Foundation Rep · 90-day operational' }],
+      };
 
       function $(id) { return document.getElementById(id); }
       function esc(s) {
@@ -5591,6 +5664,30 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         body += '<dt>Appraised by</dt><dd>' + renderRefList(p.appraisedBy) + '</dd>';
         body += '<dt>Career pathway</dt><dd>' + renderRefList(p.careerPathway) + '</dd>';
         body += '</dl></div>';
+
+        // Paired handbook(s) — deep-link into /handbook?id=X for any role
+        // with a paired induction track OR role-operational handbook (or
+        // both, in the case of HQ Subject Specialist). 10 handbooks ×
+        // ~13 position-ids mapped via HANDBOOKS_BY_POSITION above.
+        var paired = HANDBOOKS_BY_POSITION[p.id];
+        if (paired && paired.length) {
+          body += '<div class="rp-modal-section"><h3>Paired handbook' + (paired.length > 1 ? 's' : '') + '</h3>';
+          body += '<div class="rp-handbook-cards">';
+          paired.forEach(function (hb) {
+            var iconCh = hb.kind === 'induction' ? '📕' : '🛡️';  // 📕 induction · 🛡 role-op
+            var kindCls = hb.kind === 'induction' ? 'is-induction' : 'is-roleop';
+            var kindLabel = hb.kind === 'induction' ? 'Year-1 induction · Charter NN-bound' : '90-day operational · paired with weekly checklist';
+            body += '<a class="rp-handbook-card ' + kindCls + '" href="handbook?id=' + encodeURIComponent(hb.id) + '">' +
+              '<span class="rp-handbook-card-icon" aria-hidden="true">' + iconCh + '</span>' +
+              '<span class="rp-handbook-card-body">' +
+                '<span class="rp-handbook-card-label">' + esc(hb.label) + '</span>' +
+                '<span class="rp-handbook-card-kind">' + esc(kindLabel) + '</span>' +
+              '</span>' +
+              '<span class="rp-handbook-card-arrow" aria-hidden="true">↗</span>' +
+            '</a>';
+          });
+          body += '</div></div>';
+        }
 
         // Duties
         body += renderListSection('Major duties', p.majorDuties);
