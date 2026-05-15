@@ -211,11 +211,11 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 
 **Specialist CPD (4-page set for HQ Subject Specialists):** `specialist-framework`, `specialist-path`, `specialist-portfolio`, `specialist-certificates`
 
-**Induction (HQ-side):** `induction-admin`, `my-induction`, `handbook`
+**Induction (HQ-side):** `induction-admin`, `my-induction`, `handbook` — `handbook` is **dual-mode** (2026-05-14): `/handbook` no-params is the browser catalogue of all 10 docs (3 induction `docs/induction/` + 7 role-operational `docs/handbooks/`) with handbookKind / hub / sub-role filter chips; `/handbook?id=<programId>` is the reader (sticky TOC + scroll-spy + 5 chip families: CTS / SKL / PIGP / CL / NN). NN chips load from [`docs/induction/INDUCTION_CHARTER.json`](../docs/induction/INDUCTION_CHARTER.json). See root CLAUDE.md "Handbook Ecosystem" for cross-link discipline.
 
 **Activities + Cambridge:** `cambridge-calendar`, `cambridge-standards`
 
-**References & Standards (2026-05-09):** `references` — single HQ surface for every framework / audit / handbook / Cambridge standard / Indonesian regulation. 6 tabs · 49 docs · search + `?doc=<id>` deep-link + localStorage MRU-5 recently-viewed. References-data lives in `dist/references-data/` (build copies from monorepo `docs/` + AH/CH `resources/`). AH and TH `/references` fetch this cross-origin (CORS-open).
+**References & Standards (2026-05-09, expanded 2026-05-14):** `references` — single HQ surface for every framework / audit / handbook / Cambridge standard / Indonesian regulation. 6 tabs · 52 docs (the **"Handbooks" facet** now covers all 10 handbooks: 3 induction + 7 role-operational) · search + `?doc=<id>` deep-link + localStorage MRU-5 recently-viewed. References-data lives in `dist/references-data/` (build copies from monorepo `docs/` + AH/CH `resources/`). AH and TH `/references` fetch this cross-origin (CORS-open). Deep-links handbook cards into `/handbook?id=<programId>` reader.
 
 **Principal Evaluation Module (Phase-2, 2026-05-09):**
 - `principal-coaching-hub` — mentor's overview of all assigned coaching relationships (per-coachee cards + cycle progress + last-session date + quick-launch button into `principal-coaching-session`). `ch_sub_roles.director` only.
