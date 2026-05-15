@@ -2919,6 +2919,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .hero {
       background: linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5a4ed1 75%, #6c5ce7 100%);
       padding: 28px 40px 0; color: #fff; position: relative; overflow: hidden;
+      /* Fixed minimum keeps the hero the same height whether 3 or 4 KPI
+         tiles render, and matches the AH+TH handbook hero band. */
+      min-height: 280px;
+      display: flex; align-items: center;
     }
     .hero::before {
       content: ''; position: absolute; inset: 0;
@@ -2926,11 +2930,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       pointer-events: none;
     }
     .hero-inner {
-      max-width: 1200px; margin: 0 auto;
-      display: flex; align-items: flex-start; gap: 32px; flex-wrap: wrap;
+      max-width: 1200px; margin: 0 auto; width: 100%;
+      /* width: 100% is critical — .hero is a flex container, so .hero-inner
+         (a flex item) defaults to content-sized rather than 1200px-wide.
+         Without it, margin: 0 auto centres a narrow block instead of the
+         expected full 1200px clamp, and KPI tiles end up far right of the
+         search box. Matches AH/TH .hb-browser-hero-inner. */
+      padding-left: 40px;
+      display: flex; flex-direction: column; gap: 20px;
       position: relative; z-index: 1;
     }
-    .hero-title { flex: 1 1 320px; min-width: 280px; }
+    @media (max-width: 720px) {
+      .hero-inner { padding-left: 0; }
+    }
+    .hero-title { width: 100%; }
     .hero-eyebrow {
       font-size: .65rem; font-weight: 700; letter-spacing: .2em;
       text-transform: uppercase; color: rgba(196,181,253,.85); margin-bottom: 6px;
@@ -2959,7 +2972,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .hero-kpi-primary .hero-kpi-lbl { color: rgba(221,214,254,.85); }
     .hero-kpi-sub { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 3px; font-weight: 400; }
     @media (max-width: 720px) {
-      .hero { padding: 22px 22px 0; }
+      .hero {
+        padding: 22px 22px 0;
+        min-height: 0;            /* let mobile reflow to natural height */
+        align-items: flex-start;
+      }
       .hero h1 { font-size: 1.55rem; }
       .hero-kpi-primary .hero-kpi-num { font-size: 2.2rem; }
       .hero-kpi-num { font-size: 1.8rem; }
@@ -3248,26 +3265,90 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       height: 1px; background: var(--border); margin: 8px 0;
     }
 
-    /* Content column */
-    .hb-content { padding-top: 24px; min-width: 0; }
+    /* Content column. Editorial typography upgrade (2026-05-15) —
+       larger body type, generous vertical rhythm, serif headings with
+       breathing room, drop-cap on the lead paragraph of each section,
+       and decorative section-break ornaments between major sections.
+       Aim: Medium / Stripe Press reading feel without sacrificing the
+       reference-doc density inside stage / task blocks. */
+    .hb-content { padding-top: 28px; min-width: 0; color: var(--ink); }
 
-    /* Section wrappers — h2 anchor + content card */
+    /* Section wrappers — h2 anchor + content card. Bigger gap between
+       sections (56px vs old 36px) lets the section-break ornament
+       breathe, and matches the larger H2 size. */
     .hb-sec {
-      margin-bottom: 36px;
-      scroll-margin-top: 80px;   /* offset for sticky toolbar */
+      margin-bottom: 56px;
+      scroll-margin-top: 80px;
+      position: relative;
+    }
+    .hb-sec + .hb-sec::before {
+      /* Triple-mor lozenge section break sits in the negative-space
+         between sibling sections. Pure decorative, hidden from a11y. */
+      content: '◆ ◆ ◆';
+      display: block;
+      position: absolute;
+      top: -36px; left: 0; right: 0;
+      text-align: center;
+      letter-spacing: 0.7em;
+      font-size: 8px;
+      color: var(--accent);
+      opacity: 0.4;
+      pointer-events: none;
     }
     .hb-sec-h {
-      font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600;
-      color: var(--ink); margin: 0 0 14px;
-      display: flex; align-items: baseline; gap: 10px;
+      font-family: 'Lora', serif; font-size: 2rem; font-weight: 600;
+      color: var(--ink); margin: 0 0 18px;
+      display: flex; align-items: baseline; gap: 14px;
+      line-height: 1.15; letter-spacing: -0.01em;
     }
     .hb-sec-h .count {
-      font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
       background: var(--accent-2); color: var(--accent-dk);
       font-variant-numeric: tabular-nums;
       font-family: 'DM Sans', sans-serif;
+      letter-spacing: 0.04em; text-transform: uppercase;
     }
-    .hb-sec-text { font-size: 14px; line-height: 1.65; color: var(--ink-2); margin: 0 0 16px; }
+    .hb-sec-text {
+      font-size: 16px; line-height: 1.75; color: var(--ink-2);
+      margin: 0 0 18px;
+      font-feature-settings: 'kern', 'liga';
+    }
+    /* Drop-cap on the FIRST paragraph of each section's narrative —
+       single mor Lora capital that hangs to the left of the body
+       column. Applied only when .hb-sec-text is the first child of
+       .hb-sec after the h2, so we never drop-cap a subtitle or a list. */
+    .hb-sec-h + .hb-sec-text::first-letter {
+      font-family: 'Lora', serif;
+      font-size: 3.2rem; font-weight: 600;
+      color: var(--accent-dk);
+      float: left;
+      line-height: 0.95;
+      margin: 6px 10px 0 0;
+      padding: 0;
+    }
+    /* Inline emphasis pulled from JSON narrative text (italic + serif). */
+    .hb-sec-text em { font-style: italic; color: var(--ink); font-family: 'Lora', serif; }
+    .hb-sec-text strong { color: var(--ink); font-weight: 700; }
+
+    /* Pull-quote — surfaces a short callout from the JSON when an
+       authoring pass adds .pullQuote to a section. Renders as a
+       left-bordered serif block, slightly bigger than body, mor accent.
+       Wrapped in a <blockquote class="hb-pull"> so semantic HTML stays
+       intact for screen readers + print. */
+    .hb-pull {
+      margin: 22px 0 28px;
+      padding: 8px 0 8px 22px;
+      border-left: 3px solid var(--accent);
+      font-family: 'Lora', serif;
+      font-size: 1.15rem; line-height: 1.55; font-style: italic;
+      color: var(--ink);
+    }
+    .hb-pull cite {
+      display: block; margin-top: 8px;
+      font-family: 'DM Sans', sans-serif; font-style: normal;
+      font-size: 12px; color: var(--ink-3); letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
 
     /* Charter callout — refined */
     .hb-charter {

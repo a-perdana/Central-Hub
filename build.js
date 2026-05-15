@@ -434,6 +434,28 @@ if (fs.existsSync(researchSrcDir)) {
   });
 }
 
+// -- Eduversal Academic Standards (23-section network-wide manual) for
+//    the ES chip family in cambridge-crossref.js. Only the manifest +
+//    blurb files are needed by the runtime — full section JSONs ship
+//    via the references-data tree below for the /references reader.
+//    Source: monorepo-root docs/research/eduversal/academic-standards/.
+//    Build the manifest before this step via:
+//      node scripts/eduversal-standards/build-academic-standards.js --apply
+const eduStdSrcDir  = path.join("..", "docs", "research", "eduversal", "academic-standards");
+const eduStdDestDir = path.join("dist", "research", "eduversal", "academic-standards");
+if (fs.existsSync(eduStdSrcDir)) {
+  fs.mkdirSync(eduStdDestDir, { recursive: true });
+  ["manifest.json", "search-blurbs.json"].forEach(name => {
+    const src = path.join(eduStdSrcDir, name);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(eduStdDestDir, name));
+      console.log(`Copied: dist/research/eduversal/academic-standards/${name}`);
+    } else {
+      console.warn(`WARNING: ${name} not found in docs/research/eduversal/academic-standards/ — run build-academic-standards.js --apply first.`);
+    }
+  });
+}
+
 // -- References & Standards data tree.
 //    The /references page (Hub for policy + framework + verbatim) loads
 //    these on demand via fetch('references-data/<path>'). Source of
@@ -509,6 +531,24 @@ const refAssetMap = [
   ["organization/organizational-meeting-framework-v1-2026.json", path.join("..", "docs", "research", "eduversal", "organizational-meeting-framework-v1-2026.json")],
   ["organization/partner-school-org-structure-lampiran-v.json",  path.join("..", "docs", "research", "eduversal", "partner-school-org-structure-lampiran-v.json")],
   ["organization/roles-positions.json",                          path.join("resources", "roles-positions.json")],
+
+  // ── Eduversal Academic Standards (23-section network-wide manual) ─
+  // The whole standards corpus is mirrored here so the /references reader
+  // can deep-link any madde (e.g. "ES 7.3" → /references?doc=eduversal-
+  // standards-section-07). manifest.json is the flat madde id index used
+  // by the ES chip family AND by the references search index. Source-of-
+  // truth is HQ-authored Academic Hub/Sections/Section NN.json → mirrored
+  // into docs/research/eduversal/academic-standards/ by build-academic-
+  // standards.js (--apply).
+  ["eduversal-standards/manifest.json",      path.join("..", "docs", "research", "eduversal", "academic-standards", "manifest.json")],
+  ["eduversal-standards/search-blurbs.json", path.join("..", "docs", "research", "eduversal", "academic-standards", "search-blurbs.json")],
+  ...Array.from({ length: 23 }, (_, i) => {
+    const n = String(i + 1).padStart(2, '0');
+    return [
+      `eduversal-standards/section-${n}.json`,
+      path.join("..", "docs", "research", "eduversal", "academic-standards", `section-${n}.json`),
+    ];
+  }),
 
   // ── Schemas & Governance ────────────────────────────────────
   ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "architecture", "FIRESTORE_SCHEMA.md")],

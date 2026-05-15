@@ -1,7 +1,7 @@
 /**
  * cambridge-crossref.js
  *
- * Click-to-expand popover runtime for three chip families that surface
+ * Click-to-expand popover runtime for four chip families that surface
  * across induction handbooks, KPI / appraisal / competency UIs:
  *
  *   1. CTS chips           — Cambridge Teacher / School-Leader Standards
@@ -10,6 +10,9 @@
  *                            (Permendikdasmen 10/2025, 8 dimensions).
  *   3. PIGP chips          — Indonesian induction articles + lampiran sections
  *                            (Permendiknas 27/2010, statutory induction framework).
+ *   4. ES chips            — Eduversal Academic Standards madde id anchors
+ *                            (23-section network-wide standards manual,
+ *                             docs/research/eduversal/academic-standards/).
  *
  * UI is in English. PIGP + SKL source documents are in Bahasa Indonesia;
  * the popover shows the English summary first and exposes the verbatim
@@ -23,8 +26,10 @@
  *   - window.db                    (Firestore — only required for CTS chips)
  *   - /research/permendiknas/no-27-2010-pigp.json     (PIGP chips)
  *   - /research/permendiknas/no-10-2025-skl.json      (SKL chips)
+ *   - /research/eduversal/academic-standards/manifest.json     (ES chips)
+ *   - /research/eduversal/academic-standards/search-blurbs.json (ES chip preview)
  *
- * Each hub's build.js copies the two JSONs into dist/research/permendiknas/.
+ * Each hub's build.js copies the JSONs into dist/research/.
  * If a JSON fails to load the popover degrades gracefully ("source not
  * available offline").
  */
@@ -39,6 +44,11 @@
     inflightPigp: null,
     skl: null,                // SKL dimension lookup (research JSON)
     inflightSkl: null,
+    esManifest: null,         // ES manifest.json — flat madde id index
+    inflightEsManifest: null,
+    esBlurbs: null,           // ES search-blurbs.json — popover preview text
+    inflightEsBlurbs: null,
+    esSections: {},           // ES section-NN.json — fetched on demand for "view full"
     popover: null,
   };
 
@@ -85,8 +95,10 @@
     return cache[inflightKey];
   }
 
-  const loadPigp = () => loadJson('/research/permendiknas/no-27-2010-pigp.json', 'pigp', 'inflightPigp');
-  const loadSkl  = () => loadJson('/research/permendiknas/no-10-2025-skl.json',  'skl',  'inflightSkl');
+  const loadPigp       = () => loadJson('/research/permendiknas/no-27-2010-pigp.json', 'pigp', 'inflightPigp');
+  const loadSkl        = () => loadJson('/research/permendiknas/no-10-2025-skl.json',  'skl',  'inflightSkl');
+  const loadEsManifest = () => loadJson('/research/eduversal/academic-standards/manifest.json',     'esManifest', 'inflightEsManifest');
+  const loadEsBlurbs   = () => loadJson('/research/eduversal/academic-standards/search-blurbs.json', 'esBlurbs',   'inflightEsBlurbs');
 
   // ──────────────────────────────────────────────────────────────────
   // Popover skeleton (shared across all 3 chip families)
@@ -112,7 +124,7 @@
     document.addEventListener('mousedown', (e) => {
       if (el.style.display === 'none') return;
       if (!el.contains(e.target) &&
-          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref]')) {
+          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref]')) {
         closePopover();
       }
     });
@@ -368,6 +380,116 @@
   }
 
   // ──────────────────────────────────────────────────────────────────
+  // ES popover (Eduversal Academic Standards — 23-section network manual)
+  // ──────────────────────────────────────────────────────────────────
+  //
+  // Ref forms accepted:
+  //   "7.3"      → subsection inside Section 07
+  //   "15.1.1"   → 3-level madde inside Section 15
+  //   "07"       → whole section (rare — usually tag at madde level)
+  //
+  // Manifest lookup is O(1) via flat maddeIndex. "View full madde"
+  // button deep-links to /references?doc=eduversal-standards-section-07
+  // so the reader-side viewer (built next) can render the full content.
+
+  function parseEsRef(ref) {
+    const s = String(ref || '').trim();
+    if (!s) return null;
+    // "ES-7.3.1" / "ES 7.3.1" / "es:7.3.1" — strip prefix if author wrote it.
+    return s.replace(/^ES[\s:_-]*/i, '');
+  }
+
+  function esSectionIdFromMadde(maddeId) {
+    // "7.3.1" → "07"; "15" → "15"; "5.15b" → "05".
+    const m = String(maddeId).match(/^(\d+)/);
+    if (!m) return null;
+    return String(parseInt(m[1], 10)).padStart(2, '0');
+  }
+
+  async function openEsCrossref(rawRef, anchorEl) {
+    const pop = ensurePopoverEl();
+    const ref = parseEsRef(rawRef) || rawRef;
+    pop.innerHTML = `<div style="color:#8888a8;font-size:12px;">Loading Eduversal Standard <code>${escHtml(ref)}</code>…</div>`;
+    pop.style.display = 'block';
+    positionPopover(pop, anchorEl);
+
+    const manifest = await loadEsManifest();
+    if (!manifest || manifest.__loadError) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">ES · ${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">Eduversal Academic Standards manifest is not available offline.</div>
+      `;
+      return;
+    }
+
+    // Check whole-section reference first (e.g. "07" or "7").
+    const sectionId = String(parseInt(ref, 10) || 0).toString().padStart(2, '0');
+    const sectionMeta = (manifest.sections || []).find(s => s.id === sectionId);
+    const isWholeSection = /^\d{1,2}$/.test(ref) && sectionMeta;
+
+    let sectionTitle = '';
+    let maddeTitle   = '';
+    let resolvedSectionId = '';
+
+    if (isWholeSection) {
+      sectionTitle      = sectionMeta.title;
+      resolvedSectionId = sectionMeta.id;
+    } else {
+      const entry = (manifest.maddeIndex || {})[ref];
+      if (!entry) {
+        pop.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+            <div style="font-weight:700;">ES · ${escHtml(ref)}</div>
+            ${closeBtn()}
+          </div>
+          <div style="color:#8888a8;line-height:1.55;">
+            Madde <code>${escHtml(ref)}</code> not found in the Eduversal Academic Standards manifest.
+            Check the tag spelling — valid forms look like <code>ES 1.2</code>, <code>ES 7.3</code>, <code>ES 15.1.1</code>.
+          </div>
+        `;
+        return;
+      }
+      sectionTitle      = entry.sectionTitle;
+      maddeTitle        = entry.maddeTitle;
+      resolvedSectionId = entry.sectionId;
+    }
+
+    const blurbsDoc = await loadEsBlurbs();
+    const blurb     = !isWholeSection && blurbsDoc && !blurbsDoc.__loadError
+      ? (blurbsDoc.blurbs || {})[ref] || ''
+      : '';
+
+    const sectionSlug = `section-${resolvedSectionId}`;
+    const deepLink    = `/references?doc=eduversal-standards-${sectionSlug}`;
+
+    pop.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:#0e7490;font-weight:700;letter-spacing:.05em;">EDUVERSAL ACADEMIC STANDARDS · ES ${escHtml(ref)}</div>
+          <div style="font-size:11px;color:#8888a8;margin-top:2px;">Section ${escHtml(resolvedSectionId)} · ${escHtml(sectionTitle)}</div>
+        </div>
+        ${closeBtn()}
+      </div>
+      <div style="border-top:1px solid #e5e0d8;padding-top:8px;">
+        ${maddeTitle ? `<div style="font-size:13px;font-weight:600;color:#1c1c2e;margin-bottom:6px;">${escHtml(maddeTitle)}</div>` : ''}
+        ${blurb ? `<div style="font-size:12.5px;color:#44445a;line-height:1.55;">${escHtml(blurb)}</div>` : `<div style="font-size:12px;color:#8888a8;line-height:1.55;font-style:italic;">No preview text available — open the full madde for the complete content.</div>`}
+        <div style="margin-top:10px;">
+          <a href="${escHtml(deepLink)}" target="_self"
+             style="display:inline-block;padding:6px 10px;border:1px solid #0891b2;border-radius:6px;color:#0e7490;text-decoration:none;font-size:11.5px;font-weight:600;letter-spacing:.02em;">
+            Open full madde in /references →
+          </a>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:#8888a8;line-height:1.5;">
+        Eduversal Academic Standards is the network-wide source of truth for governance, curriculum, assessment, safeguarding, QA, and operations. Tag a handbook task / framework item / competency descriptor with the relevant madde id to anchor it to the standard.
+      </div>
+    `;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   // Auto-wire chips
   // ──────────────────────────────────────────────────────────────────
 
@@ -422,6 +544,23 @@
       el.title = el.title || 'PIGP · Permendiknas 27/2010 — click for the verbatim Indonesian induction-law text.';
       makeClickable(el, ref, openPigpCrossref);
     });
+
+    // ES chips — handbook + framework + competency render <span class="hb-tag es">ES 7.3.1</span>
+    //   Accepted forms: "ES 7.3", "ES 15.1.1", "ES-1.2", "ES:5.15b".
+    //   Whole-section refs ("ES 7") also work; popover shows section header only.
+    scope.querySelectorAll('.hb-tag.es, [data-es-ref]').forEach(el => {
+      if (el.dataset.esWired === '1') return;
+      let ref = el.dataset.esRef;
+      if (!ref) {
+        const m = (el.textContent || '').match(/ES[\s:_-]+([0-9]+(?:\.[0-9]+){0,2}[a-z]?)/i);
+        if (!m) return;
+        ref = m[1];
+        el.dataset.esRef = ref;
+      }
+      el.dataset.esWired = '1';
+      el.title = el.title || 'Eduversal Academic Standards — click for the madde anchor + deep-link into /references.';
+      makeClickable(el, ref, openEsCrossref);
+    });
   }
 
   // First pass + observe for chips added later (modal opens, accordion expands).
@@ -440,10 +579,12 @@
   window.openCtsCrossref  = openCtsCrossref;
   window.openSklCrossref  = openSklCrossref;
   window.openPigpCrossref = openPigpCrossref;
+  window.openEsCrossref   = openEsCrossref;
   window.__ctsCrossref = {
     open:     openCtsCrossref,
     openSkl:  openSklCrossref,
     openPigp: openPigpCrossref,
+    openEs:   openEsCrossref,
     close:    closePopover,
   };
 })();
