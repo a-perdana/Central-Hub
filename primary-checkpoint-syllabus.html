@@ -51,6 +51,18 @@
   <!-- Main (shown for central_user and central_admin) -->
   <div id="mainContent" data-subject="math" style="display:none">
 
+    <!-- Level Toggle (Lower Primary Y1-3 / Upper Primary Y4-6) -->
+    <div class="level-toggle" role="tablist" aria-label="Primary level" style="display:flex;gap:8px;margin:0 0 14px;padding:4px;background:var(--paper-2);border-radius:10px;width:fit-content">
+      <button class="level-tab" role="tab" data-level="lower" aria-selected="false"
+        style="padding:8px 16px;border:none;background:transparent;border-radius:8px;font:500 13px/1 'DM Sans',sans-serif;color:var(--ink-2);cursor:pointer;transition:all .15s">
+        Lower Primary <span style="opacity:.7;font-weight:400">· Year 1-3</span>
+      </button>
+      <button class="level-tab" role="tab" data-level="upper" aria-selected="true"
+        style="padding:8px 16px;border:none;background:var(--paper);border-radius:8px;font:500 13px/1 'DM Sans',sans-serif;color:var(--ink);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06);transition:all .15s">
+        Upper Primary <span style="opacity:.7;font-weight:400">· Year 4-6 (Checkpoint)</span>
+      </button>
+    </div>
+
     <!-- Subject Tabs -->
     <div class="subject-tabs" role="tablist" aria-label="Subject">
       <button class="subj-tab active" role="tab" data-subj="math" aria-selected="true">
@@ -424,18 +436,57 @@
 <script type="module">
 import { initSyllabusPage } from './partials/syllabus-core.js';
 
+// Level selection: ?level=lower → Year 1-3; default (or ?level=upper) → Year 4-6.
+// Level toggle buttons reload the page with the chosen ?level= param so
+// initSyllabusPage re-mounts cleanly against the right Firestore docId.
+const params = new URLSearchParams(window.location.search);
+const level  = params.get('level') === 'lower' ? 'lower' : 'upper';
+
+const LEVELS = {
+  lower: {
+    docId:          'year1-3',
+    years:          ['Year 1', 'Year 2', 'Year 3'],
+    glhTarget:      150,                       // 5 hours/week × ~30 weeks/year × ... per stage band guidance
+    programmeLabel: 'Cambridge Primary (Lower)',
+  },
+  upper: {
+    docId:          'year4-6',
+    years:          ['Year 4', 'Year 5', 'Year 6'],
+    glhTarget:      95,                        // legacy value, preserved
+    programmeLabel: 'Cambridge Primary Checkpoint',
+  },
+};
+const cfg = LEVELS[level];
+
+// Sync level-toggle active state + wire clicks (page reload with new ?level=).
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.level-tab').forEach(btn => {
+    const isActive = btn.dataset.level === level;
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    btn.style.background = isActive ? 'var(--paper)' : 'transparent';
+    btn.style.color      = isActive ? 'var(--ink)'  : 'var(--ink-2)';
+    btn.style.boxShadow  = isActive ? '0 1px 2px rgba(0,0,0,.06)' : 'none';
+    btn.addEventListener('click', () => {
+      if (btn.dataset.level === level) return;
+      const u = new URL(window.location.href);
+      u.searchParams.set('level', btn.dataset.level);
+      window.location.href = u.toString();
+    });
+  });
+});
+
 initSyllabusPage({
   subjects: {
-    math:    { label: 'Mathematics', code: '0845', collection: 'primary_math_pacing',    pacingUrl: 'primary-checkpoint-pacing' },
+    math:    { label: 'Mathematics', code: '0096', collection: 'primary_math_pacing',    pacingUrl: 'primary-checkpoint-pacing' },
     english: { label: 'English',     code: '0844', collection: 'primary_english_pacing', pacingUrl: 'primary-checkpoint-pacing' },
     science: { label: 'Science',     code: '0846', collection: 'primary_science_pacing', pacingUrl: 'primary-checkpoint-pacing',
                chSubjectKeys: ['biology','chemistry','physics','science'] },
   },
-  docId:          'year4-6',
-  years:          ['Year 4', 'Year 5', 'Year 6'],
-  glhTarget:      95,
+  docId:          cfg.docId,
+  years:          cfg.years,
+  glhTarget:      cfg.glhTarget,
   scheduleDocId:  'main',
-  programmeLabel: 'Cambridge Primary Checkpoint',
+  programmeLabel: cfg.programmeLabel,
   tierSessionKey: null,
   settingsMode:   'inline',
   features: {
