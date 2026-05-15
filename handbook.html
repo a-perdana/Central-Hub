@@ -544,6 +544,51 @@
     .hb-tag.cts { background: var(--accent-2); color: var(--accent-dk); font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.skl { background: #d1fae5; color: #065f46; font-family: 'DM Mono', monospace; font-size: 10.5px; }
     .hb-tag.pigp { background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    /* Charter Non-Negotiables — purple ⚖ chip. Click pops a tooltip
+       showing the rule verbatim from INDUCTION_CHARTER.json (loaded
+       lazily, cached). Parallel to cts/skl/pigp pattern but Charter is
+       binding (rule-enforced at firestore.rules) so colour is darker. */
+    .hb-tag.nn {
+      background: #ede9fe; color: #4c1d95;
+      font-family: 'DM Mono', monospace; font-size: 10.5px;
+      font-weight: 700;
+      cursor: help; user-select: none;
+      transition: background .12s;
+    }
+    .hb-tag.nn::before { content: '\2696'; font-size: 10px; margin-right: 2px; }
+    .hb-tag.nn:hover, .hb-tag.nn[aria-expanded="true"] { background: #ddd6fe; }
+
+    /* NN popover — anchored to chip on click, single instance reused. */
+    .hb-nn-popover {
+      position: absolute; z-index: 200;
+      max-width: 360px; padding: 12px 14px;
+      background: #fff; border: 1px solid var(--accent-2);
+      border-radius: 10px; box-shadow: 0 12px 28px -16px rgba(76,29,149,0.4);
+      font-size: 12.5px; line-height: 1.5; color: var(--ink);
+      display: none;
+    }
+    .hb-nn-popover.open { display: block; }
+    .hb-nn-popover-head {
+      font-size: 10.5px; font-weight: 700;
+      color: #4c1d95; letter-spacing: 0.06em; text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    .hb-nn-popover-head::before { content: '\2696'; font-size: 12px; }
+    .hb-nn-popover-id {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: #ede9fe; padding: 1px 6px; border-radius: 4px;
+    }
+    .hb-nn-popover-rule { color: var(--ink-2); }
+    .hb-nn-popover-source {
+      margin-top: 8px; padding-top: 6px;
+      border-top: 1px dashed var(--border);
+      font-size: 10.5px; color: var(--ink-3);
+    }
+    .hb-nn-popover-source code {
+      background: #f3f4f6; padding: 1px 4px; border-radius: 3px;
+      font-family: 'DM Mono', monospace; font-size: 10.5px;
+    }
     .hb-tag.signoff { background: #ddd6fe; color: #5b21b6; font-weight: 700; }
     .hb-tag.signoff::before { content: '✓'; font-weight: 800; }
 
@@ -865,6 +910,120 @@
     });
     renderHandbook(requestedId);
     document.getElementById('btnPrint').addEventListener('click', () => window.print());
+    initNNPopover();
+  }
+
+  /* ── Charter NN popover ───────────────────────────────────────────
+     Single-instance popover anchored to the clicked .hb-tag.nn chip.
+     INDUCTION_CHARTER.json fetched lazily on first click; cached for
+     the page lifetime. Click outside / Escape closes. Click another
+     chip re-anchors. */
+  let _charterCache = null;
+  let _nnPopoverEl = null;
+  async function loadCharter() {
+    if (_charterCache) return _charterCache;
+    try {
+      const res = await fetch('references-data/schemas/INDUCTION_CHARTER.json');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      _charterCache = await res.json();
+      return _charterCache;
+    } catch (err) {
+      console.warn('NN popover: charter fetch failed', err);
+      _charterCache = { nonNegotiables: [] };
+      return _charterCache;
+    }
+  }
+  function getOrCreateNNPopover() {
+    if (_nnPopoverEl) return _nnPopoverEl;
+    _nnPopoverEl = document.createElement('div');
+    _nnPopoverEl.className = 'hb-nn-popover';
+    _nnPopoverEl.setAttribute('role', 'tooltip');
+    document.body.appendChild(_nnPopoverEl);
+    return _nnPopoverEl;
+  }
+  function positionNNPopover(chip) {
+    const pop = getOrCreateNNPopover();
+    const rect = chip.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    // Anchor below chip; flip above if it would overflow viewport.
+    const scrollY = window.scrollY || window.pageYOffset;
+    const scrollX = window.scrollX || window.pageXOffset;
+    let top = rect.bottom + scrollY + 6;
+    let left = rect.left + scrollX;
+    if (left + popRect.width > scrollX + window.innerWidth - 12) {
+      left = scrollX + window.innerWidth - popRect.width - 12;
+    }
+    if (left < scrollX + 12) left = scrollX + 12;
+    // If bottom-half placement would clip below viewport, flip above.
+    if (rect.bottom + 6 + popRect.height > window.innerHeight - 12) {
+      top = rect.top + scrollY - popRect.height - 6;
+    }
+    pop.style.top = top + 'px';
+    pop.style.left = left + 'px';
+  }
+  function closeNNPopover() {
+    if (!_nnPopoverEl) return;
+    _nnPopoverEl.classList.remove('open');
+    document.querySelectorAll('.hb-tag.nn[aria-expanded="true"]').forEach(c => c.setAttribute('aria-expanded', 'false'));
+  }
+  async function openNNPopover(chip) {
+    const nnId = (chip.dataset.nn || '').toLowerCase(); // e.g. "nn1"
+    if (!nnId) return;
+    const charter = await loadCharter();
+    const entry = (charter.nonNegotiables || []).find(n => (n.id || '').toLowerCase() === nnId);
+    const pop = getOrCreateNNPopover();
+    const idLabel = nnId.toUpperCase();
+    if (!entry) {
+      pop.innerHTML = `
+        <div class="hb-nn-popover-head">Charter <span class="hb-nn-popover-id">${escapeHtml(idLabel)}</span></div>
+        <div class="hb-nn-popover-rule" style="color:var(--ink-3);font-style:italic;">Charter entry not found. Verify INDUCTION_CHARTER.json is current.</div>
+      `;
+    } else {
+      pop.innerHTML = `
+        <div class="hb-nn-popover-head">Charter Non-Negotiable <span class="hb-nn-popover-id">${escapeHtml(idLabel)}</span></div>
+        <div class="hb-nn-popover-rule">${escapeHtml(entry.rule || '')}</div>
+        <div class="hb-nn-popover-source">Source: <code>docs/induction/INDUCTION_CHARTER.json</code> · rule-enforced at <code>firestore.rules</code></div>
+      `;
+    }
+    pop.classList.add('open');
+    // Reset other chip states + mark this one open
+    document.querySelectorAll('.hb-tag.nn[aria-expanded="true"]').forEach(c => c.setAttribute('aria-expanded', 'false'));
+    chip.setAttribute('aria-expanded', 'true');
+    // Position after content set (so popRect width is accurate)
+    positionNNPopover(chip);
+  }
+  function initNNPopover() {
+    // Delegated handler — chips are re-rendered on handbook switch, so
+    // a one-shot delegated listener survives every render.
+    if (window._nnPopoverWired) return;
+    window._nnPopoverWired = true;
+    document.addEventListener('click', (e) => {
+      const chip = e.target.closest && e.target.closest('.hb-tag.nn[data-nn]');
+      if (chip) {
+        e.preventDefault();
+        e.stopPropagation();
+        const wasOpen = chip.getAttribute('aria-expanded') === 'true';
+        if (wasOpen) closeNNPopover();
+        else openNNPopover(chip);
+        return;
+      }
+      // Click outside chip + outside popover → close
+      if (_nnPopoverEl && !_nnPopoverEl.contains(e.target)) closeNNPopover();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeNNPopover();
+      // Enter / Space on focused chip
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const chip = e.target.closest && e.target.closest('.hb-tag.nn[data-nn]');
+      if (!chip) return;
+      e.preventDefault();
+      const wasOpen = chip.getAttribute('aria-expanded') === 'true';
+      if (wasOpen) closeNNPopover();
+      else openNNPopover(chip);
+    });
+    // Close on scroll/resize (anchor would otherwise drift)
+    window.addEventListener('scroll', closeNNPopover, { passive: true });
+    window.addEventListener('resize', closeNNPopover);
   }
 
   /* ── Browser mode (partitioned by handbookKind) ─────────────────── */
@@ -1261,6 +1420,13 @@
     // CC-W08-001). Optional — most tasks don't have it; lights up only
     // for stages that explicitly map to checklist rows.
     const cl   = Array.isArray(t.weeklyChecklistTaskIds) ? t.weeklyChecklistTaskIds : [];
+    // Charter Non-Negotiables (NN1..NN5). Click → popover with verbatim
+    // rule from INDUCTION_CHARTER.json. Rule-enforced at firestore.rules;
+    // chip is informational, not gating. Schema: charterNonNegotiables[]
+    // — case-normalised; accepts "NN1"/"nn1"/"1" formats from authoring.
+    const nnRaw = Array.isArray(t.charterNonNegotiables) ? t.charterNonNegotiables : [];
+    const nn = nnRaw.map(n => String(n).toUpperCase().replace(/^NN/, '').replace(/[^0-9]/g, ''))
+                    .filter(Boolean).map(n => 'NN' + n);
     return `
       <div class="hb-task">
         <div class="hb-task-title">${escapeHtml(t.title || t.taskId)}</div>
@@ -1274,6 +1440,7 @@
           ${cts.map(c => `<span class="hb-tag cts">CTS ${escapeHtml(c)}</span>`).join('')}
           ${skl.map(s => `<span class="hb-tag skl">SKL: ${escapeHtml(s)}</span>`).join('')}
           ${pigp.map(p => `<span class="hb-tag pigp">PIGP ${escapeHtml(p)}</span>`).join('')}
+          ${nn.map(n => `<span class="hb-tag nn" role="button" tabindex="0" data-nn="${escapeHtml(n)}" title="Charter ${escapeHtml(n)} — click for full rule">${escapeHtml(n)}</span>`).join('')}
           ${cl.map(c => `<span class="hb-tag cl" title="Weekly-checklist task ${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('')}
         </div>
       </div>
