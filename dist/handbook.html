@@ -3214,6 +3214,111 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .hb-reader-toolbar .btn-print:hover { background: var(--accent-dk); }
     .hb-reader-toolbar .btn-print svg { width: 14px; height: 14px; }
 
+    /* ── Sticky reading-progress bar (under the reader toolbar) ──
+       Tracks the active stage during scroll, shows a 0-100% completion
+       bar (based on localStorage task ticks), and a "Stage N / total"
+       chip with the inferred window glyph. Companion to the
+       per-task checkbox feature. Hidden on mobile to keep room. */
+    .hb-progress {
+      position: sticky; top: 56px; z-index: 39;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%);
+      backdrop-filter: saturate(160%) blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px 12px;
+      display: flex; align-items: center; gap: 16px;
+      font-size: 12.5px; color: var(--ink-2);
+    }
+    .hb-progress-stage {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-weight: 600; color: var(--ink);
+      flex-shrink: 0;
+    }
+    .hb-progress-stage .glyph { font-size: 16px; line-height: 1; }
+    .hb-progress-stage .num {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: var(--accent-2); color: var(--accent-dk);
+      padding: 2px 7px; border-radius: 999px; font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .hb-progress-days {
+      font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    .hb-progress-track {
+      flex: 1; height: 6px; min-width: 80px;
+      background: var(--accent-2); border-radius: 999px; overflow: hidden;
+      position: relative;
+    }
+    .hb-progress-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 50%, var(--cyan) 100%);
+      border-radius: 999px;
+      transition: width .25s ease-out;
+      width: 0;
+    }
+    .hb-progress-count {
+      font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+      flex-shrink: 0; min-width: 56px; text-align: right;
+    }
+    .hb-progress-count b { color: var(--accent-dk); font-weight: 700; }
+    .hb-progress-reset {
+      font-size: 11px; padding: 4px 8px; border-radius: 6px;
+      background: transparent; color: var(--ink-3); border: 1px solid transparent;
+      cursor: pointer; font-family: inherit;
+      transition: color .12s, border-color .12s;
+      flex-shrink: 0;
+    }
+    .hb-progress-reset:hover { color: var(--accent-dk); border-color: var(--accent-2); }
+    @media (max-width: 720px) {
+      .hb-progress { display: none; }
+    }
+
+    /* Per-task checkbox — sits inside the .hb-task grid cell where the
+       glyph used to live. When checked, strikes through the title and
+       fades the row. Persists in localStorage keyed by handbook id +
+       task id. Personal-use feature; not synced to Firestore. */
+    .hb-task-check {
+      grid-row: 1 / span 3;
+      width: 22px; height: 22px;
+      appearance: none; -webkit-appearance: none;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      background: #fff; cursor: pointer;
+      margin-top: 2px;
+      transition: background .12s, border-color .12s;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .hb-task-check:hover { border-color: var(--accent); }
+    .hb-task-check:checked {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .hb-task-check:checked::after {
+      content: ''; position: absolute;
+      left: 6px; top: 2px;
+      width: 6px; height: 11px;
+      border: solid #fff; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .hb-task:has(.hb-task-check:checked) {
+      background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+    }
+    .hb-task:has(.hb-task-check:checked) .hb-task-title {
+      text-decoration: line-through;
+      text-decoration-color: var(--ink-3);
+      color: var(--ink-3);
+    }
+    .hb-task:has(.hb-task-check:checked) .hb-task-desc { opacity: 0.6; }
+    .hb-task:has(.hb-task-check:checked) .hb-task-glyph {
+      /* The glyph still renders inside the same grid cell as the
+         checkbox — overlap is fine, both sit at grid-row 1/span 3 but
+         the checkbox is opaque on top. Fade the emoji so the check
+         dominates. */
+      opacity: 0.35;
+    }
+    /* When checkbox is rendered, hide the glyph entirely to avoid the
+       overlap completely. JS only adds the checkbox in reader mode. */
+    .hb-task.has-check .hb-task-glyph { display: none; }
+
     /* Two-column layout: sticky TOC + content. Wraps to single column
        at narrow widths; TOC becomes a horizontal scroll-strip on mobile. */
     .hb-reader-layout {
@@ -3879,6 +3984,23 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     </button>
   </div>
 
+  <!-- Sticky reading-progress bar — JS populates the stage label,
+       glyph, day range, fill %, and N/M count from scroll position +
+       localStorage ticks. Hidden on mobile via CSS. -->
+  <div class="hb-progress" id="hbProgress" role="status" aria-live="polite" hidden>
+    <span class="hb-progress-stage">
+      <span class="glyph" id="hbProgressGlyph">📕</span>
+      <span class="num" id="hbProgressNum">Stage —</span>
+      <span id="hbProgressName">Reading…</span>
+    </span>
+    <span class="hb-progress-days" id="hbProgressDays"></span>
+    <div class="hb-progress-track" aria-hidden="true">
+      <div class="hb-progress-fill" id="hbProgressFill"></div>
+    </div>
+    <span class="hb-progress-count"><b id="hbProgressDone">0</b> / <span id="hbProgressTotal">0</span></span>
+    <button class="hb-progress-reset" id="hbProgressReset" type="button" title="Clear my checkmarks for this handbook">Reset</button>
+  </div>
+
   <div class="hb-reader-layout">
     <aside class="hb-toc" id="hbToc" aria-label="Section navigation">
       <div class="hb-toc-title">On this page</div>
@@ -4338,9 +4460,161 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     buildTOC(hb, stagesArr);
     initScrollSpy();
+    initProgress(hb, stagesArr);
     // Scroll to top whenever a new handbook is loaded (handles select-
     // dropdown switching between handbooks mid-scroll).
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  }
+
+  /* ── Reading-progress bar + per-task checkbox persistence ─────────
+     Companion features (2026-05-15) — turns the reader into a personal
+     companion: a sticky bar at the top shows which stage you're in +
+     a 0-100% fill driven by localStorage task ticks, and every task
+     row gets a checkbox you can tick to mark "done by me".
+     Personal-use only; never written to Firestore. */
+
+  let _progressState = null;   // { hbId, stages: [{id, label, days, glyph, taskIds:Set}], allTaskIds:Set }
+
+  function progressStorageKey(hbId) { return `hb:done:${hbId}`; }
+  function loadProgressTicks(hbId) {
+    try { return new Set(JSON.parse(localStorage.getItem(progressStorageKey(hbId)) || '[]')); }
+    catch (_) { return new Set(); }
+  }
+  function saveProgressTicks(hbId, set) {
+    try { localStorage.setItem(progressStorageKey(hbId), JSON.stringify([...set])); }
+    catch (_) { /* quota — silently skip */ }
+  }
+
+  function initProgress(hb, stagesArr) {
+    const bar = document.getElementById('hbProgress');
+    if (!bar) return;
+    // Build a stage→taskIds index from the rendered DOM (covers stages
+    // + subStages without re-walking the JSON).
+    const stages = stagesArr.map((s, i) => {
+      const el = document.getElementById(`hb-sec-stage-${i}`);
+      const taskIds = new Set(
+        [...(el ? el.querySelectorAll('.hb-task[data-task-id]') : [])]
+          .map(n => n.dataset.taskId)
+          .filter(Boolean)
+      );
+      return {
+        id: `hb-sec-stage-${i}`,
+        index: i,
+        label: s.label || s.stageId || `Stage ${i + 1}`,
+        days: (s.dayStart != null && s.dayEnd != null) ? `Day ${s.dayStart} → ${s.dayEnd}` : '',
+        glyph: stageGlyph(s.label || s.stageId),
+        taskIds,
+      };
+    });
+    const allTaskIds = new Set();
+    stages.forEach(st => st.taskIds.forEach(id => allTaskIds.add(id)));
+
+    _progressState = { hbId: hb.id, stages, allTaskIds };
+
+    // Show the bar only when there are stages to track + at least one
+    // task carries a stable taskId (older docs without taskIds get a
+    // tickless reader).
+    if (!stages.length || !allTaskIds.size) { bar.hidden = true; return; }
+    bar.hidden = false;
+
+    // Restore previous ticks from localStorage onto the rendered
+    // checkboxes. Filter out tasks no longer in this handbook revision
+    // so the stored set doesn't grow stale forever.
+    const stored = loadProgressTicks(hb.id);
+    const restored = new Set();
+    document.querySelectorAll('.hb-task-check[data-task-id]').forEach(cb => {
+      const id = cb.dataset.taskId;
+      if (stored.has(id)) { cb.checked = true; restored.add(id); }
+    });
+    if (restored.size !== stored.size) saveProgressTicks(hb.id, restored);
+
+    // Wire checkbox change → persist + recompute progress.
+    document.querySelectorAll('.hb-task-check[data-task-id]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const set = loadProgressTicks(hb.id);
+        if (cb.checked) set.add(cb.dataset.taskId);
+        else set.delete(cb.dataset.taskId);
+        saveProgressTicks(hb.id, set);
+        updateProgressFill();
+      });
+    });
+
+    // Reset button — clears all ticks for this handbook (with a quick
+    // double-click guard so a misclick doesn't nuke 50 hand-ticked
+    // tasks). 3-second confirmation window via data-armed attribute.
+    const resetBtn = document.getElementById('hbProgressReset');
+    if (resetBtn) {
+      let timeoutId = null;
+      resetBtn.addEventListener('click', () => {
+        if (resetBtn.dataset.armed === '1') {
+          // Confirmed — clear everything.
+          saveProgressTicks(hb.id, new Set());
+          document.querySelectorAll('.hb-task-check').forEach(cb => { cb.checked = false; });
+          updateProgressFill();
+          resetBtn.textContent = 'Reset';
+          resetBtn.dataset.armed = '';
+          clearTimeout(timeoutId);
+        } else {
+          resetBtn.dataset.armed = '1';
+          resetBtn.textContent = 'Click again to clear';
+          timeoutId = setTimeout(() => {
+            resetBtn.textContent = 'Reset';
+            resetBtn.dataset.armed = '';
+          }, 3000);
+        }
+      });
+    }
+
+    // Initial fill + stage label.
+    updateProgressFill();
+    updateProgressStage();
+
+    // Re-run stage label on scroll so the bar tracks the active stage
+    // alongside the existing scrollSpy TOC highlight. Throttled by RAF.
+    if (window._hbProgressScrollWired) return;
+    window._hbProgressScrollWired = true;
+    let raf = null;
+    window.addEventListener('scroll', () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = null; updateProgressStage(); });
+    }, { passive: true });
+  }
+
+  function updateProgressFill() {
+    if (!_progressState) return;
+    const done = loadProgressTicks(_progressState.hbId);
+    const total = _progressState.allTaskIds.size;
+    const doneCount = [..._progressState.allTaskIds].filter(id => done.has(id)).length;
+    const pct = total ? Math.round((doneCount / total) * 100) : 0;
+    const fill = document.getElementById('hbProgressFill');
+    const doneEl = document.getElementById('hbProgressDone');
+    const totalEl = document.getElementById('hbProgressTotal');
+    if (fill) fill.style.width = pct + '%';
+    if (doneEl) doneEl.textContent = doneCount;
+    if (totalEl) totalEl.textContent = total;
+  }
+
+  function updateProgressStage() {
+    if (!_progressState || !_progressState.stages.length) return;
+    // Find the stage whose section is currently most prominent in the
+    // viewport. Use the first stage whose top is below 120px from the
+    // top edge (matches the scrollspy offset).
+    let active = _progressState.stages[0];
+    for (const st of _progressState.stages) {
+      const el = document.getElementById(st.id);
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top;
+      if (top <= 120) active = st;
+      else break;
+    }
+    const glyphEl = document.getElementById('hbProgressGlyph');
+    const numEl = document.getElementById('hbProgressNum');
+    const nameEl = document.getElementById('hbProgressName');
+    const daysEl = document.getElementById('hbProgressDays');
+    if (glyphEl) glyphEl.textContent = active.glyph;
+    if (numEl)   numEl.textContent   = `Stage ${active.index + 1} / ${_progressState.stages.length}`;
+    if (nameEl)  nameEl.textContent  = active.label;
+    if (daysEl)  daysEl.textContent  = active.days;
   }
 
   function renderDesignPhilosophy(dp) {
@@ -4536,8 +4810,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     const nnRaw = Array.isArray(t.charterNonNegotiables) ? t.charterNonNegotiables : [];
     const nn = nnRaw.map(n => String(n).toUpperCase().replace(/^NN/, '').replace(/[^0-9]/g, ''))
                     .filter(Boolean).map(n => 'NN' + n);
+    const tid = t.taskId || '';
     return `
-      <div class="hb-task">
+      <div class="hb-task has-check"${tid ? ` data-task-id="${escapeHtml(tid)}"` : ''}>
+        <input type="checkbox" class="hb-task-check" aria-label="Mark task done"${tid ? ` data-task-id="${escapeHtml(tid)}"` : ''}>
         <span class="hb-task-glyph" aria-hidden="true">${taskGlyph(t)}</span>
         <div class="hb-task-title">${escapeHtml(t.title || t.taskId)}</div>
         ${t.description ? `<div class="hb-task-desc">${escapeHtml(t.description)}</div>` : ''}
@@ -4681,5 +4957,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 </script>
+<script src="cambridge-crossref.js" defer></script>
 </body>
 </html>

@@ -391,8 +391,14 @@ htmlFiles.forEach((file) => {
   // CTS chips. Use lastIndexOf so we target the actual document </body>
   // and not a </body> sitting inside an inline JS template literal
   // (e.g. orientation-admin's print-window builder).
+  //
+  // Idempotency check: look for the actual <script src="..."> tag, not
+  // a plain substring of the filename. Past incident 2026-05-15:
+  // handbook.html had CSS/JS comments referencing "cambridge-crossref.js"
+  // which made the loose substring check think the script was already
+  // there → ES/CTS/SKL/PIGP chips rendered but were unclickable.
   if (file !== 'login.html' && file !== 'index.html' &&
-      !output.includes('cambridge-crossref.js')) {
+      !/<script\s[^>]*src=["']cambridge-crossref\.js["']/.test(output)) {
     const closeIdx = output.lastIndexOf('</body>');
     if (closeIdx >= 0) {
       output = output.slice(0, closeIdx)
