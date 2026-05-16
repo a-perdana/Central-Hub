@@ -175,6 +175,68 @@ const CHECKPOINT_SUBJECTS = {
 };
 
 // ============================================================
+// Primary pacing pages — generated from primary-pacing-template.html
+// All 6 stages live in one Firestore doc (year1-6); the page renders
+// a 6-chip year filter + 6-option chapter modal dropdown rather than
+// the 2-year secondary/IGCSE/AS-A pattern. PACING_CONFIG.years[] drives
+// pacing-core.js's filter/badge/modal-default behaviour.
+// ============================================================
+const PRIMARY_YEARS = [
+  { label: 'Year 1', key: 'year1', badgeCls: 'yr1' },
+  { label: 'Year 2', key: 'year2', badgeCls: 'yr2' },
+  { label: 'Year 3', key: 'year3', badgeCls: 'yr3' },
+  { label: 'Year 4', key: 'year4', badgeCls: 'yr4' },
+  { label: 'Year 5', key: 'year5', badgeCls: 'yr5' },
+  { label: 'Year 6', key: 'year6', badgeCls: 'yr6' },
+];
+const PRIMARY_YEARS_JSON = JSON.stringify(PRIMARY_YEARS);
+const PRIMARY_YEAR_CHIPS = PRIMARY_YEARS.map(
+  y => `        <button class="class-chip" data-cls="${y.key}" onclick="selectClass('${y.key}',this)">${y.label}</button>`
+).join('\n');
+const PRIMARY_YEAR_OPTIONS = PRIMARY_YEARS.map(
+  y => `          <option value="${y.label}">${y.label}</option>`
+).join('\n');
+
+const PRIMARY_SUBJECTS = {
+  'primary-math-pacing.html': {
+    pageTitle:    'Primary Mathematics Pacing — CentralHub',
+    accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
+    heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
+    heroGlow:     'rgba(185,28,28,.4)',
+    heroIcon:     '∫',
+    heroEyebrow:  'Cambridge Primary Mathematics 0096',
+    heroTitle:    'Primary Mathematics Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'primary_math_pacing', docId: 'year1-6', subjectKey: 'math', comboKey: 'primary_math', syllabusCode: '0096', progressKey: 'primary_math_statuses', classesField: 'primary_math_classes', years: ${PRIMARY_YEARS_JSON} }`,
+  },
+  'primary-english-pacing.html': {
+    pageTitle:    'Primary English Pacing — CentralHub',
+    accentVars:   '--accent: #2980b9;\n      --accent-dk: #1f6fa3;\n      --accent-2: #e8f4fd;',
+    heroGradient: 'linear-gradient(135deg, #0c2340 0%, #1a4a7a 40%, #1f6fa3 70%, #2980b9 100%)',
+    heroGlow:     'rgba(41,128,185,.4)',
+    heroIcon:     '📖',
+    heroEyebrow:  'Cambridge Primary English 0058',
+    heroTitle:    'Primary English Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'primary_english_pacing', docId: 'year1-6', subjectKey: 'english', comboKey: 'primary_english', syllabusCode: '0058', progressKey: 'primary_english_statuses', classesField: 'primary_english_classes', years: ${PRIMARY_YEARS_JSON} }`,
+  },
+  'primary-science-pacing.html': {
+    pageTitle:    'Primary Science Pacing — CentralHub',
+    accentVars:   '--accent: #27ae60;\n      --accent-dk: #1e8449;\n      --accent-2: #e9f7ef;',
+    heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
+    heroGlow:     'rgba(21,128,61,.4)',
+    heroIcon:     '🔬',
+    heroEyebrow:  'Cambridge Primary Science 0097',
+    heroTitle:    'Primary Science Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'primary_science_pacing', docId: 'year1-6', subjectKey: 'science', comboKeys: ['primary_science', 'primary_biology', 'primary_chemistry', 'primary_physics'], syllabusCode: '0097', progressKey: 'primary_science_statuses', classesField: 'primary_science_classes', years: ${PRIMARY_YEARS_JSON} }`,
+  },
+};
+
+// ============================================================
 // AS/A-Level pacing pages — generated from igcse-pacing-template.html
 // ============================================================
 const ASALEVEL_SUBJECTS = {
@@ -233,7 +295,7 @@ const ASALEVEL_SUBJECTS = {
 };
 
 function generateFromPacingTemplate(template, cfg) {
-  return template
+  let out = template
     .replace('{{PAGE_TITLE}}',    cfg.pageTitle)
     .replace('{{ACCENT_VARS}}',   cfg.accentVars)
     .replace('{{HERO_GRADIENT}}', cfg.heroGradient)
@@ -243,16 +305,27 @@ function generateFromPacingTemplate(template, cfg) {
     .replace('{{HERO_TITLE}}',    cfg.heroTitle)
     .replace('{{HERO_DESC}}',     cfg.heroDesc)
     .replace('{{AO_OPTIONS}}',    cfg.aoOptions)
-    .replace('{{PACING_CONFIG}}', cfg.pacingConfig)
-    .replace(/\{\{YEAR_A_KEY\}\}/g, cfg.yearAKey)
-    .replace(/\{\{YEAR_B_KEY\}\}/g, cfg.yearBKey)
-    .replace(/\{\{YEAR_A\}\}/g,    cfg.yearA)
-    .replace(/\{\{YEAR_B\}\}/g,    cfg.yearB);
+    .replace('{{PACING_CONFIG}}', cfg.pacingConfig);
+  // 2-year pages (IGCSE / Checkpoint / AS-A) inline YEAR_A/YEAR_B chips +
+  // dropdown options directly in the template; primary template ships
+  // pre-rendered YEAR_CHIPS / YEAR_OPTIONS blocks instead.
+  if (cfg.yearChips !== undefined) {
+    out = out.replace('{{YEAR_CHIPS}}',   cfg.yearChips)
+             .replace('{{YEAR_OPTIONS}}', cfg.yearOptions);
+  } else {
+    out = out
+      .replace(/\{\{YEAR_A_KEY\}\}/g, cfg.yearAKey)
+      .replace(/\{\{YEAR_B_KEY\}\}/g, cfg.yearBKey)
+      .replace(/\{\{YEAR_A\}\}/g,    cfg.yearA)
+      .replace(/\{\{YEAR_B\}\}/g,    cfg.yearB);
+  }
+  return out;
 }
 
 const igcseTemplate      = fs.readFileSync('igcse-pacing-template.html', 'utf8');
 const checkpointTemplate = fs.readFileSync('secondary-checkpoint-pacing-template.html', 'utf8');
 const asalevelTemplate   = fs.readFileSync('as-alevel-pacing-template.html', 'utf8');
+const primaryTemplate    = fs.readFileSync('primary-pacing-template.html',    'utf8');
 
 const generatedPacing = {};
 Object.entries(IGCSE_SUBJECTS).forEach(([f, cfg]) => {
@@ -263,6 +336,13 @@ Object.entries(CHECKPOINT_SUBJECTS).forEach(([f, cfg]) => {
 });
 Object.entries(ASALEVEL_SUBJECTS).forEach(([f, cfg]) => {
   generatedPacing[f] = generateFromPacingTemplate(asalevelTemplate, cfg);
+});
+Object.entries(PRIMARY_SUBJECTS).forEach(([f, cfg]) => {
+  generatedPacing[f] = generateFromPacingTemplate(primaryTemplate, {
+    ...cfg,
+    yearChips:   PRIMARY_YEAR_CHIPS,
+    yearOptions: PRIMARY_YEAR_OPTIONS,
+  });
 });
 
 // -- Copy HTML files
@@ -289,6 +369,9 @@ const htmlFiles = [
   "igcse-biology-pacing.html",
   "igcse-chemistry-pacing.html",
   "igcse-physics-pacing.html",
+  "primary-math-pacing.html",
+  "primary-english-pacing.html",
+  "primary-science-pacing.html",
   "checkpoint-math-pacing.html",
   "checkpoint-english-pacing.html",
   "checkpoint-science-pacing.html",

@@ -76,6 +76,12 @@ const SUBJECT_PAGE_MAP = {
   'checkpoint-math-pacing':      ['math'],
   'checkpoint-english-pacing':   ['english'],
   'checkpoint-science-pacing':   ['biology', 'chemistry', 'physics', 'science'],
+  // Primary — Stage 1-6. Primary Science (0097) is combined-science, so
+  // any of biology/chemistry/physics/science specialists may enter (mirrors
+  // the checkpoint-science rule).
+  'primary-math-pacing':         ['math'],
+  'primary-english-pacing':      ['english'],
+  'primary-science-pacing':      ['biology', 'chemistry', 'physics', 'science'],
 };
 
 // Syllabus pages render multiple subject tabs in one page. Each entry

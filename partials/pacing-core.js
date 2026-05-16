@@ -21,6 +21,24 @@ const YEAR_A        = window.PACING_CONFIG.yearA || 'Year 9';
 const YEAR_B        = window.PACING_CONFIG.yearB || 'Year 10';
 const YEAR_A_KEY    = window.PACING_CONFIG.yearAKey || 'year9';
 const YEAR_B_KEY    = window.PACING_CONFIG.yearBKey || 'year10';
+// Multi-year support: pacing pages spanning >2 grades (e.g. Primary
+// Stages 1-6) ship a `years: [{ label, key, badgeCls }, ...]` array.
+// 2-year pages omit it and fall back to YEAR_A/YEAR_B above for
+// back-compat. `badgeCls` selects the chapter-row pill styling
+// (existing CSS classes: `yr9` blue, `yr10` violet, plus `yr1`..`yr12`
+// rotated through the same palette in the primary template).
+const YEARS = (() => {
+  if (Array.isArray(window.PACING_CONFIG.years) && window.PACING_CONFIG.years.length) {
+    return window.PACING_CONFIG.years;
+  }
+  return [
+    { label: YEAR_A, key: YEAR_A_KEY, badgeCls: 'yr9' },
+    { label: YEAR_B, key: YEAR_B_KEY, badgeCls: 'yr10' },
+  ];
+})();
+const YEAR_KEY_BY_LABEL = Object.fromEntries(YEARS.map(y => [y.label, y.key]));
+const YEAR_LABEL_BY_KEY = Object.fromEntries(YEARS.map(y => [y.key, y.label]));
+const YEAR_BADGE_BY_LABEL = Object.fromEntries(YEARS.map(y => [y.label, y.badgeCls || 'yr9']));
 // Per-subject Firestore field names written by Teachers Hub. Each subject's
 // pacing template uses its own keys: IGCSE shares `statuses` + `igcse_*_classes`,
 // Checkpoint and AS/A-Level use prefixed variants like `checkpoint_math_statuses`
@@ -542,7 +560,7 @@ function renderChapters() {
   el.innerHTML = pageChapters.map((ch, localCi) => {
     const ci = localCi + pageOffset;
     const topics = ch.topics || [];
-    const yearCls = ch.year === YEAR_A ? 'yr9' : 'yr10';
+    const yearCls = YEAR_BADGE_BY_LABEL[ch.year] || (ch.year === YEAR_A ? 'yr9' : 'yr10');
     const topicsHtml = topics.length === 0
       ? '<div style="padding:10px 14px;font-size:.75rem;color:var(--ink-3)">No topics yet.</div>'
       : (() => {
@@ -669,7 +687,7 @@ window.openAddChapterModal = function() {
   _editChIdx = null;
   document.getElementById('chModalTitle').textContent = 'Add Chapter';
   document.getElementById('chNameInput').value = '';
-  document.getElementById('chYearInput').value = YEAR_A;
+  document.getElementById('chYearInput').value = YEARS[0].label;
   document.getElementById('chapterModal').style.display = 'flex';
   setTimeout(() => document.getElementById('chNameInput').focus(), 50);
 };
@@ -679,7 +697,7 @@ window.editChapter = function(ci) {
   const ch = chapters[ci];
   document.getElementById('chModalTitle').textContent = 'Edit Chapter';
   document.getElementById('chNameInput').value = ch.chapter || '';
-  document.getElementById('chYearInput').value = ch.year || YEAR_A;
+  document.getElementById('chYearInput').value = ch.year || YEARS[0].label;
   document.getElementById('chapterModal').style.display = 'flex';
   setTimeout(() => document.getElementById('chNameInput').focus(), 50);
 };
@@ -918,10 +936,14 @@ function renderProgressView() {
 
   function classMatchesYear(cls) {
     if (!selectedClass || selectedClass === 'default') return true;
-    const n = cls.replace(/\s/g, '').toLowerCase();
-    if (selectedClass === YEAR_A_KEY) return new RegExp('\\b' + YEAR_A.replace('Year ','') + '\\b').test(n.replace(/\s/g,''));
-    if (selectedClass === YEAR_B_KEY) return new RegExp('\\b' + YEAR_B.replace('Year ','') + '\\b').test(n.replace(/\s/g,''));
-    return true;
+    const label = YEAR_LABEL_BY_KEY[selectedClass];
+    if (!label) return true;
+    // Strip "Year " or "Class " prefixes from the label and look for the
+    // bare numeric token in the class name (e.g. "Class 7B" matches Year 7,
+    // "1A" matches Year 1). Word-boundary keeps "Year 1" from matching
+    // "Class 11A".
+    const num = label.replace(/^(Year|Class|Stage|Grade)\s+/i, '');
+    return new RegExp('\\b' + num + '\\b').test(cls.replace(/\s/g, ''));
   }
 
   const rows = [];
