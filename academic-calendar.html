@@ -296,6 +296,11 @@
     const firstDay  = new Date(year, month, 1).getDay();
     const lastDate  = new Date(year, month + 1, 0).getDate();
 
+    // Set of day-numbers (1..31) to glow because the user is hovering a
+    // foot-panel row. Empty Set = nothing hovered. Local to this month
+    // card so the two months in 2-month strip don't interfere.
+    const [hoveredDays, setHoveredDays] = useState(() => new Set());
+
     const cells = [];
     // Empty cells before the 1st
     for (let i = 0; i < firstDay; i++) {
@@ -341,6 +346,14 @@
           // Make the today outline visible against colored cells
           cellStyle.outline = "2px solid #fff";
           cellStyle.boxShadow = "0 0 0 2px #2563EB";
+        }
+        // Glow when the user hovers the matching foot-panel row
+        if (hoveredDays.has(d)) {
+          cellStyle.transform = "scale(1.10)";
+          cellStyle.zIndex = 3;
+          cellStyle.outline = `2px solid ${st.color}`;
+          cellStyle.outlineOffset = 2;
+          cellStyle.boxShadow = `0 6px 16px ${st.color}55, 0 0 0 4px ${st.color}33`;
         }
       }
 
@@ -398,8 +411,37 @@
                   if (sameMonth) dayLabel = `${day}-${endParts[2]}`;
                 }
                 const st = getEventStyle(ev);
+                // Compute every in-month day this event covers, so hover
+                // can light up multi-day spans (e.g. "23-25") all at once.
+                const covered = [];
+                const evStart = parseDate(ev.date_start);
+                const evEnd   = parseDate(ev.date_end || ev.date_start);
+                if (evStart && evEnd) {
+                  const cur = new Date(evStart);
+                  while (cur <= evEnd) {
+                    if (cur.getFullYear() === year && cur.getMonth() === month) covered.push(cur.getDate());
+                    cur.setDate(cur.getDate() + 1);
+                  }
+                }
                 return (
-                  <div key={`${day}-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, lineHeight: 1.4, padding: "4px 0" }}>
+                  <div
+                    key={`${day}-${i}`}
+                    onMouseEnter={() => setHoveredDays(new Set(covered))}
+                    onMouseLeave={() => setHoveredDays(new Set())}
+                    onClick={() => {
+                      const k = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                      const startEvts = byDay[k] || [];
+                      const contEvts  = contByDay[k] || [];
+                      onDayClick(k, [...startEvts, ...contEvts]);
+                    }}
+                    style={{
+                      display: "flex", gap: 8, alignItems: "flex-start",
+                      fontSize: 12.5, lineHeight: 1.4, padding: "4px 6px",
+                      borderRadius: 4, cursor: "pointer",
+                      background: covered.length && hoveredDays.has(day) ? "#F1F5F9" : "transparent",
+                      transition: "background 0.1s",
+                    }}
+                  >
                     <span style={{ fontWeight: 700, minWidth: 36, flexShrink: 0, color: st.color }}>{dayLabel}:</span>
                     <span style={{ color: "#0F172A", flex: 1 }}>{ev.title}</span>
                   </div>
