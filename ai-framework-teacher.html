@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Framework — Teacher · CentralHub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="firebase-config.js"></script>
+<style>
+:root {
+  --accent: #e67e22;
+  --accent-dk: #d35400;
+  --accent-2: #fef3e2;
+}
+
+/* AICF colour family (orange, distinct from CTS purple / ES cyan / SKL green / PIGP red) */
+.aicf-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--accent-2); color: var(--accent-dk);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; font-family: 'DM Sans', sans-serif;
+}
+
+/* Hero */
+.hero {
+  background: linear-gradient(135deg, #0a0a1a 0%, #2b1e10 55%, #0c1028 100%);
+  padding: 40px 40px 56px; position: relative; overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 12% 80%, rgba(230,126,34,0.22) 0%, transparent 48%),
+    radial-gradient(circle at 86% 20%, rgba(108,92,231,0.16) 0%, transparent 48%);
+}
+.hero-inner { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; }
+.hero-eyebrow {
+  font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.5);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;
+}
+.hero-title {
+  font-family: 'Lora', serif; font-size: 2rem; font-weight: 600;
+  color: #fff; margin-bottom: 8px; line-height: 1.2;
+}
+.hero-sub {
+  font-size: 0.9rem; color: rgba(255,255,255,0.6); max-width: 760px;
+  line-height: 1.6; margin-bottom: 22px;
+}
+.hero-meta {
+  font-size: 0.78rem; color: rgba(255,255,255,0.45);
+  margin-top: 12px;
+}
+
+/* Page wrap */
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 40px 80px; }
+
+/* Intro card */
+.intro-card {
+  background: #fff; border: 1px solid var(--border, #e5e0d8);
+  border-radius: 12px; padding: 22px 26px; margin-bottom: 28px;
+}
+.intro-card h2 {
+  font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 600;
+  color: var(--ink, #1c1c2e); margin: 0 0 10px 0;
+}
+.intro-card p {
+  font-size: 0.9rem; color: var(--ink-2, #44445a);
+  line-height: 1.65; margin: 0 0 8px 0;
+}
+
+/* Matrix */
+.matrix-section { margin-bottom: 36px; }
+.section-eyebrow {
+  font-size: 0.7rem; font-weight: 600; color: var(--accent-dk);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px;
+}
+.section-title {
+  font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600;
+  color: var(--ink, #1c1c2e); margin: 0 0 18px 0;
+}
+
+.matrix {
+  display: grid; grid-template-columns: 200px repeat(3, 1fr);
+  gap: 1px; background: var(--border, #e5e0d8);
+  border: 1px solid var(--border, #e5e0d8); border-radius: 12px;
+  overflow: hidden;
+}
+.matrix-cell {
+  background: #fff; padding: 16px 18px; min-height: 100px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.matrix-cell.header {
+  background: #fdf6ee; font-weight: 600; min-height: auto;
+  font-size: 0.85rem; color: var(--ink, #1c1c2e);
+  align-items: center; justify-content: center; text-align: center;
+  padding: 14px 12px;
+}
+.matrix-cell.domain-label {
+  background: #fdf6ee; font-weight: 600;
+  font-size: 0.85rem; color: var(--ink, #1c1c2e);
+  align-items: flex-start; justify-content: center;
+}
+.matrix-cell.body {
+  cursor: pointer; transition: background 0.15s;
+}
+.matrix-cell.body:hover {
+  background: var(--accent-2);
+}
+.cell-summary {
+  font-size: 0.82rem; color: var(--ink-2, #44445a);
+  line-height: 1.5; flex: 1;
+}
+.cell-refid {
+  font-size: 0.68rem; font-family: 'DM Mono', monospace;
+  color: var(--accent-dk); margin-top: auto;
+}
+
+/* Detail panel (right side) */
+.detail-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 480px;
+  background: #fff; border-left: 1px solid var(--border, #e5e0d8);
+  box-shadow: -8px 0 30px rgba(0,0,0,0.08);
+  transform: translateX(100%); transition: transform 0.25s ease;
+  overflow-y: auto; z-index: 200;
+}
+.detail-panel.open { transform: translateX(0); }
+.detail-head {
+  padding: 18px 24px 14px; border-bottom: 1px solid var(--border, #e5e0d8);
+  position: sticky; top: 0; background: #fff; z-index: 1;
+}
+.detail-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: 1px solid var(--border, #e5e0d8);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer;
+  font-size: 12px; color: var(--ink-2, #44445a);
+}
+.detail-title {
+  font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600;
+  color: var(--accent-dk); margin: 8px 0 4px 0;
+}
+.detail-refid {
+  font-size: 0.72rem; font-family: 'DM Mono', monospace;
+  color: var(--ink-3, #8888a8);
+}
+.detail-body {
+  padding: 20px 24px 40px;
+}
+.detail-body p {
+  font-size: 0.92rem; line-height: 1.65;
+  color: var(--ink, #1c1c2e); margin: 0 0 12px 0;
+}
+.detail-meta {
+  background: #fdf6ee; border-radius: 8px;
+  padding: 12px 14px; margin-top: 16px;
+  font-size: 0.8rem; color: var(--ink-2, #44445a);
+  line-height: 1.55;
+}
+.detail-meta strong { color: var(--accent-dk); }
+
+/* Loading + empty states */
+.loading {
+  padding: 40px; text-align: center;
+  color: var(--ink-3, #8888a8); font-size: 0.9rem;
+}
+
+/* Sources block */
+.sources-block {
+  margin-top: 36px; padding: 22px 26px;
+  background: #fdf6ee; border-radius: 12px;
+  border: 1px solid var(--accent-2);
+}
+.sources-block h3 {
+  font-family: 'Lora', serif; font-size: 1rem; font-weight: 600;
+  color: var(--accent-dk); margin: 0 0 10px 0;
+}
+.sources-block ul {
+  margin: 0; padding-left: 20px;
+  font-size: 0.82rem; color: var(--ink-2, #44445a);
+  line-height: 1.7;
+}
+.sources-block a {
+  color: var(--accent-dk); text-decoration: none;
+}
+.sources-block a:hover { text-decoration: underline; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .matrix { grid-template-columns: 1fr; }
+  .matrix-cell.header, .matrix-cell.domain-label { display: none; }
+  .matrix-cell.body { border-left: 3px solid var(--accent); }
+  .detail-panel { width: 100%; }
+}
+</style>
+</head>
+<body>
+<!-- SHARED_NAVBAR -->
+<script type="module" src="auth-guard.js"></script>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">AI Competency Framework v1.0</div>
+    <h1 class="hero-title">Teacher AI Competency Framework</h1>
+    <p class="hero-sub">
+      Three progression levels (Foundation, Practitioner, Leader) across five domains.
+      Click any cell to see the verbatim canonical descriptor. Use for self-assessment,
+      professional development planning, and line-manager validation.
+    </p>
+    <div class="hero-meta">
+      Eduversal AI Competency Framework v1.0 · Approved by Eduversal Academic Directorate ·
+      Companion playbook: <a href="/handbook?id=aicf-teacher-playbook" style="color:rgba(255,255,255,0.7);">Teacher Playbook</a>
+    </div>
+  </div>
+</header>
+
+<main class="page-wrap">
+  <section class="intro-card">
+    <h2>How to use this page</h2>
+    <p>
+      All teaching staff are expected to achieve <strong>Foundation</strong> level within the
+      first year of framework implementation. <strong>Practitioner</strong> level reflects
+      proficient AI integration. <strong>Leader</strong> level represents advanced expertise
+      and is a specialist contribution — not all teachers are expected to reach it.
+    </p>
+    <p>
+      The matrix below shows what is expected at each level for each domain. Click a cell
+      to read the verbatim descriptor. The descriptors are the source of truth for annual
+      self-assessment.
+    </p>
+  </section>
+
+  <section class="matrix-section">
+    <div class="section-eyebrow">Competency Matrix</div>
+    <h2 class="section-title">3 Levels × 5 Domains</h2>
+
+    <div class="matrix" id="matrix">
+      <div class="matrix-cell header"></div>
+      <div class="matrix-cell header">Foundation</div>
+      <div class="matrix-cell header">Practitioner</div>
+      <div class="matrix-cell header">Leader</div>
+
+      <!-- Domain A -->
+      <div class="matrix-cell domain-label">Domain A<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Knowledge &amp; Understanding</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainA">
+        <div class="cell-summary">Understands AI basics, key limitations (hallucination, bias), and ethical considerations. Knows the school's AI policy.</div>
+        <span class="aicf-tag">Foundation · A</span>
+        <div class="cell-refid">teacher.foundation.domainA</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainA">
+        <div class="cell-summary">Deeper understanding of how LLMs work. Stays current with developments. Can explain AI to students and parents.</div>
+        <span class="aicf-tag">Practitioner · A</span>
+        <div class="cell-refid">teacher.practitioner.domainA</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainA">
+        <div class="cell-summary">Comprehensive understanding. Engages with technical concepts and research literature. Anticipates future developments.</div>
+        <span class="aicf-tag">Leader · A</span>
+        <div class="cell-refid">teacher.leader.domainA</div>
+      </div>
+
+      <!-- Domain B -->
+      <div class="matrix-cell domain-label">Domain B<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Practical Application</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainB">
+        <div class="cell-summary">Uses approved tools for lesson planning, materials creation, admin tasks. Reviews AI outputs before use. Follows data privacy.</div>
+        <span class="aicf-tag">Foundation · B</span>
+        <div class="cell-refid">teacher.foundation.domainB</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainB">
+        <div class="cell-summary">Advanced prompt engineering. Uses AI across differentiation, rubrics, feedback templates. Troubleshoots when outputs aren't right.</div>
+        <span class="aicf-tag">Practitioner · B</span>
+        <div class="cell-refid">teacher.practitioner.domainB</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainB">
+        <div class="cell-summary">Expert-level skills. Designs complex AI-enhanced workflows. Evaluates tools for school adoption. Develops resources for colleagues.</div>
+        <span class="aicf-tag">Leader · B</span>
+        <div class="cell-refid">teacher.leader.domainB</div>
+      </div>
+
+      <!-- Domain C -->
+      <div class="matrix-cell domain-label">Domain C<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Pedagogical Integration</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainC">
+        <div class="cell-summary">Uses AI materials to support learning objectives. Remains the instructional decision-maker. Can explain AI use to students.</div>
+        <span class="aicf-tag">Foundation · C</span>
+        <div class="cell-refid">teacher.foundation.domainC</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainC">
+        <div class="cell-summary">Integrates AI strategically for differentiation. Designs learning that leverages AI while maintaining rigour. Teaches students responsible use.</div>
+        <span class="aicf-tag">Practitioner · C</span>
+        <div class="cell-refid">teacher.practitioner.domainC</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainC">
+        <div class="cell-summary">Designs innovative AI-enhanced learning. Develops curriculum materials for the school/network. Mentors colleagues. Leads student AI literacy work.</div>
+        <span class="aicf-tag">Leader · C</span>
+        <div class="cell-refid">teacher.leader.domainC</div>
+      </div>
+
+      <!-- Domain D -->
+      <div class="matrix-cell domain-label">Domain D<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Critical Evaluation</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainD">
+        <div class="cell-summary">Fact-checks AI content. Spots obvious errors, false citations, cultural bias. Doesn't accept AI uncritically.</div>
+        <span class="aicf-tag">Foundation · D</span>
+        <div class="cell-refid">teacher.foundation.domainD</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainD">
+        <div class="cell-summary">Sophisticated evaluation — accuracy, depth, nuance, pedagogical fit. Spots subtle bias. Handles AI integrity concerns without false accusations.</div>
+        <span class="aicf-tag">Practitioner · D</span>
+        <div class="cell-refid">teacher.practitioner.domainD</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainD">
+        <div class="cell-summary">Contributes to school/network evaluation of tools, policies, integration outcomes. Leads ethical discussions. Advises leadership on emerging risks.</div>
+        <span class="aicf-tag">Leader · D</span>
+        <div class="cell-refid">teacher.leader.domainD</div>
+      </div>
+
+      <!-- Domain E -->
+      <div class="matrix-cell domain-label">Domain E<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Professional Contribution</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainE">
+        <div class="cell-summary">Engages with school AI initiatives. Shares basic tips with immediate colleagues. Asks for support when uncertain.</div>
+        <span class="aicf-tag">Foundation · E</span>
+        <div class="cell-refid">teacher.foundation.domainE</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainE">
+        <div class="cell-summary">Actively shares effective practices. Contributes to department/school discussions. Supports less experienced colleagues. Participates in PLCs.</div>
+        <span class="aicf-tag">Practitioner · E</span>
+        <div class="cell-refid">teacher.practitioner.domainE</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainE">
+        <div class="cell-summary">Leads PD sessions at school/network level. Contributes to AI policy development. Represents the school externally. Documents and shares effective practices.</div>
+        <span class="aicf-tag">Leader · E</span>
+        <div class="cell-refid">teacher.leader.domainE</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sources-block">
+    <h3>Companion resources</h3>
+    <ul>
+      <li><a href="/handbook?id=aicf-teacher-playbook">Teacher Playbook</a> — Practical workflows for subject teachers and subject leaders.</li>
+      <li><a href="/handbook?id=aicf-prompt-library">AI Prompt Library</a> — Copy-paste prompts organised by task category.</li>
+      <li><a href="/handbook?id=aicf-red-lines">AI Red Lines</a> — Network-wide unconditional no-go list.</li>
+      <li><a href="/handbook?id=aicf-decision-trees">AI Decision Trees</a> — Step-by-step guidance for ambiguous situations.</li>
+      <li><a href="/handbook?id=aicf-weekly-tips">AI Weekly Tips</a> — One small idea per week across 34 effective weeks.</li>
+      <li><a href="/ai-framework-student">Student AI Competency Framework</a> — Age-appropriate learning outcomes (Part 2).</li>
+      <li><a href="/ai-framework-institutional">Institutional AI Maturity Framework</a> — School-level assessment (Part 3).</li>
+    </ul>
+  </section>
+</main>
+
+<!-- Detail panel (slides in from right when a cell is clicked) -->
+<aside class="detail-panel" id="detailPanel">
+  <div class="detail-head">
+    <button class="detail-close" onclick="closeDetail()">✕</button>
+    <div class="aicf-tag" id="detailBadge">AICF · Teacher</div>
+    <div class="detail-title" id="detailTitle">—</div>
+    <div class="detail-refid" id="detailRefId">—</div>
+  </div>
+  <div class="detail-body">
+    <div id="detailBody" class="loading">Click a cell to see the verbatim descriptor.</div>
+  </div>
+</aside>
+
+<script>
+let referenceData = null;
+
+async function loadReference() {
+  try {
+    const res = await fetch('/research/eduversal/ai-competency-framework/reference/eduversal-v1-part1-teacher.json', { cache: 'force-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    referenceData = await res.json();
+  } catch (err) {
+    console.warn('[ai-framework-teacher] reference load failed', err);
+  }
+}
+
+function findByRefId(node, target) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.refId === target) return node;
+  for (const key of Object.keys(node)) {
+    if (key.startsWith('_')) continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const hit = findByRefId(item, target);
+        if (hit) return hit;
+      }
+    } else if (child && typeof child === 'object') {
+      const hit = findByRefId(child, target);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+async function openDetail(ref) {
+  const panel = document.getElementById('detailPanel');
+  const body = document.getElementById('detailBody');
+  const title = document.getElementById('detailTitle');
+  const refIdEl = document.getElementById('detailRefId');
+
+  panel.classList.add('open');
+  body.innerHTML = '<div class="loading">Loading…</div>';
+  title.textContent = '—';
+  refIdEl.textContent = ref;
+
+  if (!referenceData) await loadReference();
+  if (!referenceData) {
+    body.innerHTML = '<p style="color:#8888a8;">Reference layer not available. Check that build.js has copied the JSON to /research/eduversal/ai-competency-framework/reference/.</p>';
+    return;
+  }
+
+  const node = findByRefId(referenceData, ref);
+  if (!node) {
+    body.innerHTML = '<p style="color:#8888a8;">No matching block found for ' + escHtml(ref) + '.</p>';
+    return;
+  }
+
+  title.textContent = node.title || ref;
+
+  let html = '';
+  if (Array.isArray(node.verbatim)) {
+    html = node.verbatim.map(p => '<p>' + escHtml(p) + '</p>').join('');
+  } else if (typeof node.verbatim === 'string') {
+    html = '<p>' + escHtml(node.verbatim) + '</p>';
+  } else if (node.summary) {
+    html = '<p>' + escHtml(node.summary) + '</p>';
+  } else {
+    html = '<p style="color:#8888a8;">(No verbatim text in this block.)</p>';
+  }
+
+  if (node.expectedTimeline) {
+    html += '<div class="detail-meta"><strong>Expected timeline:</strong> ' + escHtml(node.expectedTimeline) + '</div>';
+  }
+
+  body.innerHTML = html;
+
+  // Update URL hash for deep-linking
+  if (window.history && window.history.replaceState) {
+    const newUrl = window.location.pathname + '?ref=' + encodeURIComponent(ref);
+    window.history.replaceState({}, '', newUrl);
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
+// Wire matrix cells
+document.querySelectorAll('.matrix-cell.body').forEach(cell => {
+  cell.addEventListener('click', () => {
+    const ref = cell.dataset.ref;
+    if (ref) openDetail(ref);
+  });
+});
+
+// Deep-link support: ?ref=teacher.foundation.domainA opens that cell on load
+document.addEventListener('authReady', () => {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('ref');
+  if (ref) openDetail(ref);
+});
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDetail();
+});
+</script>
+</body>
+</html>

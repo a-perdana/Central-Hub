@@ -1,0 +1,3414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Framework — Teacher · CentralHub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="firebase-config.js"></script>
+  <link rel="stylesheet" href="shared-styles.css">
+
+<style>
+:root {
+  --accent: #e67e22;
+  --accent-dk: #d35400;
+  --accent-2: #fef3e2;
+}
+
+/* AICF colour family (orange, distinct from CTS purple / ES cyan / SKL green / PIGP red) */
+.aicf-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--accent-2); color: var(--accent-dk);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; font-family: 'DM Sans', sans-serif;
+}
+
+/* Hero */
+.hero {
+  background: linear-gradient(135deg, #0a0a1a 0%, #2b1e10 55%, #0c1028 100%);
+  padding: 40px 40px 56px; position: relative; overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 12% 80%, rgba(230,126,34,0.22) 0%, transparent 48%),
+    radial-gradient(circle at 86% 20%, rgba(108,92,231,0.16) 0%, transparent 48%);
+}
+.hero-inner { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; }
+.hero-eyebrow {
+  font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.5);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;
+}
+.hero-title {
+  font-family: 'Lora', serif; font-size: 2rem; font-weight: 600;
+  color: #fff; margin-bottom: 8px; line-height: 1.2;
+}
+.hero-sub {
+  font-size: 0.9rem; color: rgba(255,255,255,0.6); max-width: 760px;
+  line-height: 1.6; margin-bottom: 22px;
+}
+.hero-meta {
+  font-size: 0.78rem; color: rgba(255,255,255,0.45);
+  margin-top: 12px;
+}
+
+/* Page wrap */
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 40px 80px; }
+
+/* Intro card */
+.intro-card {
+  background: #fff; border: 1px solid var(--border, #e5e0d8);
+  border-radius: 12px; padding: 22px 26px; margin-bottom: 28px;
+}
+.intro-card h2 {
+  font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 600;
+  color: var(--ink, #1c1c2e); margin: 0 0 10px 0;
+}
+.intro-card p {
+  font-size: 0.9rem; color: var(--ink-2, #44445a);
+  line-height: 1.65; margin: 0 0 8px 0;
+}
+
+/* Matrix */
+.matrix-section { margin-bottom: 36px; }
+.section-eyebrow {
+  font-size: 0.7rem; font-weight: 600; color: var(--accent-dk);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px;
+}
+.section-title {
+  font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600;
+  color: var(--ink, #1c1c2e); margin: 0 0 18px 0;
+}
+
+.matrix {
+  display: grid; grid-template-columns: 200px repeat(3, 1fr);
+  gap: 1px; background: var(--border, #e5e0d8);
+  border: 1px solid var(--border, #e5e0d8); border-radius: 12px;
+  overflow: hidden;
+}
+.matrix-cell {
+  background: #fff; padding: 16px 18px; min-height: 100px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.matrix-cell.header {
+  background: #fdf6ee; font-weight: 600; min-height: auto;
+  font-size: 0.85rem; color: var(--ink, #1c1c2e);
+  align-items: center; justify-content: center; text-align: center;
+  padding: 14px 12px;
+}
+.matrix-cell.domain-label {
+  background: #fdf6ee; font-weight: 600;
+  font-size: 0.85rem; color: var(--ink, #1c1c2e);
+  align-items: flex-start; justify-content: center;
+}
+.matrix-cell.body {
+  cursor: pointer; transition: background 0.15s;
+}
+.matrix-cell.body:hover {
+  background: var(--accent-2);
+}
+.cell-summary {
+  font-size: 0.82rem; color: var(--ink-2, #44445a);
+  line-height: 1.5; flex: 1;
+}
+.cell-refid {
+  font-size: 0.68rem; font-family: 'DM Mono', monospace;
+  color: var(--accent-dk); margin-top: auto;
+}
+
+/* Detail panel (right side) */
+.detail-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 480px;
+  background: #fff; border-left: 1px solid var(--border, #e5e0d8);
+  box-shadow: -8px 0 30px rgba(0,0,0,0.08);
+  transform: translateX(100%); transition: transform 0.25s ease;
+  overflow-y: auto; z-index: 200;
+}
+.detail-panel.open { transform: translateX(0); }
+.detail-head {
+  padding: 18px 24px 14px; border-bottom: 1px solid var(--border, #e5e0d8);
+  position: sticky; top: 0; background: #fff; z-index: 1;
+}
+.detail-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: 1px solid var(--border, #e5e0d8);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer;
+  font-size: 12px; color: var(--ink-2, #44445a);
+}
+.detail-title {
+  font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600;
+  color: var(--accent-dk); margin: 8px 0 4px 0;
+}
+.detail-refid {
+  font-size: 0.72rem; font-family: 'DM Mono', monospace;
+  color: var(--ink-3, #8888a8);
+}
+.detail-body {
+  padding: 20px 24px 40px;
+}
+.detail-body p {
+  font-size: 0.92rem; line-height: 1.65;
+  color: var(--ink, #1c1c2e); margin: 0 0 12px 0;
+}
+.detail-meta {
+  background: #fdf6ee; border-radius: 8px;
+  padding: 12px 14px; margin-top: 16px;
+  font-size: 0.8rem; color: var(--ink-2, #44445a);
+  line-height: 1.55;
+}
+.detail-meta strong { color: var(--accent-dk); }
+
+/* Loading + empty states */
+.loading {
+  padding: 40px; text-align: center;
+  color: var(--ink-3, #8888a8); font-size: 0.9rem;
+}
+
+/* Sources block */
+.sources-block {
+  margin-top: 36px; padding: 22px 26px;
+  background: #fdf6ee; border-radius: 12px;
+  border: 1px solid var(--accent-2);
+}
+.sources-block h3 {
+  font-family: 'Lora', serif; font-size: 1rem; font-weight: 600;
+  color: var(--accent-dk); margin: 0 0 10px 0;
+}
+.sources-block ul {
+  margin: 0; padding-left: 20px;
+  font-size: 0.82rem; color: var(--ink-2, #44445a);
+  line-height: 1.7;
+}
+.sources-block a {
+  color: var(--accent-dk); text-decoration: none;
+}
+.sources-block a:hover { text-decoration: underline; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .matrix { grid-template-columns: 1fr; }
+  .matrix-cell.header, .matrix-cell.domain-label { display: none; }
+  .matrix-cell.body { border-left: 3px solid var(--accent); }
+  .detail-panel { width: 100%; }
+}
+</style>
+</head>
+<body>
+<style>
+  .btn-my-tasks {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .btn-my-tasks:hover { color: #fff; border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); }
+
+  .nav-my-tasks { position: relative; }
+
+  .my-tasks-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 340px;
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(28,28,46,0.18);
+    z-index: 9999;
+    overflow: hidden;
+  }
+  .my-tasks-dropdown.open { display: block; }
+
+  .mtd-header {
+    padding: 11px 16px 9px;
+    border-bottom: 1px solid #ece9e3;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #8888a8;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+
+  .mtd-list { max-height: 360px; overflow-y: auto; }
+
+  .mtd-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #f4f1ec;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .mtd-item:last-child { border-bottom: none; }
+  .mtd-item:hover { background: #f7f6f3; }
+
+  .mtd-task-name {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #1c1c2e;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mtd-board {
+    font-size: 0.73rem;
+    color: #8888a8;
+    flex-shrink: 0;
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mtd-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .mtd-empty {
+    padding: 22px 16px;
+    font-size: 0.84rem;
+    color: #8888a8;
+    text-align: center;
+  }
+
+  .mtd-footer {
+    padding: 9px 16px;
+    border-top: 1px solid #ece9e3;
+    text-align: center;
+  }
+  .mtd-footer a {
+    font-size: 0.82rem;
+    color: #0891b2;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .mtd-footer a:hover { text-decoration: underline; }
+
+  /* ===== Notifications Bell ===== */
+  .nav-notifications { position: relative; }
+
+  .btn-notif {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    color: rgba(255,255,255,0.7);
+    flex-shrink: 0;
+  }
+  .btn-notif:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3); color: #fff; }
+
+  .notif-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .notif-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 360px;
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(28,28,46,0.18);
+    z-index: 9999;
+    overflow: hidden;
+  }
+  .notif-dropdown.open { display: block; }
+
+  .nd-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px 9px;
+    border-bottom: 1px solid #ece9e3;
+  }
+  .nd-header-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #8888a8;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+  .nd-header-since {
+    font-size: 0.68rem;
+    color: #aaa9c0;
+  }
+
+  .nd-list { max-height: 380px; overflow-y: auto; }
+
+  .nd-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #f4f1ec;
+    text-decoration: none;
+    transition: background 0.12s;
+  }
+  .nd-item:last-child { border-bottom: none; }
+  .nd-item:hover { background: #f7f6f3; }
+
+  .nd-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .nd-icon.ic-ann  { background: #e0f2fe; color: #0891b2; }
+  .nd-icon.ic-doc  { background: #f0fdf4; color: #16a34a; }
+  .nd-icon.ic-msg  { background: #faf5ff; color: #7c3aed; }
+
+  .nd-body { flex: 1; min-width: 0; }
+  .nd-title {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #1c1c2e;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nd-meta {
+    font-size: 0.72rem;
+    color: #8888a8;
+    margin-top: 1px;
+  }
+
+  .nd-empty {
+    padding: 28px 16px;
+    font-size: 0.84rem;
+    color: #8888a8;
+    text-align: center;
+  }
+  .nd-empty-icon { font-size: 1.5rem; margin-bottom: 6px; }
+
+  /* ===== GLOBAL SEARCH ===== */
+  .search-bar-wrap {
+    position: relative;
+    flex: 1 1 200px;
+    min-width: 200px;
+    max-width: 420px;
+  }
+  .search-bar-input {
+    width: 100%;
+    height: 36px;
+    padding: 0 36px 0 38px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    font-family: "DM Sans", sans-serif;
+    font-size: 0.855rem;
+    color: #fff;
+    outline: none;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .search-bar-input::placeholder { color: rgba(255,255,255,0.38); }
+  .search-bar-input:focus {
+    background: rgba(255,255,255,0.13);
+    border-color: rgba(8,145,178,0.7);
+  }
+  .search-bar-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255,255,255,0.38);
+    pointer-events: none;
+  }
+  .search-bar-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.38);
+    cursor: pointer;
+    padding: 2px;
+    display: none;
+    line-height: 1;
+  }
+  .search-bar-clear:hover { color: rgba(255,255,255,0.7); }
+  .search-bar-clear.visible { display: flex; align-items: center; }
+
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    min-width: 480px;
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(28,28,46,0.22);
+    z-index: 9999;
+    overflow: hidden;
+    display: none;
+    max-height: 520px;
+    overflow-y: auto;
+  }
+  .search-dropdown.open { display: block; }
+
+  .search-dd-header {
+    padding: 10px 16px 8px;
+    border-bottom: 1px solid #f4f1ec;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+  }
+  .search-dd-query { font-size: 0.78rem; color: #8888a8; }
+  .search-dd-query strong { color: #1c1c2e; }
+  .search-dd-count { font-size: 0.75rem; color: #8888a8; font-variant-numeric: tabular-nums; }
+
+  .search-dd-section { padding: 6px 0 2px; }
+  .search-dd-section-label {
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #8888a8;
+    padding: 4px 16px 4px;
+  }
+
+  .search-result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.12s ease;
+    cursor: pointer;
+  }
+  .search-result-item:hover,
+  .search-result-item.focused { background: #f7f6f3; }
+  .sri-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .sri-body { flex: 1; min-width: 0; }
+  .sri-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #1c1c2e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sri-title mark { background: #fef08a; color: #1c1c2e; border-radius: 2px; padding: 0 1px; }
+  .sri-meta {
+    font-size: 0.75rem;
+    color: #8888a8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+  .sri-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .search-dd-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: #8888a8;
+    font-size: 0.875rem;
+  }
+  .search-dd-empty svg { margin-bottom: 8px; opacity: 0.4; }
+
+  .search-dd-loading {
+    padding: 24px 16px;
+    text-align: center;
+    color: #8888a8;
+    font-size: 0.855rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .search-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #e0ddd6;
+    border-top-color: #0891b2;
+    border-radius: 50%;
+    animation: srch-spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes srch-spin { to { transform: rotate(360deg); } }
+
+  .search-dd-divider { height: 1px; background: #f4f1ec; margin: 2px 0; }
+
+  .search-dd-footer {
+    padding: 8px 16px;
+    border-top: 1px solid #f4f1ec;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f7f6f3;
+  }
+  .search-dd-footer-hint {
+    font-size: 0.72rem;
+    color: #8888a8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .search-kbd { display: inline-flex; align-items: center; gap: 3px; font-size: 0.68rem; color: #8888a8; }
+  .search-kbd kbd {
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: "DM Mono", monospace;
+    font-size: 0.68rem;
+    color: #6b6b8a;
+  }
+
+  @media (max-width: 1100px) {
+    .search-bar-wrap { max-width: 100%; }
+    .search-dropdown { min-width: 320px; left: auto; right: 0; }
+  }
+
+  /* ===== MOBILE NAV ===== */
+  .nav-hamburger {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    color: rgba(255,255,255,0.7);
+    flex-shrink: 0;
+    transition: color 0.2s ease, background 0.2s ease;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav-hamburger:hover { color: #fff; background: rgba(255,255,255,0.08); }
+
+  .mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .mobile-nav-overlay.open { opacity: 1; }
+
+  .mobile-nav-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(280px, 85vw);
+    height: 100%;
+    background: #0f0f1e;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+  }
+  .mobile-nav-overlay.open .mobile-nav-drawer { transform: translateX(0); }
+
+  .mobile-nav-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+  .mobile-nav-brand { font-size: 0.95rem; font-weight: 600; color: #fff; letter-spacing: -0.02em; }
+  .mobile-nav-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: rgba(255,255,255,0.55);
+    padding: 4px;
+    border-radius: 6px;
+    transition: color 0.2s ease;
+  }
+  .mobile-nav-close:hover { color: #fff; }
+
+  .mobile-nav-links { display: flex; flex-direction: column; padding: 8px 0 20px; flex: 1; }
+
+  /* Category section */
+  .mob-nav-section { margin-bottom: 4px; }
+  .mob-nav-section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 9px 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    transition: color 0.2s ease;
+  }
+  .mob-nav-section-toggle:hover { color: rgba(255,255,255,0.6); }
+  .mob-nav-section-toggle svg { transition: transform 0.2s ease; flex-shrink: 0; }
+  .mob-nav-section.open .mob-nav-section-toggle svg { transform: rotate(180deg); }
+  .mob-nav-section-body { display: none; }
+  .mob-nav-section.open .mob-nav-section-body { display: block; }
+
+  /* Sub-header inside a section */
+  .mob-nav-subheader {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.22);
+    padding: 10px 24px 4px;
+  }
+  .mob-nav-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.07);
+    margin: 6px 20px;
+  }
+
+  .mobile-nav-link {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.65);
+    text-decoration: none;
+    padding: 9px 28px;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+  .mobile-nav-link:hover, .mobile-nav-link.active { color: #fff; background: rgba(255,255,255,0.06); }
+
+  /* Top-level direct links (Dashboard, ext links) */
+  .mob-nav-top-link {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.65);
+    text-decoration: none;
+    padding: 9px 20px;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+  .mob-nav-top-link:hover, .mob-nav-top-link.active { color: #fff; background: rgba(255,255,255,0.06); }
+
+  /* ===== BASE NAV STYLES (shared across all pages) ===== */
+  .top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: 62px;
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    background: rgba(5, 5, 16, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .nav-brand-img {
+    height: 28px; width: auto; display: block; flex-shrink: 0;
+    filter: drop-shadow(0 2px 10px rgba(109, 40, 217, 0.45));
+  }
+  .nav-brand-divider {
+    width: 1px; height: 22px;
+    background: rgba(255,255,255,0.18);
+    flex-shrink: 0;
+  }
+  .nav-brand-name {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .nav-link {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+  .nav-link:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+  .nav-link.active { color: #fff; background: rgba(255, 255, 255, 0.1); }
+  .nav-auth {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .nav-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #0891b2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    user-select: none;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+  }
+  .nav-avatar:hover { opacity: 0.85; }
+
+  /* ===== CH DROPDOWN MENUS ===== */
+  .ch-dd-wrap { position: relative; }
+  .ch-dd-trigger {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.875rem; font-weight: 500;
+    color: rgba(255,255,255,0.6);
+    padding: 6px 11px; border-radius: 6px;
+    border: none; background: transparent; cursor: pointer;
+    white-space: nowrap; transition: color .2s, background .2s;
+    font-family: 'DM Sans', sans-serif;
+    user-select: none;
+  }
+  .ch-dd-trigger:hover,
+  .ch-dd-wrap.open .ch-dd-trigger { color: #fff; background: rgba(255,255,255,0.07); }
+  .ch-dd-trigger.active { color: #fff; background: rgba(255,255,255,0.1); }
+  .ch-dd-caret { width: 12px; height: 12px; flex-shrink: 0; transition: transform .2s; }
+  .ch-dd-wrap.open .ch-dd-caret { transform: rotate(180deg); }
+
+  .ch-dd-panel {
+    display: none;
+    position: absolute; top: calc(100% + 6px); left: 0;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(28,28,46,0.18);
+    padding: 6px; z-index: 9999;
+    animation: chDdOpen .16s cubic-bezier(.34,1.2,.64,1) both;
+  }
+  @keyframes chDdOpen {
+    from { opacity:0; transform:translateY(-6px) scale(.97); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+  .ch-dd-wrap.open .ch-dd-panel { display: block; }
+
+  .ch-dd-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-radius: 7px;
+    color: #1c1c2e; font-family: 'DM Sans', sans-serif;
+    font-size: 0.855rem; font-weight: 500;
+    text-decoration: none; white-space: nowrap;
+    transition: background .12s;
+  }
+  .ch-dd-item svg { width: 14px; height: 14px; flex-shrink: 0; color: #8888a8; transition: color .12s; }
+  .ch-dd-item:hover { background: #f7f6f3; }
+  .ch-dd-item:hover svg { color: #1c1c2e; }
+  .ch-dd-item.active { background: #eef2ff; color: #4338ca; }
+  .ch-dd-item.active svg { color: #4338ca; }
+
+  .ch-dd-divider { height: 1px; background: #f4f1ec; margin: 4px 0; }
+
+  /* Wide 2-column panel */
+  /* Wide panel — Admin + Curriculum panels carry 4 columns each.
+     480px floored item labels at ~110px which truncated 'Orientation
+     Admin', 'Competency Admin', 'Principal Coaching'. 600px gives
+     ~140px per column, enough headroom for every current label. */
+  .ch-dd-panel--wide  { min-width: 600px; }
+  /* xwide: 4-column layouts (Performance & PD, Admin). 820px gives
+     ~205px per column — enough to fit "Students Hub Assessment"
+     headers + the longest current label ("Eduversal Standards ↗"
+     / "Mentor Certification ↗") on one line, no wrapping. */
+  .ch-dd-panel--xwide { min-width: 820px; }
+  .ch-dd-col-group { display: flex; }
+  .ch-dd-col { flex: 1; min-width: 0; padding: 0 4px; }
+  .ch-dd-col-header {
+    padding: 6px 10px 3px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: #8888a8;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .ch-dd-col-divider { width: 1px; background: #f4f1ec; margin: 6px 2px; flex-shrink: 0; }
+
+  /* ===== Cascading submenu (hover-activated) ===== */
+  .ch-dd-submenu-wrap { position: relative; }
+  .ch-dd-submenu-trigger {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-radius: 7px;
+    color: #1c1c2e; font-family: 'DM Sans', sans-serif;
+    font-size: 0.855rem; font-weight: 500;
+    cursor: pointer; white-space: nowrap;
+    transition: background .12s;
+    user-select: none;
+  }
+  .ch-dd-submenu-trigger > svg.submenu-icon {
+    width: 14px; height: 14px; flex-shrink: 0;
+    color: #8888a8; transition: color .12s;
+  }
+  .ch-dd-submenu-trigger > .submenu-label { flex: 1; min-width: 0; }
+  .ch-dd-submenu-trigger > .submenu-caret {
+    width: 12px; height: 12px; flex-shrink: 0;
+    color: #8888a8; transition: transform .15s, color .12s;
+  }
+  .ch-dd-submenu-wrap:hover > .ch-dd-submenu-trigger,
+  .ch-dd-submenu-wrap.open > .ch-dd-submenu-trigger {
+    background: #f7f6f3;
+  }
+  .ch-dd-submenu-wrap:hover > .ch-dd-submenu-trigger > svg.submenu-icon,
+  .ch-dd-submenu-wrap:hover > .ch-dd-submenu-trigger > .submenu-caret,
+  .ch-dd-submenu-wrap.open > .ch-dd-submenu-trigger > svg.submenu-icon,
+  .ch-dd-submenu-wrap.open > .ch-dd-submenu-trigger > .submenu-caret {
+    color: #1c1c2e;
+  }
+  .ch-dd-submenu-wrap:hover > .ch-dd-submenu-trigger > .submenu-caret,
+  .ch-dd-submenu-wrap.open > .ch-dd-submenu-trigger > .submenu-caret {
+    transform: translateX(2px);
+  }
+  /* When current page lives inside this submenu */
+  .ch-dd-submenu-trigger.has-active {
+    background: #eef2ff;
+    color: #4338ca;
+  }
+  .ch-dd-submenu-trigger.has-active > svg.submenu-icon,
+  .ch-dd-submenu-trigger.has-active > .submenu-caret { color: #4338ca; }
+
+  .ch-dd-submenu-panel {
+    display: none;
+    position: absolute;
+    top: -6px;
+    /* Touch the trigger edge — no gap — so the mouse never crosses dead space */
+    left: 100%;
+    margin-left: 4px;
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid #e0ddd6;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(28,28,46,0.18);
+    padding: 6px;
+    z-index: 10000;
+  }
+  /* Invisible hover-bridge that fills the visual 4px gap so :hover never breaks */
+  .ch-dd-submenu-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -8px;       /* covers the 4px margin plus a small extension */
+    width: 12px;
+  }
+  /* Flip to the left side if there isn't enough room on the right */
+  .ch-dd-submenu-wrap.flip-left > .ch-dd-submenu-panel {
+    left: auto;
+    right: 100%;
+    margin-left: 0;
+    margin-right: 4px;
+  }
+  .ch-dd-submenu-wrap.flip-left > .ch-dd-submenu-panel::before {
+    left: auto;
+    right: -8px;
+  }
+  .ch-dd-submenu-wrap:hover > .ch-dd-submenu-panel,
+  .ch-dd-submenu-wrap.open > .ch-dd-submenu-panel { display: block; }
+
+  /* In edit mode: keep submenu panels open and disable hover-only behaviour
+     so admins can drag items around without the panel flickering closed. */
+  .nav-edit-mode .ch-dd-submenu-panel {
+    display: block !important;
+    position: static;
+    box-shadow: none;
+    border: 1px dashed #e0ddd6;
+    margin: 4px 0 4px 16px;
+    animation: none;
+    min-width: 0;
+    min-height: 28px; /* keep an empty submenu droppable */
+  }
+  .nav-edit-mode .ch-dd-submenu-trigger { cursor: default; }
+  .nav-edit-mode .ch-dd-submenu-trigger > .submenu-caret { display: none; }
+  /* In edit mode, the submenu wrap itself is draggable for reordering */
+  .nav-edit-mode .ch-dd-submenu-wrap[draggable="true"] { cursor: grab; }
+  .nav-edit-mode .ch-dd-submenu-wrap.dragging { opacity: 0.4; }
+  .nav-edit-mode .ch-dd-submenu-wrap.drag-over > .ch-dd-submenu-trigger {
+    border-top: 2px solid #fbbf24;
+  }
+  /* Editable label inside submenu trigger */
+  .nav-edit-mode .ch-dd-submenu-trigger .submenu-label {
+    outline: none;
+    border-bottom: 1px solid #fbbf24;
+    cursor: text;
+    background: transparent;
+  }
+  /* Delete (×) button on submenu trigger, only visible in edit mode */
+  .submenu-delete {
+    display: none;
+    width: 20px; height: 20px;
+    margin-left: auto;
+    border: 1px solid #f4f1ec;
+    background: #fff;
+    border-radius: 4px;
+    color: #a94545;
+    font-size: 14px; line-height: 1;
+    cursor: pointer;
+    align-items: center; justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .submenu-delete:hover { background: #fee; border-color: #f0a0a0; }
+  .nav-edit-mode .submenu-delete { display: inline-flex; }
+  .nav-edit-mode .ch-dd-submenu-trigger .submenu-label { margin-right: 0; }
+
+  /* "+ Add Group" button in the edit bar */
+  .btn-nav-add-group,
+  .btn-nav-add-group-panel {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem; font-weight: 500;
+    color: #1c1c2e; background: #fff;
+    border: 1px solid rgba(28,28,46,0.15); border-radius: 6px;
+    padding: 4px 10px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-nav-add-group:hover { background: #fef3c7; border-color: #fbbf24; }
+  .btn-nav-add-group-panel { padding: 4px 6px; }
+  /* Container-level drop highlight (column or submenu panel) when a drag is hovering it */
+  .nav-edit-mode .ch-dd-col.drop-into,
+  .nav-edit-mode .ch-dd-submenu-panel.drop-into,
+  .nav-edit-mode .ch-dd-panel.drop-into {
+    background: #fffbeb;
+    border-color: #fbbf24;
+  }
+  /* Section headers act as anchors in edit mode — they don't move, items
+     reorder around them. The lock icon hints they're not draggable. */
+  .nav-edit-mode .ch-dd-col-header {
+    background: #f7f6f3;
+    border-radius: 4px;
+    margin: 4px 2px 2px;
+    padding-left: 22px;
+    position: relative;
+    user-select: none;
+  }
+  .nav-edit-mode .ch-dd-col-header::before {
+    content: '🔒';
+    position: absolute;
+    left: 6px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    opacity: 0.5;
+  }
+  /* Hint text inside an empty submenu panel */
+  .nav-edit-mode .ch-dd-submenu-panel:empty::before {
+    content: 'Drop items here';
+    display: block;
+    font-size: 0.72rem;
+    color: #b8b8c8;
+    font-style: italic;
+    padding: 4px 8px;
+    pointer-events: none;
+  }
+
+  /* ===== RESPONSIVE BREAKPOINT ===== */
+  /* Hide desktop nav links and show hamburger when nav would wrap */
+  @media (max-width: 1100px) {
+    .nav-links { display: none; }
+    .nav-hamburger { display: flex; }
+    .top-nav { gap: 16px; padding: 0 20px; }
+  }
+  @media (max-width: 640px) {
+    .top-nav { height: 58px; padding: 0 10px; gap: 10px; }
+    .nav-brand-divider, .nav-brand-name { display: none; }
+    .nav-avatar { width: 30px; height: 30px; font-size: 0.7rem; }
+  }
+
+  /* ===== NAV EDIT MODE ===== */
+  .btn-nav-edit {
+    display: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.55);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    gap: 5px;
+    align-items: center;
+  }
+  .btn-nav-edit.visible { display: flex; }
+  .btn-nav-edit:hover { color: #fff; border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.1); }
+  .btn-nav-edit.active { color: #fbbf24; border-color: rgba(251,191,36,0.5); background: rgba(251,191,36,0.1); }
+
+  .nav-edit-bar {
+    display: none;
+    position: fixed;
+    top: 62px;
+    left: 0; right: 0;
+    background: rgba(251,191,36,0.12);
+    border-bottom: 1px solid rgba(251,191,36,0.3);
+    padding: 6px 24px;
+    font-size: 0.78rem;
+    color: #fbbf24;
+    font-family: 'DM Sans', sans-serif;
+    z-index: 99;
+    align-items: center;
+    gap: 14px;
+  }
+  .nav-edit-bar.open { display: flex; }
+  .nav-edit-bar-msg { flex: 1; }
+  .btn-nav-save {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem; font-weight: 600;
+    color: #1c1c2e; background: #fbbf24;
+    border: none; border-radius: 6px;
+    padding: 5px 14px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-nav-save:hover { background: #f59e0b; }
+  .btn-nav-discard {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem; font-weight: 500;
+    color: rgba(255,255,255,0.6); background: transparent;
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+    padding: 4px 12px; cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .btn-nav-discard:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+
+  /* In edit mode: items get drag-handle and editable text */
+  .nav-edit-mode .ch-dd-item {
+    cursor: grab;
+    user-select: none;
+    border: 1px dashed transparent;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .nav-edit-mode .ch-dd-item:hover { border-color: rgba(251,191,36,0.4); background: #fffbeb; }
+  .nav-edit-mode .ch-dd-item.drag-over { border-color: #fbbf24; background: #fef3c7; }
+  .nav-edit-mode .ch-dd-item.dragging { opacity: 0.4; }
+
+  .nav-drag-handle {
+    display: none;
+    color: #bbb;
+    flex-shrink: 0;
+    cursor: grab;
+    padding: 0 2px;
+  }
+  .nav-edit-mode .nav-drag-handle { display: flex; align-items: center; }
+
+  .nav-item-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nav-edit-mode .nav-item-label {
+    outline: none;
+    border-bottom: 1px solid #fbbf24;
+    cursor: text;
+    white-space: nowrap;
+    overflow: visible;
+    background: transparent;
+  }
+  /* In edit mode: items are draggable and labels are editable — no navigation */
+  .nav-edit-mode .ch-dd-item[draggable="true"] { cursor: grab; }
+  .nav-edit-mode .ch-dd-item[draggable="true"] .nav-item-label { pointer-events: auto; cursor: text; }
+</style>
+
+<nav class="top-nav" aria-label="Main navigation">
+  <a href="index" class="nav-brand">
+    <img class="nav-brand-img" src="eduversal-logo-white.png" alt="Eduversal">
+    <span class="nav-brand-divider" aria-hidden="true"></span>
+    <span class="nav-brand-name">Central Hub</span>
+  </a>
+
+  <div class="nav-links">
+    <!-- Network dropdown -->
+    <div class="ch-dd-wrap" id="chDdWrap-network">
+      <button class="ch-dd-trigger" data-dd="network" aria-haspopup="true" aria-expanded="false">
+        Network
+        <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ch-dd-panel" id="chDdPanel-network">
+        <div class="ch-dd-col-header">Partner Schools</div>
+        <a href="schools" class="ch-dd-item" data-nav-page="schools" data-nav-key="schools">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span class="nav-item-label">Schools</span>
+        </a>
+        <a href="pilot-enrolment" class="ch-dd-item" data-nav-page="pilot-enrolment" data-nav-key="pilot-enrolment">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="nav-item-label">Pilot Enrolment</span>
+        </a>
+        <a href="staff" class="ch-dd-item" data-nav-page="staff" data-nav-key="staff">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          <span class="nav-item-label">Staff</span>
+        </a>
+        <a href="network-health" class="ch-dd-item" data-nav-page="network-health" data-nav-key="network-health">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49m-8.48-.01a6 6 0 010-8.49m11.31-2.82a10 10 0 010 14.14m-14.14 0a10 10 0 010-14.14"/></svg>
+          <span class="nav-item-label">Network Health</span>
+        </a>
+        <a href="students-overview" class="ch-dd-item" data-nav-page="students-overview" data-nav-key="students-overview">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          <span class="nav-item-label">Students Overview</span>
+        </a>
+        <div class="ch-dd-divider"></div>
+        <div class="ch-dd-col-header" style="padding-top:4px;">Hubs</div>
+        <a href="https://academichub.eduversal.org" target="_blank" rel="noopener" class="ch-dd-item" data-nav-page="academichub-link" data-nav-key="academichub-link">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6a2 2 0 01-2 2H7l-5 5V5a2 2 0 012-2h11"/><polyline points="16 3 21 3 21 8"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span class="nav-item-label">Academic Hub ↗</span>
+        </a>
+        <a href="https://teachershub.eduversal.org" target="_blank" rel="noopener" class="ch-dd-item" data-nav-page="teachershub-link" data-nav-key="teachershub-link">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6a2 2 0 01-2 2H7l-5 5V5a2 2 0 012-2h11"/><polyline points="16 3 21 3 21 8"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span class="nav-item-label">Teachers Hub ↗</span>
+        </a>
+        <a href="https://studentshub.eduversal.org" target="_blank" rel="noopener" class="ch-dd-item" data-nav-page="studentshub-link" data-nav-key="studentshub-link">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6a2 2 0 01-2 2H7l-5 5V5a2 2 0 012-2h11"/><polyline points="16 3 21 3 21 8"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span class="nav-item-label">Students Hub ↗</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Communications dropdown -->
+    <div class="ch-dd-wrap" id="chDdWrap-comms">
+      <button class="ch-dd-trigger" data-dd="comms" aria-haspopup="true" aria-expanded="false">
+        Communications
+        <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ch-dd-panel" id="chDdPanel-comms">
+        <div class="ch-dd-col-header">Messaging</div>
+        <a href="announcements" class="ch-dd-item" data-nav-page="announcements" data-nav-key="announcements">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3L9.218 10.083M11.698 20.334C12.573 21.209 14 20.561 14 19.307V4.693C14 3.439 12.573 2.791 11.698 3.666L7 8H4C2.895 8 2 8.895 2 10v4c0 1.105.895 2 2 2h3l4.698 4.334z"/></svg>
+          <span class="nav-item-label">Announcements</span>
+        </a>
+        <a href="messageboard" class="ch-dd-item" data-nav-page="messageboard" data-nav-key="messageboard">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          <span class="nav-item-label">Message Board</span>
+        </a>
+        <a href="notifications" class="ch-dd-item" data-nav-page="notifications" data-nav-key="notifications">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          <span class="nav-item-label">Notifications</span>
+        </a>
+        <div class="ch-dd-divider"></div>
+        <div class="ch-dd-col-header" style="padding-top:4px;">Documents</div>
+        <a href="documents" class="ch-dd-item" data-nav-page="documents" data-nav-key="documents">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="nav-item-label">Documents</span>
+        </a>
+        <a href="library" class="ch-dd-item" data-nav-page="library" data-nav-key="library">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          <span class="nav-item-label">Document Library</span>
+        </a>
+        <div class="ch-dd-divider"></div>
+        <div class="ch-dd-col-header" style="padding-top:4px;">Workspace</div>
+        <a href="activities" class="ch-dd-item" data-nav-page="activities" data-nav-key="activities">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="nav-item-label">Activities</span>
+        </a>
+        <a href="weekly-checklist" class="ch-dd-item" data-nav-page="weekly-checklist" data-nav-key="weekly-checklist">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          <span class="nav-item-label">Weekly Checklist</span>
+        </a>
+        <a href="surveys" class="ch-dd-item" data-nav-page="surveys" data-nav-key="surveys">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="nav-item-label">Surveys</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Curriculum dropdown -->
+    <div class="ch-dd-wrap" id="chDdWrap-curriculum">
+      <button class="ch-dd-trigger" data-dd="curriculum" aria-haspopup="true" aria-expanded="false">
+        Curriculum
+        <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ch-dd-panel ch-dd-panel--wide" id="chDdPanel-curriculum">
+        <div class="ch-dd-col-group">
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Calendars</div>
+            <a href="academic-calendar" class="ch-dd-item" data-nav-page="academic-calendar" data-nav-key="academic-calendar">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span class="nav-item-label">Academic Calendar</span>
+            </a>
+            <a href="school-events" class="ch-dd-item" data-nav-page="school-events" data-nav-key="school-events">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span class="nav-item-label">Event Calendar</span>
+            </a>
+            <a href="cambridge-calendar" class="ch-dd-item" data-nav-page="cambridge-calendar" data-nav-key="cambridge-calendar">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01"/></svg>
+              <span class="nav-item-label">Cambridge Exam Calendar</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Syllabus</div>
+            <a href="igcse-syllabus" class="ch-dd-item" data-nav-page="igcse-syllabus" data-nav-key="igcse-syllabus">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <span class="nav-item-label">IGCSE Syllabus</span>
+            </a>
+            <a href="as-alevel-syllabus" class="ch-dd-item" data-nav-page="as-alevel-syllabus" data-nav-key="as-alevel-syllabus">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">AS / A-Level Syllabus</span>
+            </a>
+            <a href="secondary-checkpoint-syllabus" class="ch-dd-item" data-nav-page="secondary-checkpoint-syllabus" data-nav-key="secondary-checkpoint-syllabus">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">Secondary Checkpoint</span>
+            </a>
+            <a href="primary-checkpoint-syllabus" class="ch-dd-item" data-nav-page="primary-checkpoint-syllabus" data-nav-key="primary-checkpoint-syllabus">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">Primary Checkpoint</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Mapping</div>
+            <a href="curriculum-map" class="ch-dd-item" data-nav-page="curriculum-map" data-nav-key="curriculum-map">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+              <span class="nav-item-label">Curriculum Map</span>
+            </a>
+            <a href="national-alignment" class="ch-dd-item" data-nav-page="national-alignment" data-nav-key="national-alignment">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M12 3v18M5 8l4 4-4 4M19 8l-4 4 4 4"/></svg>
+              <span class="nav-item-label">National Alignment</span>
+            </a>
+            <a href="teaching-progress" class="ch-dd-item" data-nav-page="teaching-progress" data-nav-key="teaching-progress">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              <span class="nav-item-label">Teaching Progress</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">AI Framework</div>
+            <a href="ai-framework-teacher" class="ch-dd-item" data-nav-page="ai-framework-teacher" data-nav-key="ai-framework-teacher">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span class="nav-item-label">AI · Teacher</span>
+            </a>
+            <a href="ai-framework-student" class="ch-dd-item" data-nav-page="ai-framework-student" data-nav-key="ai-framework-student">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 4 3 6 3s6-1.34 6-3v-5"/></svg>
+              <span class="nav-item-label">AI · Student</span>
+            </a>
+            <a href="ai-framework-institutional" class="ch-dd-item" data-nav-page="ai-framework-institutional" data-nav-key="ai-framework-institutional">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9v0M9 12v0M9 15v0M9 18v0M15 9v0M15 12v0M15 15v0M15 18v0"/></svg>
+              <span class="nav-item-label">AI · Institutional</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Pacing Assessments</div>
+            <a href="assessment-management" class="ch-dd-item" data-nav-page="assessment-management" data-nav-key="assessment-management">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <span class="nav-item-label">Pacing Assessments</span>
+            </a>
+          </div>
+          <div class="ch-dd-col-divider"></div>
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Pacing — Primary</div>
+            <a href="primary-math-pacing" class="ch-dd-item" data-nav-page="primary-math-pacing" data-nav-key="primary-math-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">Math</span>
+            </a>
+            <a href="primary-english-pacing" class="ch-dd-item" data-nav-page="primary-english-pacing" data-nav-key="primary-english-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <span class="nav-item-label">English</span>
+            </a>
+            <a href="primary-science-pacing" class="ch-dd-item" data-nav-page="primary-science-pacing" data-nav-key="primary-science-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v11l3.5 6H5.5L9 14V3z"/><line x1="6" y1="8" x2="18" y2="8"/></svg>
+              <span class="nav-item-label">Science</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Pacing — Checkpoint</div>
+            <a href="checkpoint-math-pacing" class="ch-dd-item" data-nav-page="checkpoint-math-pacing" data-nav-key="checkpoint-math-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">Math</span>
+            </a>
+            <a href="checkpoint-english-pacing" class="ch-dd-item" data-nav-page="checkpoint-english-pacing" data-nav-key="checkpoint-english-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <span class="nav-item-label">English</span>
+            </a>
+            <a href="checkpoint-science-pacing" class="ch-dd-item" data-nav-page="checkpoint-science-pacing" data-nav-key="checkpoint-science-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v11l3.5 6H5.5L9 14V3z"/><line x1="6" y1="8" x2="18" y2="8"/></svg>
+              <span class="nav-item-label">Science</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Pacing — IGCSE</div>
+            <a href="igcse-math-pacing" class="ch-dd-item" data-nav-page="igcse-math-pacing" data-nav-key="igcse-math-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">Math</span>
+            </a>
+            <a href="igcse-biology-pacing" class="ch-dd-item" data-nav-page="igcse-biology-pacing" data-nav-key="igcse-biology-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span class="nav-item-label">Biology</span>
+            </a>
+            <a href="igcse-chemistry-pacing" class="ch-dd-item" data-nav-page="igcse-chemistry-pacing" data-nav-key="igcse-chemistry-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v11l3.5 6H5.5L9 14V3z"/><line x1="6" y1="8" x2="18" y2="8"/></svg>
+              <span class="nav-item-label">Chemistry</span>
+            </a>
+            <a href="igcse-physics-pacing" class="ch-dd-item" data-nav-page="igcse-physics-pacing" data-nav-key="igcse-physics-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              <span class="nav-item-label">Physics</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Pacing — AS / A-Level</div>
+            <a href="as-alevel-math-pacing" class="ch-dd-item" data-nav-page="as-alevel-math-pacing" data-nav-key="as-alevel-math-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+              <span class="nav-item-label">Math</span>
+            </a>
+            <a href="as-alevel-biology-pacing" class="ch-dd-item" data-nav-page="as-alevel-biology-pacing" data-nav-key="as-alevel-biology-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span class="nav-item-label">Biology</span>
+            </a>
+            <a href="as-alevel-chemistry-pacing" class="ch-dd-item" data-nav-page="as-alevel-chemistry-pacing" data-nav-key="as-alevel-chemistry-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v11l3.5 6H5.5L9 14V3z"/><line x1="6" y1="8" x2="18" y2="8"/></svg>
+              <span class="nav-item-label">Chemistry</span>
+            </a>
+            <a href="as-alevel-physics-pacing" class="ch-dd-item" data-nav-page="as-alevel-physics-pacing" data-nav-key="as-alevel-physics-pacing">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              <span class="nav-item-label">Physics</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Performance & PD dropdown -->
+    <div class="ch-dd-wrap" id="chDdWrap-performance">
+      <button class="ch-dd-trigger" data-dd="performance" aria-haspopup="true" aria-expanded="false">
+        Performance &amp; PD
+        <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ch-dd-panel ch-dd-panel--xwide" id="chDdPanel-performance">
+        <div class="ch-dd-col-group">
+          <!-- Column 1 — Standards -->
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Standards</div>
+            <a href="cambridge-standards" class="ch-dd-item" data-nav-page="cambridge-standards" data-nav-key="cambridge-standards">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              <span class="nav-item-label">Cambridge Standards</span>
+            </a>
+            <a href="https://academichub.eduversal.org/academic-standards-public" target="_blank" rel="noopener" class="ch-dd-item" data-nav-page="academic-standards-ah" data-nav-key="academic-standards-ah">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              <span class="nav-item-label">Eduversal Standards ↗</span>
+            </a>
+            <a href="references" class="ch-dd-item" data-nav-page="references" data-nav-key="references">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+              <span class="nav-item-label">References & Standards Hub</span>
+            </a>
+            <a href="handbook" class="ch-dd-item" data-nav-page="handbook" data-nav-key="handbook">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <span class="nav-item-label">Handbooks</span>
+            </a>
+            <a href="roles-positions" class="ch-dd-item" data-nav-page="roles-positions" data-nav-key="roles-positions">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              <span class="nav-item-label">Roles &amp; Positions</span>
+            </a>
+          </div>
+
+          <!-- Column 2 — Appraisals -->
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Appraisals</div>
+            <a href="appraisals" class="ch-dd-item" data-nav-page="appraisals" data-nav-key="appraisals">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              <span class="nav-item-label">Appraisals Hub</span>
+            </a>
+            <a href="school-appraisals" class="ch-dd-item" data-nav-page="school-appraisals" data-nav-key="school-appraisals">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <span class="nav-item-label">School Appraisals</span>
+            </a>
+            <a href="teacher-appraisals" class="ch-dd-item" data-nav-page="teacher-appraisals" data-nav-key="teacher-appraisals">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              <span class="nav-item-label">Teacher Appraisals</span>
+            </a>
+            <a href="school-visits" class="ch-dd-item" data-nav-page="school-visits" data-nav-key="school-visits">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/><circle cx="18" cy="5" r="3"/></svg>
+              <span class="nav-item-label">School Visits</span>
+            </a>
+          </div>
+
+          <!-- Column 3 — Students Hub Assessment (2 sub-headers: EASE Growth → Chapter Tests) -->
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">EASE Growth (M / E / S)</div>
+            <a href="ease-item-author" class="ch-dd-item" data-nav-page="ease-item-author" data-nav-key="ease-item-author">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="nav-item-label">EASE Item Author</span>
+            </a>
+            <a href="ease-window-admin" class="ch-dd-item" data-nav-page="ease-window-admin" data-nav-key="ease-window-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span class="nav-item-label">EASE Windows</span>
+            </a>
+            <a href="ease-bank-browser" class="ch-dd-item" data-nav-page="ease-bank-browser" data-nav-key="ease-bank-browser">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span class="nav-item-label">Latihan Browser</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Chapter Tests</div>
+            <a href="chapter-test-author" class="ch-dd-item" data-nav-page="chapter-test-author" data-nav-key="chapter-test-author">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              <span class="nav-item-label">Chapter Test Author</span>
+            </a>
+            <a href="question-bank" class="ch-dd-item" data-nav-page="question-bank" data-nav-key="question-bank">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <span class="nav-item-label">Chapter Test Item Bank</span>
+            </a>
+            <a href="diagrams" class="ch-dd-item" data-nav-page="diagrams" data-nav-key="diagrams">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+              <span class="nav-item-label">Diagrams Gallery</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Practice Questions</div>
+            <a href="practice-bank-admin" class="ch-dd-item" data-nav-page="practice-bank-admin" data-nav-key="practice-bank-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+              <span class="nav-item-label">Practice Questions Author</span>
+            </a>
+            <a href="practice-assessment-author" class="ch-dd-item" data-nav-page="practice-assessment-author" data-nav-key="practice-assessment-author">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.6 4.7L18 8.3l-4.7 1.6L12 14.7l-1.6-4.8L6 8.3l4.4-1.6z"/><path d="M19 14l.8 2.3L22 17l-2.2.7L19 20l-.8-2.3L16 17l2.2-.7z"/></svg>
+              <span class="nav-item-label">Practice Assessment Author</span>
+            </a>
+            <a href="daily-challenge-admin" class="ch-dd-item" data-nav-page="daily-challenge-admin" data-nav-key="daily-challenge-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>
+              <span class="nav-item-label">Daily Challenge Admin</span>
+            </a>
+            <a href="practice-bank-flags" class="ch-dd-item" data-nav-page="practice-bank-flags" data-nav-key="practice-bank-flags">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V3"/><path d="M4 4h13l-2 4 2 4H4"/></svg>
+              <span class="nav-item-label">Question Flags</span>
+            </a>
+            <a href="practice-bank-endorsements" class="ch-dd-item" data-nav-page="practice-bank-endorsements" data-nav-key="practice-bank-endorsements">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+              <span class="nav-item-label">Starred Questions</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin dropdown (visible only to central_admin) -->
+    <div class="ch-dd-wrap" id="chDdWrap-admin" data-admin-only="1" style="display:none">
+      <button class="ch-dd-trigger" data-dd="admin" aria-haspopup="true" aria-expanded="false">
+        Admin
+        <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ch-dd-panel ch-dd-panel--wide" id="chDdPanel-admin">
+        <div class="ch-dd-col-group">
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Users & Access</div>
+            <a href="console" class="ch-dd-item" data-nav-page="console" data-nav-key="console">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              <span class="nav-item-label">User Console</span>
+            </a>
+            <a href="page-access" class="ch-dd-item" data-nav-page="page-access" data-nav-key="page-access">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              <span class="nav-item-label">Page Access</span>
+            </a>
+            <a href="rules-viewer" class="ch-dd-item" data-nav-page="rules-viewer" data-nav-key="rules-viewer">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <span class="nav-item-label">Rules Viewer</span>
+            </a>
+            <a href="https://teachershub.eduversal.org/careers-admin" target="_blank" rel="noopener" class="ch-dd-item" data-nav-page="careers-admin-th" data-nav-key="careers-admin-th">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="2" y1="13" x2="22" y2="13"/></svg>
+              <span class="nav-item-label">Hiring Funnel ↗</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Insights &amp; Comms</div>
+            <a href="mail-composer" class="ch-dd-item" data-nav-page="mail-composer" data-nav-key="mail-composer">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <span class="nav-item-label">Mail Composer</span>
+            </a>
+            <a href="survey-console" class="ch-dd-item" data-nav-page="survey-console" data-nav-key="survey-console">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span class="nav-item-label">Survey Console</span>
+            </a>
+            <a href="reports" class="ch-dd-item" data-nav-page="reports" data-nav-key="reports">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <span class="nav-item-label">Reports & Export</span>
+            </a>
+            <a href="feedback-management" class="ch-dd-item" data-nav-page="feedback-management" data-nav-key="feedback-management">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
+              <span class="nav-item-label">Feedback Management</span>
+            </a>
+          </div>
+          <div class="ch-dd-col-divider"></div>
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Frameworks</div>
+            <a href="kpi-admin" class="ch-dd-item" data-nav-page="kpi-admin" data-nav-key="kpi-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              <span class="nav-item-label">KPI Admin</span>
+            </a>
+            <a href="competency-admin" class="ch-dd-item" data-nav-page="competency-admin" data-nav-key="competency-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              <span class="nav-item-label">Competency Admin</span>
+            </a>
+            <a href="competency-admin?track=teachers" class="ch-dd-item" data-nav-page="competency-admin-teachers" data-nav-key="competency-admin-teachers">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              <span class="nav-item-label">Teachers Framework</span>
+            </a>
+            <a href="competency-admin?track=leaders" class="ch-dd-item" data-nav-page="competency-admin-leaders" data-nav-key="competency-admin-leaders">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1"/></svg>
+              <span class="nav-item-label">Leaders Framework</span>
+            </a>
+            <a href="specialist-framework" class="ch-dd-item" data-nav-page="specialist-framework" data-nav-key="specialist-framework">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span class="nav-item-label">Specialist Framework</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Appraisals</div>
+            <a href="teacher-appraisals" class="ch-dd-item" data-nav-page="teacher-appraisals" data-nav-key="teacher-appraisals">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              <span class="nav-item-label">Teacher Appraisals</span>
+            </a>
+            <a href="school-appraisals" class="ch-dd-item" data-nav-page="school-appraisals" data-nav-key="school-appraisals">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h6M9 13h6M9 17h6"/></svg>
+              <span class="nav-item-label">School Appraisals</span>
+            </a>
+            <a href="appraisals?type=principal-annual" class="ch-dd-item" data-nav-page="appraisals-principal-annual" data-nav-key="appraisals-principal-annual">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              <span class="nav-item-label">Principal Annual Appraisal</span>
+            </a>
+            <a href="principal-360-admin" class="ch-dd-item" data-nav-page="principal-360-admin" data-nav-key="principal-360-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+              <span class="nav-item-label">Principal 360°</span>
+            </a>
+          </div>
+          <div class="ch-dd-col-divider"></div>
+          <div class="ch-dd-col">
+            <div class="ch-dd-col-header">Development Programs</div>
+            <a href="orientation-admin" class="ch-dd-item" data-nav-page="orientation-admin" data-nav-key="orientation-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+              <span class="nav-item-label">Orientation Admin</span>
+            </a>
+            <a href="induction-admin" class="ch-dd-item" data-nav-page="induction-admin" data-nav-key="induction-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              <span class="nav-item-label">Induction Admin</span>
+            </a>
+            <a href="https://teachershub.eduversal.org/mentor-certification" target="_blank" rel="noopener" class="ch-dd-item" data-nav-page="mentor-certification-th" data-nav-key="mentor-certification-th">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+              <span class="nav-item-label">Mentor Certification ↗</span>
+            </a>
+            <a href="principal-coaching-hub" class="ch-dd-item" data-nav-page="principal-coaching-hub" data-nav-key="principal-coaching-hub">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+              <span class="nav-item-label">Principal Coaching</span>
+            </a>
+            <a href="principal-coaching-session" class="ch-dd-item" data-nav-page="principal-coaching-session" data-nav-key="principal-coaching-session">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span class="nav-item-label">Coaching Session Form</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Certificates</div>
+            <a href="certificates" class="ch-dd-item" data-nav-page="certificates" data-nav-key="certificates">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+              <span class="nav-item-label">Certificates</span>
+            </a>
+            <a href="certificate-verify" class="ch-dd-item" data-nav-page="certificate-verify" data-nav-key="certificate-verify">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <span class="nav-item-label">Certificate Verify</span>
+            </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">System Settings</div>
+            <a href="checklist-admin" class="ch-dd-item" data-nav-page="checklist-admin" data-nav-key="checklist-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              <span class="nav-item-label">Checklist Admin</span>
+            </a>
+            <a href="schedule-settings" class="ch-dd-item" data-nav-page="schedule-settings" data-nav-key="schedule-settings">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><circle cx="12" cy="12" r="7"/></svg>
+              <span class="nav-item-label">Schedule Settings</span>
+            </a>
+            <a href="design-system" class="ch-dd-item" data-nav-page="design-system" data-nav-key="design-system">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+              <span class="nav-item-label">Design System</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="nav-hamburger" id="navHamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNavOverlay">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+
+  <div class="nav-auth">
+    <!-- Global Search -->
+    <div class="search-bar-wrap" id="globalSearchWrap">
+      <svg class="search-bar-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input
+        type="search"
+        id="globalSearchInput"
+        class="search-bar-input"
+        placeholder="Search schools, staff, documents…"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Search database"
+        aria-expanded="false"
+        aria-haspopup="listbox"
+        role="combobox"
+      />
+      <button class="search-bar-clear" id="searchClearBtn" aria-label="Clear search" tabindex="-1">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="search-dropdown" id="searchDropdown" role="listbox" aria-label="Search results">
+        <div class="search-dd-loading">
+          <div class="search-spinner"></div>
+          Searching…
+        </div>
+      </div>
+    </div>
+    <!-- Notifications -->
+    <div class="nav-notifications" id="navNotifications">
+      <button class="btn-notif" id="notifBtn" title="What's new since your last login" aria-label="Notifications">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="nd-header">
+          <span class="nd-header-label">New since last login</span>
+          <span class="nd-header-since" id="notifSince"></span>
+        </div>
+        <div class="nd-list" id="notifList">
+          <p class="nd-empty"><span class="nd-empty-icon">🔔</span><br>Loading…</p>
+        </div>
+        <div class="mtd-footer"><a href="notifications">View all notifications →</a></div>
+      </div>
+    </div>
+
+    <!-- My Tasks -->
+    <div class="nav-my-tasks" id="navMyTasks">
+      <button class="btn-my-tasks" id="myTasksBtn">
+        My Tasks (<strong id="myTasksCount" style="color:#ff3333;font-weight:700">0</strong>)
+      </button>
+      <div class="my-tasks-dropdown" id="myTasksDropdown">
+        <div class="mtd-header">My Assigned Tasks</div>
+        <div class="mtd-list" id="myTasksList">
+          <p class="mtd-empty">Loading…</p>
+        </div>
+        <div class="mtd-footer"><a href="activities">View all in Activities →</a></div>
+      </div>
+    </div>
+
+    <!-- My Hub dropdown (Eduversal Subject Specialist CPD track — placed near profile avatar) -->
+    <div class="ch-dd-wrap" id="chDdWrap-specialist">
+      <button class="ch-dd-trigger" data-dd="specialist" aria-haspopup="true" aria-expanded="false">
+        My Hub
+        <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="ch-dd-panel" id="chDdPanel-specialist">
+        <a href="specialist-path" class="ch-dd-item" data-nav-page="specialist-path" data-nav-key="specialist-path">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
+          <span class="nav-item-label">Learning Path</span>
+        </a>
+        <a href="specialist-portfolio" class="ch-dd-item" data-nav-page="specialist-portfolio" data-nav-key="specialist-portfolio">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><polyline points="16 3 12 7 8 3"/></svg>
+          <span class="nav-item-label">My Portfolio</span>
+        </a>
+        <a href="specialist-certificates" class="ch-dd-item" data-nav-page="specialist-certificates" data-nav-key="specialist-certificates">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><polyline points="9 14 9 22 12 19 15 22 15 14"/></svg>
+          <span class="nav-item-label">My Certificates</span>
+        </a>
+        <a href="my-induction" class="ch-dd-item" data-nav-page="my-induction" data-nav-key="my-induction">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+          <span class="nav-item-label">My Induction</span>
+        </a>
+      </div>
+    </div>
+
+    <button class="btn-nav-edit" id="btnNavEdit" title="Edit navigation menu">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit Nav
+    </button>
+    <div class="nav-avatar" id="navAvatar" aria-hidden="true"></div>
+  </div>
+</nav>
+
+<!-- Nav edit mode bar -->
+<div class="nav-edit-bar" id="navEditBar">
+  <span class="nav-edit-bar-msg">✏️ Nav Edit Mode — drag items, click labels to rename, or add groups inside Admin.</span>
+  <select class="btn-nav-add-group-panel" id="navAddGroupPanel" title="Which dropdown to add a group to">
+    <option value="chDdPanel-admin">Admin</option>
+  </select>
+  <button class="btn-nav-add-group" id="btnNavAddGroup" title="Create a new submenu group">+ Add Group</button>
+  <button class="btn-nav-discard" id="btnNavDiscard">Discard</button>
+  <button class="btn-nav-save" id="btnNavSave">Save Changes</button>
+</div>
+
+<!-- Mobile nav drawer -->
+<div class="mobile-nav-overlay" id="mobileNavOverlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+  <div class="mobile-nav-drawer">
+    <div class="mobile-nav-head">
+      <span class="mobile-nav-brand">Central Hub</span>
+      <button class="mobile-nav-close" id="mobileNavClose" aria-label="Close menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <nav class="mobile-nav-links" aria-label="Mobile navigation links">
+      <!-- Top-level -->
+      <a href="index" class="mob-nav-top-link mobile-nav-link" data-mob-page="index">Dashboard</a>
+
+      <!-- Network -->
+      <div class="mob-nav-section" id="mobSecNetwork">
+        <button class="mob-nav-section-toggle" aria-expanded="false" aria-controls="mobSecNetworkBody">
+          Network
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="mob-nav-section-body" id="mobSecNetworkBody">
+          <div class="mob-nav-subheader">Partner Schools</div>
+          <a href="schools"        class="mobile-nav-link" data-mob-page="schools">Schools</a>
+          <a href="pilot-enrolment" class="mobile-nav-link" data-mob-page="pilot-enrolment">Pilot Enrolment</a>
+          <a href="staff"          class="mobile-nav-link" data-mob-page="staff">Staff</a>
+          <a href="network-health" class="mobile-nav-link" data-mob-page="network-health">Network Health</a>
+          <a href="students-overview" class="mobile-nav-link" data-mob-page="students-overview">Students Overview</a>
+          <div class="mob-nav-subheader">Hubs</div>
+          <a href="https://academichub.eduversal.org" target="_blank" rel="noopener" class="mobile-nav-link">Academic Hub ↗</a>
+          <a href="https://teachershub.eduversal.org" target="_blank" rel="noopener" class="mobile-nav-link">Teachers Hub ↗</a>
+          <a href="https://studentshub.eduversal.org" target="_blank" rel="noopener" class="mobile-nav-link">Students Hub ↗</a>
+        </div>
+      </div>
+
+      <!-- Communications -->
+      <div class="mob-nav-section" id="mobSecComms">
+        <button class="mob-nav-section-toggle" aria-expanded="false" aria-controls="mobSecCommsBody">
+          Communications
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="mob-nav-section-body" id="mobSecCommsBody">
+          <div class="mob-nav-subheader">Messaging</div>
+          <a href="announcements"    class="mobile-nav-link" data-mob-page="announcements">Announcements</a>
+          <a href="messageboard"     class="mobile-nav-link" data-mob-page="messageboard">Message Board</a>
+          <a href="notifications"    class="mobile-nav-link" data-mob-page="notifications">Notifications</a>
+          <div class="mob-nav-subheader">Documents</div>
+          <a href="documents"        class="mobile-nav-link" data-mob-page="documents">Documents</a>
+          <a href="library"          class="mobile-nav-link" data-mob-page="library">Document Library</a>
+          <div class="mob-nav-subheader">Workspace</div>
+          <a href="activities"       class="mobile-nav-link" data-mob-page="activities">Activities</a>
+          <a href="weekly-checklist" class="mobile-nav-link" data-mob-page="weekly-checklist">Weekly Checklist</a>
+          <a href="surveys"          class="mobile-nav-link" data-mob-page="surveys">Surveys</a>
+        </div>
+      </div>
+
+      <!-- Curriculum -->
+      <div class="mob-nav-section" id="mobSecCurriculum">
+        <button class="mob-nav-section-toggle" aria-expanded="false" aria-controls="mobSecCurriculumBody">
+          Curriculum
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="mob-nav-section-body" id="mobSecCurriculumBody">
+          <div class="mob-nav-subheader">Calendars</div>
+          <a href="academic-calendar"  class="mobile-nav-link" data-mob-page="academic-calendar">Academic Calendar</a>
+          <a href="school-events"      class="mobile-nav-link" data-mob-page="school-events">School Events</a>
+          <a href="cambridge-calendar" class="mobile-nav-link" data-mob-page="cambridge-calendar">Cambridge Exam Calendar</a>
+          <div class="mob-nav-subheader">Syllabus</div>
+          <a href="igcse-syllabus"                class="mobile-nav-link" data-mob-page="igcse-syllabus">IGCSE Syllabus</a>
+          <a href="as-alevel-syllabus"             class="mobile-nav-link" data-mob-page="as-alevel-syllabus">AS / A-Level Syllabus</a>
+          <a href="secondary-checkpoint-syllabus"  class="mobile-nav-link" data-mob-page="secondary-checkpoint-syllabus">Secondary Checkpoint</a>
+          <a href="primary-checkpoint-syllabus"    class="mobile-nav-link" data-mob-page="primary-checkpoint-syllabus">Primary Checkpoint</a>
+          <div class="mob-nav-subheader">Mapping</div>
+          <a href="curriculum-map"     class="mobile-nav-link" data-mob-page="curriculum-map">Curriculum Map</a>
+          <a href="national-alignment" class="mobile-nav-link" data-mob-page="national-alignment">National Alignment</a>
+          <a href="teaching-progress"  class="mobile-nav-link" data-mob-page="teaching-progress">Teaching Progress</a>
+          <div class="mob-nav-subheader">AI Framework</div>
+          <a href="ai-framework-teacher"       class="mobile-nav-link" data-mob-page="ai-framework-teacher">AI · Teacher</a>
+          <a href="ai-framework-student"       class="mobile-nav-link" data-mob-page="ai-framework-student">AI · Student</a>
+          <a href="ai-framework-institutional" class="mobile-nav-link" data-mob-page="ai-framework-institutional">AI · Institutional</a>
+          <div class="mob-nav-subheader">Pacing — Primary</div>
+          <a href="primary-math-pacing"    class="mobile-nav-link" data-mob-page="primary-math-pacing">Math</a>
+          <a href="primary-english-pacing" class="mobile-nav-link" data-mob-page="primary-english-pacing">English</a>
+          <a href="primary-science-pacing" class="mobile-nav-link" data-mob-page="primary-science-pacing">Science</a>
+          <div class="mob-nav-subheader">Pacing — Checkpoint</div>
+          <a href="checkpoint-math-pacing"    class="mobile-nav-link" data-mob-page="checkpoint-math-pacing">Math</a>
+          <a href="checkpoint-english-pacing" class="mobile-nav-link" data-mob-page="checkpoint-english-pacing">English</a>
+          <a href="checkpoint-science-pacing" class="mobile-nav-link" data-mob-page="checkpoint-science-pacing">Science</a>
+          <div class="mob-nav-subheader">Pacing — IGCSE</div>
+          <a href="igcse-math-pacing"      class="mobile-nav-link" data-mob-page="igcse-math-pacing">Math</a>
+          <a href="igcse-biology-pacing"   class="mobile-nav-link" data-mob-page="igcse-biology-pacing">Biology</a>
+          <a href="igcse-chemistry-pacing" class="mobile-nav-link" data-mob-page="igcse-chemistry-pacing">Chemistry</a>
+          <a href="igcse-physics-pacing"   class="mobile-nav-link" data-mob-page="igcse-physics-pacing">Physics</a>
+          <div class="mob-nav-subheader">Pacing — AS / A-Level</div>
+          <a href="as-alevel-math-pacing"      class="mobile-nav-link" data-mob-page="as-alevel-math-pacing">Math</a>
+          <a href="as-alevel-biology-pacing"   class="mobile-nav-link" data-mob-page="as-alevel-biology-pacing">Biology</a>
+          <a href="as-alevel-chemistry-pacing" class="mobile-nav-link" data-mob-page="as-alevel-chemistry-pacing">Chemistry</a>
+          <a href="as-alevel-physics-pacing"   class="mobile-nav-link" data-mob-page="as-alevel-physics-pacing">Physics</a>
+          <div class="mob-nav-subheader">Pacing Assessments</div>
+          <a href="assessment-management" class="mobile-nav-link" data-mob-page="assessment-management">Pacing Assessments</a>
+        </div>
+      </div>
+
+      <!-- Performance & PD -->
+      <div class="mob-nav-section" id="mobSecPerformance">
+        <button class="mob-nav-section-toggle" aria-expanded="false" aria-controls="mobSecPerformanceBody">
+          Performance &amp; PD
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="mob-nav-section-body" id="mobSecPerformanceBody">
+          <div class="mob-nav-subheader">Standards</div>
+          <a href="cambridge-standards" class="mobile-nav-link" data-mob-page="cambridge-standards">Cambridge Standards</a>
+          <a href="https://academichub.eduversal.org/academic-standards-public" target="_blank" rel="noopener" class="mobile-nav-link">Eduversal Academic Standards ↗</a>
+          <a href="references"          class="mobile-nav-link" data-mob-page="references">References &amp; Standards Hub</a>
+          <a href="handbook"            class="mobile-nav-link" data-mob-page="handbook">Handbooks</a>
+          <a href="roles-positions"     class="mobile-nav-link" data-mob-page="roles-positions">Roles &amp; Positions</a>
+          <div class="mob-nav-subheader">Appraisals</div>
+          <a href="appraisals"         class="mobile-nav-link" data-mob-page="appraisals">Appraisals Hub</a>
+          <a href="school-appraisals"  class="mobile-nav-link" data-mob-page="school-appraisals">School Appraisals</a>
+          <a href="teacher-appraisals" class="mobile-nav-link" data-mob-page="teacher-appraisals">Teacher Appraisals</a>
+          <a href="school-visits"      class="mobile-nav-link" data-mob-page="school-visits">School Visits</a>
+          <div class="mob-nav-subheader">Students Hub Assessment · EASE Growth (M / E / S)</div>
+          <a href="ease-item-author"      class="mobile-nav-link" data-mob-page="ease-item-author">EASE Item Author</a>
+          <a href="ease-window-admin"     class="mobile-nav-link" data-mob-page="ease-window-admin">EASE Windows</a>
+          <a href="ease-bank-browser"     class="mobile-nav-link" data-mob-page="ease-bank-browser">Latihan Browser</a>
+          <div class="mob-nav-subheader">Students Hub Assessment · Chapter Tests</div>
+          <a href="chapter-test-author"   class="mobile-nav-link" data-mob-page="chapter-test-author">Chapter Test Author</a>
+          <a href="question-bank"         class="mobile-nav-link" data-mob-page="question-bank">Chapter Test Item Bank</a>
+          <a href="diagrams"              class="mobile-nav-link" data-mob-page="diagrams">Diagrams Gallery</a>
+          <div class="mob-nav-subheader">Students Hub Assessment · Practice Questions</div>
+          <a href="practice-bank-admin"          class="mobile-nav-link" data-mob-page="practice-bank-admin">Practice Questions Author</a>
+          <a href="practice-assessment-author"   class="mobile-nav-link" data-mob-page="practice-assessment-author">Practice Assessment Author</a>
+          <a href="daily-challenge-admin"        class="mobile-nav-link" data-mob-page="daily-challenge-admin">Daily Challenge Admin</a>
+          <a href="practice-bank-flags"          class="mobile-nav-link" data-mob-page="practice-bank-flags">Question Flags</a>
+          <a href="practice-bank-endorsements"   class="mobile-nav-link" data-mob-page="practice-bank-endorsements">Starred Questions</a>
+        </div>
+      </div>
+
+      <!-- Admin (visible only to central_admin) -->
+      <div class="mob-nav-section" id="mobSecAdmin" data-admin-only="1" style="display:none">
+        <button class="mob-nav-section-toggle" aria-expanded="false" aria-controls="mobSecAdminBody">
+          Admin
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="mob-nav-section-body" id="mobSecAdminBody">
+          <div class="mob-nav-subheader">Users & Access</div>
+          <a href="console"      class="mobile-nav-link" data-mob-page="console">User Console</a>
+          <a href="page-access"  class="mobile-nav-link" data-mob-page="page-access">Page Access</a>
+          <a href="rules-viewer" class="mobile-nav-link" data-mob-page="rules-viewer">Rules Viewer</a>
+          <a href="https://teachershub.eduversal.org/careers-admin" target="_blank" rel="noopener" class="mobile-nav-link">Hiring Funnel ↗</a>
+          <div class="mob-nav-subheader">Insights &amp; Comms</div>
+          <a href="mail-composer"        class="mobile-nav-link" data-mob-page="mail-composer">Mail Composer</a>
+          <a href="survey-console"       class="mobile-nav-link" data-mob-page="survey-console">Survey Console</a>
+          <a href="reports"              class="mobile-nav-link" data-mob-page="reports">Reports &amp; Export</a>
+          <a href="feedback-management"  class="mobile-nav-link" data-mob-page="feedback-management">Feedback Management</a>
+          <div class="mob-nav-subheader">Frameworks</div>
+          <a href="kpi-admin"                       class="mobile-nav-link" data-mob-page="kpi-admin">KPI Admin</a>
+          <a href="competency-admin"                class="mobile-nav-link" data-mob-page="competency-admin">Competency Admin</a>
+          <a href="competency-admin?track=teachers" class="mobile-nav-link" data-mob-page="competency-admin-teachers">Teachers Framework</a>
+          <a href="competency-admin?track=leaders"  class="mobile-nav-link" data-mob-page="competency-admin-leaders">Leaders Framework</a>
+          <a href="specialist-framework"            class="mobile-nav-link" data-mob-page="specialist-framework">Specialist Framework</a>
+          <div class="mob-nav-subheader">Appraisals</div>
+          <a href="teacher-appraisals"              class="mobile-nav-link" data-mob-page="teacher-appraisals">Teacher Appraisals</a>
+          <a href="school-appraisals"               class="mobile-nav-link" data-mob-page="school-appraisals">School Appraisals</a>
+          <a href="appraisals?type=principal-annual" class="mobile-nav-link" data-mob-page="appraisals-principal-annual">Principal Annual Appraisal</a>
+          <a href="principal-360-admin"             class="mobile-nav-link" data-mob-page="principal-360-admin">Principal 360°</a>
+          <div class="mob-nav-subheader">Development Programs</div>
+          <a href="orientation-admin"               class="mobile-nav-link" data-mob-page="orientation-admin">Orientation Admin</a>
+          <a href="induction-admin"                 class="mobile-nav-link" data-mob-page="induction-admin">Induction Admin</a>
+          <a href="https://teachershub.eduversal.org/mentor-certification" target="_blank" rel="noopener" class="mobile-nav-link">Mentor Certification ↗</a>
+          <a href="principal-coaching-hub"          class="mobile-nav-link" data-mob-page="principal-coaching-hub">Principal Coaching</a>
+          <a href="principal-coaching-session"      class="mobile-nav-link" data-mob-page="principal-coaching-session">Coaching Session Form</a>
+          <div class="mob-nav-subheader">Certificates</div>
+          <a href="certificates"                    class="mobile-nav-link" data-mob-page="certificates">Certificates</a>
+          <a href="certificate-verify"              class="mobile-nav-link" data-mob-page="certificate-verify">Certificate Verify</a>
+          <div class="mob-nav-subheader">System Settings</div>
+          <a href="checklist-admin"                 class="mobile-nav-link" data-mob-page="checklist-admin">Checklist Admin</a>
+          <a href="schedule-settings"               class="mobile-nav-link" data-mob-page="schedule-settings">Schedule Settings</a>
+          <a href="design-system"                   class="mobile-nav-link" data-mob-page="design-system">Design System</a>
+        </div>
+      </div>
+
+      <!-- My Hub (Eduversal Subject Specialist CPD track — placed near profile area) -->
+      <div class="mob-nav-section" id="mobSecSpecialist">
+        <button class="mob-nav-section-toggle" aria-expanded="false" aria-controls="mobSecSpecialistBody">
+          My Hub
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="mob-nav-section-body" id="mobSecSpecialistBody">
+          <a href="specialist-path"         class="mobile-nav-link" data-mob-page="specialist-path">Learning Path</a>
+          <a href="specialist-portfolio"    class="mobile-nav-link" data-mob-page="specialist-portfolio">My Portfolio</a>
+          <a href="specialist-certificates" class="mobile-nav-link" data-mob-page="specialist-certificates">My Certificates</a>
+          <a href="my-induction"            class="mobile-nav-link" data-mob-page="my-induction">My Induction</a>
+        </div>
+      </div>
+    </nav>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const rawPath = window.location.pathname.split("/").pop() || "index";
+    const page = rawPath.replace(/\.html$/i, "") || "index";
+
+    // ── Role-aware Admin dropdown / section gating ───────────────────────────
+    // The Admin dropdown (desktop) and Admin section (mobile) are marked with
+    // [data-admin-only="1"] and start hidden via inline style. Reveal them only
+    // for central_admin. auth-guard.js dispatches 'authReady' after profile
+    // load; if that already fired (window.userProfile populated) we apply
+    // immediately, otherwise we wait.
+    function applyAdminGating(profile) {
+      const isAdmin = profile?.role_centralhub === 'central_admin';
+      if (!isAdmin) return; // start state is already hidden
+      document.querySelectorAll('[data-admin-only="1"]').forEach(function(el) {
+        el.style.display = '';
+      });
+    }
+    if (window.userProfile) {
+      applyAdminGating(window.userProfile);
+    } else {
+      document.addEventListener('authReady', function(e) {
+        applyAdminGating(e?.detail?.profile || window.userProfile);
+      }, { once: true });
+    }
+
+    // Toggle My Tasks dropdown
+    document.getElementById('myTasksBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      document.getElementById('notifDropdown').classList.remove('open');
+      document.getElementById('myTasksDropdown').classList.toggle('open');
+    });
+
+    // Toggle Notifications dropdown
+    document.getElementById('notifBtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      document.getElementById('myTasksDropdown').classList.remove('open');
+      document.getElementById('notifDropdown').classList.toggle('open');
+    });
+
+    // Close both dropdowns on outside click
+    document.addEventListener('click', function () {
+      const dd1 = document.getElementById('myTasksDropdown');
+      const dd2 = document.getElementById('notifDropdown');
+      if (dd1) dd1.classList.remove('open');
+      if (dd2) dd2.classList.remove('open');
+    });
+
+    // ── CH nav dropdowns ───────────────────────────────────────────────────────
+    (function initChDropdowns() {
+      const groupKeys = {
+        network:    ['schools','pilot-enrolment','staff','network-health','students-overview'],
+        comms:      ['announcements','messageboard','documents','library','notifications',
+                     'activities','weekly-checklist','surveys'],
+        curriculum: ['academic-calendar','school-events','cambridge-calendar',
+                     'igcse-syllabus','as-alevel-syllabus',
+                     'secondary-checkpoint-syllabus','primary-checkpoint-syllabus',
+                     'curriculum-map','national-alignment',
+                     'primary-math-pacing','primary-english-pacing','primary-science-pacing',
+                     'checkpoint-math-pacing','checkpoint-english-pacing','checkpoint-science-pacing',
+                     'igcse-math-pacing','igcse-biology-pacing','igcse-chemistry-pacing','igcse-physics-pacing',
+                     'as-alevel-math-pacing','as-alevel-biology-pacing','as-alevel-chemistry-pacing','as-alevel-physics-pacing',
+                     'teaching-progress',
+                     'ai-framework-teacher','ai-framework-student','ai-framework-institutional',
+                     'assessment-management'],
+        performance:['cambridge-standards','academic-standards-ah','references','handbook','roles-positions',
+                     'appraisals','school-appraisals','teacher-appraisals','school-visits',
+                     'chapter-test-author','ease-item-author','ease-window-admin','ease-bank-browser','question-bank','diagrams',
+                     'practice-bank-admin','practice-assessment-author','daily-challenge-admin','practice-bank-flags','practice-bank-endorsements'],
+        specialist: ['specialist-path','specialist-portfolio','specialist-certificates','my-induction'],
+        admin:      ['console','page-access','rules-viewer',
+                     'mail-composer','survey-console','reports','feedback-management',
+                     'certificates','certificate-verify',
+                     'kpi-admin','competency-admin','competency-admin-teachers','competency-admin-leaders','specialist-framework',
+                     'teacher-appraisals','school-appraisals','appraisals-principal-annual',
+                     'orientation-admin','induction-admin','principal-coaching-hub','principal-coaching-session','principal-360-admin',
+                     'checklist-admin','schedule-settings','design-system'],
+      };
+
+      document.querySelectorAll('.ch-dd-wrap').forEach(function(wrap) {
+        var trigger = wrap.querySelector('.ch-dd-trigger');
+        var panel   = wrap.querySelector('.ch-dd-panel');
+        if (!trigger || !panel) return;
+        var dd = trigger.dataset.dd;
+
+        // Highlight trigger if current page is in this group
+        if (dd && groupKeys[dd] && groupKeys[dd].includes(page)) {
+          trigger.classList.add('active');
+        }
+
+        // Mark active item inside panel + bubble up to submenu trigger
+        panel.querySelectorAll('[data-nav-page]').forEach(function(a) {
+          if (a.dataset.navPage === page) {
+            a.classList.add('active');
+            var sub = a.closest('.ch-dd-submenu-wrap');
+            if (sub) sub.querySelector(':scope > .ch-dd-submenu-trigger')?.classList.add('has-active');
+          }
+        });
+
+        // Submenu: flip to left side if it would overflow viewport on hover
+        panel.querySelectorAll('.ch-dd-submenu-wrap').forEach(function(sub) {
+          sub.addEventListener('mouseenter', function() {
+            // Only run flip detection in non-edit mode (edit mode forces static layout)
+            if (document.querySelector('.nav-links')?.classList.contains('nav-edit-mode')) return;
+            var subPanel = sub.querySelector(':scope > .ch-dd-submenu-panel');
+            if (!subPanel) return;
+            // Reset, measure, then flip if needed
+            sub.classList.remove('flip-left');
+            requestAnimationFrame(function() {
+              var rect = subPanel.getBoundingClientRect();
+              if (rect.right > window.innerWidth - 8) sub.classList.add('flip-left');
+            });
+          });
+        });
+
+        trigger.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var isOpen = wrap.classList.contains('open');
+          // Close other ch dropdowns
+          document.querySelectorAll('.ch-dd-wrap.open').forEach(function(w) {
+            if (w !== wrap) w.classList.remove('open');
+          });
+          // Close My Tasks / Notif
+          document.getElementById('myTasksDropdown')?.classList.remove('open');
+          document.getElementById('notifDropdown')?.classList.remove('open');
+          wrap.classList.toggle('open', !isOpen);
+          trigger.setAttribute('aria-expanded', String(!isOpen));
+
+          if (!isOpen) {
+            requestAnimationFrame(function() {
+              var rect = panel.getBoundingClientRect();
+              if (rect.right > window.innerWidth - 8) {
+                panel.style.left = 'auto';
+                panel.style.right = '0';
+              } else {
+                panel.style.left = '';
+                panel.style.right = '';
+              }
+            });
+          }
+        });
+      });
+
+      document.addEventListener('click', function() {
+        // Don't auto-close dropdowns while the admin is in nav edit mode —
+        // they need the panels to stay open while clicking labels to rename them.
+        if (document.querySelector('.nav-links')?.classList.contains('nav-edit-mode')) return;
+        document.querySelectorAll('.ch-dd-wrap.open').forEach(function(w) { w.classList.remove('open'); });
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (document.querySelector('.nav-links')?.classList.contains('nav-edit-mode')) return;
+          document.querySelectorAll('.ch-dd-wrap.open').forEach(function(w) { w.classList.remove('open'); });
+        }
+      });
+    })();
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // ── Mobile nav hamburger ──────────────────────────────────────────────────
+    const mobileOverlay = document.getElementById('mobileNavOverlay');
+    const hamburger = document.getElementById('navHamburger');
+    const mobileClose = document.getElementById('mobileNavClose');
+
+    // Mobile section toggles
+    mobileOverlay && mobileOverlay.querySelectorAll('.mob-nav-section-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var section = btn.closest('.mob-nav-section');
+        var isOpen = section.classList.contains('open');
+        section.classList.toggle('open', !isOpen);
+        btn.setAttribute('aria-expanded', String(!isOpen));
+      });
+    });
+
+    function openMobileNav() {
+      if (!mobileOverlay) return;
+      mobileOverlay.style.display = 'block';
+      requestAnimationFrame(() => mobileOverlay.classList.add('open'));
+      mobileOverlay.setAttribute('aria-hidden', 'false');
+      hamburger && hamburger.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+      // Highlight current page and open its section
+      document.querySelectorAll('.mobile-nav-link[data-mob-page]').forEach(function(a) {
+        var isActive = a.getAttribute('data-mob-page') === page;
+        a.classList.toggle('active', isActive);
+        if (isActive) {
+          var section = a.closest('.mob-nav-section');
+          if (section && !section.classList.contains('open')) {
+            section.classList.add('open');
+            var toggle = section.querySelector('.mob-nav-section-toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+          }
+        }
+      });
+      // Focus first link for accessibility
+      var firstLink = mobileOverlay.querySelector('.mob-nav-top-link, .mobile-nav-link');
+      if (firstLink) firstLink.focus();
+    }
+
+    function closeMobileNav() {
+      if (!mobileOverlay) return;
+      mobileOverlay.classList.remove('open');
+      mobileOverlay.setAttribute('aria-hidden', 'true');
+      hamburger && hamburger.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+      setTimeout(() => { mobileOverlay.style.display = 'none'; }, 280);
+    }
+
+    if (hamburger) hamburger.addEventListener('click', openMobileNav);
+    if (mobileClose) mobileClose.addEventListener('click', closeMobileNav);
+    if (mobileOverlay) {
+      // Close when clicking the backdrop (outside the drawer)
+      mobileOverlay.addEventListener('click', function (e) {
+        if (e.target === mobileOverlay) closeMobileNav();
+      });
+    }
+    // Close on Escape key
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && mobileOverlay && mobileOverlay.classList.contains('open')) {
+        closeMobileNav();
+      }
+    });
+  })();
+</script>
+
+<script type="module">
+/* ===== NAV EDIT MODE ===== */
+import {
+  doc, getDoc, setDoc
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const NAV_CONFIG_DOC = 'nav_config/v1';
+// All six dropdowns are editable. Static `.ch-dd-col-header` divs (e.g.
+// "Pacing — IGCSE", "Messaging") act as anchors: they keep their position
+// in the HTML source while items reorder around them. getConfig captures
+// each item's nearest preceding header as its `section`; applyConfig
+// places items back into their section's slot.
+const PANELS = [
+  'chDdPanel-network',
+  'chDdPanel-comms',
+  'chDdPanel-curriculum',
+  'chDdPanel-performance',
+  'chDdPanel-admin',
+  'chDdPanel-specialist',
+];
+
+let editMode = false;
+let dragSrc = null;
+let savedConfig = null; // snapshot before editing, for discard
+
+// ── Apply config from Firestore on load ──
+document.addEventListener('authReady', async () => {
+  const db = window.db;
+  const isAdmin = window.userProfile?.role_centralhub === 'central_admin';
+
+  // Show edit button only for admins
+  if (isAdmin) {
+    const btn = document.getElementById('btnNavEdit');
+    if (btn) btn.classList.add('visible');
+  }
+
+  // Load and apply nav config
+  if (!db) return;
+  try {
+    const snap = await getDoc(doc(db, NAV_CONFIG_DOC));
+    if (snap.exists()) applyConfig(snap.data());
+  } catch (e) {
+    console.warn('nav_config load error', e);
+  }
+});
+
+// ── Config schema ────────────────────────────────────────────────────────
+// cfg[panelId] = {
+//   submenus: [{ key, label, col }, ...],   // user-defined submenu groups (Admin-only for now)
+//   items:    [{ key, label, col, submenu, section }, ...],
+// }
+// `section` is the textContent of the nearest preceding .ch-dd-col-header
+// in the item's column at capture time, or null if the item lives above
+// any header. It anchors items to a section: applyConfig places each item
+// into the slot between its section header and the next header/divider.
+// Legacy: an array (just items) — treated as { submenus: [], items: [...] }.
+
+// Read the textContent of an element, normalising whitespace.
+function _hdrText(el) {
+  return (el?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+// Find the nearest preceding .ch-dd-col-header sibling for `node` within
+// its parent container. Returns the text label, or null if none above.
+function _sectionForNode(node) {
+  let p = node.previousElementSibling;
+  while (p) {
+    if (p.classList && p.classList.contains('ch-dd-col-header')) return _hdrText(p);
+    p = p.previousElementSibling;
+  }
+  return null;
+}
+
+function getConfig() {
+  const cfg = {};
+  PANELS.forEach(panelId => {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const cols = Array.from(panel.querySelectorAll(':scope > .ch-dd-col-group > .ch-dd-col'));
+
+    // Submenus: their identity, label, and which column they live in (in source order within their column)
+    const submenus = Array.from(panel.querySelectorAll('.ch-dd-submenu-wrap')).map(w => {
+      const colAncestor = w.closest('.ch-dd-col');
+      const colIdx = colAncestor && cols.length > 0 ? Math.max(0, cols.indexOf(colAncestor)) : 0;
+      return {
+        key:   w.dataset.submenu,
+        label: w.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label')?.textContent.trim() || '',
+        col:   colIdx,
+      };
+    });
+
+    const items = Array.from(panel.querySelectorAll('.ch-dd-item[data-nav-key]')).map(a => {
+      const subWrap = a.closest('.ch-dd-submenu-wrap');
+      const submenu = subWrap ? subWrap.dataset.submenu : null;
+      let colIdx = 0;
+      if (cols.length > 0) {
+        const colAncestor = (subWrap || a).closest('.ch-dd-col');
+        colIdx = colAncestor ? cols.indexOf(colAncestor) : 0;
+        if (colIdx < 0) colIdx = 0;
+      }
+      // Section anchor: the nearest preceding .ch-dd-col-header within the
+      // item's direct parent. Items inside a submenu panel inherit the
+      // submenu's section context, not their own (submenus carry items
+      // independently of column-level section headers).
+      const section = subWrap ? null : _sectionForNode(a);
+      return {
+        key:     a.dataset.navKey,
+        label:   a.querySelector('.nav-item-label')?.textContent.trim() || '',
+        col:     colIdx,
+        submenu: submenu,
+        section: section,
+      };
+    });
+
+    cfg[panelId] = { submenus, items };
+  });
+  return cfg;
+}
+
+// Within `container`, return the slot AFTER the section header whose text
+// matches `sectionText`, OR null if the section isn't found. The slot is
+// expressed as { container, beforeNode } — beforeNode is the next header
+// or divider after the section's items (or null = append to end).
+function _findSectionSlot(container, sectionText) {
+  if (!container) return null;
+  if (sectionText == null) {
+    // Items without a section live above the first header. Slot = before
+    // the first header (or end of container if there are no headers).
+    const firstHdr = container.querySelector(':scope > .ch-dd-col-header');
+    return { container, beforeNode: firstHdr || null };
+  }
+  const headers = Array.from(container.querySelectorAll(':scope > .ch-dd-col-header'));
+  const hdr = headers.find(h => _hdrText(h) === sectionText);
+  if (!hdr) return null;
+  // Find the next header or divider after this one — that's the boundary
+  // where this section ends.
+  let cursor = hdr.nextElementSibling;
+  while (cursor) {
+    if (cursor.classList?.contains('ch-dd-col-header') ||
+        cursor.classList?.contains('ch-dd-divider')) {
+      return { container, beforeNode: cursor };
+    }
+    cursor = cursor.nextElementSibling;
+  }
+  return { container, beforeNode: null };
+}
+
+function applyConfig(cfg) {
+  PANELS.forEach(panelId => {
+    const panel = document.getElementById(panelId);
+    if (!panel || !cfg[panelId]) return;
+    // Normalise legacy array format
+    const entry = Array.isArray(cfg[panelId]) ? { submenus: [], items: cfg[panelId] } : cfg[panelId];
+    const submenusList = entry.submenus || [];
+    const itemsList    = entry.items    || [];
+
+    const cols = Array.from(panel.querySelectorAll(':scope > .ch-dd-col-group > .ch-dd-col'));
+
+    // 1. Reconcile submenu wraps with the saved list:
+    //    - drop any submenu that's no longer in cfg
+    //    - create any submenu in cfg that's missing in the DOM
+    //    - place each one inside its target column in cfg order
+    const existing = {};
+    panel.querySelectorAll('.ch-dd-submenu-wrap').forEach(w => { existing[w.dataset.submenu] = w; });
+    const cfgKeys = new Set(submenusList.map(s => s.key));
+    Object.keys(existing).forEach(k => {
+      if (!cfgKeys.has(k)) {
+        // submenu was deleted: spill its items into the wrap's parent column before removing
+        const wrap = existing[k];
+        const parent = wrap.parentNode;
+        wrap.querySelectorAll(':scope > .ch-dd-submenu-panel > .ch-dd-item[data-nav-key]').forEach(it => {
+          parent.insertBefore(it, wrap);
+        });
+        wrap.remove();
+        delete existing[k];
+      }
+    });
+    submenusList.forEach(({ key, label, col }) => {
+      let wrap = existing[key];
+      if (!wrap) {
+        wrap = createSubmenuElement(key, label);
+        existing[key] = wrap;
+      } else {
+        const lblEl = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label');
+        if (lblEl && label) lblEl.textContent = label;
+      }
+      const targetCol = (cols.length > 0 ? (cols[col] || cols[0]) : panel);
+      targetCol.appendChild(wrap);
+    });
+
+    // 2. Re-home every item into its target container (column or submenu panel),
+    //    honouring the saved `section` anchor when set. Section headers + dividers
+    //    stay where the HTML put them; items slot in between.
+    const submenuPanels = {};
+    panel.querySelectorAll('.ch-dd-submenu-wrap').forEach(w => {
+      submenuPanels[w.dataset.submenu] = w.querySelector(':scope > .ch-dd-submenu-panel');
+    });
+
+    // Track per-section running insertion cursor so successive items in the
+    // same section land in the saved order (not all stacked at the section's
+    // first slot). Map: container+section -> Node|null (next sibling after
+    // the last placed item).
+    const sectionCursors = new Map();
+    const cursorKey = (container, section) => {
+      // Use a unique container marker — DOM identity via WeakRef-safe key
+      if (!container.__navSecCursorId) {
+        container.__navSecCursorId = Math.random().toString(36).slice(2);
+      }
+      return container.__navSecCursorId + '||' + (section ?? '__none__');
+    };
+
+    itemsList.forEach(({ key, label, col, submenu, section }) => {
+      const item = panel.querySelector(`.ch-dd-item[data-nav-key="${key}"]`);
+      if (!item) return;
+      const labelEl = item.querySelector('.nav-item-label');
+      if (labelEl && label) labelEl.textContent = label;
+
+      // Resolve target container.
+      let container;
+      if (submenu && submenuPanels[submenu]) {
+        container = submenuPanels[submenu];
+      } else if (cols.length > 0 && col != null) {
+        container = cols[col] || cols[0];
+      } else {
+        container = panel;
+      }
+
+      // Try section-anchored placement first (column-level only).
+      let placed = false;
+      if (!submenu) {
+        const slot = _findSectionSlot(container, section);
+        if (slot) {
+          const k = cursorKey(container, section);
+          let cursor = sectionCursors.get(k);
+          if (cursor === undefined) {
+            // First item in this section: insert at the slot's start
+            // (right after the header). Then update cursor to the slot
+            // boundary so the next item slides in BEFORE the boundary
+            // but AFTER this one.
+            cursor = slot.beforeNode;
+          }
+          if (cursor) container.insertBefore(item, cursor);
+          else container.appendChild(item);
+          // Don't move the cursor — successive items also insert before
+          // the boundary, so they naturally append in order before it.
+          sectionCursors.set(k, cursor);
+          placed = true;
+        }
+      }
+
+      if (!placed) {
+        // Fallback: append (legacy data without `section`, or submenu items,
+        // or an unresolved section text). DOM order from itemsList drives sequence.
+        container.appendChild(item);
+      }
+    });
+  });
+}
+
+// Build a fresh submenu DOM element (used for both saved-config rehydration and Add Group).
+function createSubmenuElement(key, label) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ch-dd-submenu-wrap';
+  wrap.dataset.submenu = key;
+  wrap.innerHTML =
+    '<div class="ch-dd-submenu-trigger" tabindex="0">' +
+      '<svg class="submenu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>' +
+      '<span class="submenu-label"></span>' +
+      '<svg class="submenu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>' +
+      '<button type="button" class="submenu-delete" title="Delete this group" aria-label="Delete group">×</button>' +
+    '</div>' +
+    '<div class="ch-dd-submenu-panel"></div>';
+  wrap.querySelector('.submenu-label').textContent = label || 'New Group';
+  return wrap;
+}
+
+// Make a slug from a label: "IGCSE Pacing" → "igcse-pacing". Falls back to a timestamp.
+function slugify(s) {
+  const slug = String(s || '').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || ('group-' + Date.now().toString(36));
+}
+function uniqueSubmenuKey(panel, base) {
+  let key = base, i = 1;
+  while (panel.querySelector(`.ch-dd-submenu-wrap[data-submenu="${CSS.escape(key)}"]`)) {
+    i += 1;
+    key = base + '-' + i;
+  }
+  return key;
+}
+
+// ── Edit mode toggle ──
+document.getElementById('btnNavEdit')?.addEventListener('click', () => {
+  editMode ? exitEditMode(false) : enterEditMode();
+});
+
+document.getElementById('btnNavSave')?.addEventListener('click', () => exitEditMode(true));
+document.getElementById('btnNavDiscard')?.addEventListener('click', () => exitEditMode(false));
+
+document.getElementById('btnNavAddGroup')?.addEventListener('click', () => {
+  if (!editMode) return;
+  const panelId = document.getElementById('navAddGroupPanel')?.value || 'chDdPanel-admin';
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  const label = (prompt('Name for the new group:', 'New Group') || '').trim();
+  if (!label) return;
+  const key = uniqueSubmenuKey(panel, slugify(label));
+  const wrap = createSubmenuElement(key, label);
+  // Append into the first column of the panel (admins can drag it elsewhere afterwards)
+  const firstCol = panel.querySelector(':scope > .ch-dd-col-group > .ch-dd-col') || panel;
+  firstCol.appendChild(wrap);
+  initSubmenuWrap(wrap);
+  // Focus the label for immediate rename
+  const lblEl = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label');
+  if (lblEl) {
+    lblEl.contentEditable = 'true';
+    setTimeout(() => { lblEl.focus(); document.getSelection()?.selectAllChildren(lblEl); }, 0);
+  }
+});
+
+// Wire one submenu wrap for edit mode: draggable wrap + editable label + delete button.
+function initSubmenuWrap(wrap) {
+  if (wrap._navEditInit) return;
+  wrap._navEditInit = true;
+  wrap.setAttribute('draggable', 'true');
+  wrap.addEventListener('dragstart', onSubmenuDragStart);
+  wrap.addEventListener('dragover',  onSubmenuDragOver);
+  wrap.addEventListener('dragleave', onSubmenuDragLeave);
+  wrap.addEventListener('drop',      onSubmenuDrop);
+  wrap.addEventListener('dragend',   onSubmenuDragEnd);
+
+  const trigger = wrap.querySelector(':scope > .ch-dd-submenu-trigger');
+  const lblEl   = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label');
+  const delBtn  = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-delete');
+  if (lblEl) {
+    lblEl.contentEditable = 'true';
+    lblEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lblEl.blur(); } });
+    // Stop label drag from triggering wrap drag
+    lblEl.addEventListener('mousedown', e => e.stopPropagation());
+  }
+  if (delBtn) {
+    delBtn.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      // Spill items back to the parent column, then remove the wrap
+      const parent = wrap.parentNode;
+      wrap.querySelectorAll(':scope > .ch-dd-submenu-panel > .ch-dd-item[data-nav-key]').forEach(it => {
+        parent.insertBefore(it, wrap);
+      });
+      wrap.remove();
+    });
+  }
+}
+
+let dragSubmenu = null;
+function onSubmenuDragStart(e) {
+  // Only fire if the drag originated on the wrap itself, not on the editable label
+  dragSubmenu = this;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', 'submenu:' + this.dataset.submenu);
+  e.stopPropagation();
+}
+function onSubmenuDragOver(e) {
+  if (!dragSubmenu || dragSubmenu === this) return;
+  if (dragSubmenu.closest('.ch-dd-panel') !== this.closest('.ch-dd-panel')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  this.classList.add('drag-over');
+}
+function onSubmenuDragLeave() { this.classList.remove('drag-over'); }
+function onSubmenuDrop(e) {
+  e.preventDefault(); e.stopPropagation();
+  this.classList.remove('drag-over');
+  if (!dragSubmenu || dragSubmenu === this) return;
+  if (dragSubmenu.closest('.ch-dd-panel') !== this.closest('.ch-dd-panel')) return;
+  // Insert before this submenu wrap
+  this.parentNode.insertBefore(dragSubmenu, this);
+}
+function onSubmenuDragEnd() {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.ch-dd-submenu-wrap.drag-over').forEach(el => el.classList.remove('drag-over'));
+  dragSubmenu = null;
+}
+
+function enterEditMode() {
+  editMode = true;
+  savedConfig = getConfig();
+
+  document.querySelector('.nav-links').classList.add('nav-edit-mode');
+  document.getElementById('btnNavEdit').classList.add('active');
+  document.getElementById('navEditBar').classList.add('open');
+
+  // Open all dropdowns
+  PANELS.forEach(panelId => {
+    const wrap = document.getElementById(panelId)?.closest('.ch-dd-wrap');
+    if (wrap) wrap.classList.add('open');
+  });
+
+  // Make items draggable and labels editable
+  document.querySelectorAll('.nav-edit-mode .ch-dd-item[data-nav-key]').forEach(initItem);
+
+  // Wire each submenu wrap for label-edit, drag-reorder, delete
+  document.querySelectorAll('.nav-edit-mode .ch-dd-submenu-wrap').forEach(initSubmenuWrap);
+
+  // Wire container-level drop targets (columns + submenu panels) so admins can
+  // drop into empty groups or below the last item.
+  PANELS.forEach(panelId => {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const containers = [
+      ...panel.querySelectorAll(':scope > .ch-dd-col-group > .ch-dd-col'),
+      ...panel.querySelectorAll('.ch-dd-submenu-panel'),
+    ];
+    // If the panel itself holds items directly (single-column dropdowns like Schools/Ops)
+    if (panel.querySelector(':scope > .ch-dd-item[data-nav-key]')) containers.push(panel);
+    containers.forEach(c => {
+      c.addEventListener('dragover',  onContainerDragOver);
+      c.addEventListener('dragleave', onContainerDragLeave);
+      c.addEventListener('drop',      onContainerDrop);
+      c._navEditContainer = true;
+    });
+  });
+}
+
+function exitEditMode(save) {
+  editMode = false;
+
+  // Cleanup editable labels
+  document.querySelectorAll('.ch-dd-item[data-nav-key]').forEach(item => {
+    item.removeAttribute('draggable');
+    item.removeEventListener('dragstart', onDragStart);
+    item.removeEventListener('dragover', onDragOver);
+    item.removeEventListener('dragleave', onDragLeave);
+    item.removeEventListener('drop', onDrop);
+    item.removeEventListener('dragend', onDragEnd);
+    item.removeEventListener('click', blockNav, true);
+    item._navEditInit = false;
+    item.classList.remove('dragging', 'drag-over');
+    // Restore stashed href
+    if (item.dataset.navHref) {
+      item.setAttribute('href', item.dataset.navHref);
+      delete item.dataset.navHref;
+    }
+    const lbl = item.querySelector('.nav-item-label');
+    if (lbl) lbl.contentEditable = 'false';
+  });
+
+  // Cleanup container-level drop targets
+  document.querySelectorAll('[data-nav-edit-container], .ch-dd-col, .ch-dd-submenu-panel, .ch-dd-panel').forEach(c => {
+    if (!c._navEditContainer) return;
+    c.removeEventListener('dragover',  onContainerDragOver);
+    c.removeEventListener('dragleave', onContainerDragLeave);
+    c.removeEventListener('drop',      onContainerDrop);
+    c.classList.remove('drop-into');
+    c._navEditContainer = false;
+  });
+
+  // Cleanup submenu wraps
+  document.querySelectorAll('.ch-dd-submenu-wrap').forEach(wrap => {
+    if (!wrap._navEditInit) return;
+    wrap.removeAttribute('draggable');
+    wrap.removeEventListener('dragstart', onSubmenuDragStart);
+    wrap.removeEventListener('dragover',  onSubmenuDragOver);
+    wrap.removeEventListener('dragleave', onSubmenuDragLeave);
+    wrap.removeEventListener('drop',      onSubmenuDrop);
+    wrap.removeEventListener('dragend',   onSubmenuDragEnd);
+    wrap.classList.remove('dragging', 'drag-over');
+    const lblEl = wrap.querySelector(':scope > .ch-dd-submenu-trigger > .submenu-label');
+    if (lblEl) lblEl.contentEditable = 'false';
+    wrap._navEditInit = false;
+  });
+
+  document.querySelector('.nav-links').classList.remove('nav-edit-mode');
+  document.getElementById('btnNavEdit').classList.remove('active');
+  document.getElementById('navEditBar').classList.remove('open');
+
+  // Close all dropdowns
+  PANELS.forEach(panelId => {
+    const wrap = document.getElementById(panelId)?.closest('.ch-dd-wrap');
+    if (wrap) wrap.classList.remove('open');
+  });
+
+  if (!save && savedConfig) {
+    applyConfig(savedConfig);
+    savedConfig = null;
+    return;
+  }
+
+  if (save && window.db) {
+    const cfg = getConfig();
+    setDoc(doc(window.db, NAV_CONFIG_DOC), cfg).catch(e => console.error('nav_config save error', e));
+  }
+  savedConfig = null;
+}
+
+function blockNav(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function initItem(item) {
+  item.setAttribute('draggable', 'true');
+  // Stash and remove href so the <a> cannot navigate
+  if (item.hasAttribute('href')) {
+    item.dataset.navHref = item.getAttribute('href');
+    item.removeAttribute('href');
+  }
+  item.addEventListener('dragstart', onDragStart);
+  item.addEventListener('dragover', onDragOver);
+  item.addEventListener('dragleave', onDragLeave);
+  item.addEventListener('drop', onDrop);
+  item.addEventListener('dragend', onDragEnd);
+  // Block click in capture phase (prevents any residual navigation)
+  item.addEventListener('click', blockNav, true);
+  item._navEditInit = true;
+
+  const lbl = item.querySelector('.nav-item-label');
+  if (lbl) {
+    lbl.contentEditable = 'true';
+    lbl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lbl.blur(); } });
+    // While interacting with the label (clicking to place caret, typing), suspend
+    // the item's draggability so the browser doesn't intercept it as a drag start
+    // and so the click reaches the contentEditable target.
+    lbl.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      item.draggable = false;
+    });
+    lbl.addEventListener('blur', () => { item.draggable = true; });
+    lbl.addEventListener('focus', () => { item.draggable = false; });
+  }
+}
+
+function onDragStart(e) {
+  dragSrc = this;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', this.dataset.navKey);
+}
+
+// Drag/drop rule: items can move freely within the same top-level dropdown panel
+// (Schools / Operations / Academics). Inside Academics that means columns AND
+// submenu panels are all valid targets — admins can move an item from the main
+// column into any submenu group, or vice versa.
+function samePanel(a, b) {
+  return a && b && a.closest('.ch-dd-panel') === b.closest('.ch-dd-panel');
+}
+
+function onDragOver(e) {
+  if (!dragSrc || dragSrc === this) return;
+  if (!samePanel(dragSrc, this)) return;
+  e.preventDefault();
+  e.stopPropagation(); // don't let parent container handler also light up
+  e.dataTransfer.dropEffect = 'move';
+  this.classList.add('drag-over');
+}
+
+function onDragLeave() {
+  this.classList.remove('drag-over');
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  e.stopPropagation(); // don't let the container-level drop handler run too
+  if (!dragSrc || dragSrc === this) return;
+  if (!samePanel(dragSrc, this)) return;
+
+  this.classList.remove('drag-over');
+
+  // Insert relative to target's actual parent (may be .ch-dd-col or .ch-dd-submenu-panel)
+  const tgtParent = this.parentNode;
+  const srcParent = dragSrc.parentNode;
+  const tgtItems  = Array.from(tgtParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcItems  = Array.from(srcParent.querySelectorAll(':scope > .ch-dd-item[data-nav-key]'));
+  const srcIdx    = srcItems.indexOf(dragSrc);
+  const tgtIdx    = tgtItems.indexOf(this);
+
+  if (tgtParent === srcParent && srcIdx < tgtIdx) {
+    this.after(dragSrc);
+  } else {
+    tgtParent.insertBefore(dragSrc, this);
+  }
+}
+
+// Container-level drop: lets admins drop into an empty container (e.g. an empty
+// submenu panel that has no items yet) or between section headers in a column.
+// Picks the insertion point closest to the cursor's Y, respecting headers
+// and dividers as boundaries the dragged item won't jump over.
+function onContainerDragOver(e) {
+  if (!dragSrc) return;
+  if (!samePanel(dragSrc, this)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  this.classList.add('drop-into');
+}
+function onContainerDragLeave() { this.classList.remove('drop-into'); }
+function onContainerDrop(e) {
+  e.preventDefault();
+  this.classList.remove('drop-into');
+  if (!dragSrc) return;
+  if (!samePanel(dragSrc, this)) return;
+
+  // Walk the container's direct children top-to-bottom and find the first
+  // element whose vertical midpoint sits below the cursor. Insert before it.
+  // Section headers and dividers count as anchors — items can land just
+  // before or just after a header but not be appended past the column's
+  // last header (which would dump everything into the final section).
+  const children = Array.from(this.children).filter(c => c !== dragSrc);
+  let insertBefore = null;
+  for (const child of children) {
+    const r = child.getBoundingClientRect();
+    if (e.clientY < r.top + r.height / 2) { insertBefore = child; break; }
+  }
+  if (insertBefore) this.insertBefore(dragSrc, insertBefore);
+  else              this.appendChild(dragSrc);
+}
+
+function onDragEnd() {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.ch-dd-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+  dragSrc = null;
+}
+</script>
+
+<script type="module">
+import {
+  collection, getDocs, query, where
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const STATUS = {
+  todo:         { label: 'To Do',        color: '#6b7280', bg: '#f3f4f6' },
+  in_progress:  { label: 'In Progress',  color: '#0891b2', bg: '#e0f2fe' },
+  under_review: { label: 'Under Review', color: '#d97706', bg: '#fef3c7' },
+  completed:    { label: 'Completed',    color: '#059669', bg: '#d1fae5' },
+  on_hold:      { label: 'On Hold',      color: '#e11d48', bg: '#ffe4e6' },
+};
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('authReady', async ({ detail: { user } }) => {
+  const db = window.db;
+  const displayName = window.userProfile?.displayName || user.displayName || '';
+  const listEl = document.getElementById('myTasksList');
+  const countEl = document.getElementById('myTasksCount');
+
+  if (!displayName || !db) {
+    if (listEl) listEl.innerHTML = '<p class="mtd-empty">Not signed in.</p>';
+    return;
+  }
+
+  try {
+    // Fetch tasks assigned to this user by display name
+    const snap = await getDocs(query(
+      collection(db, 'activity_tasks'),
+      where('assignees', 'array-contains', displayName)
+    ));
+    const myTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Fetch board names
+    const projectIds = [...new Set(myTasks.map(t => t.projectId).filter(Boolean))];
+    const projectMap = {};
+    if (projectIds.length > 0) {
+      // @lint-allow-unbounded — auto-annotated; revisit if collection grows large
+      const projSnap = await getDocs(collection(db, 'activity_projects'));
+      projSnap.docs.forEach(d => { projectMap[d.id] = d.data().name || ''; });
+    }
+
+    // Update count badge
+    if (countEl) countEl.textContent = myTasks.length;
+
+    // Render list
+    if (!listEl) return;
+    if (myTasks.length === 0) {
+      listEl.innerHTML = '<p class="mtd-empty">No tasks assigned to you.</p>';
+      return;
+    }
+
+    listEl.innerHTML = myTasks.map(t => {
+      const st = STATUS[t.status] || { label: t.status || '—', color: '#6b7280', bg: '#f3f4f6' };
+      const boardName = projectMap[t.projectId] || '';
+      return `<a class="mtd-item" href="activities">
+        <span class="mtd-task-name" title="${esc(t.name)}">${esc(t.name || 'Untitled')}</span>
+        ${boardName ? `<span class="mtd-board" title="${esc(boardName)}">${esc(boardName)}</span>` : ''}
+        <span class="mtd-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
+      </a>`;
+    }).join('');
+
+  } catch (err) {
+    console.error('My Tasks navbar error:', err);
+    if (listEl) listEl.innerHTML = '<p class="mtd-empty">Failed to load tasks.</p>';
+  }
+});
+</script>
+
+<script type="module">
+import {
+  collection, query, where, orderBy, limit, getDocs,
+  doc, updateDoc, serverTimestamp, Timestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+function escN(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function sinceLabel(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return 'since ' + d.toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+
+const ICONS = {
+  ann: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3z"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg>`,
+  doc: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  msg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+};
+
+document.addEventListener('authReady', async ({ detail: { user } }) => {
+  const db = window.db;
+  const listEl = document.getElementById('notifList');
+  const badgeEl = document.getElementById('notifBadge');
+  const sinceEl = document.getElementById('notifSince');
+  if (!db || !listEl) return;
+
+  // Read lastLoginAt from profile (set on previous session)
+  const prevLogin = window.userProfile?.lastLoginAt || null;
+
+  // Update lastLoginAt to now for next session
+  try {
+    await updateDoc(doc(db, 'users', user.uid), { lastLoginAt: serverTimestamp() });
+  } catch (e) {
+    console.warn('Could not update lastLoginAt', e);
+  }
+
+  // If no previous login recorded, nothing to compare — show "all caught up"
+  if (!prevLogin) {
+    listEl.innerHTML = '<p class="nd-empty"><span class="nd-empty-icon">✓</span><br>Nothing to show yet.<br><small>Check back after your next login.</small></p>';
+    return;
+  }
+
+  if (sinceEl) sinceEl.textContent = sinceLabel(prevLogin);
+
+  try {
+    const cutoff = prevLogin; // Firestore Timestamp
+
+    // Query each collection in parallel
+    const [annSnap, docSnap, msgSnap] = await Promise.all([
+      getDocs(query(collection(db, 'announcements'),     where('createdAt', '>', cutoff), orderBy('createdAt', 'desc'), limit(10))),
+      getDocs(query(collection(db, 'central_documents'), where('createdAt', '>', cutoff), orderBy('createdAt', 'desc'), limit(10))),
+      getDocs(query(collection(db, 'topics'),            where('createdAt', '>', cutoff), orderBy('createdAt', 'desc'), limit(10))),
+    ]);
+
+    const items = [
+      ...annSnap.docs.map(d => ({ type: 'ann', href: 'announcements', label: 'Announcement', data: d.data() })),
+      ...docSnap.docs.map(d => ({ type: 'doc', href: 'documents',     label: 'Document',     data: d.data() })),
+      ...msgSnap.docs.map(d => ({ type: 'msg', href: 'messageboard',  label: 'Message',      data: d.data() })),
+    ].sort((a, b) => {
+      const ta = a.data.createdAt?.toMillis?.() || 0;
+      const tb = b.data.createdAt?.toMillis?.() || 0;
+      return tb - ta;
+    });
+
+    // Update badge
+    if (badgeEl) {
+      if (items.length > 0) {
+        badgeEl.textContent = items.length > 99 ? '99+' : items.length;
+        badgeEl.style.display = 'flex';
+      } else {
+        badgeEl.style.display = 'none';
+      }
+    }
+
+    if (items.length === 0) {
+      listEl.innerHTML = '<p class="nd-empty"><span class="nd-empty-icon">✓</span><br>You\'re all caught up!<br><small>Nothing new since your last login.</small></p>';
+      return;
+    }
+
+    listEl.innerHTML = items.map(({ type, href, label, data }) => {
+      const title = data.title || data.name || data.subject || 'Untitled';
+      const ago = timeAgo(data.createdAt);
+      return `<a class="nd-item" href="${href}">
+        <span class="nd-icon ic-${type}">${ICONS[type]}</span>
+        <span class="nd-body">
+          <span class="nd-title" title="${escN(title)}">${escN(title)}</span>
+          <span class="nd-meta">${escN(label)} · ${ago}</span>
+        </span>
+      </a>`;
+    }).join('');
+
+  } catch (err) {
+    console.error('Notifications error:', err);
+    listEl.innerHTML = '<p class="nd-empty">Could not load notifications.</p>';
+  }
+});
+</script>
+
+<script type="module" src="auth-guard.js"></script>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">AI Competency Framework v1.0</div>
+    <h1 class="hero-title">Teacher AI Competency Framework</h1>
+    <p class="hero-sub">
+      Three progression levels (Foundation, Practitioner, Leader) across five domains.
+      Click any cell to see the verbatim canonical descriptor. Use for self-assessment,
+      professional development planning, and line-manager validation.
+    </p>
+    <div class="hero-meta">
+      Eduversal AI Competency Framework v1.0 · Approved by Eduversal Academic Directorate ·
+      Companion playbook: <a href="/handbook?id=aicf-teacher-playbook" style="color:rgba(255,255,255,0.7);">Teacher Playbook</a>
+    </div>
+  </div>
+</header>
+
+<main class="page-wrap">
+  <section class="intro-card">
+    <h2>How to use this page</h2>
+    <p>
+      All teaching staff are expected to achieve <strong>Foundation</strong> level within the
+      first year of framework implementation. <strong>Practitioner</strong> level reflects
+      proficient AI integration. <strong>Leader</strong> level represents advanced expertise
+      and is a specialist contribution — not all teachers are expected to reach it.
+    </p>
+    <p>
+      The matrix below shows what is expected at each level for each domain. Click a cell
+      to read the verbatim descriptor. The descriptors are the source of truth for annual
+      self-assessment.
+    </p>
+  </section>
+
+  <section class="matrix-section">
+    <div class="section-eyebrow">Competency Matrix</div>
+    <h2 class="section-title">3 Levels × 5 Domains</h2>
+
+    <div class="matrix" id="matrix">
+      <div class="matrix-cell header"></div>
+      <div class="matrix-cell header">Foundation</div>
+      <div class="matrix-cell header">Practitioner</div>
+      <div class="matrix-cell header">Leader</div>
+
+      <!-- Domain A -->
+      <div class="matrix-cell domain-label">Domain A<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Knowledge &amp; Understanding</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainA">
+        <div class="cell-summary">Understands AI basics, key limitations (hallucination, bias), and ethical considerations. Knows the school's AI policy.</div>
+        <span class="aicf-tag">Foundation · A</span>
+        <div class="cell-refid">teacher.foundation.domainA</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainA">
+        <div class="cell-summary">Deeper understanding of how LLMs work. Stays current with developments. Can explain AI to students and parents.</div>
+        <span class="aicf-tag">Practitioner · A</span>
+        <div class="cell-refid">teacher.practitioner.domainA</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainA">
+        <div class="cell-summary">Comprehensive understanding. Engages with technical concepts and research literature. Anticipates future developments.</div>
+        <span class="aicf-tag">Leader · A</span>
+        <div class="cell-refid">teacher.leader.domainA</div>
+      </div>
+
+      <!-- Domain B -->
+      <div class="matrix-cell domain-label">Domain B<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Practical Application</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainB">
+        <div class="cell-summary">Uses approved tools for lesson planning, materials creation, admin tasks. Reviews AI outputs before use. Follows data privacy.</div>
+        <span class="aicf-tag">Foundation · B</span>
+        <div class="cell-refid">teacher.foundation.domainB</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainB">
+        <div class="cell-summary">Advanced prompt engineering. Uses AI across differentiation, rubrics, feedback templates. Troubleshoots when outputs aren't right.</div>
+        <span class="aicf-tag">Practitioner · B</span>
+        <div class="cell-refid">teacher.practitioner.domainB</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainB">
+        <div class="cell-summary">Expert-level skills. Designs complex AI-enhanced workflows. Evaluates tools for school adoption. Develops resources for colleagues.</div>
+        <span class="aicf-tag">Leader · B</span>
+        <div class="cell-refid">teacher.leader.domainB</div>
+      </div>
+
+      <!-- Domain C -->
+      <div class="matrix-cell domain-label">Domain C<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Pedagogical Integration</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainC">
+        <div class="cell-summary">Uses AI materials to support learning objectives. Remains the instructional decision-maker. Can explain AI use to students.</div>
+        <span class="aicf-tag">Foundation · C</span>
+        <div class="cell-refid">teacher.foundation.domainC</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainC">
+        <div class="cell-summary">Integrates AI strategically for differentiation. Designs learning that leverages AI while maintaining rigour. Teaches students responsible use.</div>
+        <span class="aicf-tag">Practitioner · C</span>
+        <div class="cell-refid">teacher.practitioner.domainC</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainC">
+        <div class="cell-summary">Designs innovative AI-enhanced learning. Develops curriculum materials for the school/network. Mentors colleagues. Leads student AI literacy work.</div>
+        <span class="aicf-tag">Leader · C</span>
+        <div class="cell-refid">teacher.leader.domainC</div>
+      </div>
+
+      <!-- Domain D -->
+      <div class="matrix-cell domain-label">Domain D<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Critical Evaluation</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainD">
+        <div class="cell-summary">Fact-checks AI content. Spots obvious errors, false citations, cultural bias. Doesn't accept AI uncritically.</div>
+        <span class="aicf-tag">Foundation · D</span>
+        <div class="cell-refid">teacher.foundation.domainD</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainD">
+        <div class="cell-summary">Sophisticated evaluation — accuracy, depth, nuance, pedagogical fit. Spots subtle bias. Handles AI integrity concerns without false accusations.</div>
+        <span class="aicf-tag">Practitioner · D</span>
+        <div class="cell-refid">teacher.practitioner.domainD</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainD">
+        <div class="cell-summary">Contributes to school/network evaluation of tools, policies, integration outcomes. Leads ethical discussions. Advises leadership on emerging risks.</div>
+        <span class="aicf-tag">Leader · D</span>
+        <div class="cell-refid">teacher.leader.domainD</div>
+      </div>
+
+      <!-- Domain E -->
+      <div class="matrix-cell domain-label">Domain E<br><span style="font-weight:400;color:var(--ink-2,#44445a);font-size:0.78rem;">Professional Contribution</span></div>
+      <div class="matrix-cell body" data-ref="teacher.foundation.domainE">
+        <div class="cell-summary">Engages with school AI initiatives. Shares basic tips with immediate colleagues. Asks for support when uncertain.</div>
+        <span class="aicf-tag">Foundation · E</span>
+        <div class="cell-refid">teacher.foundation.domainE</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.practitioner.domainE">
+        <div class="cell-summary">Actively shares effective practices. Contributes to department/school discussions. Supports less experienced colleagues. Participates in PLCs.</div>
+        <span class="aicf-tag">Practitioner · E</span>
+        <div class="cell-refid">teacher.practitioner.domainE</div>
+      </div>
+      <div class="matrix-cell body" data-ref="teacher.leader.domainE">
+        <div class="cell-summary">Leads PD sessions at school/network level. Contributes to AI policy development. Represents the school externally. Documents and shares effective practices.</div>
+        <span class="aicf-tag">Leader · E</span>
+        <div class="cell-refid">teacher.leader.domainE</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sources-block">
+    <h3>Companion resources</h3>
+    <ul>
+      <li><a href="/handbook?id=aicf-teacher-playbook">Teacher Playbook</a> — Practical workflows for subject teachers and subject leaders.</li>
+      <li><a href="/handbook?id=aicf-prompt-library">AI Prompt Library</a> — Copy-paste prompts organised by task category.</li>
+      <li><a href="/handbook?id=aicf-red-lines">AI Red Lines</a> — Network-wide unconditional no-go list.</li>
+      <li><a href="/handbook?id=aicf-decision-trees">AI Decision Trees</a> — Step-by-step guidance for ambiguous situations.</li>
+      <li><a href="/handbook?id=aicf-weekly-tips">AI Weekly Tips</a> — One small idea per week across 34 effective weeks.</li>
+      <li><a href="/ai-framework-student">Student AI Competency Framework</a> — Age-appropriate learning outcomes (Part 2).</li>
+      <li><a href="/ai-framework-institutional">Institutional AI Maturity Framework</a> — School-level assessment (Part 3).</li>
+    </ul>
+  </section>
+</main>
+
+<!-- Detail panel (slides in from right when a cell is clicked) -->
+<aside class="detail-panel" id="detailPanel">
+  <div class="detail-head">
+    <button class="detail-close" onclick="closeDetail()">✕</button>
+    <div class="aicf-tag" id="detailBadge">AICF · Teacher</div>
+    <div class="detail-title" id="detailTitle">—</div>
+    <div class="detail-refid" id="detailRefId">—</div>
+  </div>
+  <div class="detail-body">
+    <div id="detailBody" class="loading">Click a cell to see the verbatim descriptor.</div>
+  </div>
+</aside>
+
+<script>
+let referenceData = null;
+
+async function loadReference() {
+  try {
+    const res = await fetch('/research/eduversal/ai-competency-framework/reference/eduversal-v1-part1-teacher.json', { cache: 'force-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    referenceData = await res.json();
+  } catch (err) {
+    console.warn('[ai-framework-teacher] reference load failed', err);
+  }
+}
+
+function findByRefId(node, target) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.refId === target) return node;
+  for (const key of Object.keys(node)) {
+    if (key.startsWith('_')) continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const hit = findByRefId(item, target);
+        if (hit) return hit;
+      }
+    } else if (child && typeof child === 'object') {
+      const hit = findByRefId(child, target);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+async function openDetail(ref) {
+  const panel = document.getElementById('detailPanel');
+  const body = document.getElementById('detailBody');
+  const title = document.getElementById('detailTitle');
+  const refIdEl = document.getElementById('detailRefId');
+
+  panel.classList.add('open');
+  body.innerHTML = '<div class="loading">Loading…</div>';
+  title.textContent = '—';
+  refIdEl.textContent = ref;
+
+  if (!referenceData) await loadReference();
+  if (!referenceData) {
+    body.innerHTML = '<p style="color:#8888a8;">Reference layer not available. Check that build.js has copied the JSON to /research/eduversal/ai-competency-framework/reference/.</p>';
+    return;
+  }
+
+  const node = findByRefId(referenceData, ref);
+  if (!node) {
+    body.innerHTML = '<p style="color:#8888a8;">No matching block found for ' + escHtml(ref) + '.</p>';
+    return;
+  }
+
+  title.textContent = node.title || ref;
+
+  let html = '';
+  if (Array.isArray(node.verbatim)) {
+    html = node.verbatim.map(p => '<p>' + escHtml(p) + '</p>').join('');
+  } else if (typeof node.verbatim === 'string') {
+    html = '<p>' + escHtml(node.verbatim) + '</p>';
+  } else if (node.summary) {
+    html = '<p>' + escHtml(node.summary) + '</p>';
+  } else {
+    html = '<p style="color:#8888a8;">(No verbatim text in this block.)</p>';
+  }
+
+  if (node.expectedTimeline) {
+    html += '<div class="detail-meta"><strong>Expected timeline:</strong> ' + escHtml(node.expectedTimeline) + '</div>';
+  }
+
+  body.innerHTML = html;
+
+  // Update URL hash for deep-linking
+  if (window.history && window.history.replaceState) {
+    const newUrl = window.location.pathname + '?ref=' + encodeURIComponent(ref);
+    window.history.replaceState({}, '', newUrl);
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
+// Wire matrix cells
+document.querySelectorAll('.matrix-cell.body').forEach(cell => {
+  cell.addEventListener('click', () => {
+    const ref = cell.dataset.ref;
+    if (ref) openDetail(ref);
+  });
+});
+
+// Deep-link support: ?ref=teacher.foundation.domainA opens that cell on load
+document.addEventListener('authReady', () => {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('ref');
+  if (ref) openDetail(ref);
+});
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDetail();
+});
+</script>
+<script src="cambridge-crossref.js" defer></script>
+</body>
+</html>

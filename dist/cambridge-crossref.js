@@ -1,8 +1,9 @@
 /**
  * cambridge-crossref.js
  *
- * Click-to-expand popover runtime for four chip families that surface
- * across induction handbooks, KPI / appraisal / competency UIs:
+ * Click-to-expand popover runtime for five chip families that surface
+ * across induction handbooks, KPI / appraisal / competency UIs, and the
+ * AI Competency Framework reader pages:
  *
  *   1. CTS chips           — Cambridge Teacher / School-Leader Standards
  *                            (cross-ref via cambridge_crossref/index Firestore doc).
@@ -13,6 +14,15 @@
  *   4. ES chips            — Eduversal Academic Standards madde id anchors
  *                            (23-section network-wide standards manual,
  *                             docs/research/eduversal/academic-standards/).
+ *   5. AICF chips          — Eduversal AI Competency Framework v1.0 refIds
+ *                            (3 parts × competency blocks + UNESCO selections,
+ *                             docs/research/eduversal/ai-competency-framework/).
+ *                            Accepted refId forms:
+ *                              teacher.foundation.domainA
+ *                              student.lower_secondary.strand2
+ *                              institutional.staff_capability.level3
+ *                              unesco_aicft.acquire
+ *                              appendix.A_teacher_self_assessment
  *
  * UI is in English. PIGP + SKL source documents are in Bahasa Indonesia;
  * the popover shows the English summary first and exposes the verbatim
@@ -49,6 +59,17 @@
     esBlurbs: null,           // ES search-blurbs.json — popover preview text
     inflightEsBlurbs: null,
     esSections: {},           // ES section-NN.json — fetched on demand for "view full"
+    // AICF — Eduversal AI Competency Framework v1.0 reference layer
+    aicfPart1: null,          // eduversal-v1-part1-teacher.json
+    inflightAicfPart1: null,
+    aicfPart2: null,          // eduversal-v1-part2-student.json
+    inflightAicfPart2: null,
+    aicfPart3: null,          // eduversal-v1-part3-institutional.json
+    inflightAicfPart3: null,
+    aicfAppendices: null,     // eduversal-v1-appendices.json
+    inflightAicfAppendices: null,
+    aicfUnesco: null,         // unesco-ai-cft-2024.json
+    inflightAicfUnesco: null,
     popover: null,
   };
 
@@ -100,6 +121,14 @@
   const loadEsManifest = () => loadJson('/research/eduversal/academic-standards/manifest.json',     'esManifest', 'inflightEsManifest');
   const loadEsBlurbs   = () => loadJson('/research/eduversal/academic-standards/search-blurbs.json', 'esBlurbs',   'inflightEsBlurbs');
 
+  // AICF loaders — 5 reference files in docs/research/eduversal/ai-competency-framework/reference/
+  // build.js copies these to dist/research/eduversal/ai-competency-framework/reference/
+  const loadAicfPart1      = () => loadJson('/research/eduversal/ai-competency-framework/reference/eduversal-v1-part1-teacher.json',      'aicfPart1',      'inflightAicfPart1');
+  const loadAicfPart2      = () => loadJson('/research/eduversal/ai-competency-framework/reference/eduversal-v1-part2-student.json',      'aicfPart2',      'inflightAicfPart2');
+  const loadAicfPart3      = () => loadJson('/research/eduversal/ai-competency-framework/reference/eduversal-v1-part3-institutional.json','aicfPart3',      'inflightAicfPart3');
+  const loadAicfAppendices = () => loadJson('/research/eduversal/ai-competency-framework/reference/eduversal-v1-appendices.json',         'aicfAppendices', 'inflightAicfAppendices');
+  const loadAicfUnesco     = () => loadJson('/research/eduversal/ai-competency-framework/reference/unesco-ai-cft-2024.json',              'aicfUnesco',     'inflightAicfUnesco');
+
   // ──────────────────────────────────────────────────────────────────
   // Popover skeleton (shared across all 3 chip families)
   // ──────────────────────────────────────────────────────────────────
@@ -124,7 +153,7 @@
     document.addEventListener('mousedown', (e) => {
       if (el.style.display === 'none') return;
       if (!el.contains(e.target) &&
-          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref]')) {
+          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref],[data-aicf-ref]')) {
         closePopover();
       }
     });
@@ -490,6 +519,132 @@
   }
 
   // ──────────────────────────────────────────────────────────────────
+  // AICF popover — Eduversal AI Competency Framework v1.0
+  //   refId routing:
+  //     teacher.*           → eduversal-v1-part1-teacher.json
+  //     student.*           → eduversal-v1-part2-student.json
+  //     institutional.*     → eduversal-v1-part3-institutional.json
+  //     appendix.*          → eduversal-v1-appendices.json
+  //     unesco_aicft.*      → unesco-ai-cft-2024.json
+  // ──────────────────────────────────────────────────────────────────
+
+  // Walk a JSON tree looking for a node whose refId matches the target.
+  function findByRefId(node, targetRefId) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.refId === targetRefId) return node;
+    for (const key of Object.keys(node)) {
+      if (key.startsWith('_')) continue; // skip _meta, _indexing, _purpose
+      const child = node[key];
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          const hit = findByRefId(item, targetRefId);
+          if (hit) return hit;
+        }
+      } else if (child && typeof child === 'object') {
+        const hit = findByRefId(child, targetRefId);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  function aicfSourceBadge(refIdPrefix) {
+    const m = {
+      teacher:       { bg: '#fef3c7', fg: '#92400e', label: 'AICF · Teacher' },
+      student:       { bg: '#dbeafe', fg: '#1e40af', label: 'AICF · Student' },
+      institutional: { bg: '#ede9fe', fg: '#5b21b6', label: 'AICF · Institutional' },
+      appendix:      { bg: '#f3f4f6', fg: '#374151', label: 'AICF · Appendix' },
+      unesco_aicft:  { bg: '#dcfce7', fg: '#166534', label: 'UNESCO AI CFT 2024' },
+    };
+    return m[refIdPrefix] || { bg: '#f3f4f6', fg: '#374151', label: 'AICF' };
+  }
+
+  async function openAicfCrossref(rawRef, anchorEl) {
+    const ref = String(rawRef || '').trim();
+    if (!ref) return;
+
+    const pop = ensurePopoverEl();
+    pop.innerHTML = `<div style="color:#8888a8;font-size:12px;">Loading AI Competency Framework reference…</div>`;
+    pop.style.display = 'block';
+    positionPopover(pop, anchorEl);
+
+    const prefix = ref.split('.')[0];
+    let doc = null;
+    let loaderName = '';
+    if (prefix === 'teacher')             { doc = await loadAicfPart1();      loaderName = 'Part 1 — Teacher'; }
+    else if (prefix === 'student')        { doc = await loadAicfPart2();      loaderName = 'Part 2 — Student'; }
+    else if (prefix === 'institutional')  { doc = await loadAicfPart3();      loaderName = 'Part 3 — Institutional'; }
+    else if (prefix === 'appendix')       { doc = await loadAicfAppendices(); loaderName = 'Appendices'; }
+    else if (prefix === 'unesco_aicft')   { doc = await loadAicfUnesco();     loaderName = 'UNESCO AI CFT 2024'; }
+
+    if (!doc || doc.__loadError) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">Source not available offline. Reference layer files for the AI Competency Framework are under docs/research/eduversal/ai-competency-framework/reference/.</div>
+      `;
+      return;
+    }
+
+    const node = findByRefId(doc, ref);
+    if (!node) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">No matching block found in ${escHtml(loaderName)}. Check the refId pattern.</div>
+      `;
+      return;
+    }
+
+    const badge = aicfSourceBadge(prefix);
+    const title = node.title || node.summary || ref;
+    // verbatim may be a string or an array of paragraphs
+    let bodyHtml = '';
+    if (node.verbatim) {
+      if (Array.isArray(node.verbatim)) {
+        bodyHtml = node.verbatim.map(p => `<p style="margin:0 0 8px 0;line-height:1.55;color:#1c1c2e;">${escHtml(p)}</p>`).join('');
+      } else {
+        bodyHtml = `<p style="margin:0 0 8px 0;line-height:1.55;color:#1c1c2e;">${escHtml(node.verbatim)}</p>`;
+      }
+    } else if (node.summary) {
+      bodyHtml = `<p style="margin:0 0 8px 0;line-height:1.55;color:#1c1c2e;">${escHtml(node.summary)}</p>`;
+    } else {
+      bodyHtml = `<p style="color:#8888a8;line-height:1.55;">(No verbatim text or summary in this block.)</p>`;
+    }
+
+    // Deep-link to reader page when implemented (Phase 1c-1e). For now, link to /references.
+    const deepLink = (() => {
+      if (prefix === 'teacher')             return '/ai-framework-teacher?ref=' + encodeURIComponent(ref);
+      if (prefix === 'student')             return '/ai-framework-student?ref=' + encodeURIComponent(ref);
+      if (prefix === 'institutional')       return '/ai-framework-institutional?ref=' + encodeURIComponent(ref);
+      if (prefix === 'appendix')            return '/references?doc=aicf-appendices&ref=' + encodeURIComponent(ref);
+      if (prefix === 'unesco_aicft')        return '/references?doc=unesco-ai-cft-2024&ref=' + encodeURIComponent(ref);
+      return '/references';
+    })();
+
+    pop.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">
+        <div style="flex:1;min-width:0;">
+          <span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${badge.bg};color:${badge.fg};letter-spacing:.05em;text-transform:uppercase;">${escHtml(badge.label)}</span>
+          <div style="font-weight:700;margin-top:6px;color:#e67e22;">${escHtml(title)}</div>
+          <div style="font-size:10.5px;color:#8888a8;margin-top:2px;font-family:'JetBrains Mono',monospace;">${escHtml(ref)}</div>
+        </div>
+        ${closeBtn()}
+      </div>
+      <div style="border-top:1px solid #f1ece4;padding-top:8px;">
+        ${bodyHtml}
+      </div>
+      <div style="margin-top:10px;border-top:1px dashed #e5e0d8;padding-top:8px;font-size:11px;">
+        <a href="${escHtml(deepLink)}" style="color:#e67e22;text-decoration:none;font-weight:600;">Open full reference →</a>
+      </div>
+    `;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   // Auto-wire chips
   // ──────────────────────────────────────────────────────────────────
 
@@ -561,6 +716,22 @@
       el.title = el.title || 'Eduversal Academic Standards — click for the madde anchor + deep-link into /references.';
       makeClickable(el, ref, openEsCrossref);
     });
+
+    // AICF chips — AI Competency Framework v1.0 reference blocks
+    //   Accepted forms (the refId is verbatim, not parsed from text):
+    //     <span class="hb-tag aicf" data-aicf-ref="teacher.foundation.domainA">Foundation · Domain A</span>
+    //     <span data-aicf-ref="student.lower_secondary.strand2">Using AI Responsibly (LS)</span>
+    //     <span data-aicf-ref="unesco_aicft.acquire">UNESCO · Acquire</span>
+    //   refId pattern is more structured than ES/CTS so text-pattern matching is unreliable.
+    //   The chip MUST carry data-aicf-ref explicitly — text-only chips are NOT auto-wired.
+    scope.querySelectorAll('.hb-tag.aicf, [data-aicf-ref]').forEach(el => {
+      if (el.dataset.aicfWired === '1') return;
+      const ref = el.dataset.aicfRef;
+      if (!ref) return; // no text fallback for AICF
+      el.dataset.aicfWired = '1';
+      el.title = el.title || 'Eduversal AI Competency Framework v1.0 — click for verbatim canonical content.';
+      makeClickable(el, ref, openAicfCrossref);
+    });
   }
 
   // First pass + observe for chips added later (modal opens, accordion expands).
@@ -580,11 +751,13 @@
   window.openSklCrossref  = openSklCrossref;
   window.openPigpCrossref = openPigpCrossref;
   window.openEsCrossref   = openEsCrossref;
+  window.openAicfCrossref = openAicfCrossref;
   window.__ctsCrossref = {
     open:     openCtsCrossref,
     openSkl:  openSklCrossref,
     openPigp: openPigpCrossref,
     openEs:   openEsCrossref,
+    openAicf: openAicfCrossref,
     close:    closePopover,
   };
 })();

@@ -573,11 +573,15 @@ EASE assessment configuration. `central_admin` write; any authorised read.
 The 7 collections that implement the Eduversal Induction Charter (subject teacher / school principal / HQ subject specialist first-year journeys). Specification source: [`docs/induction/firestore-schema.json`](induction/firestore-schema.json) and [`docs/induction/INDUCTION_CHARTER.md`](induction/INDUCTION_CHARTER.md). Firestore rules in [`Central Hub/firestore.rules`](../Central Hub/firestore.rules) under "INDUCTION MODULE".
 
 #### `induction_programs/{programId}` — Handbook templates
-**PK:** stable slug — `handbook_subject_teacher_v2`, `eduversal_principal_v1`, `eduversal_specialist_v1`.
-**Fields:** `handbookId`, `version`, `targetRole` (`'subject_teacher'`/`'school_principal'`/`'subject_specialist'`), `audience{platform, role, subRole}`, `duration{}`, `stages[]` (with nested tasks, observation cycles, deliverables), `linkedFrameworks{}` (Cambridge ICTL 5881, PIGP, SKL refs), `openItems[]`, `createdAt`, `updatedAt`.
+**PK:** stable slug — `handbook_subject_teacher_v2`, `eduversal_principal_v1`, `eduversal_specialist_v1`, `eduversal_director_first_90_days_v1`, `eduversal_student_handbook_v1`, etc.
+**Fields:** `handbookId`, `handbookKind` (discriminator — see below), `version`, `targetRole` (where applicable), `audience{platform, role, subRole, primaryReader}`, `duration{}` (induction + role-operational kinds), `stages[]` OR `sections[]` (induction + role-operational use `stages[]` for time-windowed phases; school-facing uses `sections[]` for topic chapters), `linkedFrameworks{}`, `openItems[]`, `customizationModel`, `internationalAnchorsSummary[]`, `indonesianAnchorsSummary[]`, `createdAt`, `updatedAt`.
+**`handbookKind` enum** — three values:
+- `'induction'` — Year-1 mentee journey (subject teacher, principal, specialist). Charter NN1-NN5 bound. Source: [`docs/induction/handbook-*.json`](induction/).
+- `'role-operational'` — Specialist role 90-day onboarding (DSL, Cambridge Coordinator, Academic Coordinator, Subject Leader, Director, Subject Specialist, Foundation Rep). Pairs with weekly checklists. Source: [`docs/handbooks/*-first-90-days-v1.json`](handbooks/).
+- `'school-facing'` — Partner-school audience documents (Student / Teacher / Parent Handbook + Staff Code of Conduct). Network-uniform core + hybrid school customization slots. Source: [`docs/handbooks/school-facing/*.json`](handbooks/school-facing/).
 **Writers:** `central_admin` (populated by `scripts/induction/seed-induction-programs.js` from the JSON handbooks).
-**Read scope:** any signed-in user (mentees and mentors must read their program).
-**Notes:** Source of truth is the JSON in [`docs/induction/handbook-*.json`](induction/). Firestore docs are populated by the seed script. Hand-edits in Firestore that diverge from the JSON are reverted on next seed run.
+**Read scope:** any signed-in user (mentees and mentors must read their program; school-facing docs are read by every audience: students via SH, teachers via TH, parents via portal links, staff via CH/AH/TH).
+**Notes:** Source of truth is always the JSON in `docs/`. Firestore docs are populated by the seed script. Hand-edits in Firestore that diverge from the JSON are reverted on next seed run. `stages[]` and `sections[]` are functionally equivalent for reader rendering — both contain ordered content blocks; the reader checks which is present and renders accordingly.
 
 #### `induction_assignments/{menteeUid}` — Three-party induction record
 **PK:** mentee `uid` (composite-style — one active induction per user).
