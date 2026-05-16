@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────────
 // Replace with your deployed Apps Script Web App URL
-const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec";
+const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbz8Wiv4ndiecRZSYmbLsOe9DVc8A7BiV0TMHVV_8x9Tz08goc8WVhPQGtMW3umkTyO5/exec";
 
 // Fallback demo data (replaces API when URL not configured)
 const DEMO_EVENTS = [
