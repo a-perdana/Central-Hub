@@ -3041,7 +3041,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   const { useState, useEffect, useCallback, useMemo } = React;
 
   // ─── CONFIG ──────────────────────────────────────────────────────────────────
-  const SHEETS_API_URL    = "https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec";
+  const SHEETS_API_URL    = "https://script.google.com/macros/s/AKfycbz8Wiv4ndiecRZSYmbLsOe9DVc8A7BiV0TMHVV_8x9Tz08goc8WVhPQGtMW3umkTyO5/exec";
   const FS_COLLECTION     = "calendar_events";
   const FS_SETTINGS_DOC   = "calendar_settings";  // collection
   const FS_SETTINGS_ID    = "current";             // single document
@@ -3632,7 +3632,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     const [currentYear,  setCurrentYear]  = useState(today.getFullYear());
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
     const [events,       setEvents]       = useState([]);
-    const [dataSource,   setDataSource]   = useState("loading"); // "loading" | "sheets" | "firestore" | "sheets+firestore" | "empty"
+    const [dataSource,   setDataSource]   = useState("loading"); // "loading" | "firestore" | "empty"
     const [selectedEvent, setSelectedEvent] = useState(null);
     // View persisted in localStorage so user's choice sticks. New default
     // is "strip" (2-month grid) — wider scan than the single-month grid.
@@ -3665,39 +3665,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     const [sheetsVersionModal, setSheetsVersionModal] = useState(null);
 
     // ─── Load Firestore events ────────────────────────────────────────────────
+    // Firestore is the single source of truth. Each doc carries `sheets_original`
+    // (snapshot of what Sheets had at last sync) so the "edited" rozet still
+    // works by diffing current fields against that snapshot.
     const loadFromFirestore = useCallback(async () => {
       const { getFirestore, collection, getDocs, query, orderBy } = window.__calFS;
       const db = getFirestore(window.firebaseApp);
       const snap = await getDocs(query(collection(db, FS_COLLECTION), orderBy("date_start")));
       if (snap.empty) return [];
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return snap.docs.map(d => {
+        const data = d.data();
+        const ev = { id: d.id, ...data };
+        // Reconstruct _sheetsOriginal so the existing "edited" badge logic
+        // (selectedEvent._sheetsOriginal truthy → show diff) keeps working
+        // unchanged. Only docs that came from a Sheets sync carry this.
+        if (data.sheets_original) ev._sheetsOriginal = data.sheets_original;
+        return ev;
+      });
     }, []);
-
-    // ─── Merge Sheets + Firestore ─────────────────────────────────────────────
-    // Firestore docs with sheets_id override the matching Sheets row.
-    // Firestore docs without sheets_id are new admin-added events.
-    function mergeEvents(sheetsEvents, fsEvents) {
-      // Build override map: sheets_id → firestore doc
-      const overrides = {};
-      const fsOnly = [];
-      fsEvents.forEach(fe => {
-        if (fe.sheets_id) overrides[fe.sheets_id] = fe;
-        else fsOnly.push(fe);
-      });
-
-      const merged = sheetsEvents.map(se => {
-        if (overrides[se.id]) {
-          // Return Firestore version, but keep sheets_original for diffing
-          return { ...overrides[se.id], _sheetsOriginal: se };
-        }
-        return se;
-      });
-
-      // Add Firestore-only events (no matching Sheets row)
-      fsOnly.forEach(fe => merged.push(fe));
-
-      return merged;
-    }
 
     // ─── Load academic year settings from calendar_settings/current ─────────
     useEffect(() => {
@@ -3714,38 +3699,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       loadSettings();
     }, []);
 
-    // ─── Initial data fetch: Sheets + Firestore in parallel ──────────────────
+    // ─── Initial data fetch: Firestore only ──────────────────────────────────
+    // Sheets is no longer read at page load. The Apps Script feeder is only
+    // touched by the admin "Sync from Sheets" button (handleSyncFromSheets).
     useEffect(() => {
       let cancelled = false;
 
       async function init() {
-        const [sheetsResult, fsResult] = await Promise.allSettled([
-          fetch(SHEETS_API_URL).then(r => r.json()),
-          loadFromFirestore(),
-        ]);
-
+        const fsEvents = await loadFromFirestore().catch(() => []);
         if (cancelled) return;
-
-        const sheetsOk = sheetsResult.status === "fulfilled" && Array.isArray(sheetsResult.value) && sheetsResult.value.length > 0;
-        const fsOk     = fsResult.status === "fulfilled" && fsResult.value && fsResult.value.length > 0;
-
-        const sheetsEvents = sheetsOk
-          ? sheetsResult.value.map(e => e ? {
-              ...e,
-              date_start: normalizeDate(e.date_start) || e.date_start,
-              date_end:   normalizeDate(e.date_end)   || e.date_end,
-            } : null).filter(Boolean)
-          : [];
-
-        const fsEvents = fsOk ? fsResult.value : [];
-
-        if (sheetsOk && fsOk) {
-          setEvents(mergeEvents(sheetsEvents, fsEvents));
-          setDataSource("sheets+firestore");
-        } else if (sheetsOk) {
-          setEvents(sheetsEvents);
-          setDataSource("sheets");
-        } else if (fsOk) {
+        if (fsEvents.length > 0) {
           setEvents(fsEvents);
           setDataSource("firestore");
         } else {
@@ -3758,33 +3721,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       return () => { cancelled = true; };
     }, [loadFromFirestore]);
 
-    // ─── Admin: reload both sources and re-merge ─────────────────────────────
+    // ─── Admin: re-read Firestore (after sync / edit / delete) ───────────────
     const reloadAll = useCallback(async () => {
-      const [sheetsResult, fsResult] = await Promise.allSettled([
-        fetch(SHEETS_API_URL).then(r => r.json()),
-        loadFromFirestore(),
-      ]);
-
-      const sheetsOk = sheetsResult.status === "fulfilled" && Array.isArray(sheetsResult.value) && sheetsResult.value.length > 0;
-      const fsOk     = fsResult.status === "fulfilled" && fsResult.value && fsResult.value.length > 0;
-
-      const sheetsEvents = sheetsOk
-        ? sheetsResult.value.map(e => e ? {
-            ...e,
-            date_start: normalizeDate(e.date_start) || e.date_start,
-            date_end:   normalizeDate(e.date_end)   || e.date_end,
-          } : null).filter(Boolean)
-        : [];
-
-      const fsEvents = fsOk ? fsResult.value : [];
-
-      if (sheetsOk && fsOk) {
-        setEvents(mergeEvents(sheetsEvents, fsEvents));
-        setDataSource("sheets+firestore");
-      } else if (sheetsOk) {
-        setEvents(sheetsEvents);
-        setDataSource("sheets");
-      } else if (fsOk) {
+      const fsEvents = await loadFromFirestore().catch(() => []);
+      if (fsEvents.length > 0) {
         setEvents(fsEvents);
         setDataSource("firestore");
       } else {
@@ -3813,10 +3753,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         const { getFirestore, doc, getDoc, setDoc, serverTimestamp } = window.__calFS;
         const db = getFirestore(window.firebaseApp);
 
-        const [sheetsRes, calSnap] = await Promise.all([
-          fetch(SHEETS_API_URL).then(r => r.json()),
+        // Read events from Firestore (Sheets is no longer a runtime data source —
+        // it's only touched by the admin "Sync from Sheets" button via handleSyncFromSheets).
+        const { collection: collectionFn, getDocs: getDocsFn, query: queryFn, orderBy: orderByFn } = window.__calFS;
+        const [eventsSnap, calSnap] = await Promise.all([
+          getDocsFn(queryFn(collectionFn(db, FS_COLLECTION), orderByFn('date_start'))),
           getDoc(doc(db, 'calendar_settings', 'current')),
         ]);
+        const sheetsRes = eventsSnap.empty
+          ? []
+          : eventsSnap.docs.map(d => d.data());
 
         let yearStartIso = '2025-07-21';
         let termsCfg = [];
@@ -4013,8 +3959,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // Imports every Sheets row that doesn't already have a Firestore doc with
     // matching sheets_id. Existing FS docs (admin overrides) are left untouched.
     // Idempotent: re-running only inserts new Sheets rows.
+    //
+    // The selected `syncYear` (e.g. '25_26' / '26_27') is stamped on every
+    // imported doc as `academicYear`. The Apps Script feeder's SHEET_NAME must
+    // already be pointing at the matching tab — admin redeploys the feeder
+    // before pressing this button. The dropdown is purely a labelling choice;
+    // it does NOT switch the Apps Script source.
     const [syncing,    setSyncing]    = useState(false);
     const [syncMsg,    setSyncMsg]    = useState("");
+    const [syncYear,   setSyncYear]   = useState("25_26");
+    const SYNC_YEAR_OPTIONS = ["24_25", "25_26", "26_27", "27_28"];
 
     const handleSyncFromSheets = useCallback(async () => {
       setSyncing(true);
@@ -4047,13 +4001,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         for (const r of toImport) {
           const { id: sheetsId, ...fields } = r;
           await addDoc(collection(db, FS_COLLECTION), {
-            title:       fields.title || "",
-            department:  fields.department || "Academic",
-            category:    fields.category || "Academic",
-            date_start:  fields.date_start,
-            date_end:    fields.date_end,
-            description: fields.description || "",
-            sheets_id:   sheetsId,
+            title:        fields.title || "",
+            department:   fields.department || "Academic",
+            category:     fields.category || "Academic",
+            date_start:   fields.date_start,
+            date_end:     fields.date_end,
+            description:  fields.description || "",
+            academicYear: syncYear,
+            sheets_id:    sheetsId,
             sheets_original: {
               title: fields.title, date_start: fields.date_start, date_end: fields.date_end,
               department: fields.department, category: fields.category,
@@ -4065,14 +4020,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
         await reloadAll();
         const skipped = sheetsRows.length - toImport.length;
-        setSyncMsg(`✓ Synced — ${inserted} imported, ${skipped} already in Firestore.`);
+        setSyncMsg(`✓ Synced ${syncYear} — ${inserted} imported, ${skipped} already in Firestore.`);
       } catch (e) {
         setSyncMsg(`Sync failed: ${e.message}`);
       } finally {
         setSyncing(false);
-        setTimeout(() => setSyncMsg(""), 6000);
+        setTimeout(() => setSyncMsg(""), 8000);
       }
-    }, [reloadAll]);
+    }, [reloadAll, syncYear]);
 
     // ─── Admin: delete ────────────────────────────────────────────────────────
     const handleDelete = useCallback(async (fsId) => {
@@ -4197,11 +4152,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     // ─── Data source badge ────────────────────────────────────────────────────
     const sourceBadge = ({
-      loading:          { label: "Loading…",                  color: "#94A3B8" },
-      "sheets+firestore": { label: "Google Sheets + Firestore", color: "#059669" },
-      sheets:           { label: "Live — Google Sheets",      color: "#059669" },
-      firestore:        { label: "Live — Firestore",          color: "#2563EB" },
-      empty:            { label: "No data",                   color: "#DC2626" },
+      loading:   { label: "Loading…",          color: "#94A3B8" },
+      firestore: { label: "Live — Firestore",  color: "#2563EB" },
+      empty:     { label: "No data",           color: "#DC2626" },
     })[dataSource] || { label: dataSource, color: "#94A3B8" };
 
     return (
@@ -4231,14 +4184,30 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
               {isAdmin && (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={handleSyncFromSheets} disabled={syncing} title="Import new events from the Google Sheets master into Firestore. Existing admin overrides are preserved." style={{
+                  <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                    <div title="Stamps imported docs with this academicYear field. Make sure the Apps Script feeder's SHEET_NAME is pointing at the matching tab before syncing." style={{
+                      display: "flex", alignItems: "center", gap: 6, padding: "0 4px 0 10px",
+                      background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.25)",
+                      borderRadius: 8,
+                    }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.65)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Year</span>
+                      <select value={syncYear} onChange={e => setSyncYear(e.target.value)} disabled={syncing} style={{
+                        background: "transparent", color: "#fff", border: "none", padding: "6px 4px",
+                        fontWeight: 700, fontSize: 13, cursor: syncing ? "default" : "pointer",
+                        fontFamily: "'DM Sans',sans-serif", outline: "none",
+                      }}>
+                        {SYNC_YEAR_OPTIONS.map(y => (
+                          <option key={y} value={y} style={{ color: "#0F172A" }}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={handleSyncFromSheets} disabled={syncing} title={`Import new events from the Google Sheets master into Firestore, stamping academicYear='${syncYear}' on each new doc. Existing admin overrides are preserved.`} style={{
                       padding: "9px 16px", background: syncing ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
                       color: syncing ? "rgba(255,255,255,0.5)" : "#fff",
                       border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
                       cursor: syncing ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif",
                     }}>
-                      {syncing ? "Syncing…" : "⟳ Sync from Sheets"}
+                      {syncing ? "Syncing…" : `⟳ Sync ${syncYear}`}
                     </button>
                     <button onClick={() => setSettingsModal(true)} style={{
                       padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",

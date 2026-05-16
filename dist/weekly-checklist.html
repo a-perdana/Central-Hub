@@ -3611,7 +3611,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
 import {
-  doc, getDoc, setDoc, onSnapshot, serverTimestamp
+  doc, getDoc, setDoc, onSnapshot, serverTimestamp,
+  collection, getDocs, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -3627,8 +3628,9 @@ let _teachingWeeks    = [];
 let _academicEventsPromise = null;  // resolves to [{title, date_start, date_end, category, department}]
 let _cambridgeEventsPromise = null; // resolves to [{title, date_start, date_end, kind}]
 
-const ACADEMIC_CALENDAR_URL =
-  'https://script.google.com/macros/s/AKfycbzi-8Cyh9MYI_AwKyOY9QzS65bfBcNvN4bxhMB7DHiruzoq6ZXfq3P8CyeJumS0pbpZ/exec';
+// Academic calendar events come from Firestore (collection: calendar_events).
+// CH /academic-calendar is the single source of truth — admin uses its
+// "Sync from Sheets" button to import / refresh from the Apps Script feeder.
 const CAMBRIDGE_SERIES = [
   'igcse_june', 'alevel_june', 'checkpoint_may',
   'igcse_november', 'alevel_november', 'checkpoint_oct',
@@ -3885,15 +3887,18 @@ function _tsToIso(val) {
 
 function loadAcademicEvents() {
   if (_academicEventsPromise) return _academicEventsPromise;
-  _academicEventsPromise = fetch(ACADEMIC_CALENDAR_URL)
-    .then(r => r.json())
-    .then(raw => (Array.isArray(raw) ? raw : []).filter(e => e?.date_start && e?.date_end).map(e => ({
-      title: e.title || '',
-      date_start: _normalizeIsoDate(e.date_start) || String(e.date_start).slice(0,10),
-      date_end:   _normalizeIsoDate(e.date_end)   || String(e.date_end).slice(0,10),
-      category: e.category || '',
-      department: e.department || '',
-    })))
+  const db = window.db;
+  _academicEventsPromise = getDocs(query(collection(db, 'calendar_events'), orderBy('date_start')))
+    .then(snap => snap.docs
+      .map(d => d.data())
+      .filter(e => e?.date_start && e?.date_end)
+      .map(e => ({
+        title: e.title || '',
+        date_start: _normalizeIsoDate(e.date_start) || String(e.date_start).slice(0,10),
+        date_end:   _normalizeIsoDate(e.date_end)   || String(e.date_end).slice(0,10),
+        category: e.category || '',
+        department: e.department || '',
+      })))
     .catch(() => []);
   return _academicEventsPromise;
 }
