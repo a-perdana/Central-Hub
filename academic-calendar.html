@@ -1051,7 +1051,23 @@
     const [syncing,    setSyncing]    = useState(false);
     const [syncMsg,    setSyncMsg]    = useState("");
     const [syncYear,   setSyncYear]   = useState("25_26");
+    const [adminMenuOpen, setAdminMenuOpen] = useState(false);
     const SYNC_YEAR_OPTIONS = ["24_25", "25_26", "26_27", "27_28"];
+
+    // Close admin dropdown on outside click / Escape
+    useEffect(() => {
+      if (!adminMenuOpen) return;
+      const onDocClick = (e) => {
+        if (!e.target.closest?.("[data-admin-menu-root]")) setAdminMenuOpen(false);
+      };
+      const onKey = (e) => { if (e.key === "Escape") setAdminMenuOpen(false); };
+      document.addEventListener("mousedown", onDocClick);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("mousedown", onDocClick);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, [adminMenuOpen]);
 
     const handleSyncFromSheets = useCallback(async () => {
       setSyncing(true);
@@ -1251,47 +1267,68 @@
             {/* Right side: admin button + view toggle */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
               {isAdmin && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-                    <div title="Stamps imported docs with this academicYear field. Make sure the Apps Script feeder's SHEET_NAME is pointing at the matching tab before syncing." style={{
-                      display: "flex", alignItems: "center", gap: 6, padding: "0 4px 0 10px",
-                      background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.25)",
-                      borderRadius: 8,
+                <div data-admin-menu-root style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, position: "relative" }}>
+                  <button
+                    onClick={() => setAdminMenuOpen(o => !o)}
+                    title="Admin tools: year selector, sync from Sheets, year settings, add event"
+                    style={{
+                      padding: "8px 14px", background: adminMenuOpen ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.12)",
+                      color: "#fff", border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8,
+                      fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                      display: "flex", alignItems: "center", gap: 6,
+                    }}
+                  >
+                    ⚙ Admin <span style={{ fontSize: 10, opacity: 0.85, marginLeft: 2 }}>{adminMenuOpen ? "▴" : "▾"}</span>
+                  </button>
+                  {adminMenuOpen && (
+                    <div style={{
+                      position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
+                      minWidth: 240, background: "#0F172A",
+                      border: "1.5px solid rgba(255,255,255,0.18)", borderRadius: 10,
+                      boxShadow: "0 14px 36px rgba(0,0,0,0.45)", padding: 8,
+                      display: "flex", flexDirection: "column", gap: 6,
                     }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.65)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Year</span>
-                      <select value={syncYear} onChange={e => setSyncYear(e.target.value)} disabled={syncing} style={{
-                        background: "transparent", color: "#fff", border: "none", padding: "6px 4px",
-                        fontWeight: 700, fontSize: 13, cursor: syncing ? "default" : "pointer",
-                        fontFamily: "'DM Sans',sans-serif", outline: "none",
+                      <div title="Stamps imported docs with this academicYear field. Make sure the Apps Script feeder's SHEET_NAME is pointing at the matching tab before syncing." style={{
+                        display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+                        background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)",
+                        borderRadius: 6,
                       }}>
-                        {SYNC_YEAR_OPTIONS.map(y => (
-                          <option key={y} value={y} style={{ color: "#0F172A" }}>{y}</option>
-                        ))}
-                      </select>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.6)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Year</span>
+                        <select value={syncYear} onChange={e => setSyncYear(e.target.value)} disabled={syncing} style={{
+                          flex: 1, background: "transparent", color: "#fff", border: "none", padding: "2px 4px",
+                          fontWeight: 700, fontSize: 13, cursor: syncing ? "default" : "pointer",
+                          fontFamily: "'DM Sans',sans-serif", outline: "none",
+                        }}>
+                          {SYNC_YEAR_OPTIONS.map(y => (
+                            <option key={y} value={y} style={{ color: "#0F172A" }}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button onClick={() => { handleSyncFromSheets(); }} disabled={syncing} title={`Import new events from the Google Sheets master into Firestore, stamping academicYear='${syncYear}' on each new doc. Existing admin overrides are preserved.`} style={{
+                        padding: "9px 12px", background: syncing ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+                        color: syncing ? "rgba(255,255,255,0.45)" : "#fff",
+                        border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, fontWeight: 600, fontSize: 13,
+                        cursor: syncing ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif",
+                        textAlign: "left",
+                      }}>
+                        {syncing ? "Syncing…" : `⟳ Sync ${syncYear} from Sheets`}
+                      </button>
+                      <button onClick={() => { setSettingsModal(true); setAdminMenuOpen(false); }} style={{
+                        padding: "9px 12px", background: "rgba(255,255,255,0.08)", color: "#fff",
+                        border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, fontWeight: 600, fontSize: 13,
+                        cursor: "pointer", fontFamily: "'DM Sans',sans-serif", textAlign: "left",
+                      }}>
+                        ⚙ Year Settings
+                      </button>
+                      <button onClick={() => { setFormModal({ initial: null }); setAdminMenuOpen(false); }} style={{
+                        padding: "9px 12px", background: "#2563EB", color: "#fff",
+                        border: "none", borderRadius: 6, fontWeight: 700, fontSize: 13,
+                        cursor: "pointer", fontFamily: "'DM Sans',sans-serif", textAlign: "left",
+                      }}>
+                        + Add Event
+                      </button>
                     </div>
-                    <button onClick={handleSyncFromSheets} disabled={syncing} title={`Import new events from the Google Sheets master into Firestore, stamping academicYear='${syncYear}' on each new doc. Existing admin overrides are preserved.`} style={{
-                      padding: "9px 16px", background: syncing ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
-                      color: syncing ? "rgba(255,255,255,0.5)" : "#fff",
-                      border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                      cursor: syncing ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif",
-                    }}>
-                      {syncing ? "Syncing…" : `⟳ Sync ${syncYear}`}
-                    </button>
-                    <button onClick={() => setSettingsModal(true)} style={{
-                      padding: "9px 18px", background: "rgba(255,255,255,0.12)", color: "#fff",
-                      border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                      cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                    }}>
-                      ⚙ Year Settings
-                    </button>
-                    <button onClick={() => setFormModal({ initial: null })} style={{
-                      padding: "9px 18px", background: "#2563EB", color: "#fff",
-                      border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                      cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                    }}>
-                      + Add Event
-                    </button>
-                  </div>
+                  )}
                   {syncMsg && (
                     <div style={{
                       fontSize: 11, fontWeight: 600,
