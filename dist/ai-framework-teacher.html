@@ -3196,6 +3196,22 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     </p>
   </section>
 
+  <!-- My self-assessment widget — populated by JS after authReady -->
+  <section id="mySelfAssessmentWidget" style="display:none; margin-bottom: 28px;">
+    <div style="background: linear-gradient(135deg, #fef3e2 0%, #fff 100%); border: 1px solid var(--accent); border-radius: 12px; padding: 22px 26px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:280px;">
+          <div style="font-size:11px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent-dk); margin-bottom:6px;">My self-assessment</div>
+          <div id="mySaTitle" style="font-family:'Lora',serif; font-size:18px; font-weight:600; color:var(--ink, #1c1c2e); margin-bottom:4px;">Loading…</div>
+          <div id="mySaSub" style="font-size:13px; color:var(--ink-2, #44445a); line-height:1.5;">—</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <a id="mySaButton" href="#" target="_blank" rel="noopener" style="padding:10px 20px; border-radius:8px; background:var(--accent); color:#fff; font-size:13.5px; font-weight:600; text-decoration:none; font-family:'DM Sans',sans-serif; display:inline-block;">Open in Teachers Hub →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="matrix-section">
     <div class="section-eyebrow">Competency Matrix</div>
     <h2 class="section-title">3 Levels × 5 Domains</h2>
@@ -3430,7 +3446,63 @@ document.addEventListener('authReady', () => {
   const params = new URLSearchParams(window.location.search);
   const ref = params.get('ref');
   if (ref) openDetail(ref);
+
+  // My self-assessment widget — only show if user has a TH role
+  populateMySelfAssessment();
 });
+
+async function populateMySelfAssessment() {
+  const profile = window.userProfile;
+  if (!profile) return;
+  // Show widget only for users who have a TH role assignment (teachers can self-assess)
+  const hasTHRole = profile.role_teachershub === 'teachers_user' || profile.role_teachershub === 'teachers_admin';
+  if (!hasTHRole) return;
+
+  const widget = document.getElementById('mySelfAssessmentWidget');
+  const title = document.getElementById('mySaTitle');
+  const sub = document.getElementById('mySaSub');
+  const btn = document.getElementById('mySaButton');
+
+  const academicYear = '2026-2027';
+  const docId = `${window.currentUser.uid}_${academicYear}`;
+  // Note: TH self-assessment widget lives on Teachers Hub at /ai-self-assessment
+  // CH user clicks through and uses Google SSO single-sign-on
+  const thUrl = `https://teachershub.eduversal.org/ai-self-assessment`;
+  btn.href = thUrl;
+
+  widget.style.display = 'block';
+
+  try {
+    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    const ref = doc(window.db, 'ai_competency_self_assessments', docId);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data();
+      const levelLabels = { foundation: 'Foundation', practitioner: 'Practitioner', leader: 'Leader' };
+      const statusLabels = { draft: 'Draft — not yet submitted', submitted: 'Submitted — awaiting line-manager review', validated: 'Validated by your line manager' };
+      title.textContent = `${academicYear} · ${levelLabels[data.selfDeclaredLevel] || 'Foundation'} (self-declared)`;
+      const validationNote = data.status === 'validated' && data.validation?.agreedLevel
+        ? ` · Agreed: <strong>${levelLabels[data.validation.agreedLevel]}</strong>`
+        : '';
+      sub.innerHTML = `${statusLabels[data.status] || data.status}${validationNote}`;
+      if (data.status === 'validated') {
+        btn.textContent = 'View in Teachers Hub →';
+      } else if (data.status === 'submitted') {
+        btn.textContent = 'View submitted →';
+      } else {
+        btn.textContent = 'Continue draft →';
+      }
+    } else {
+      title.textContent = `${academicYear} · Not started yet`;
+      sub.textContent = 'Use the matrix below as your guide. Submit your annual self-assessment from Teachers Hub.';
+      btn.textContent = 'Start self-assessment →';
+    }
+  } catch (err) {
+    console.warn('[ai-framework-teacher] self-assessment fetch failed', err);
+    title.textContent = `${academicYear} · Self-assessment`;
+    sub.textContent = 'Open Teachers Hub to start or continue your annual self-assessment.';
+  }
+}
 
 // Close on Escape
 document.addEventListener('keydown', (e) => {

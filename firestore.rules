@@ -2484,5 +2484,241 @@ service cloud.firestore {
       allow get, list: if isAdmin();
       allow update, delete: if false;
     }
+
+    // ─────────────────────────────────────────────────────────
+    // AI COMPETENCY FRAMEWORK v1.0 — Phase 2 (2026-05-17)
+    //   See docs/architecture/FIRESTORE_SCHEMA.md §24 + the
+    //   manifest at docs/research/eduversal/ai-competency-framework/.
+    //
+    //   Three collections:
+    //     - ai_competency_self_assessments (per-teacher annual)
+    //     - ai_maturity_assessments        (per-school annual)
+    //     - ai_competency_aggregates       (CF-only summaries)
+    //
+    //   Boundary: these are PARALLEL to KPI / Appraisal / Competency
+    //   rating systems. AICF docs never write into those collections
+    //   and vice-versa.
+    // ─────────────────────────────────────────────────────────
+
+    // Helper: is the requester a CH reviewer (director / coordinator / admin)?
+    // Used by both the teacher self-assessment block (CH staff line-manager
+    // validation) and the maturity-assessment appraisal block.
+    function isAICFReviewer() {
+      return isAdmin() || isCHCoordinator()
+          || (isCentralUser() &&
+              'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ch_sub_roles', []));
+    }
+
+    // Helper: is the requester an AH line-manager (school_principal /
+    // academic_admin) at the same school as the target user?
+    function isAHLineManagerForUser(targetUid) {
+      return isAcademicUser()
+          && get(/databases/$(database)/documents/users/$(targetUid)).data.schoolId ==
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId
+          && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role_academichub == 'academic_admin'
+            || (
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ah_sub_roles is list
+              && 'school_principal' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ah_sub_roles
+            )
+          );
+    }
+
+    // -- ai_competency_self_assessments ----------------------
+    // Per-teacher annual self-assessment of Eduversal AICF v1.0
+    // Part 1. PK pattern: {userId}_{academicYear} (e.g.
+    // abc123_2026-2027). Submit-and-validate workflow:
+    //   draft  → submitted    (owner self-writes)
+    //   submitted → validated (line manager writes validation.*)
+    //
+    // Read scope:
+    //   - owner (always)
+    //   - same-school AH school_principal / academic_admin (line manager)
+    //   - CH director / coordinator / admin (network-wide)
+    //
+    // Write scope:
+    //   - owner: CREATE + UPDATE while status == 'draft' (full doc)
+    //   - owner: flip status 'draft' → 'submitted' (one-way; locks ratings + reflection fields)
+    //   - line manager: write validation.* + flip status 'submitted' → 'validated'
+    //                   (all other fields immutable)
+    //   - central_admin: delete (forensic)
+    match /ai_competency_self_assessments/{docId} {
+
+      // Read: owner OR line manager OR CH reviewer.
+      // The resource's userId field identifies the assessor.
+      allow get: if isSignedIn() && (
+                   request.auth.uid == resource.data.userId
+                   || isAICFReviewer()
+                   || isAHLineManagerForUser(resource.data.userId)
+                 );
+
+      // List: AH leadership over their own school + CH reviewers.
+      // Clients filter by (schoolId == ownSchoolId) + (academicYear == ...)
+      // which the indexes support.
+      allow list: if isAICFReviewer() || isAcademicUser();
+
+      // Owner self-CREATE: must claim own userId, set status to 'draft',
+      // and not pre-populate validation.* fields.
+      allow create: if isSignedIn()
+                    && request.auth.uid == request.resource.data.userId
+                    && request.resource.data.status == 'draft'
+                    && !('validation' in request.resource.data);
+
+      // UPDATE — split by what the writer is allowed to touch.
+      allow update: if isSignedIn() && (
+        // Path 1: owner self-update while draft (any field except validation.*)
+        (
+          request.auth.uid == resource.data.userId
+          && resource.data.status == 'draft'
+          && (!('validation' in request.resource.data) || request.resource.data.validation == resource.data.get('validation', null))
+          && request.resource.data.userId == resource.data.userId
+        )
+        // Path 2: owner submit (draft → submitted; locks ratings + reflection)
+        || (
+          request.auth.uid == resource.data.userId
+          && resource.data.status == 'draft'
+          && request.resource.data.status == 'submitted'
+          && request.resource.data.ratings == resource.data.ratings
+          && request.resource.data.selfDeclaredLevel == resource.data.selfDeclaredLevel
+        )
+        // Path 3: line manager validation (submitted → validated; only validation.* + status)
+        || (
+          (isAICFReviewer() || isAHLineManagerForUser(resource.data.userId))
+          && resource.data.status == 'submitted'
+          && request.resource.data.status == 'validated'
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.ratings == resource.data.ratings
+          && request.resource.data.selfDeclaredLevel == resource.data.selfDeclaredLevel
+          && request.resource.data.strengths == resource.data.strengths
+          && request.resource.data.growthAreas == resource.data.growthAreas
+          && request.resource.data.professionalLearningGoals == resource.data.professionalLearningGoals
+        )
+        // Path 4: central_admin override (forensic / unblocking — rare)
+        || isAdmin()
+      );
+
+      // Delete: central_admin only.
+      allow delete: if isAdmin();
+    }
+
+    // -- ai_maturity_assessments -----------------------------
+    // Per-school annual institutional maturity self-assessment.
+    // PK pattern: {schoolId}_{academicYear}. Validated by CH
+    // Academic Directorate during the appraisal visit.
+    //
+    // Read scope:
+    //   - same-school AH leadership (school_principal, academic_coordinator,
+    //     foundation_representative, academic_admin)
+    //   - CH director / coordinator / admin (network-wide)
+    //
+    // Write scope:
+    //   - school side: CREATE + UPDATE while status ∈ {'draft','submitted'}
+    //     by AH school_principal / academic_admin at the school
+    //     OR central_admin (network-wide rare).
+    //   - appraiser: CH director / central_admin writes appraisal.*
+    //     + flips status to 'appraised'. Other fields immutable.
+    //   - delete: central_admin only.
+    match /ai_maturity_assessments/{docId} {
+
+      // Read: same-school AH leadership + CH reviewers.
+      allow get: if isSignedIn() && (
+                   isAICFReviewer()
+                   || (
+                     isAcademicUser()
+                     && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == resource.data.schoolId
+                   )
+                 );
+
+      // List: AH leadership over their own school + CH reviewers.
+      // Clients filter by schoolId or academicYear which indexes support.
+      allow list: if isAICFReviewer() || isAcademicUser();
+
+      // CREATE: AH school_principal / academic_admin for own school,
+      // or central_admin. Must claim submittedBy = self + schoolId matches.
+      allow create: if isSignedIn()
+                    && request.resource.data.submittedBy == request.auth.uid
+                    && request.resource.data.status in ['draft', 'submitted']
+                    && !('appraisal' in request.resource.data)
+                    && (
+                      isAdmin()
+                      || (
+                        isAcademicUser()
+                        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == request.resource.data.schoolId
+                        && (
+                          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role_academichub == 'academic_admin'
+                          || (
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ah_sub_roles is list
+                            && 'school_principal' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ah_sub_roles
+                          )
+                        )
+                      )
+                    );
+
+      // UPDATE: split by what the writer is allowed to touch.
+      allow update: if isSignedIn() && (
+        // Path 1: school-side update while draft or submitted (not appraised yet,
+        // appraisal.* must remain unchanged / absent)
+        (
+          resource.data.status in ['draft', 'submitted']
+          && (!('appraisal' in request.resource.data) || request.resource.data.appraisal == resource.data.get('appraisal', null))
+          && request.resource.data.schoolId == resource.data.schoolId
+          && (
+            isAdmin()
+            || (
+              isAcademicUser()
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == resource.data.schoolId
+              && (
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role_academichub == 'academic_admin'
+                || (
+                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ah_sub_roles is list
+                  && 'school_principal' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ah_sub_roles
+                )
+              )
+            )
+          )
+        )
+        // Path 2: appraiser writes appraisal.* + flips status to 'appraised'.
+        // domainRatings + other fields immutable at this stage.
+        || (
+          isAICFReviewer()
+          && resource.data.status == 'submitted'
+          && request.resource.data.status == 'appraised'
+          && request.resource.data.schoolId == resource.data.schoolId
+          && request.resource.data.domainRatings == resource.data.domainRatings
+          && request.resource.data.priorityActions == resource.data.priorityActions
+        )
+        // Path 3: central_admin override (forensic).
+        || isAdmin()
+      );
+
+      // Delete: central_admin only.
+      allow delete: if isAdmin();
+    }
+
+    // -- ai_competency_aggregates ---------------------------
+    // Read-only summaries maintained by Cloud Function
+    // `rebuildAiCompetencyAggregates` (Phase 3 deploy). Two PK
+    // namespaces:
+    //   {schoolId}_{academicYear}  — school-level (read by AH + CH)
+    //   network_{academicYear}     — network-level (CH only)
+    match /ai_competency_aggregates/{aggregateId} {
+
+      // Read: same-school AH leadership + CH reviewers (school-level);
+      //       CH reviewers only (network-level).
+      allow get: if isSignedIn() && (
+                   isAICFReviewer()
+                   || (
+                     resource.data.scopeKind == 'school'
+                     && isAcademicUser()
+                     && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == resource.data.schoolId
+                   )
+                 );
+
+      // List: CH reviewers always; AH leadership for school-scope docs.
+      allow list: if isAICFReviewer() || isAcademicUser();
+
+      // No client writes — Cloud Function only.
+      allow create, update, delete: if false;
+    }
   }
 }

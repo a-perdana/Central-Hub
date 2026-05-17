@@ -1335,6 +1335,116 @@ topics + replies + comments  .authorUid → users
 
 ---
 
+### 24. AI Competency Framework — Self-Assessment + Maturity (2026-05-17 — Phase 2)
+
+Three collections supporting the Eduversal AI Competency Framework v1.0 (Phase 2 of the AI Framework rollout — see `docs/research/eduversal/ai-competency-framework/manifest.json`). Phase 1 (read-only reader pages + AICF chip family) shipped 2026-05-17 with no Firestore writes. Phase 2 adds the data layer for annual self-assessment + line-manager validation.
+
+**Scope boundary:** these collections track AI **competency** progression (per Eduversal AICF v1.0). They do NOT replace KPI (`teacher_kpi_submissions`), Appraisal (`teacher_self_appraisals` / `teacher_appraisals`), or Competency Framework (`user_competencies`) — those remain the canonical three rating systems. AICF self-assessment is a **fourth, parallel track** focused exclusively on AI use. No write paths cross between AICF and the three rating systems.
+
+#### `ai_competency_self_assessments/{uid}_{academicYear}`
+**PK:** composite — `{userId}_{academicYear}` (e.g. `abc123_2026-2027`). Append-only by design — annual submission creates a fresh doc per academic year so historical progression is preserved.
+**Scope:** per-teacher annual self-assessment of Eduversal AICF v1.0 Part 1 (Teacher AI Competency).
+**Fields:**
+- Identity: `userId →users.uid`, `userEmail` (denormalised for audit), `displayName`, `platform` (`'teachers' | 'academic' | 'central'` — denormalised — the assessor's primary hub), `schoolId →partner_schools.id | null` (null for CH HQ staff).
+- Cycle: `academicYear` (e.g. `'2026-2027'`), `cycleStartedAt`, `submittedAt`, `status` (`'draft' | 'submitted' | 'validated'`).
+- Self-rating: `ratings` (nested map; the canonical shape `ratings[part][level][domain] = ratingValue`). Today only `part = 'teacher'`. Example: `ratings.teacher.foundation.domainA = 'achieved'`. Levels: `foundation | practitioner | leader`. Domains: `domainA | domainB | domainC | domainD | domainE`. Rating values: `not_yet | developing | achieved`.
+- Self-declared level: `selfDeclaredLevel` (`'foundation' | 'practitioner' | 'leader'`) — computed client-side as the highest level where the majority of the 5 domains are `achieved`. Server validates on write.
+- Free-text reflection: `strengths[]`, `growthAreas[]`, `professionalLearningGoals[]` — each ≤ 5 entries, each entry ≤ 280 chars.
+- Validation: `validation` (nested map, only writable by line manager):
+  - `validatedBy →users.uid` (line manager — typically AH `school_principal` / `academic_admin` for same-school AH+TH staff, CH `coordinator` / `director` / `central_admin` for CH staff)
+  - `validatedAt` (Timestamp)
+  - `agreedLevel` (`'foundation' | 'practitioner' | 'leader'`) — may differ from `selfDeclaredLevel`
+  - `managerNotes` (string ≤ 1000 chars)
+
+**FKs:** `users.uid` (via `userId`); `partner_schools.id` (via `schoolId` for school-scoped rule queries).
+**Indexes:** composite on `(schoolId, academicYear)` for line-manager queries listing same-school direct reports per cycle; composite on `(platform, academicYear, status)` for network-level aggregate Cloud Function.
+**Write scope:**
+- **Self-CREATE + self-UPDATE while `status == 'draft'`:** the user (`request.auth.uid == userId`). The user may resubmit drafts as many times as needed before the line manager validates.
+- **Self-SUBMIT (flip `status` → `'submitted'`):** the user. After submission, `ratings` / `selfDeclaredLevel` / `strengths` / `growthAreas` / `professionalLearningGoals` become immutable.
+- **Line-manager validate (write `validation.*` + flip `status` → `'validated'`):** for same-school AH leadership (`school_principal` / `academic_admin`) when the assessor is at the same school; for `coordinator` / `director` / `central_admin` when the assessor is CH staff. Other fields immutable at this stage.
+- **Delete:** `central_admin` only.
+
+**Read scope:**
+- Owner (self) always.
+- Same-school AH `school_principal` / `academic_admin` (when both sides' `schoolId` matches).
+- CH `director` / `coordinator` / `central_admin` (network-wide).
+- Append-only history preserved: historical years' docs visible to line managers for trend analysis.
+
+**Notes:**
+- Doc id deterministic by `{userId}_{academicYear}` — re-running the seed or re-opening a submitted assessment routes back to the same doc (idempotent against accidental duplicates).
+- `validation` sub-map remains absent until the line manager fills it in. Reader UI shows "Not yet validated" if missing.
+- 5 domains × 3 levels = 15 rating cells. Client validates that submission requires at least the 5 Foundation-level cells to be filled (rating ∈ `not_yet | developing | achieved`); Practitioner + Leader cells are optional (a teacher genuinely at Foundation marks Foundation and leaves higher cells empty).
+
+#### `ai_maturity_assessments/{schoolId}_{academicYear}`
+**PK:** composite — `{schoolId}_{academicYear}`. One doc per school per academic year. Append-only across years.
+**Scope:** per-school annual institutional maturity self-assessment (Eduversal AICF v1.0 Part 3 — 5 maturity levels × 6 domains). Validated by Eduversal Academic Directorate during the school appraisal visit.
+**Fields:**
+- Identity: `schoolId →partner_schools.id`, `schoolName` (denormalised), `academicYear`.
+- Submission: `submittedBy →users.uid` (typically `school_principal` or `academic_admin`), `submittedAt`, `status` (`'draft' | 'submitted' | 'appraised'`).
+- Domain ratings: `domainRatings` (nested map, shape `domainRatings[domainId]` = `{ currentLevel, evidence[], strengths[], improvementAreas[], targetLevel }`). The 6 domain IDs: `strategy_leadership | policy_compliance | staff_capability | teaching_learning | student_outcomes | infrastructure_resources`. Each `currentLevel` and `targetLevel` is an integer 1-5. `evidence[]` items are ≤ 500 chars each, ≤ 8 entries per domain. `strengths[]` and `improvementAreas[]` are ≤ 5 entries each, ≤ 280 chars each.
+- Computed: `overallLevel` (integer 1-5, rounded average across 6 domains — computed client-side, server validates).
+- Priority actions: `priorityActions[]` (≤ 6 entries, ≤ 280 chars each) — what the school commits to advance for the coming year.
+- Appraisal (only writable by CH appraiser):
+  - `appraisal.appraiserUid →users.uid` (CH `director` / `central_admin`)
+  - `appraisal.appraisedAt` (Timestamp)
+  - `appraisal.validatedDomainRatings` (same shape as `domainRatings`; appraiser-adjusted)
+  - `appraisal.validatedOverallLevel` (integer 1-5)
+  - `appraisal.appraiserNotes` (string ≤ 2000 chars)
+  - `appraisal.recommendations[]` (≤ 8 entries, ≤ 280 chars each) — Eduversal-level recommendations for the school
+
+**FKs:** `partner_schools.id` (PK component); `users.uid` (via `submittedBy` and `appraisal.appraiserUid`).
+**Indexes:** composite on `(academicYear, status)` for network-level reporting; composite on `(schoolId, academicYear)` for school-level history queries.
+**Write scope:**
+- **CREATE + UPDATE while `status == 'draft' | 'submitted'`:** AH `school_principal` / `academic_admin` for own school (`request.auth.uid` writes to a doc whose `schoolId` matches their `users/{uid}.schoolId`); CH `central_admin` for any school.
+- **Appraisal validate (write `appraisal.*` + flip `status` → `'appraised'`):** CH `director` / `central_admin`. After appraisal, all fields except `appraisal.*` immutable.
+- **Delete:** `central_admin` only.
+
+**Read scope:**
+- Same-school AH leadership (`school_principal` / `academic_coordinator` / `foundation_representative` / `academic_admin`).
+- CH `director` / `coordinator` (network-wide for benchmarking) / `central_admin`.
+- Submitted but pre-appraisal docs visible to appraisers via CH `/ai-maturity-admin` triage queue.
+
+**Notes:**
+- Schools self-assess honestly even if Level 1-2. Eduversal v1.0 explicitly accepts that "most schools in 2026 honestly sit at Level 1-2 on most domains" (`leader-playbook.json#institutionalMaturity`). Inflation is a red line (`redFlagsAndRedlines.json#rl_10_no_inflated_self_assessment`).
+- Two-domain rule (Eduversal v1.0): each school targets at-most-two domains per year for level advancement. `priorityActions[]` typically names two.
+- Appraisal team often adjusts `validatedDomainRatings` down from `domainRatings` when evidence does not support the self-rating. Adjustment up is rarer but possible.
+
+#### `ai_competency_aggregates/{aggregateId}`
+**PK:** two namespaces in the same collection:
+- School-level: `{schoolId}_{academicYear}` (e.g. `partner-fatih_2026-2027`).
+- Network-level: `network_{academicYear}` (e.g. `network_2026-2027`).
+**Scope:** Cloud-Function-maintained read-only summaries powering school benchmarking dashboards and network-level AI integration reports. Saves clients from on-the-fly aggregation across thousands of self-assessments.
+**Fields (school-level docs):**
+- Identity: `schoolId →partner_schools.id`, `academicYear`, `schopeKind: 'school'`.
+- Staff competency distribution: `staffCounts` (nested map; shape `staffCounts[selfDeclaredLevel] = number`, e.g. `{ foundation: 18, practitioner: 5, leader: 1, unsubmitted: 3 }`). `submissionRate` (decimal — submitted ÷ eligible staff).
+- Validation lag: `pendingValidationCount`, `medianDaysToValidation`.
+- Institutional maturity: `institutionalCurrentLevel` (overall), `institutionalDomainLevels[6]`, `institutionalAppraised` (boolean — true if the school's `ai_maturity_assessments` doc for this year reached `appraised` status).
+- Trend (year-on-year, when 2+ years of data): `previousOverallLevel`, `levelDelta`, `previousStaffPractitionerCount`, `practitionerDelta`.
+- Audit: `recomputedAt`, `recomputedBy` (Cloud Function name).
+
+**Fields (network-level docs):**
+- Identity: `academicYear`, `scopeKind: 'network'`.
+- Network-wide staff counts: same shape as school-level but summed across all partner schools.
+- Network-wide institutional ladder: `schoolsByMaturityLevel` (shape `{ 1: 4, 2: 8, 3: 2, 4: 0, 5: 0 }` — count of schools at each level).
+- Domain heatmap: `networkDomainMedian[6]` (median current level across schools per domain).
+- Top + bottom schools per domain (anonymised — `schoolId` only, no names; used for appraiser benchmarking): `topSchoolsByDomain[domainId][]` (top 3 schoolIds), `bottomSchoolsByDomain[domainId][]` (bottom 3 schoolIds).
+- Audit: `recomputedAt`.
+
+**FKs:** `partner_schools.id` (school-level docs only).
+**Indexes:** none required (queried by exact docId).
+**Writers:** **Cloud Function only** — `rebuildAiCompetencyAggregates` runs on a weekly schedule (Mondays 02:00 Asia/Jakarta) and on-demand when an `ai_maturity_assessments` doc flips to `appraised`. Admin SDK bypasses rules.
+**Read scope:**
+- School-level docs: same-school AH leadership + all CH `director` / `coordinator` / `central_admin`.
+- Network-level docs: CH `director` / `coordinator` / `central_admin` only (network-comparative data not intended for school-side audiences).
+
+**Notes:**
+- Aggregates are **stale by design** — clients display `recomputedAt` so users know the data may be up to a week old. Real-time querying across all schools would be cost-prohibitive (Firestore read amplification).
+- The `topSchoolsByDomain` / `bottomSchoolsByDomain` arrays exist to support appraiser benchmarking conversations ("School X at Level 4 on Staff Capability has these patterns we can share"), not for public ranking — Eduversal v1.0 explicitly avoids school ranking as a tool of comparison.
+
+**Phase 3 wiring (forward reference):** Phase 3 adds the appraisal UI surfaces — AH `/ai-maturity-self-assessment` (school-side submission) + CH `/ai-maturity-admin` (Academic Directorate triage queue) + the `rebuildAiCompetencyAggregates` Cloud Function deploy. Phase 2 only ships the data shape + rules. The two phases can ship a week apart without breaking each other.
+
+---
+
 ## Standardisation Backlog
 
 Things this schema knows are inconsistent. Prioritise these in upcoming refactors.
