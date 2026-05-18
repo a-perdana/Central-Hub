@@ -296,6 +296,20 @@
     .hb-card.hb-card-policy-topic .hb-card-icon {
       background: #fef3c7; color: #92400e;
     }
+    /* AICF Companion handbook variant — electric blue accent (AI/circuit vibe).
+       5th handbookKind. Navigable wrappers for AICF v1.0 practical layer
+       (Teacher Playbook, Prompt Library, Red Lines, Decision Trees, Weekly Tips,
+       Classroom Activities). Distinct from all 4 prior kinds. */
+    .hb-card.hb-card-aicf {
+      box-shadow: inset 4px 0 0 #1d4ed8;
+    }
+    .hb-card.hb-card-aicf:hover {
+      background: #eff6ff; border-color: #bfdbfe;
+      box-shadow: inset 4px 0 0 #1d4ed8, 0 6px 18px -10px rgba(29,78,216,0.32);
+    }
+    .hb-card.hb-card-aicf .hb-card-icon {
+      background: #dbeafe; color: #1e40af;
+    }
 
     /* ── SCHOOL-FACING SECTION RENDERER (reader mode) ──
        Distinct styling layer that piggybacks on .hb-stage but tunes the
@@ -1663,19 +1677,24 @@
       const isRoleOps = kind === 'role-operational';
       const isSchoolFacing = kind === 'school-facing';
       const isPolicyTopic = kind === 'policy-topic';
-      const hasSections = isSchoolFacing || isPolicyTopic;
+      const isAicfCompanion = kind === 'aicf-companion';
+      // AICF companions ship sections[] just like school-facing + policy-topic.
+      const hasSections = isSchoolFacing || isPolicyTopic || isAicfCompanion;
       // Card icon by handbookKind:
       //   📕 induction         — year-long mentee journey
       //   🛡 role-operational  — DSL/AC/CC etc. protection/readiness ramp
       //   🧭 school-facing     — compass for the partner-school community
       //   📜 policy-topic      — deep-dive policy (Safeguarding, Behaviour, etc.)
-      const icon = isPolicyTopic ? '📜' : (isSchoolFacing ? '🧭' : (isRoleOps ? '🛡' : '📕'));
-      const cardCls = isPolicyTopic
-        ? 'hb-card hb-card-policy-topic'
-        : (isSchoolFacing
-          ? 'hb-card hb-card-school'
-          : (isRoleOps ? 'hb-card hb-card-role' : 'hb-card'));
-      // Counts pill: stages for induction + role-operational; sections for school-facing + policy-topic.
+      //   🤖 aicf-companion    — AI operational guide (paired with AICF v1.0)
+      const icon = isAicfCompanion ? '🤖'
+        : (isPolicyTopic ? '📜'
+          : (isSchoolFacing ? '🧭'
+            : (isRoleOps ? '🛡' : '📕')));
+      const cardCls = isAicfCompanion ? 'hb-card hb-card-aicf'
+        : (isPolicyTopic ? 'hb-card hb-card-policy-topic'
+          : (isSchoolFacing ? 'hb-card hb-card-school'
+            : (isRoleOps ? 'hb-card hb-card-role' : 'hb-card')));
+      // Counts pill: stages for induction + role-operational; sections for the rest.
       const countsPill = hasSections
         ? (sections ? `<span class="pill">${sections} sections</span>` : '')
         : (stages ? `<span class="pill">${stages} stages</span>` : '');
@@ -1775,24 +1794,27 @@
         || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null)
         || hb.audience?.primaryReader,
     ].filter(Boolean).join(' · ');
-    // School-facing + policy-topic handbooks use sections[] (topic chapters),
-    // induction + role-operational use stages[] (time-windowed phases).
-    // Reader treats both as an ordered list of content blocks — renderStage
-    // and renderSection produce compatible HTML.
+    // School-facing + policy-topic + aicf-companion handbooks use sections[]
+    // (topic chapters); induction + role-operational use stages[] (time-windowed
+    // phases). Reader treats both as an ordered list of content blocks —
+    // renderStage and renderSection produce compatible HTML.
     const handbookKind = hb.handbookKind || 'induction';
     const isSchoolFacing = handbookKind === 'school-facing';
     const isPolicyTopic = handbookKind === 'policy-topic';
-    const hasSectionsArr = isSchoolFacing || isPolicyTopic;
+    const isAicfCompanion = handbookKind === 'aicf-companion';
+    const hasSectionsArr = isSchoolFacing || isPolicyTopic || isAicfCompanion;
     const stagesArr = hasSectionsArr
       ? (Array.isArray(hb.sections) ? hb.sections : [])
       : (Array.isArray(hb.stages) ? hb.stages : []);
     const stageLabelPlural = hasSectionsArr ? 'Sections' : 'Stages';
 
-    const eyebrowLabel = isPolicyTopic
-      ? 'Eduversal Policy Handbook'
-      : (isSchoolFacing
-        ? 'Eduversal School-Facing Handbook'
-        : (handbookKind === 'role-operational' ? 'Eduversal Operational Handbook' : 'Eduversal Induction Handbook'));
+    const eyebrowLabel = isAicfCompanion
+      ? 'Eduversal AI Companion Handbook'
+      : (isPolicyTopic
+        ? 'Eduversal Policy Handbook'
+        : (isSchoolFacing
+          ? 'Eduversal School-Facing Handbook'
+          : (handbookKind === 'role-operational' ? 'Eduversal Operational Handbook' : 'Eduversal Induction Handbook')));
     document.getElementById('hbReaderEyebrow').textContent =
       `${eyebrowLabel} · v${hb.version || '?'}`;
     document.getElementById('hbReaderTitle').textContent = hb.title || hb.id;
@@ -1860,10 +1882,12 @@
       ${hasSectionsArr ? `
         <aside class="hb-charter hb-charter-school" id="hb-sec-charter">
           <div>
-            <strong>${isPolicyTopic ? 'Network policy handbook.' : 'Network handbook for partner schools.'}</strong>
-            ${hb.customizationModel === 'hybrid'
-              ? `This handbook is the network-uniform core. Your school adds school-specific information in the clearly-marked slots. Eduversal sets the framing; your school sets the local detail.`
-              : `Edits go through <code>docs/handbooks/${isPolicyTopic ? 'policy-topic' : 'school-facing'}/*.json</code> + <code>scripts/induction/seed-induction-programs.js</code> — never Firestore directly.`}
+            <strong>${isAicfCompanion ? 'AICF companion — navigable wrapper for the canonical AICF practical layer.' : (isPolicyTopic ? 'Network policy handbook.' : 'Network handbook for partner schools.')}</strong>
+            ${isAicfCompanion
+              ? `Full corpus lives in <code>docs/research/eduversal/ai-competency-framework/practical/*.json</code>. This handbook is the navigable reading guide. Edits go to the canonical JSON; this handbook is regenerated from it.`
+              : (hb.customizationModel === 'hybrid'
+                ? `This handbook is the network-uniform core. Your school adds school-specific information in the clearly-marked slots. Eduversal sets the framing; your school sets the local detail.`
+                : `Edits go through <code>docs/handbooks/${isPolicyTopic ? 'policy-topic' : 'school-facing'}/*.json</code> + <code>scripts/induction/seed-induction-programs.js</code> — never Firestore directly.`)}
           </div>
         </aside>
       ` : `
@@ -2538,7 +2562,7 @@
   function buildTOC(hb, stages) {
     const list = document.getElementById('hbTocList');
     const kind = hb.handbookKind || 'induction';
-    const isSchoolFacing = kind === 'school-facing' || kind === 'policy-topic';
+    const isSchoolFacing = kind === 'school-facing' || kind === 'policy-topic' || kind === 'aicf-companion';
     const stageLabelPlural = isSchoolFacing ? 'Sections' : 'Stages';
     const items = [];
     items.push(`<li><a href="#hb-sec-charter">Charter</a></li>`);
