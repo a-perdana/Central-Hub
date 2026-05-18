@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Maturity Admin — CentralHub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="firebase-config.js"></script>
+<style>
+:root {
+  --accent: #e67e22;
+  --accent-dk: #d35400;
+  --accent-2: #fef3e2;
+  --watchout: #b91c1c;
+  --grow: #047857;
+  --grow-bg: #ecfdf5;
+}
+
+.aicf-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--accent-2); color: var(--accent-dk);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; font-family: 'DM Sans', sans-serif;
+}
+
+.hero {
+  background: linear-gradient(135deg, #0a0a1a 0%, #2b1e10 55%, #0c1028 100%);
+  padding: 36px 40px 44px; position: relative; overflow: hidden;
+}
+.hero::before { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 12% 80%, rgba(230,126,34,0.22) 0%, transparent 48%),
+              radial-gradient(circle at 86% 20%, rgba(108,92,231,0.16) 0%, transparent 48%); }
+.hero-inner { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; }
+.hero-eyebrow { font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.5); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+.hero-title { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 600; color: #fff; margin-bottom: 8px; line-height: 1.2; }
+.hero-sub { font-size: 0.9rem; color: rgba(255,255,255,0.6); max-width: 760px; line-height: 1.6; }
+
+.page-wrap { max-width: 1240px; margin: 0 auto; padding: 24px 40px 80px; }
+
+.filter-bar {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 20px; padding: 14px 18px;
+  background: #fff; border: 1px solid var(--border, #e2e8f0); border-radius: 10px;
+}
+.filter-bar label { font-size: 12px; font-weight: 600; color: #475569; }
+.filter-bar select, .filter-bar input {
+  padding: 7px 11px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; font-family: inherit; background: #fff;
+}
+.filter-bar .stats { margin-left: auto; font-size: 12.5px; color: #64748b; }
+.filter-bar .stats strong { color: #1e293b; }
+
+.tabs-row {
+  display: flex; gap: 6px; margin-bottom: 16px;
+}
+.tab-btn {
+  padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border, #e2e8f0); background: #fff;
+  font-size: 13px; font-weight: 500; color: #475569; font-family: inherit;
+}
+.tab-btn:hover { background: var(--accent-2); border-color: var(--accent); }
+.tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.tab-btn .tab-count {
+  display: inline-block; margin-left: 6px; padding: 1px 7px;
+  border-radius: 10px; background: rgba(0,0,0,0.08); font-size: 11px;
+}
+.tab-btn.active .tab-count { background: rgba(255,255,255,0.25); }
+
+.list-table { background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; }
+.list-row {
+  display: grid; grid-template-columns: 1.8fr 1.1fr 130px 110px 110px 100px;
+  gap: 14px; padding: 14px 20px; border-bottom: 1px solid #f1f5f9;
+  align-items: center; transition: background 0.15s;
+}
+.list-row:last-child { border-bottom: none; }
+.list-row:hover:not(.head) { background: #fdf6ee; cursor: pointer; }
+.list-row.head { background: #f8fafc; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; cursor: default; }
+.list-row .name { font-size: 14px; font-weight: 600; color: #1e293b; }
+.list-row .name small { display: block; font-weight: 400; color: #64748b; font-size: 11.5px; margin-top: 1px; }
+.list-row .submitted { font-size: 12.5px; color: #475569; }
+.list-row .overall-chip {
+  display: inline-block; padding: 4px 10px; border-radius: 4px;
+  font-size: 12px; font-weight: 700; font-family: 'Lora', serif;
+}
+.overall-chip.l1 { background: #fee2e2; color: #991b1b; }
+.overall-chip.l2 { background: #fef3c7; color: #92400e; }
+.overall-chip.l3 { background: #fef3e2; color: #d35400; }
+.overall-chip.l4 { background: #dbeafe; color: #1e40af; }
+.overall-chip.l5 { background: #dcfce7; color: #166534; }
+.list-row .status-chip {
+  display: inline-block; padding: 3px 9px; border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+.status-chip.draft     { background: #f1f5f9; color: #475569; }
+.status-chip.submitted { background: #dbeafe; color: #1e40af; }
+.status-chip.appraised { background: #dcfce7; color: #166534; }
+
+.empty-state { padding: 60px 20px; text-align: center; color: #64748b; font-size: 14px; }
+.empty-state h3 { font-family: 'Lora', serif; font-size: 18px; color: #1e293b; margin-bottom: 6px; }
+.loading-msg { padding: 30px; text-align: center; color: #64748b; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+  display: none; align-items: flex-start; justify-content: center; z-index: 200;
+  padding: 20px; overflow-y: auto;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 14px; max-width: 1000px; width: 100%;
+  max-height: calc(100vh - 40px); display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25); overflow: hidden;
+}
+.modal-head {
+  padding: 22px 28px 14px; border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #fff 0%, #fdf6ee 100%);
+}
+.modal-headflex { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.modal-title { font-family: 'Lora', serif; font-size: 22px; font-weight: 600; color: #1e293b; }
+.modal-sub { font-size: 12.5px; color: #64748b; margin-top: 4px; }
+.modal-meta { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; font-size: 12px; color: #475569; }
+.modal-meta strong { color: #1e293b; font-weight: 600; }
+.modal-close {
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+  width: 32px; height: 32px; cursor: pointer; font-size: 16px; color: #475569;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.modal-body { padding: 22px 28px; overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: 14px 28px; border-top: 1px solid #e2e8f0;
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  background: #f8fafc;
+}
+
+.domain-detail { margin-bottom: 22px; padding: 16px 18px; background: #f8fafc; border-radius: 10px; }
+.domain-detail.appraised { background: var(--grow-bg); border: 1px solid var(--grow); }
+.dd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.dd-num {
+  width: 32px; height: 32px; border-radius: 6px;
+  background: #fef3e2; color: #d35400;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Lora', serif; font-size: 15px; font-weight: 600;
+}
+.dd-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 600; color: #1e293b; flex: 1; }
+.dd-self-rating { font-size: 11.5px; color: #64748b; }
+.dd-self-rating strong { color: #d35400; }
+
+.compare-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; margin-top: 8px;
+}
+.compare-col { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
+.compare-col.appraiser { border-color: var(--grow); }
+.cc-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
+.compare-col.appraiser .cc-label { color: var(--grow); }
+.cc-stars { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.cc-star {
+  width: 26px; height: 26px; border: 1.5px solid #cbd5e1; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #94a3b8;
+  background: #fff; cursor: default;
+}
+.cc-star.filled { background: #d35400; color: #fff; border-color: #d35400; }
+.cc-star.target { border-color: var(--grow); color: var(--grow); border-style: dashed; }
+.cc-star.target.filled { background: var(--grow); color: #fff; border-style: solid; }
+.cc-star.editable { cursor: pointer; }
+.cc-star.editable:hover { border-color: var(--accent); }
+
+.cc-list { font-size: 12.5px; color: #475569; line-height: 1.55; }
+.cc-list ul { margin-left: 16px; margin-top: 4px; }
+.cc-list li { margin: 3px 0; }
+.cc-list .cc-sub { font-weight: 600; color: #1e293b; margin-top: 6px; }
+
+/* Appraiser-side level selector (current + target compact pill row) */
+.app-level-selector { margin: 10px 0; }
+.app-lvl-row { display: flex; gap: 5px; margin: 4px 0 10px 0; }
+.app-lvl-btn {
+  flex: 1; padding: 8px 4px; border: 1.5px solid #cbd5e1; border-radius: 6px;
+  background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+  color: #475569; font-family: inherit; text-align: center;
+}
+.app-lvl-btn:hover { border-color: var(--accent); }
+.app-lvl-btn.cur-selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+.app-lvl-btn.tgt-selected { background: var(--grow); border-color: var(--grow); color: #fff; }
+.app-lvl-row.target .app-lvl-btn { border-style: dashed; }
+.app-lvl-row.target .app-lvl-btn.tgt-selected { border-style: solid; }
+.app-lvl-mini-label { font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* Free-text overrides in appraiser column */
+.app-textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 60px;
+  background: #fff; margin-top: 4px; line-height: 1.5;
+}
+
+/* Overall + admin section */
+.summary-card {
+  background: var(--grow-bg); border: 1px solid var(--grow); border-radius: 10px;
+  padding: 16px 20px; margin-bottom: 20px;
+}
+.summary-card h4 { font-family: 'Lora', serif; font-size: 16px; color: var(--grow); margin-bottom: 8px; }
+.summary-card .summary-row { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; }
+.summary-card .summary-row .sr-label { color: #475569; font-weight: 600; }
+
+.appraiser-overall-row { display: flex; gap: 5px; margin: 6px 0 12px 0; }
+
+.notes-block { margin: 14px 0; }
+.notes-block label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.notes-block textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; font-family: inherit; min-height: 100px; line-height: 1.55;
+  background: #fff;
+}
+.notes-block .hint { font-size: 11.5px; color: #94a3b8; margin-top: 4px; }
+
+.btn-primary {
+  padding: 10px 22px; border-radius: 8px; border: none;
+  background: var(--accent); color: #fff; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+}
+.btn-primary:hover { background: var(--accent-dk); }
+.btn-primary[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  padding: 10px 18px; border-radius: 8px; border: 1px solid #cbd5e1;
+  background: #fff; color: #1e293b; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+}
+
+.toast {
+  position: fixed; top: 80px; right: 24px; z-index: 500;
+  padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12); opacity: 0; transform: translateY(-10px);
+  transition: opacity 0.2s, transform 0.2s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.toast.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+</style>
+</head>
+<body>
+<!-- SHARED_NAVBAR -->
+<script type="module" src="auth-guard.js"></script>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">AI Competency Framework v1.0 · HQ Appraisal</div>
+    <h1 class="hero-title">AI Maturity Appraisal Admin</h1>
+    <p class="hero-sub">
+      Every Eduversal partner school self-assesses its AI maturity each year. This queue lists
+      submissions. Open any school to compare the school's self-rating against the evidence,
+      adjust the validated level if needed, and write Eduversal-level recommendations.
+    </p>
+  </div>
+</header>
+
+<main class="page-wrap">
+  <div class="filter-bar">
+    <label>Academic year</label>
+    <select id="yearFilter">
+      <option value="2026-2027" selected>2026-2027</option>
+      <option value="2025-2026">2025-2026</option>
+    </select>
+    <label>Search</label>
+    <input type="text" id="searchInput" placeholder="School name…" style="min-width:220px;">
+    <div class="stats" id="stats">—</div>
+  </div>
+
+  <div class="tabs-row">
+    <button class="tab-btn active" data-tab="submitted">Awaiting appraisal <span class="tab-count" id="cnt-submitted">0</span></button>
+    <button class="tab-btn" data-tab="appraised">Validated <span class="tab-count" id="cnt-appraised">0</span></button>
+    <button class="tab-btn" data-tab="draft">Draft only <span class="tab-count" id="cnt-draft">0</span></button>
+    <button class="tab-btn" data-tab="all">All <span class="tab-count" id="cnt-all">0</span></button>
+  </div>
+
+  <div id="listContainer" class="list-table">
+    <div class="loading-msg">Loading…</div>
+  </div>
+</main>
+
+<!-- Detail / validate modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-headflex">
+        <div>
+          <span class="aicf-tag">AICF · Institutional</span>
+          <div class="modal-title" id="modalTitle">—</div>
+          <div class="modal-sub" id="modalSub">—</div>
+          <div class="modal-meta" id="modalMeta"></div>
+        </div>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <div class="loading-msg">Loading…</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn-primary" id="btnSaveValidation" onclick="submitValidation()" style="display:none;">Save validation &amp; mark as appraised</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  getFirestore, collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc, setDoc, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const DOMAINS = [
+  { id: 'strategy_leadership',     title: 'Strategy and Leadership' },
+  { id: 'policy_compliance',       title: 'Policy and Compliance' },
+  { id: 'staff_capability',        title: 'Staff Capability' },
+  { id: 'teaching_learning',       title: 'Teaching and Learning' },
+  { id: 'student_outcomes',        title: 'Student Outcomes' },
+  { id: 'infrastructure_resources',title: 'Infrastructure and Resources' }
+];
+
+const LEVELS = [
+  { num: 1, name: 'Emerging' },
+  { num: 2, name: 'Developing' },
+  { num: 3, name: 'Established' },
+  { num: 4, name: 'Advanced' },
+  { num: 5, name: 'Leading' }
+];
+
+const state = {
+  rows: [],
+  filtered: [],
+  filterYear: '2026-2027',
+  filterTab: 'submitted',
+  search: '',
+  openDoc: null,
+  appraiserOverride: null,   // mutable copy during edit
+  schoolNameById: {}
+};
+
+function showToast(msg, kind = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + kind;
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function levelChip(lv) {
+  if (!lv) return '<span style="color:#94a3b8;">—</span>';
+  return `<span class="overall-chip l${lv}">${lv} · ${LEVELS[lv-1].name}</span>`;
+}
+
+function statusChip(s) {
+  const map = { draft: 'Draft', submitted: 'Submitted', appraised: 'Validated' };
+  return `<span class="status-chip ${s}">${map[s] || s}</span>`;
+}
+
+// ---- Load schools list (for denormalised name lookup if missing) ----
+async function loadSchoolNames() {
+  try {
+    // @lint-allow-unbounded — partner_schools is a small bounded directory (~15 docs)
+    const snap = await getDocs(collection(window.db, 'partner_schools'));
+    snap.forEach(d => { state.schoolNameById[d.id] = (d.data().name || d.id); });
+  } catch (err) {
+    console.warn('[ai-maturity-admin] partner_schools load failed', err);
+  }
+}
+
+// ---- Load all assessments for the selected year ----
+async function loadAssessments() {
+  const container = document.getElementById('listContainer');
+  container.innerHTML = '<div class="loading-msg">Loading…</div>';
+
+  try {
+    const q = query(
+      collection(window.db, 'ai_maturity_assessments'),
+      where('academicYear', '==', state.filterYear)
+    );
+    const snap = await getDocs(q);
+    const rows = [];
+    snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+    state.rows = rows;
+    applyFilters();
+  } catch (err) {
+    console.error('[ai-maturity-admin] load failed', err);
+    container.innerHTML = `<div class="empty-state"><h3>Load failed</h3><p>${escapeHtml(err.code || err.message)}</p></div>`;
+  }
+}
+
+function applyFilters() {
+  let rows = state.rows.slice();
+  // Status tab
+  if (state.filterTab !== 'all') {
+    rows = rows.filter(r => r.status === state.filterTab);
+  }
+  // Search by school name
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    rows = rows.filter(r => (r.schoolName || state.schoolNameById[r.schoolId] || '').toLowerCase().includes(q));
+  }
+  // Sort: submitted oldest first (queue logic), appraised newest first, draft alphabetical
+  rows.sort((a, b) => {
+    if (state.filterTab === 'submitted') {
+      const at = a.submittedAt?.toMillis?.() || 0;
+      const bt = b.submittedAt?.toMillis?.() || 0;
+      return at - bt;
+    }
+    if (state.filterTab === 'appraised') {
+      const at = a.appraisal?.appraisedAt?.toMillis?.() || 0;
+      const bt = b.appraisal?.appraisedAt?.toMillis?.() || 0;
+      return bt - at;
+    }
+    return (a.schoolName || '').localeCompare(b.schoolName || '');
+  });
+  state.filtered = rows;
+  renderList();
+  renderTabCounts();
+  renderStats();
+}
+
+function renderTabCounts() {
+  const counts = { submitted: 0, appraised: 0, draft: 0, all: state.rows.length };
+  state.rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+  for (const k of ['submitted', 'appraised', 'draft', 'all']) {
+    const el = document.getElementById('cnt-' + k);
+    if (el) el.textContent = counts[k] || 0;
+  }
+}
+
+function renderStats() {
+  const total = state.rows.length;
+  const submitted = state.rows.filter(r => r.status === 'submitted').length;
+  const appraised = state.rows.filter(r => r.status === 'appraised').length;
+  document.getElementById('stats').innerHTML =
+    `<strong>${total}</strong> school${total === 1 ? '' : 's'} · <strong>${submitted}</strong> waiting · <strong>${appraised}</strong> validated`;
+}
+
+function renderList() {
+  const container = document.getElementById('listContainer');
+  if (!state.filtered.length) {
+    container.innerHTML = `<div class="empty-state"><h3>Nothing here yet</h3><p>No assessments match this filter for ${escapeHtml(state.filterYear)}.</p></div>`;
+    return;
+  }
+  let html = `
+    <div class="list-row head">
+      <div>School</div>
+      <div>Self-declared overall</div>
+      <div>Status</div>
+      <div>Submitted</div>
+      <div>Validated</div>
+      <div></div>
+    </div>
+  `;
+  for (const r of state.filtered) {
+    const name = r.schoolName || state.schoolNameById[r.schoolId] || r.schoolId;
+    const submittedAt = r.submittedAt?.toDate ? r.submittedAt.toDate().toLocaleDateString('en-GB') : '—';
+    const appraisedAt = r.appraisal?.appraisedAt?.toDate ? r.appraisal.appraisedAt.toDate().toLocaleDateString('en-GB') : '—';
+    const validatedOverall = r.appraisal?.validatedOverallLevel ?? null;
+    html += `
+      <div class="list-row" data-docid="${escapeHtml(r.id)}">
+        <div class="name">${escapeHtml(name)}<small>${escapeHtml(r.schoolId)}</small></div>
+        <div class="submitted">${levelChip(r.overallLevel)}</div>
+        <div>${statusChip(r.status || 'draft')}</div>
+        <div class="submitted">${submittedAt}</div>
+        <div class="submitted">${appraisedAt}${validatedOverall ? ' · ' + levelChip(validatedOverall) : ''}</div>
+        <div><button class="btn-secondary" style="padding:6px 12px;font-size:12px;">Open →</button></div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.list-row[data-docid]').forEach(row => {
+    row.addEventListener('click', () => openModal(row.dataset.docid));
+  });
+}
+
+// ---- Open detail / validate modal ----
+async function openModal(docId) {
+  state.openDoc = null;
+  state.appraiserOverride = null;
+  const modal = document.getElementById('modal');
+  modal.classList.add('open');
+  document.getElementById('modalBody').innerHTML = '<div class="loading-msg">Loading…</div>';
+  document.getElementById('btnSaveValidation').style.display = 'none';
+
+  try {
+    const ref = doc(window.db, 'ai_maturity_assessments', docId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      document.getElementById('modalBody').innerHTML = '<div class="empty-state">Document not found.</div>';
+      return;
+    }
+    const d = { id: snap.id, ...snap.data() };
+    state.openDoc = d;
+    // Seed appraiser override from existing appraisal OR clone of self-rating
+    state.appraiserOverride = cloneForOverride(d);
+    renderModal();
+  } catch (err) {
+    console.error('[ai-maturity-admin] modal load failed', err);
+    document.getElementById('modalBody').innerHTML = `<div class="empty-state"><h3>Load failed</h3><p>${escapeHtml(err.code || err.message)}</p></div>`;
+  }
+}
+
+function cloneForOverride(d) {
+  const validated = d.appraisal?.validatedDomainRatings;
+  const out = { validatedDomainRatings: {}, validatedOverallLevel: null, appraiserNotes: '', recommendations: [] };
+  for (const dm of DOMAINS) {
+    if (validated && validated[dm.id]) {
+      const v = validated[dm.id];
+      out.validatedDomainRatings[dm.id] = {
+        currentLevel: v.currentLevel ?? null,
+        targetLevel:  v.targetLevel  ?? null,
+        evidence:        Array.isArray(v.evidence)        ? v.evidence.slice()        : [],
+        strengths:       Array.isArray(v.strengths)       ? v.strengths.slice()       : [],
+        improvementAreas:Array.isArray(v.improvementAreas)? v.improvementAreas.slice(): []
+      };
+    } else {
+      const s = d.domainRatings?.[dm.id] || {};
+      out.validatedDomainRatings[dm.id] = {
+        currentLevel: s.currentLevel ?? null,
+        targetLevel:  s.targetLevel  ?? null,
+        evidence:        Array.isArray(s.evidence)        ? s.evidence.slice()        : [],
+        strengths:       Array.isArray(s.strengths)       ? s.strengths.slice()       : [],
+        improvementAreas:Array.isArray(s.improvementAreas)? s.improvementAreas.slice(): []
+      };
+    }
+  }
+  out.validatedOverallLevel = d.appraisal?.validatedOverallLevel ?? d.overallLevel ?? null;
+  out.appraiserNotes = d.appraisal?.appraiserNotes || '';
+  out.recommendations = Array.isArray(d.appraisal?.recommendations) ? d.appraisal.recommendations.slice() : [];
+  return out;
+}
+
+function renderModal() {
+  const d = state.openDoc;
+  if (!d) return;
+  const name = d.schoolName || state.schoolNameById[d.schoolId] || d.schoolId;
+  document.getElementById('modalTitle').textContent = name;
+  document.getElementById('modalSub').textContent = `${d.academicYear} · ${d.schoolId}`;
+  const submittedAt = d.submittedAt?.toDate ? d.submittedAt.toDate().toLocaleDateString('en-GB') : '—';
+  const appraisedAt = d.appraisal?.appraisedAt?.toDate ? d.appraisal.appraisedAt.toDate().toLocaleDateString('en-GB') : '—';
+  document.getElementById('modalMeta').innerHTML = `
+    <span><strong>Status:</strong> ${statusChip(d.status)}</span>
+    <span><strong>Submitted:</strong> ${submittedAt}</span>
+    ${d.status === 'appraised' ? `<span><strong>Validated:</strong> ${appraisedAt}</span>` : ''}
+    <span><strong>Self-overall:</strong> ${levelChip(d.overallLevel)}</span>
+    ${d.status === 'appraised' ? `<span><strong>Validated overall:</strong> ${levelChip(d.appraisal?.validatedOverallLevel)}</span>` : ''}
+  `;
+
+  const isAppraised = d.status === 'appraised';
+  const canAppraise = d.status === 'submitted';
+  document.getElementById('btnSaveValidation').style.display = canAppraise ? 'inline-block' : 'none';
+
+  let body = '';
+
+  // Per-domain compare layout
+  for (let i = 0; i < DOMAINS.length; i++) {
+    const dm = DOMAINS[i];
+    const self = d.domainRatings?.[dm.id] || {};
+    const app  = state.appraiserOverride.validatedDomainRatings[dm.id];
+    body += `<div class="domain-detail${isAppraised ? ' appraised' : ''}">
+      <div class="dd-head">
+        <div class="dd-num">${i + 1}</div>
+        <div class="dd-title">${escapeHtml(dm.title)}</div>
+        <div class="dd-self-rating">Self-declared current step: <strong>${self.currentLevel ?? '—'}</strong> · target <strong>${self.targetLevel ?? '—'}</strong></div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-col">
+          <div class="cc-label">School self-rating</div>
+          ${renderStars(self.currentLevel, 'cur', false)}
+          ${renderStars(self.targetLevel, 'tgt', false)}
+          <div class="cc-list">
+            ${renderListSection('Evidence', self.evidence)}
+            ${renderListSection('Strengths', self.strengths)}
+            ${renderListSection('Improvement areas', self.improvementAreas)}
+          </div>
+        </div>
+        <div class="compare-col appraiser">
+          <div class="cc-label">Eduversal validation</div>
+          ${renderAppraiserPicker(dm.id, app, canAppraise || isAppraised)}
+          ${renderAppraiserLists(dm.id, app, canAppraise)}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Overall + notes + recommendations
+  body += `
+    <div class="summary-card">
+      <h4>Overall rating + Eduversal recommendations</h4>
+      <div class="app-level-selector">
+        <div class="app-lvl-mini-label">Validated overall step (1-5, weighted average of the 6 area validations)</div>
+        <div class="appraiser-overall-row" data-overall="1">
+          ${LEVELS.map(lv => `<button class="app-lvl-btn ${state.appraiserOverride.validatedOverallLevel === lv.num ? 'cur-selected' : ''}" data-overall-lvl="${lv.num}" ${!canAppraise ? 'disabled' : ''}>${lv.num} · ${escapeHtml(lv.name)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="notes-block">
+        <label>Appraiser notes <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;">(visible to the school after the visit)</span></label>
+        <textarea id="appraiserNotes" maxlength="2000" placeholder="Plain notes from the visit — what evidence supported or contradicted the self-rating; specific observations from staff and student conversations…" ${!canAppraise ? 'disabled' : ''}>${escapeHtml(state.appraiserOverride.appraiserNotes)}</textarea>
+        <div class="hint">Up to 2000 characters.</div>
+      </div>
+      <div class="notes-block">
+        <label>Eduversal-level recommendations <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;">(up to 8 short items — what Eduversal will support this school with)</span></label>
+        <div id="recommendList"></div>
+        <button class="btn-secondary" id="btnAddRec" style="padding:6px 14px;font-size:12px;margin-top:6px;" ${!canAppraise ? 'disabled' : ''}>+ Add recommendation</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('modalBody').innerHTML = body;
+  wireModalEvents(canAppraise);
+  renderRecommendations(canAppraise);
+}
+
+function renderStars(level, kind, _editable) {
+  let html = `<div class="app-lvl-mini-label">${kind === 'cur' ? 'Current step' : 'Target step'}</div><div class="cc-stars">`;
+  for (let i = 1; i <= 5; i++) {
+    let cls = 'cc-star';
+    if (kind === 'tgt') cls += ' target';
+    if (level === i) cls += ' filled';
+    html += `<div class="${cls}">${i}</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderAppraiserPicker(domainId, app, editable) {
+  let html = '<div class="app-level-selector">';
+  html += `<div class="app-lvl-mini-label">Validated current step</div>`;
+  html += `<div class="app-lvl-row" data-domain="${escapeHtml(domainId)}" data-field="currentLevel">`;
+  for (const lv of LEVELS) {
+    html += `<button class="app-lvl-btn ${app.currentLevel === lv.num ? 'cur-selected' : ''}" data-lvl="${lv.num}" ${!editable ? 'disabled' : ''}>${lv.num}</button>`;
+  }
+  html += '</div>';
+  html += `<div class="app-lvl-mini-label">Validated target</div>`;
+  html += `<div class="app-lvl-row target" data-domain="${escapeHtml(domainId)}" data-field="targetLevel">`;
+  for (const lv of LEVELS) {
+    html += `<button class="app-lvl-btn ${app.targetLevel === lv.num ? 'tgt-selected' : ''}" data-lvl="${lv.num}" ${!editable ? 'disabled' : ''}>${lv.num}</button>`;
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function renderAppraiserLists(domainId, app, editable) {
+  return `
+    <div class="cc-list">
+      <div class="cc-sub">Evidence observed during the visit</div>
+      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="evidence" placeholder="One per line. What the team actually saw or read."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.evidence || []).join('\n'))}</textarea>
+      <div class="cc-sub" style="margin-top:8px;">Validated strengths</div>
+      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="strengths" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.strengths || []).join('\n'))}</textarea>
+      <div class="cc-sub" style="margin-top:8px;">Validated improvement areas</div>
+      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="improvementAreas" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.improvementAreas || []).join('\n'))}</textarea>
+    </div>
+  `;
+}
+
+function renderListSection(label, items) {
+  items = Array.isArray(items) ? items.filter(s => s && s.trim()) : [];
+  if (!items.length) return `<div class="cc-sub">${escapeHtml(label)}</div><p style="font-size:12px;color:#94a3b8;">— none —</p>`;
+  return `<div class="cc-sub">${escapeHtml(label)}</div><ul>${items.map(i => '<li>' + escapeHtml(i) + '</li>').join('')}</ul>`;
+}
+
+function wireModalEvents(canAppraise) {
+  if (!canAppraise) return;
+
+  // Per-domain level pickers
+  document.querySelectorAll('.app-lvl-row[data-domain]').forEach(row => {
+    const domain = row.dataset.domain;
+    const field = row.dataset.field;
+    row.querySelectorAll('button[data-lvl]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const lvl = parseInt(btn.dataset.lvl, 10);
+        state.appraiserOverride.validatedDomainRatings[domain][field] = lvl;
+        renderModal();
+      });
+    });
+  });
+
+  // Per-domain textareas
+  document.querySelectorAll('.app-textarea[data-domain]').forEach(ta => {
+    ta.addEventListener('input', () => {
+      const domain = ta.dataset.domain;
+      const field = ta.dataset.field;
+      const items = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+      state.appraiserOverride.validatedDomainRatings[domain][field] = items;
+    });
+  });
+
+  // Overall level row
+  document.querySelectorAll('button[data-overall-lvl]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.appraiserOverride.validatedOverallLevel = parseInt(btn.dataset.overallLvl, 10);
+      renderModal();
+    });
+  });
+
+  // Notes textarea
+  document.getElementById('appraiserNotes').addEventListener('input', (e) => {
+    state.appraiserOverride.appraiserNotes = e.target.value;
+  });
+
+  // Add recommendation button
+  document.getElementById('btnAddRec').addEventListener('click', () => {
+    if (state.appraiserOverride.recommendations.length >= 8) return;
+    state.appraiserOverride.recommendations.push('');
+    renderRecommendations(true);
+  });
+}
+
+function renderRecommendations(editable) {
+  const list = document.getElementById('recommendList');
+  if (!list) return;
+  list.innerHTML = '';
+  state.appraiserOverride.recommendations.forEach((txt, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;';
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.maxLength = 280;
+    ta.placeholder = 'One concrete recommendation, ≤ 280 chars…';
+    ta.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;font-family:inherit;min-height:36px;';
+    ta.disabled = !editable;
+    ta.addEventListener('input', () => { state.appraiserOverride.recommendations[i] = ta.value; });
+    row.appendChild(ta);
+    if (editable) {
+      const rm = document.createElement('button');
+      rm.textContent = '✕';
+      rm.title = 'Remove';
+      rm.style.cssText = 'width:32px;flex-shrink:0;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;border-radius:6px;cursor:pointer;';
+      rm.addEventListener('click', () => {
+        state.appraiserOverride.recommendations.splice(i, 1);
+        renderRecommendations(true);
+      });
+      row.appendChild(rm);
+    }
+    list.appendChild(row);
+  });
+}
+
+// ---- Submit validation: flip status to 'appraised' + write appraisal.* ----
+async function submitValidation() {
+  const d = state.openDoc;
+  if (!d || d.status !== 'submitted') return;
+  if (!state.appraiserOverride.validatedOverallLevel) {
+    showToast('Pick the validated overall step before saving.', 'error');
+    return;
+  }
+  // Sanity check: all domains have validated current level
+  for (const dm of DOMAINS) {
+    const v = state.appraiserOverride.validatedDomainRatings[dm.id];
+    if (!v.currentLevel) {
+      showToast(`Set the validated current step for ${dm.title}.`, 'error');
+      return;
+    }
+  }
+  if (!confirm('Mark this school as validated and flip the status to "appraised"?\n\nAfter saving, the school can see your notes and recommendations.')) return;
+
+  const ref = doc(window.db, 'ai_maturity_assessments', d.id);
+  try {
+    const payload = {
+      status: 'appraised',
+      appraisal: {
+        appraiserUid: window.currentUser.uid,
+        appraisedAt: serverTimestamp(),
+        validatedDomainRatings: state.appraiserOverride.validatedDomainRatings,
+        validatedOverallLevel: state.appraiserOverride.validatedOverallLevel,
+        appraiserNotes: state.appraiserOverride.appraiserNotes || '',
+        recommendations: state.appraiserOverride.recommendations.map(s => String(s).trim()).filter(Boolean)
+      }
+    };
+    await updateDoc(ref, payload);
+    showToast('Saved. School marked as validated.', 'success');
+    closeModal();
+    await loadAssessments();
+  } catch (err) {
+    console.error('[ai-maturity-admin] save validation failed', err);
+    showToast('Save failed: ' + (err.code || err.message), 'error');
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  state.openDoc = null;
+  state.appraiserOverride = null;
+}
+
+// Expose for inline onclick handlers
+window.closeModal = closeModal;
+window.submitValidation = submitValidation;
+
+// ---- Filter wiring ----
+document.getElementById('yearFilter').addEventListener('change', async (e) => {
+  state.filterYear = e.target.value;
+  await loadAssessments();
+});
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  state.search = e.target.value;
+  applyFilters();
+});
+document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.filterTab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    applyFilters();
+  });
+});
+
+// Backdrop click closes
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// CH dispatches authReady on document
+document.addEventListener('authReady', async () => {
+  // Only central_admin OR ch_sub_roles.director have meaningful access
+  const profile = window.userProfile;
+  const isAdmin = profile?.role_centralhub === 'central_admin';
+  const subs = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  const isDirector = subs.includes('director');
+  if (!isAdmin && !isDirector) {
+    document.getElementById('listContainer').innerHTML = `
+      <div class="empty-state">
+        <h3>Restricted</h3>
+        <p>This page is for the Eduversal Academic Directorate (central_admin or Director sub-role).</p>
+      </div>
+    `;
+    return;
+  }
+  await loadSchoolNames();
+  await loadAssessments();
+});
+</script>
+</body>
+</html>

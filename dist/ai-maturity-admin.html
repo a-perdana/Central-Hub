@@ -1,132 +1,247 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Message Board — CentralHub</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Maturity Admin — CentralHub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="firebase-config.js"></script>
   <link rel="stylesheet" href="shared-styles.css">
-  <style>
-    /* Override sidebar for messageboard (flex layout, tighter padding) */
-    .sidebar { padding: 20px 12px; display: flex; flex-direction: column; gap: 6px; }
-    .sidebar-title { font-size: 0.68rem; padding: 8px 8px 4px; margin-bottom: 0; }
-    .cat-btn { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-radius: 7px; border: none; background: none; width: 100%; text-align: left; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink-2); transition: background 0.15s, color 0.15s; gap: 8px; }
-    .cat-btn:hover { background: var(--paper); color: var(--ink); }
-    .cat-btn.active { background: var(--accent-2); color: var(--accent-dk); font-weight: 600; }
-    .cat-btn-inner { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .cat-count { font-size: 0.72rem; font-weight: 600; background: var(--paper-2); color: var(--ink-3); border-radius: 20px; padding: 1px 7px; flex-shrink: 0; }
-    .cat-btn.active .cat-count { background: rgba(8,145,178,0.12); color: var(--accent-dk); }
 
-    /* MAIN */
-    .main-content { padding: 24px 28px; }
+<style>
+:root {
+  --accent: #e67e22;
+  --accent-dk: #d35400;
+  --accent-2: #fef3e2;
+  --watchout: #b91c1c;
+  --grow: #047857;
+  --grow-bg: #ecfdf5;
+}
 
-    /* VIEWS */
-    .view { display: none; }
-    .view.active { display: block; }
+.aicf-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--accent-2); color: var(--accent-dk);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; font-family: 'DM Sans', sans-serif;
+}
 
-    /* LIST VIEW */
-    .list-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-    .list-title { font-size: 1.2rem; font-weight: 600; flex: 1; }
-    .search-wrap { position: relative; }
-    .search-wrap .search-icon { left: 10px; }
-    .search-wrap .search-input { padding: 8px 12px 8px 32px; width: 200px; }
-    .sort-select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--white); outline: none; }
+.hero {
+  background: linear-gradient(135deg, #0a0a1a 0%, #2b1e10 55%, #0c1028 100%);
+  padding: 36px 40px 44px; position: relative; overflow: hidden;
+}
+.hero::before { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 12% 80%, rgba(230,126,34,0.22) 0%, transparent 48%),
+              radial-gradient(circle at 86% 20%, rgba(108,92,231,0.16) 0%, transparent 48%); }
+.hero-inner { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; }
+.hero-eyebrow { font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.5); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+.hero-title { font-family: 'Lora', serif; font-size: 1.8rem; font-weight: 600; color: #fff; margin-bottom: 8px; line-height: 1.2; }
+.hero-sub { font-size: 0.9rem; color: rgba(255,255,255,0.6); max-width: 760px; line-height: 1.6; }
 
-    /* TOPIC LIST */
-    .topic-list { display: flex; flex-direction: column; gap: 2px; }
-    .topic-row { display: flex; align-items: center; gap: 14px; background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; cursor: pointer; transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s; }
-    .topic-row:hover { box-shadow: var(--shadow); transform: translateY(-1px); border-color: #cbc7bf; }
-    .topic-avatar { width: 36px; height: 36px; }
-    .topic-body { flex: 1; min-width: 0; }
-    .topic-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
-    .topic-title { font-size: 0.925rem; font-weight: 600; color: var(--ink); }
-    .topic-meta { font-size: 0.78rem; color: var(--ink-3); }
-    .topic-stats { display: flex; align-items: center; gap: 14px; flex-shrink: 0; text-align: right; }
-    .topic-stat-item { display: flex; flex-direction: column; align-items: center; }
-    .topic-stat-val { font-size: 0.9rem; font-weight: 600; color: var(--ink-2); }
-    .topic-stat-lbl { font-size: 0.67rem; color: var(--ink-3); text-transform: uppercase; }
+.page-wrap { max-width: 1240px; margin: 0 auto; padding: 24px 40px 80px; }
 
-    /* THREAD VIEW */
-    .thread-back { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--accent); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; padding: 0; margin-bottom: 16px; transition: color 0.2s; }
-    .thread-back:hover { color: var(--accent-dk); }
-    .thread-header { margin-bottom: 20px; }
-    .thread-category { font-size: 0.78rem; color: var(--ink-3); margin-bottom: 6px; }
-    .thread-title { font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.3; }
-    .post { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; }
-    .post.op { border-left: 3px solid var(--accent); }
-    .post-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .post-author { font-size: 0.875rem; font-weight: 600; color: var(--ink); }
-    .post-date { font-size: 0.78rem; color: var(--ink-3); }
-    .post-body { font-size: 0.9rem; color: var(--ink-2); line-height: 1.7; white-space: pre-wrap; }
-    .post-op-label { font-size: 0.68rem; font-weight: 600; background: var(--accent-2); color: var(--accent-dk); border-radius: 4px; padding: 2px 6px; }
-    .replies-heading { font-size: 0.82rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 20px 0 10px; }
-    .reply-form { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-top: 16px; }
-    .reply-form h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 10px; }
-    .reply-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
-    .reply-error { font-size: 0.82rem; color: #dc2626; margin-bottom: 8px; display: none; }
-    .reply-error.visible { display: block; }
+.filter-bar {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 20px; padding: 14px 18px;
+  background: #fff; border: 1px solid var(--border, #e2e8f0); border-radius: 10px;
+}
+.filter-bar label { font-size: 12px; font-weight: 600; color: #475569; }
+.filter-bar select, .filter-bar input {
+  padding: 7px 11px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; font-family: inherit; background: #fff;
+}
+.filter-bar .stats { margin-left: auto; font-size: 12.5px; color: #64748b; }
+.filter-bar .stats strong { color: #1e293b; }
 
-    /* NEW TOPIC FORM */
-    .new-topic-form { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; max-width: 640px; }
-    .new-topic-form h3 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
-    .form-group { margin-bottom: 14px; }
-    .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+.tabs-row {
+  display: flex; gap: 6px; margin-bottom: 16px;
+}
+.tab-btn {
+  padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border, #e2e8f0); background: #fff;
+  font-size: 13px; font-weight: 500; color: #475569; font-family: inherit;
+}
+.tab-btn:hover { background: var(--accent-2); border-color: var(--accent); }
+.tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.tab-btn .tab-count {
+  display: inline-block; margin-left: 6px; padding: 1px 7px;
+  border-radius: 10px; background: rgba(0,0,0,0.08); font-size: 11px;
+}
+.tab-btn.active .tab-count { background: rgba(255,255,255,0.25); }
 
-    /* PAGE-SPECIFIC BADGES */
-    .badge-general   { background: #e0e7ff; color: #3730a3; }
-    .badge-academic  { background: #d1fae5; color: #065f46; }
-    .badge-resources { background: #fef3c7; color: #92400e; }
-    .badge-events    { background: #ede9fe; color: #5b21b6; }
-    .badge-technical { background: #fee2e2; color: #991b1b; }
-    .platform-badge { display:inline-flex; align-items:center; font-size:0.68rem; font-weight:700; padding:2px 7px; border-radius:20px; white-space:nowrap; flex-shrink:0; letter-spacing:.04em; }
-    .platform-badge.th { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
-    .platform-badge.ah { background:#ede9fe; color:#5b21b6; border:1px solid #ddd6fe; }
+.list-table { background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; }
+.list-row {
+  display: grid; grid-template-columns: 1.8fr 1.1fr 130px 110px 110px 100px;
+  gap: 14px; padding: 14px 20px; border-bottom: 1px solid #f1f5f9;
+  align-items: center; transition: background 0.15s;
+}
+.list-row:last-child { border-bottom: none; }
+.list-row:hover:not(.head) { background: #fdf6ee; cursor: pointer; }
+.list-row.head { background: #f8fafc; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; cursor: default; }
+.list-row .name { font-size: 14px; font-weight: 600; color: #1e293b; }
+.list-row .name small { display: block; font-weight: 400; color: #64748b; font-size: 11.5px; margin-top: 1px; }
+.list-row .submitted { font-size: 12.5px; color: #475569; }
+.list-row .overall-chip {
+  display: inline-block; padding: 4px 10px; border-radius: 4px;
+  font-size: 12px; font-weight: 700; font-family: 'Lora', serif;
+}
+.overall-chip.l1 { background: #fee2e2; color: #991b1b; }
+.overall-chip.l2 { background: #fef3c7; color: #92400e; }
+.overall-chip.l3 { background: #fef3e2; color: #d35400; }
+.overall-chip.l4 { background: #dbeafe; color: #1e40af; }
+.overall-chip.l5 { background: #dcfce7; color: #166534; }
+.list-row .status-chip {
+  display: inline-block; padding: 3px 9px; border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+.status-chip.draft     { background: #f1f5f9; color: #475569; }
+.status-chip.submitted { background: #dbeafe; color: #1e40af; }
+.status-chip.appraised { background: #dcfce7; color: #166534; }
 
-    /* WORKSPACE STATUS / DEADLINE / CATEGORY BADGES */
-    .ws-badge { display:inline-flex; align-items:center; font-size:0.68rem; font-weight:700; padding:2px 7px; border-radius:4px; white-space:nowrap; }
-    .ws-badge-open        { background:#d1fae5; color:#065f46; }
-    .ws-badge-in_progress { background:#fef3c7; color:#92400e; }
-    .ws-badge-closed      { background:#f3f4f6; color:#6b7280; }
-    .ws-cat-badge     { display:inline-flex; align-items:center; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:4px; background:#e0f2fe; color:#0369a1; white-space:nowrap; }
-    .ws-deadline-badge{ display:inline-flex; align-items:center; font-size:0.68rem; font-weight:600; padding:2px 7px; border-radius:4px; background:#fee2e2; color:#dc2626; white-space:nowrap; }
-    .form-divider { border:none; border-top:1px dashed var(--border); margin:14px 0 12px; }
+.empty-state { padding: 60px 20px; text-align: center; color: #64748b; font-size: 14px; }
+.empty-state h3 { font-family: 'Lora', serif; font-size: 18px; color: #1e293b; margin-bottom: 6px; }
+.loading-msg { padding: 30px; text-align: center; color: #64748b; }
 
-    /* FILE UPLOAD */
-    .file-drop-zone { border:2px dashed var(--border); border-radius:8px; padding:14px; background:var(--paper); text-align:center; cursor:pointer; transition:border-color 0.2s; font-size:0.84rem; color:var(--ink-3); }
-    .file-drop-zone:hover { border-color:var(--accent); color:var(--accent); }
-    .attachment-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-    .attachment-chip { display:flex; align-items:center; gap:5px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:4px; padding:3px 8px; font-size:0.76rem; color:#15803d; }
-    .attachment-chip button { background:none; border:none; cursor:pointer; color:#6b7280; font-size:0.9rem; line-height:1; padding:0 2px; }
-    .attachment-chip button:hover { color:#dc2626; }
-    .upload-progress { font-size:0.78rem; color:var(--ink-3); margin-top:6px; min-height:1.2em; }
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+  display: none; align-items: flex-start; justify-content: center; z-index: 200;
+  padding: 20px; overflow-y: auto;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 14px; max-width: 1000px; width: 100%;
+  max-height: calc(100vh - 40px); display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25); overflow: hidden;
+}
+.modal-head {
+  padding: 22px 28px 14px; border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #fff 0%, #fdf6ee 100%);
+}
+.modal-headflex { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.modal-title { font-family: 'Lora', serif; font-size: 22px; font-weight: 600; color: #1e293b; }
+.modal-sub { font-size: 12.5px; color: #64748b; margin-top: 4px; }
+.modal-meta { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; font-size: 12px; color: #475569; }
+.modal-meta strong { color: #1e293b; font-weight: 600; }
+.modal-close {
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+  width: 32px; height: 32px; cursor: pointer; font-size: 16px; color: #475569;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.modal-body { padding: 22px 28px; overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: 14px 28px; border-top: 1px solid #e2e8f0;
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  background: #f8fafc;
+}
 
-    /* LINKED ANNOUNCEMENT CARD */
-    .linked-ann-card { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:14px 16px; margin-bottom:14px; }
-    .linked-ann-label { font-size:0.68rem; font-weight:700; color:#0369a1; text-transform:uppercase; letter-spacing:.07em; margin-bottom:6px; }
-    .linked-ann-title { font-size:0.925rem; font-weight:600; color:var(--ink); margin-bottom:4px; }
-    .linked-ann-excerpt { font-size:0.83rem; color:var(--ink-2); line-height:1.5; margin-bottom:8px; }
-    .linked-ann-meta { font-size:0.76rem; color:var(--ink-3); margin-bottom:8px; }
-    .linked-ann-link { font-size:0.82rem; color:var(--accent); text-decoration:none; font-weight:500; }
-    .linked-ann-link:hover { text-decoration:underline; }
+.domain-detail { margin-bottom: 22px; padding: 16px 18px; background: #f8fafc; border-radius: 10px; }
+.domain-detail.appraised { background: var(--grow-bg); border: 1px solid var(--grow); }
+.dd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.dd-num {
+  width: 32px; height: 32px; border-radius: 6px;
+  background: #fef3e2; color: #d35400;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Lora', serif; font-size: 15px; font-weight: 600;
+}
+.dd-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 600; color: #1e293b; flex: 1; }
+.dd-self-rating { font-size: 11.5px; color: #64748b; }
+.dd-self-rating strong { color: #d35400; }
 
-    /* RESPONSIVE */
-    @media (max-width: 768px) {
-      .page-layout { grid-template-columns: 1fr; }
-      .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 12px; gap: 4px; }
-      .sidebar-title, .sidebar-divider, .sidebar-stat { display: none; }
-      .cat-btn { width: auto; flex: none; }
-      .main-content { padding: 18px 16px; }
-      .topic-stats { display: none; }
-      .search-wrap .search-input { width: 140px; }
-    }
-  </style>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+.compare-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px; margin-top: 8px;
+}
+.compare-col { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
+.compare-col.appraiser { border-color: var(--grow); }
+.cc-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
+.compare-col.appraiser .cc-label { color: var(--grow); }
+.cc-stars { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.cc-star {
+  width: 26px; height: 26px; border: 1.5px solid #cbd5e1; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #94a3b8;
+  background: #fff; cursor: default;
+}
+.cc-star.filled { background: #d35400; color: #fff; border-color: #d35400; }
+.cc-star.target { border-color: var(--grow); color: var(--grow); border-style: dashed; }
+.cc-star.target.filled { background: var(--grow); color: #fff; border-style: solid; }
+.cc-star.editable { cursor: pointer; }
+.cc-star.editable:hover { border-color: var(--accent); }
+
+.cc-list { font-size: 12.5px; color: #475569; line-height: 1.55; }
+.cc-list ul { margin-left: 16px; margin-top: 4px; }
+.cc-list li { margin: 3px 0; }
+.cc-list .cc-sub { font-weight: 600; color: #1e293b; margin-top: 6px; }
+
+/* Appraiser-side level selector (current + target compact pill row) */
+.app-level-selector { margin: 10px 0; }
+.app-lvl-row { display: flex; gap: 5px; margin: 4px 0 10px 0; }
+.app-lvl-btn {
+  flex: 1; padding: 8px 4px; border: 1.5px solid #cbd5e1; border-radius: 6px;
+  background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+  color: #475569; font-family: inherit; text-align: center;
+}
+.app-lvl-btn:hover { border-color: var(--accent); }
+.app-lvl-btn.cur-selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+.app-lvl-btn.tgt-selected { background: var(--grow); border-color: var(--grow); color: #fff; }
+.app-lvl-row.target .app-lvl-btn { border-style: dashed; }
+.app-lvl-row.target .app-lvl-btn.tgt-selected { border-style: solid; }
+.app-lvl-mini-label { font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* Free-text overrides in appraiser column */
+.app-textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 60px;
+  background: #fff; margin-top: 4px; line-height: 1.5;
+}
+
+/* Overall + admin section */
+.summary-card {
+  background: var(--grow-bg); border: 1px solid var(--grow); border-radius: 10px;
+  padding: 16px 20px; margin-bottom: 20px;
+}
+.summary-card h4 { font-family: 'Lora', serif; font-size: 16px; color: var(--grow); margin-bottom: 8px; }
+.summary-card .summary-row { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; }
+.summary-card .summary-row .sr-label { color: #475569; font-weight: 600; }
+
+.appraiser-overall-row { display: flex; gap: 5px; margin: 6px 0 12px 0; }
+
+.notes-block { margin: 14px 0; }
+.notes-block label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.notes-block textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 13px; font-family: inherit; min-height: 100px; line-height: 1.55;
+  background: #fff;
+}
+.notes-block .hint { font-size: 11.5px; color: #94a3b8; margin-top: 4px; }
+
+.btn-primary {
+  padding: 10px 22px; border-radius: 8px; border: none;
+  background: var(--accent); color: #fff; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+}
+.btn-primary:hover { background: var(--accent-dk); }
+.btn-primary[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  padding: 10px 18px; border-radius: 8px; border: 1px solid #cbd5e1;
+  background: #fff; color: #1e293b; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+}
+
+.toast {
+  position: fixed; top: 80px; right: 24px; z-index: 500;
+  padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12); opacity: 0; transform: translateY(-10px);
+  transition: opacity 0.2s, transform 0.2s; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.toast.error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+</style>
 </head>
 <body>
-
 <style>
   .btn-my-tasks {
     font-family: 'DM Sans', sans-serif;
@@ -3099,753 +3214,600 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 });
 </script>
 
+<script type="module" src="auth-guard.js"></script>
 
-<div class="page-layout">
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">AI Competency Framework v1.0 · HQ Appraisal</div>
+    <h1 class="hero-title">AI Maturity Appraisal Admin</h1>
+    <p class="hero-sub">
+      Every Eduversal partner school self-assesses its AI maturity each year. This queue lists
+      submissions. Open any school to compare the school's self-rating against the evidence,
+      adjust the validated level if needed, and write Eduversal-level recommendations.
+    </p>
+  </div>
+</header>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" aria-label="Categories">
-    <p class="sidebar-title">Categories</p>
-    <button class="cat-btn active" data-cat="all" onclick="selectCat('all')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#8888a8"></span>All</span>
-      <span class="cat-count" id="cnt-all">0</span>
-    </button>
-    <button class="cat-btn" data-cat="general" onclick="selectCat('general')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#4338ca"></span>General</span>
-      <span class="cat-count" id="cnt-general">0</span>
-    </button>
-    <button class="cat-btn" data-cat="academic" onclick="selectCat('academic')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#059669"></span>Academic</span>
-      <span class="cat-count" id="cnt-academic">0</span>
-    </button>
-    <button class="cat-btn" data-cat="resources" onclick="selectCat('resources')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#d97706"></span>Resources</span>
-      <span class="cat-count" id="cnt-resources">0</span>
-    </button>
-    <button class="cat-btn" data-cat="events" onclick="selectCat('events')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#7c3aed"></span>Events</span>
-      <span class="cat-count" id="cnt-events">0</span>
-    </button>
-    <button class="cat-btn" data-cat="technical" onclick="selectCat('technical')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#dc2626"></span>Technical</span>
-      <span class="cat-count" id="cnt-technical">0</span>
-    </button>
-    <div class="sidebar-divider"></div>
-    <div class="sidebar-stat"><span>Total topics</span><span class="sidebar-stat-val" id="totalTopics">—</span></div>
-    <div class="sidebar-stat"><span>Total replies</span><span class="sidebar-stat-val" id="totalReplies">—</span></div>
-  </aside>
+<main class="page-wrap">
+  <div class="filter-bar">
+    <label>Academic year</label>
+    <select id="yearFilter">
+      <option value="2026-2027" selected>2026-2027</option>
+      <option value="2025-2026">2025-2026</option>
+    </select>
+    <label>Search</label>
+    <input type="text" id="searchInput" placeholder="School name…" style="min-width:220px;">
+    <div class="stats" id="stats">—</div>
+  </div>
 
-  <!-- MAIN -->
-  <main class="main-content">
+  <div class="tabs-row">
+    <button class="tab-btn active" data-tab="submitted">Awaiting appraisal <span class="tab-count" id="cnt-submitted">0</span></button>
+    <button class="tab-btn" data-tab="appraised">Validated <span class="tab-count" id="cnt-appraised">0</span></button>
+    <button class="tab-btn" data-tab="draft">Draft only <span class="tab-count" id="cnt-draft">0</span></button>
+    <button class="tab-btn" data-tab="all">All <span class="tab-count" id="cnt-all">0</span></button>
+  </div>
 
-    <!-- LIST VIEW -->
-    <div class="view active" id="viewList">
-      <div class="list-header">
-        <h1 class="list-title" id="listTitle">All Topics</h1>
-        <div class="search-wrap">
-          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input class="search-input" id="searchInput" type="search" placeholder="Search topics…" aria-label="Search topics">
+  <div id="listContainer" class="list-table">
+    <div class="loading-msg">Loading…</div>
+  </div>
+</main>
+
+<!-- Detail / validate modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-headflex">
+        <div>
+          <span class="aicf-tag">AICF · Institutional</span>
+          <div class="modal-title" id="modalTitle">—</div>
+          <div class="modal-sub" id="modalSub">—</div>
+          <div class="modal-meta" id="modalMeta"></div>
         </div>
-        <select class="sort-select" id="sortSelect" aria-label="Sort topics">
-          <option value="newest">Latest</option>
-          <option value="replies">Most replies</option>
-          <option value="oldest">Oldest</option>
-        </select>
-        <button class="btn-new-topic" id="newTopicBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New Topic
-        </button>
-      </div>
-      <div class="topic-list" id="topicList">
-        <div class="topic-row"><span class="skel" style="height:16px;width:55%;display:block"></span></div>
-        <div class="topic-row"><span class="skel" style="height:16px;width:70%;display:block"></span></div>
-        <div class="topic-row"><span class="skel" style="height:16px;width:40%;display:block"></span></div>
-      </div>
-      <div id="loadMoreWrap" style="display:none;text-align:center;margin-top:14px;">
-        <button class="btn-cancel-form" id="loadMoreBtn" style="font-size:0.85rem;padding:9px 24px;">Load more topics</button>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
       </div>
     </div>
-
-    <!-- THREAD VIEW -->
-    <div class="view" id="viewThread">
-      <button class="thread-back" id="backBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-        Back to topics
-      </button>
-      <div class="thread-header">
-        <p class="thread-category" id="threadCat"></p>
-        <h2 class="thread-title" id="threadTitle"></h2>
-      </div>
-      <div id="linkedAnnCard"></div>
-      <div id="threadPosts"></div>
-      <p class="replies-heading" id="repliesHeading"></p>
-      <div id="replyList"></div>
-      <div class="reply-form">
-        <h4>Post a Reply</h4>
-        <p class="reply-error" id="replyError"></p>
-        <textarea class="reply-textarea" id="replyText" placeholder="Write your reply…" rows="4"></textarea>
-        <div class="reply-footer">
-          <button class="btn-post-reply" id="postReplyBtn">Post Reply</button>
-        </div>
-      </div>
+    <div class="modal-body" id="modalBody">
+      <div class="loading-msg">Loading…</div>
     </div>
-
-    <!-- NEW TOPIC VIEW -->
-    <div class="view" id="viewNewTopic">
-      <div class="new-topic-form">
-        <h3 id="topicFormTitle">Start a New Topic</h3>
-        <div class="form-error" id="topicError" role="alert"></div>
-        <div class="form-group">
-          <label class="form-label" for="topicCat">Category *</label>
-          <select class="form-select" id="topicCat">
-            <option value="">Select category…</option>
-            <option value="general">General</option>
-            <option value="academic">Academic</option>
-            <option value="resources">Resources</option>
-            <option value="events">Events</option>
-            <option value="technical">Technical</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="topicTitle">Title *</label>
-          <input class="form-input" id="topicTitle" placeholder="What's the topic about?">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="topicBody">Body *</label>
-          <textarea class="form-input form-textarea" id="topicBody" placeholder="Describe your topic in detail…"></textarea>
-        </div>
-        <hr class="form-divider">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-          <div class="form-group">
-            <label class="form-label" for="topicStatus">Status</label>
-            <select class="form-select" id="topicStatus">
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="closed">Closed</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="topicDeadline">Deadline</label>
-            <input class="form-input" id="topicDeadline" type="date">
-            <p class="form-hint">Optional</p>
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label" for="topicWsCat">Workspace Category</label>
-          <select class="form-select" id="topicWsCat">
-            <option value="">None</option>
-            <option value="Akreditasyon">Akreditasyon</option>
-            <option value="Müfredat">Müfredat</option>
-            <option value="Genel">Genel</option>
-            <option value="Personel">Personel</option>
-          </select>
-          <p class="form-hint">Optional — groups this topic by purpose</p>
-        </div>
-        <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label" for="topicLinkedAnn">Linked Announcement</label>
-          <select class="form-select" id="topicLinkedAnn">
-            <option value="">None</option>
-            <!-- populated by loadAnnouncementDropdown() -->
-          </select>
-          <p class="form-hint">Optional — links this topic to an existing announcement.</p>
-        </div>
-        <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label">Attachments</label>
-          <div class="file-drop-zone" id="fileDropZone" onclick="document.getElementById('fileInput').click()">
-            <input type="file" id="fileInput" multiple accept="*/*" style="display:none">
-            📎 Click to add files
-          </div>
-          <div class="attachment-chips" id="attachmentChips"></div>
-          <p class="upload-progress" id="uploadProgress"></p>
-          <p class="form-hint">Max 20 MB per file. .exe, .sh, .bat, .ps1 files are not allowed.</p>
-        </div>
-        <div class="form-actions">
-          <button class="btn-cancel-form" id="cancelTopicBtn">Cancel</button>
-          <button class="btn-post-reply" id="submitTopicBtn">Post Topic</button>
-        </div>
-      </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn-primary" id="btnSaveValidation" onclick="submitValidation()" style="display:none;">Save validation &amp; mark as appraised</button>
     </div>
-
-  </main>
+  </div>
 </div>
 
-<script src="firebase-config.js"></script>
-<script type="module" src="auth-guard.js"></script>
+<div class="toast" id="toast"></div>
+
 <script type="module">
-  import { collection, getDocs, addDoc, setDoc, updateDoc, getDoc,
-           doc as fsDoc, query, orderBy, limit, serverTimestamp, increment,
-           arrayUnion, arrayRemove, deleteDoc }
-    from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-  import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject }
-    from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+import {
+  getFirestore, collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc, setDoc, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-  let db;
-  let storage;
-  let allTopics    = [];
-  let currentCat   = 'all';
-  let currentUser  = null;
-  let isAdmin      = false;
-  let openTopicId  = null;
-  let editingTopicId = null;
-  const PAGE_SIZE  = 20;
-  let visibleCount = PAGE_SIZE;
-  let pendingAttachments  = []; // { file: File, name: string } — not yet uploaded
-  let existingAttachments = []; // { name, url, storagePath, uploadedAt, uploadedBy } — already in Firestore
+const DOMAINS = [
+  { id: 'strategy_leadership',     title: 'Strategy and Leadership' },
+  { id: 'policy_compliance',       title: 'Policy and Compliance' },
+  { id: 'staff_capability',        title: 'Staff Capability' },
+  { id: 'teaching_learning',       title: 'Teaching and Learning' },
+  { id: 'student_outcomes',        title: 'Student Outcomes' },
+  { id: 'infrastructure_resources',title: 'Infrastructure and Resources' }
+];
 
-  const CAT_BADGE = {
-    general:   '<span class="badge badge-general">General</span>',
-    academic:  '<span class="badge badge-academic">Academic</span>',
-    resources: '<span class="badge badge-resources">Resources</span>',
-    events:    '<span class="badge badge-events">Events</span>',
-    technical: '<span class="badge badge-technical">Technical</span>',
-  };
-  const CAT_LABEL = { all:'All Topics', general:'General', academic:'Academic', resources:'Resources', events:'Events', technical:'Technical' };
+const LEVELS = [
+  { num: 1, name: 'Emerging' },
+  { num: 2, name: 'Developing' },
+  { num: 3, name: 'Established' },
+  { num: 4, name: 'Advanced' },
+  { num: 5, name: 'Leading' }
+];
 
-  // ===== Announcement dropdown =====
-  async function loadAnnouncementDropdown() {
-    const sel = document.getElementById('topicLinkedAnn');
-    if (!sel) return;
-    while (sel.options.length > 1) sel.remove(1);
-    try {
-      const snap = await getDocs(
-        query(collection(db, 'announcements'), orderBy('createdAt', 'desc'), limit(50))
-      );
-      snap.docs.forEach(d => {
-        const a = d.data();
-        const opt = document.createElement('option');
-        opt.value = d.id;
-        const dateStr = a.createdAt?.toDate
-          ? a.createdAt.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'})
-          : '';
-        opt.textContent = `${a.title || 'Untitled'} (${dateStr})`;
-        sel.appendChild(opt);
-      });
-    } catch(e) {
-      console.warn('Could not load announcements:', e);
-    }
+const state = {
+  rows: [],
+  filtered: [],
+  filterYear: '2026-2027',
+  filterTab: 'submitted',
+  search: '',
+  openDoc: null,
+  appraiserOverride: null,   // mutable copy during edit
+  schoolNameById: {}
+};
+
+function showToast(msg, kind = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + kind;
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function levelChip(lv) {
+  if (!lv) return '<span style="color:#94a3b8;">—</span>';
+  return `<span class="overall-chip l${lv}">${lv} · ${LEVELS[lv-1].name}</span>`;
+}
+
+function statusChip(s) {
+  const map = { draft: 'Draft', submitted: 'Submitted', appraised: 'Validated' };
+  return `<span class="status-chip ${s}">${map[s] || s}</span>`;
+}
+
+// ---- Load schools list (for denormalised name lookup if missing) ----
+async function loadSchoolNames() {
+  try {
+    // @lint-allow-unbounded — partner_schools is a small bounded directory (~15 docs)
+    const snap = await getDocs(collection(window.db, 'partner_schools'));
+    snap.forEach(d => { state.schoolNameById[d.id] = (d.data().name || d.id); });
+  } catch (err) {
+    console.warn('[ai-maturity-admin] partner_schools load failed', err);
   }
+}
 
-  // ===== Auth ready =====
-  document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
-    db = window.db;
-    storage = getStorage(window.firebaseApp);
-    currentUser = user;
-    isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
-    await loadTopics();
-    bindEvents();
-    await loadAnnouncementDropdown();
-  });
+// ---- Load all assessments for the selected year ----
+async function loadAssessments() {
+  const container = document.getElementById('listContainer');
+  container.innerHTML = '<div class="loading-msg">Loading…</div>';
 
-  // ===== Load all topics =====
-  async function loadTopics() {
-    try {
-      const snap = await getDocs(query(collection(db, 'topics'), orderBy('createdAt','desc')));
-      allTopics = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      updateCounts();
-      renderTopics();
-      handleInitialHash();
-    } catch(e) {
-      document.getElementById('topicList').innerHTML = '<div class="empty-state">Could not load topics.</div>';
-    }
-  }
-
-  function updateCounts() {
-    const cats = ['general','academic','resources','events','technical'];
-    document.getElementById('cnt-all').textContent = allTopics.length;
-    cats.forEach(c => {
-      document.getElementById('cnt-'+c).textContent = allTopics.filter(t => t.category === c).length;
-    });
-    document.getElementById('totalTopics').textContent  = allTopics.length;
-    const totalReplies = allTopics.reduce((sum, t) => sum + (t.replyCount || 0), 0);
-    document.getElementById('totalReplies').textContent = totalReplies;
-  }
-
-  // ===== Category select =====
-  function selectCat(cat) {
-    currentCat = cat;
-    visibleCount = PAGE_SIZE;
-    document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
-    document.getElementById('listTitle').textContent = CAT_LABEL[cat] || cat;
-    renderTopics();
-    showView('list');
-  }
-
-  // ===== Render badges =====
-  function renderBadges(t) {
-    let html = '';
-    const statusMap = {
-      open:        { cls: 'ws-badge-open',        label: 'OPEN' },
-      in_progress: { cls: 'ws-badge-in_progress', label: 'IN PROGRESS' },
-      closed:      { cls: 'ws-badge-closed',       label: 'CLOSED' },
-    };
-    const s = statusMap[t.status];
-    if (s) html += `<span class="ws-badge ${s.cls}">${s.label}</span>`;
-    if (t.workspaceCategory) {
-      html += `<span class="ws-cat-badge">${esc(t.workspaceCategory)}</span>`;
-    }
-    if (t.deadline) {
-      const d = t.deadline.toDate ? t.deadline.toDate() : new Date(t.deadline);
-      html += `<span class="ws-deadline-badge">⏰ ${d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>`;
-    }
-    const attCount = (t.attachments || []).length;
-    if (attCount > 0) {
-      html += `<span style="font-size:0.68rem;color:var(--ink-3);margin-left:2px">📎 ${attCount}</span>`;
-    }
-    return html;
-  }
-
-  // ===== Render topics =====
-  function renderTopics() {
-    const q    = document.getElementById('searchInput').value.toLowerCase();
-    const sort = document.getElementById('sortSelect').value;
-    let list   = allTopics.filter(t =>
-      (currentCat === 'all' || t.category === currentCat) &&
-      (!q || t.title?.toLowerCase().includes(q) || t.author?.toLowerCase().includes(q))
+  try {
+    const q = query(
+      collection(window.db, 'ai_maturity_assessments'),
+      where('academicYear', '==', state.filterYear)
     );
-    list = [...list].sort((a, b) => {
-      if (sort === 'replies') return (b.replyCount||0) - (a.replyCount||0);
-      if (sort === 'oldest')  return (a.createdAt?.toMillis?.()||0) - (b.createdAt?.toMillis?.()||0);
-      return (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0);
-    });
-    const el = document.getElementById('topicList');
-    const loadMoreWrap = document.getElementById('loadMoreWrap');
-    if (!list.length) {
-      el.innerHTML = '<div class="empty-state">No topics yet. Be the first to start one!</div>';
-      loadMoreWrap.style.display = 'none';
+    const snap = await getDocs(q);
+    const rows = [];
+    snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+    state.rows = rows;
+    applyFilters();
+  } catch (err) {
+    console.error('[ai-maturity-admin] load failed', err);
+    container.innerHTML = `<div class="empty-state"><h3>Load failed</h3><p>${escapeHtml(err.code || err.message)}</p></div>`;
+  }
+}
+
+function applyFilters() {
+  let rows = state.rows.slice();
+  // Status tab
+  if (state.filterTab !== 'all') {
+    rows = rows.filter(r => r.status === state.filterTab);
+  }
+  // Search by school name
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    rows = rows.filter(r => (r.schoolName || state.schoolNameById[r.schoolId] || '').toLowerCase().includes(q));
+  }
+  // Sort: submitted oldest first (queue logic), appraised newest first, draft alphabetical
+  rows.sort((a, b) => {
+    if (state.filterTab === 'submitted') {
+      const at = a.submittedAt?.toMillis?.() || 0;
+      const bt = b.submittedAt?.toMillis?.() || 0;
+      return at - bt;
+    }
+    if (state.filterTab === 'appraised') {
+      const at = a.appraisal?.appraisedAt?.toMillis?.() || 0;
+      const bt = b.appraisal?.appraisedAt?.toMillis?.() || 0;
+      return bt - at;
+    }
+    return (a.schoolName || '').localeCompare(b.schoolName || '');
+  });
+  state.filtered = rows;
+  renderList();
+  renderTabCounts();
+  renderStats();
+}
+
+function renderTabCounts() {
+  const counts = { submitted: 0, appraised: 0, draft: 0, all: state.rows.length };
+  state.rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+  for (const k of ['submitted', 'appraised', 'draft', 'all']) {
+    const el = document.getElementById('cnt-' + k);
+    if (el) el.textContent = counts[k] || 0;
+  }
+}
+
+function renderStats() {
+  const total = state.rows.length;
+  const submitted = state.rows.filter(r => r.status === 'submitted').length;
+  const appraised = state.rows.filter(r => r.status === 'appraised').length;
+  document.getElementById('stats').innerHTML =
+    `<strong>${total}</strong> school${total === 1 ? '' : 's'} · <strong>${submitted}</strong> waiting · <strong>${appraised}</strong> validated`;
+}
+
+function renderList() {
+  const container = document.getElementById('listContainer');
+  if (!state.filtered.length) {
+    container.innerHTML = `<div class="empty-state"><h3>Nothing here yet</h3><p>No assessments match this filter for ${escapeHtml(state.filterYear)}.</p></div>`;
+    return;
+  }
+  let html = `
+    <div class="list-row head">
+      <div>School</div>
+      <div>Self-declared overall</div>
+      <div>Status</div>
+      <div>Submitted</div>
+      <div>Validated</div>
+      <div></div>
+    </div>
+  `;
+  for (const r of state.filtered) {
+    const name = r.schoolName || state.schoolNameById[r.schoolId] || r.schoolId;
+    const submittedAt = r.submittedAt?.toDate ? r.submittedAt.toDate().toLocaleDateString('en-GB') : '—';
+    const appraisedAt = r.appraisal?.appraisedAt?.toDate ? r.appraisal.appraisedAt.toDate().toLocaleDateString('en-GB') : '—';
+    const validatedOverall = r.appraisal?.validatedOverallLevel ?? null;
+    html += `
+      <div class="list-row" data-docid="${escapeHtml(r.id)}">
+        <div class="name">${escapeHtml(name)}<small>${escapeHtml(r.schoolId)}</small></div>
+        <div class="submitted">${levelChip(r.overallLevel)}</div>
+        <div>${statusChip(r.status || 'draft')}</div>
+        <div class="submitted">${submittedAt}</div>
+        <div class="submitted">${appraisedAt}${validatedOverall ? ' · ' + levelChip(validatedOverall) : ''}</div>
+        <div><button class="btn-secondary" style="padding:6px 12px;font-size:12px;">Open →</button></div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.list-row[data-docid]').forEach(row => {
+    row.addEventListener('click', () => openModal(row.dataset.docid));
+  });
+}
+
+// ---- Open detail / validate modal ----
+async function openModal(docId) {
+  state.openDoc = null;
+  state.appraiserOverride = null;
+  const modal = document.getElementById('modal');
+  modal.classList.add('open');
+  document.getElementById('modalBody').innerHTML = '<div class="loading-msg">Loading…</div>';
+  document.getElementById('btnSaveValidation').style.display = 'none';
+
+  try {
+    const ref = doc(window.db, 'ai_maturity_assessments', docId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      document.getElementById('modalBody').innerHTML = '<div class="empty-state">Document not found.</div>';
       return;
     }
-    const page = list.slice(0, visibleCount);
-    loadMoreWrap.style.display = list.length > visibleCount ? 'block' : 'none';
-    el.innerHTML = page.map(t => {
-      const initials = (t.author||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-      const date = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
-      const isClosed  = t.status === 'closed';
-      const rowStyle  = isClosed ? ' style="background:#f9fafb;opacity:0.75"' : '';
-      const titleStyle = isClosed ? ' style="color:var(--ink-3)"' : '';
-      return `
-        <div class="topic-row"${rowStyle} onclick="openThread('${t.id}')" role="button" tabindex="0" aria-label="Open topic: ${esc(t.title)}">
-          <div class="topic-avatar" aria-hidden="true">${initials}</div>
-          <div class="topic-body">
-            <div class="topic-title-row">
-              ${renderBadges(t)}
-              ${CAT_BADGE[t.category]||''}
-              ${t.source === 'teachers_hub' ? '<span class="platform-badge th">Teachers Hub</span>' : t.source === 'academic_hub' ? '<span class="platform-badge ah">Academic Hub</span>' : ''}
-              <span class="topic-title"${titleStyle}>${esc(t.title||'Untitled')}</span>
-            </div>
-            <p class="topic-meta">${esc(t.author||'Anonymous')} &middot; ${date}</p>
-          </div>
-          <div class="topic-stats">
-            <div class="topic-stat-item"><span class="topic-stat-val">${t.replyCount||0}</span><span class="topic-stat-lbl">Replies</span></div>
-          </div>
-        </div>`;
-    }).join('');
+    const d = { id: snap.id, ...snap.data() };
+    state.openDoc = d;
+    // Seed appraiser override from existing appraisal OR clone of self-rating
+    state.appraiserOverride = cloneForOverride(d);
+    renderModal();
+  } catch (err) {
+    console.error('[ai-maturity-admin] modal load failed', err);
+    document.getElementById('modalBody').innerHTML = `<div class="empty-state"><h3>Load failed</h3><p>${escapeHtml(err.code || err.message)}</p></div>`;
   }
+}
 
-  // ===== Open thread =====
-  async function openThread(id) {
-    openTopicId = id;
-    const topic = allTopics.find(t => t.id === id);
-    if (!topic) return;
-    history.pushState({ topicId: id }, '', `#${id}`);
-    showView('thread');
-    document.getElementById('threadCat').innerHTML  = CAT_BADGE[topic.category] || '';
-    document.getElementById('threadTitle').textContent = topic.title || 'Untitled';
-    // Admin action buttons (edit / delete) — render fresh each time
-    let adminActions = document.getElementById('adminTopicActions');
-    if (adminActions) adminActions.remove();
-    if (isAdmin) {
-      adminActions = document.createElement('div');
-      adminActions.id = 'adminTopicActions';
-      adminActions.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;';
-      adminActions.innerHTML = `
-        <button class="btn-cancel-form" id="editTopicBtn" style="font-size:0.82rem;">✎ Edit Topic</button>
-        <button class="btn-cancel-form" id="deleteTopicBtn" style="font-size:0.82rem;color:#dc2626;border-color:#fca5a5;">🗑 Delete Topic</button>`;
-      document.getElementById('backBtn').insertAdjacentElement('afterend', adminActions);
-      document.getElementById('editTopicBtn').onclick = () => openEditForm(topic);
-      document.getElementById('deleteTopicBtn').onclick = () => deleteTopic(topic);
+function cloneForOverride(d) {
+  const validated = d.appraisal?.validatedDomainRatings;
+  const out = { validatedDomainRatings: {}, validatedOverallLevel: null, appraiserNotes: '', recommendations: [] };
+  for (const dm of DOMAINS) {
+    if (validated && validated[dm.id]) {
+      const v = validated[dm.id];
+      out.validatedDomainRatings[dm.id] = {
+        currentLevel: v.currentLevel ?? null,
+        targetLevel:  v.targetLevel  ?? null,
+        evidence:        Array.isArray(v.evidence)        ? v.evidence.slice()        : [],
+        strengths:       Array.isArray(v.strengths)       ? v.strengths.slice()       : [],
+        improvementAreas:Array.isArray(v.improvementAreas)? v.improvementAreas.slice(): []
+      };
+    } else {
+      const s = d.domainRatings?.[dm.id] || {};
+      out.validatedDomainRatings[dm.id] = {
+        currentLevel: s.currentLevel ?? null,
+        targetLevel:  s.targetLevel  ?? null,
+        evidence:        Array.isArray(s.evidence)        ? s.evidence.slice()        : [],
+        strengths:       Array.isArray(s.strengths)       ? s.strengths.slice()       : [],
+        improvementAreas:Array.isArray(s.improvementAreas)? s.improvementAreas.slice(): []
+      };
     }
-    document.getElementById('replyText').value = '';
-    document.getElementById('replyError').classList.remove('visible');
+  }
+  out.validatedOverallLevel = d.appraisal?.validatedOverallLevel ?? d.overallLevel ?? null;
+  out.appraiserNotes = d.appraisal?.appraiserNotes || '';
+  out.recommendations = Array.isArray(d.appraisal?.recommendations) ? d.appraisal.recommendations.slice() : [];
+  return out;
+}
 
-    const initials = (topic.author||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const date = topic.createdAt?.toDate ? topic.createdAt.toDate().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) : '';
-    document.getElementById('threadPosts').innerHTML = `
-      <div class="post op">
-        <div class="post-head">
-          <div class="post-avatar" aria-hidden="true">${initials}</div>
-          <div>
-            <p class="post-author">${esc(topic.author||'Anonymous')} <span class="post-op-label">OP</span></p>
-            <p class="post-date">${date}</p>
+function renderModal() {
+  const d = state.openDoc;
+  if (!d) return;
+  const name = d.schoolName || state.schoolNameById[d.schoolId] || d.schoolId;
+  document.getElementById('modalTitle').textContent = name;
+  document.getElementById('modalSub').textContent = `${d.academicYear} · ${d.schoolId}`;
+  const submittedAt = d.submittedAt?.toDate ? d.submittedAt.toDate().toLocaleDateString('en-GB') : '—';
+  const appraisedAt = d.appraisal?.appraisedAt?.toDate ? d.appraisal.appraisedAt.toDate().toLocaleDateString('en-GB') : '—';
+  document.getElementById('modalMeta').innerHTML = `
+    <span><strong>Status:</strong> ${statusChip(d.status)}</span>
+    <span><strong>Submitted:</strong> ${submittedAt}</span>
+    ${d.status === 'appraised' ? `<span><strong>Validated:</strong> ${appraisedAt}</span>` : ''}
+    <span><strong>Self-overall:</strong> ${levelChip(d.overallLevel)}</span>
+    ${d.status === 'appraised' ? `<span><strong>Validated overall:</strong> ${levelChip(d.appraisal?.validatedOverallLevel)}</span>` : ''}
+  `;
+
+  const isAppraised = d.status === 'appraised';
+  const canAppraise = d.status === 'submitted';
+  document.getElementById('btnSaveValidation').style.display = canAppraise ? 'inline-block' : 'none';
+
+  let body = '';
+
+  // Per-domain compare layout
+  for (let i = 0; i < DOMAINS.length; i++) {
+    const dm = DOMAINS[i];
+    const self = d.domainRatings?.[dm.id] || {};
+    const app  = state.appraiserOverride.validatedDomainRatings[dm.id];
+    body += `<div class="domain-detail${isAppraised ? ' appraised' : ''}">
+      <div class="dd-head">
+        <div class="dd-num">${i + 1}</div>
+        <div class="dd-title">${escapeHtml(dm.title)}</div>
+        <div class="dd-self-rating">Self-declared current step: <strong>${self.currentLevel ?? '—'}</strong> · target <strong>${self.targetLevel ?? '—'}</strong></div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-col">
+          <div class="cc-label">School self-rating</div>
+          ${renderStars(self.currentLevel, 'cur', false)}
+          ${renderStars(self.targetLevel, 'tgt', false)}
+          <div class="cc-list">
+            ${renderListSection('Evidence', self.evidence)}
+            ${renderListSection('Strengths', self.strengths)}
+            ${renderListSection('Improvement areas', self.improvementAreas)}
           </div>
         </div>
-        <p class="post-body">${esc(topic.body||'')}</p>
-      </div>`;
-
-    // Linked announcement card
-    const linkedAnnEl = document.getElementById('linkedAnnCard');
-    if (topic.linkedAnnouncementId) {
-      try {
-        const annSnap = await getDoc(fsDoc(db, 'announcements', topic.linkedAnnouncementId));
-        if (annSnap.exists()) {
-          const ann = annSnap.data();
-          const annDate = ann.createdAt?.toDate
-            ? ann.createdAt.toDate().toLocaleDateString('en-GB', {day:'numeric', month:'long', year:'numeric'})
-            : '';
-          // Check both 'body' and 'content' field names — announcements.html uses whichever exists
-          const fullText = ann.body || ann.content || '';
-          const excerpt  = fullText.slice(0, 120);
-          linkedAnnEl.innerHTML = `
-            <div class="linked-ann-card">
-              <p class="linked-ann-label">📣 Linked Announcement</p>
-              <p class="linked-ann-title">${esc(ann.title || 'Untitled')}</p>
-              <p class="linked-ann-excerpt">${esc(excerpt)}${fullText.length > 120 ? '…' : ''}</p>
-              <p class="linked-ann-meta">${annDate}</p>
-              <a href="announcements" class="linked-ann-link">View Announcement →</a>
-            </div>`;
-        } else {
-          linkedAnnEl.innerHTML = '';
-        }
-      } catch(e) {
-        linkedAnnEl.innerHTML = '';
-      }
-    } else {
-      linkedAnnEl.innerHTML = '';
-    }
-
-    // Load replies
-    try {
-      const rSnap = await getDocs(query(collection(db, 'topics', id, 'replies'), orderBy('createdAt')));
-      const replies = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      document.getElementById('repliesHeading').textContent = replies.length ? `${replies.length} ${replies.length===1?'Reply':'Replies'}` : '';
-      if (!replies.length) { document.getElementById('replyList').innerHTML = ''; return; }
-      document.getElementById('replyList').innerHTML = replies.map(r => {
-        const ri = (r.author||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-        const rd = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
-        return `<div class="post">
-          <div class="post-head">
-            <div class="post-avatar" aria-hidden="true">${ri}</div>
-            <div><p class="post-author">${esc(r.author||'Anonymous')}</p><p class="post-date">${rd}</p></div>
-          </div>
-          <p class="post-body">${esc(r.body||'')}</p>
-        </div>`;
-      }).join('');
-    } catch(e) {
-      document.getElementById('replyList').innerHTML = '<p style="color:var(--ink-3);font-size:.85rem">Could not load replies.</p>';
-    }
+        <div class="compare-col appraiser">
+          <div class="cc-label">Eduversal validation</div>
+          ${renderAppraiserPicker(dm.id, app, canAppraise || isAppraised)}
+          ${renderAppraiserLists(dm.id, app, canAppraise)}
+        </div>
+      </div>
+    </div>`;
   }
 
-  // ===== Edit Topic form =====
-  function openEditForm(topic) {
-    editingTopicId = topic.id;
-    document.getElementById('topicCat').value    = topic.category || '';
-    document.getElementById('topicTitle').value  = topic.title || '';
-    document.getElementById('topicBody').value   = topic.body || '';
-    document.getElementById('topicStatus').value = topic.status || 'open';
-    document.getElementById('topicWsCat').value  = topic.workspaceCategory || '';
-    document.getElementById('topicLinkedAnn').value = topic.linkedAnnouncementId || '';
-    if (topic.deadline) {
-      const d = topic.deadline.toDate ? topic.deadline.toDate() : new Date(topic.deadline);
-      document.getElementById('topicDeadline').value = d.toISOString().split('T')[0];
-    } else {
-      document.getElementById('topicDeadline').value = '';
-    }
-    document.getElementById('topicFormTitle').textContent = 'Edit Topic';
-    document.getElementById('topicError').classList.remove('visible');
-    pendingAttachments  = [];
-    existingAttachments = [...(topic.attachments || [])];
-    renderAttachmentChips();
-    showView('newTopic');
-  }
-  window.openEditForm = openEditForm;
+  // Overall + notes + recommendations
+  body += `
+    <div class="summary-card">
+      <h4>Overall rating + Eduversal recommendations</h4>
+      <div class="app-level-selector">
+        <div class="app-lvl-mini-label">Validated overall step (1-5, weighted average of the 6 area validations)</div>
+        <div class="appraiser-overall-row" data-overall="1">
+          ${LEVELS.map(lv => `<button class="app-lvl-btn ${state.appraiserOverride.validatedOverallLevel === lv.num ? 'cur-selected' : ''}" data-overall-lvl="${lv.num}" ${!canAppraise ? 'disabled' : ''}>${lv.num} · ${escapeHtml(lv.name)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="notes-block">
+        <label>Appraiser notes <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;">(visible to the school after the visit)</span></label>
+        <textarea id="appraiserNotes" maxlength="2000" placeholder="Plain notes from the visit — what evidence supported or contradicted the self-rating; specific observations from staff and student conversations…" ${!canAppraise ? 'disabled' : ''}>${escapeHtml(state.appraiserOverride.appraiserNotes)}</textarea>
+        <div class="hint">Up to 2000 characters.</div>
+      </div>
+      <div class="notes-block">
+        <label>Eduversal-level recommendations <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;">(up to 8 short items — what Eduversal will support this school with)</span></label>
+        <div id="recommendList"></div>
+        <button class="btn-secondary" id="btnAddRec" style="padding:6px 14px;font-size:12px;margin-top:6px;" ${!canAppraise ? 'disabled' : ''}>+ Add recommendation</button>
+      </div>
+    </div>
+  `;
 
-  // ===== Post reply =====
-  async function postReply() {
-    const body = document.getElementById('replyText').value.trim();
-    const errEl = document.getElementById('replyError');
-    if (!body) { errEl.textContent = 'Reply cannot be empty.'; errEl.classList.add('visible'); return; }
-    errEl.classList.remove('visible');
-    const btn = document.getElementById('postReplyBtn');
-    btn.disabled = true; btn.textContent = 'Posting…';
-    try {
-      await addDoc(collection(db, 'topics', openTopicId, 'replies'), {
-        body,
-        author:    currentUser.displayName || currentUser.email,
-        createdAt: serverTimestamp(),
+  document.getElementById('modalBody').innerHTML = body;
+  wireModalEvents(canAppraise);
+  renderRecommendations(canAppraise);
+}
+
+function renderStars(level, kind, _editable) {
+  let html = `<div class="app-lvl-mini-label">${kind === 'cur' ? 'Current step' : 'Target step'}</div><div class="cc-stars">`;
+  for (let i = 1; i <= 5; i++) {
+    let cls = 'cc-star';
+    if (kind === 'tgt') cls += ' target';
+    if (level === i) cls += ' filled';
+    html += `<div class="${cls}">${i}</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderAppraiserPicker(domainId, app, editable) {
+  let html = '<div class="app-level-selector">';
+  html += `<div class="app-lvl-mini-label">Validated current step</div>`;
+  html += `<div class="app-lvl-row" data-domain="${escapeHtml(domainId)}" data-field="currentLevel">`;
+  for (const lv of LEVELS) {
+    html += `<button class="app-lvl-btn ${app.currentLevel === lv.num ? 'cur-selected' : ''}" data-lvl="${lv.num}" ${!editable ? 'disabled' : ''}>${lv.num}</button>`;
+  }
+  html += '</div>';
+  html += `<div class="app-lvl-mini-label">Validated target</div>`;
+  html += `<div class="app-lvl-row target" data-domain="${escapeHtml(domainId)}" data-field="targetLevel">`;
+  for (const lv of LEVELS) {
+    html += `<button class="app-lvl-btn ${app.targetLevel === lv.num ? 'tgt-selected' : ''}" data-lvl="${lv.num}" ${!editable ? 'disabled' : ''}>${lv.num}</button>`;
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function renderAppraiserLists(domainId, app, editable) {
+  return `
+    <div class="cc-list">
+      <div class="cc-sub">Evidence observed during the visit</div>
+      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="evidence" placeholder="One per line. What the team actually saw or read."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.evidence || []).join('\n'))}</textarea>
+      <div class="cc-sub" style="margin-top:8px;">Validated strengths</div>
+      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="strengths" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.strengths || []).join('\n'))}</textarea>
+      <div class="cc-sub" style="margin-top:8px;">Validated improvement areas</div>
+      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="improvementAreas" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.improvementAreas || []).join('\n'))}</textarea>
+    </div>
+  `;
+}
+
+function renderListSection(label, items) {
+  items = Array.isArray(items) ? items.filter(s => s && s.trim()) : [];
+  if (!items.length) return `<div class="cc-sub">${escapeHtml(label)}</div><p style="font-size:12px;color:#94a3b8;">— none —</p>`;
+  return `<div class="cc-sub">${escapeHtml(label)}</div><ul>${items.map(i => '<li>' + escapeHtml(i) + '</li>').join('')}</ul>`;
+}
+
+function wireModalEvents(canAppraise) {
+  if (!canAppraise) return;
+
+  // Per-domain level pickers
+  document.querySelectorAll('.app-lvl-row[data-domain]').forEach(row => {
+    const domain = row.dataset.domain;
+    const field = row.dataset.field;
+    row.querySelectorAll('button[data-lvl]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const lvl = parseInt(btn.dataset.lvl, 10);
+        state.appraiserOverride.validatedDomainRatings[domain][field] = lvl;
+        renderModal();
       });
-      await updateDoc(fsDoc(db, 'topics', openTopicId), {
-        replyCount: increment(1),
-        lastReply:  serverTimestamp(),
-      });
-      // Refresh only this topic in memory (no full collection reload)
-      const snap = await getDoc(fsDoc(db, 'topics', openTopicId));
-      const idx  = allTopics.findIndex(t => t.id === openTopicId);
-      if (idx >= 0) allTopics[idx] = { id: openTopicId, ...snap.data() };
-      updateCounts();
-      document.getElementById('replyText').value = '';
-      await openThread(openTopicId);
-    } catch(e) {
-      errEl.textContent = e.message; errEl.classList.add('visible');
-    } finally {
-      btn.disabled = false; btn.textContent = 'Post Reply';
-    }
-  }
-
-  // ===== Attachment helpers =====
-  function sanitizeFilename(name) {
-    return name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
-  }
-
-  const BLOCKED_EXTS = ['.exe', '.sh', '.bat', '.ps1'];
-  const MAX_BYTES    = 20 * 1024 * 1024;
-
-  function safeUrl(url) {
-    try { return /^https?:\/\//i.test(url) ? url : '#'; } catch { return '#'; }
-  }
-
-  function renderAttachmentChips() {
-    const el = document.getElementById('attachmentChips');
-    if (!el) return;
-    // Use data-index attributes + event delegation — avoids stale index closures
-    const pendingHtml = pendingAttachments.map((a, i) =>
-      `<span class="attachment-chip">📎 ${esc(a.name)}<button type="button" data-pending="${i}" title="Remove">×</button></span>`
-    );
-    const existingHtml = existingAttachments.map((a, i) =>
-      `<span class="attachment-chip"><a href="${esc(safeUrl(a.url))}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">📎 ${esc(a.name)}</a><button type="button" data-existing="${i}" title="Remove">×</button></span>`
-    );
-    el.innerHTML = [...existingHtml, ...pendingHtml].join('');
-  }
-
-  // Event delegation for attachment chip remove buttons
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-pending], button[data-existing]');
-    if (!btn) return;
-    if (btn.dataset.pending !== undefined) {
-      pendingAttachments.splice(Number(btn.dataset.pending), 1);
-      renderAttachmentChips();
-    } else if (btn.dataset.existing !== undefined) {
-      removeExistingAttachment(Number(btn.dataset.existing));
-    }
+    });
   });
 
-  function removePendingAttachment(i) {
-    pendingAttachments.splice(i, 1);
-    renderAttachmentChips();
-  }
-
-  async function removeExistingAttachment(i) {
-    const att = existingAttachments[i];
-    if (!editingTopicId) return;
-    const errEl = document.getElementById('topicError');
-    try {
-      await deleteObject(storageRef(storage, att.storagePath)).catch(() => {}); // best-effort
-      await updateDoc(fsDoc(db, 'topics', editingTopicId), { attachments: arrayRemove(att) });
-      existingAttachments.splice(i, 1);
-      renderAttachmentChips();
-    } catch(e) {
-      errEl.textContent = 'Could not remove attachment: ' + e.message;
-      errEl.classList.add('visible');
-    }
-  }
-
-  async function deleteTopic(topic) {
-    const errEl = document.getElementById('replyError');
-    // Inline confirmation — no blocking confirm()
-    const btn = document.getElementById('deleteTopicBtn');
-    if (btn.dataset.confirming !== 'true') {
-      btn.dataset.confirming = 'true';
-      btn.textContent = '⚠ Click again to confirm delete';
-      setTimeout(() => { btn.dataset.confirming = ''; btn.textContent = '🗑 Delete Topic'; }, 3000);
-      return;
-    }
-    btn.disabled = true;
-    try {
-      // Delete all replies first
-      const rSnap = await getDocs(collection(db, 'topics', topic.id, 'replies'));
-      await Promise.all(rSnap.docs.map(d => deleteDoc(d.ref)));
-      await deleteDoc(fsDoc(db, 'topics', topic.id));
-      allTopics = allTopics.filter(t => t.id !== topic.id);
-      updateCounts();
-      showView('list');
-      renderTopics();
-    } catch(e) {
-      errEl.textContent = 'Could not delete topic: ' + e.message;
-      errEl.classList.add('visible');
-      btn.disabled = false;
-    }
-  }
-
-  window.removePendingAttachment  = removePendingAttachment;
-  window.removeExistingAttachment = removeExistingAttachment;
-
-  // ===== New Topic =====
-  async function submitTopic() {
-    const cat    = document.getElementById('topicCat').value;
-    const title  = document.getElementById('topicTitle').value.trim();
-    const body   = document.getElementById('topicBody').value.trim();
-    const status      = document.getElementById('topicStatus').value || 'open';
-    const wsCat       = document.getElementById('topicWsCat').value || null;
-    const deadlineVal = document.getElementById('topicDeadline').value;
-    const linkedAnnId = document.getElementById('topicLinkedAnn')?.value || null; // Phase 3 field
-    const errEl = document.getElementById('topicError');
-
-    if (!cat || !title || !body) {
-      errEl.textContent = 'Category, title, and body are required.';
-      errEl.classList.add('visible');
-      return;
-    }
-    errEl.classList.remove('visible');
-    const btn = document.getElementById('submitTopicBtn');
-    btn.disabled = true;
-    btn.textContent = editingTopicId ? 'Saving…' : 'Posting…';
-
-    const topicIdBeingSaved = editingTopicId;
-
-    try {
-      // For new topics, pre-generate the doc ref so Storage paths match the Firestore ID
-      const newDocRef = topicIdBeingSaved ? null : fsDoc(collection(db, 'topics'));
-      const topicIdForPath = topicIdBeingSaved || newDocRef.id;
-
-      // Upload any pending attachments
-      const progressEl = document.getElementById('uploadProgress');
-      const uploadedAtts = [...existingAttachments];
-
-      // Note: if upload fails mid-way, files already uploaded are orphaned in Storage.
-      // On error, the user should remove and re-add all files before retrying.
-      for (let i = 0; i < pendingAttachments.length; i++) {
-        const { file, name } = pendingAttachments[i];
-        progressEl.textContent = `Uploading ${i + 1}/${pendingAttachments.length}: ${name}…`;
-        const path    = `topics/${topicIdForPath}/attachments/${Date.now()}-${name}`;
-        const fileRef = storageRef(storage, path);
-        const snap    = await uploadBytes(fileRef, file);
-        const url     = await getDownloadURL(snap.ref);
-        uploadedAtts.push({ name, url, storagePath: path, uploadedAt: new Date(), uploadedBy: currentUser.displayName || currentUser.email });
-      }
-      if (progressEl) progressEl.textContent = '';
-
-      const payload = {
-        category:             cat, title, body, status,
-        deadline:             deadlineVal ? new Date(deadlineVal) : null,
-        workspaceCategory:    wsCat,
-        attachments:          uploadedAtts,
-        linkedAnnouncementId: linkedAnnId,
-      };
-
-      if (topicIdBeingSaved) {
-        await updateDoc(fsDoc(db, 'topics', topicIdBeingSaved), payload);
-        await loadTopics();
-        openThread(topicIdBeingSaved);
-        editingTopicId = null;
-      } else {
-        await setDoc(newDocRef, {
-          ...payload,
-          author:    currentUser.displayName || currentUser.email,
-          replyCount: 0,
-          createdAt: serverTimestamp(),
-          source:    'central_hub',
-        });
-        await loadTopics();
-        openThread(newDocRef.id);
-      }
-      pendingAttachments = [];
-      existingAttachments = [];
-      renderAttachmentChips();
-    } catch(e) {
-      errEl.textContent = e.message;
-      errEl.classList.add('visible');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = topicIdBeingSaved ? 'Save Changes' : 'Post Topic';
-    }
-  }
-
-  // ===== View switching =====
-  function showView(name) {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById('view' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
-  }
-
-  // ===== Bind events =====
-  function bindEvents() {
-    document.getElementById('searchInput').addEventListener('input', () => { visibleCount = PAGE_SIZE; renderTopics(); });
-    document.getElementById('sortSelect').addEventListener('change', () => { visibleCount = PAGE_SIZE; renderTopics(); });
-    document.getElementById('loadMoreBtn').addEventListener('click', () => { visibleCount += PAGE_SIZE; renderTopics(); });
-    document.getElementById('newTopicBtn').addEventListener('click', () => {
-      document.getElementById('topicCat').value   = currentCat !== 'all' ? currentCat : '';
-      document.getElementById('topicTitle').value = '';
-      document.getElementById('topicBody').value  = '';
-      document.getElementById('topicError').classList.remove('visible');
-      document.getElementById('topicStatus').value   = 'open';
-      document.getElementById('topicDeadline').value  = '';
-      document.getElementById('topicWsCat').value     = '';
-      document.getElementById('topicLinkedAnn').value  = '';
-      document.getElementById('topicFormTitle').textContent = 'Start a New Topic';
-      editingTopicId = null;
-      pendingAttachments  = [];
-      existingAttachments = [];
-      renderAttachmentChips();
-      showView('newTopic');
+  // Per-domain textareas
+  document.querySelectorAll('.app-textarea[data-domain]').forEach(ta => {
+    ta.addEventListener('input', () => {
+      const domain = ta.dataset.domain;
+      const field = ta.dataset.field;
+      const items = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+      state.appraiserOverride.validatedDomainRatings[domain][field] = items;
     });
-    document.getElementById('backBtn').addEventListener('click', () => {
-      showView('list');
-      history.pushState(null, '', location.pathname);
-    });
-    document.getElementById('cancelTopicBtn').addEventListener('click', () => {
-      if (editingTopicId) {
-        openThread(editingTopicId);
-      } else {
-        showView('list');
-      }
-    });
-    // Keyboard Enter on topic rows — single delegated listener
-    document.getElementById('topicList').addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        const row = e.target.closest('.topic-row');
-        if (row) row.click();
-      }
-    });
-    document.getElementById('postReplyBtn').addEventListener('click', postReply);
-    document.getElementById('submitTopicBtn').addEventListener('click', submitTopic);
-    document.getElementById('fileInput').addEventListener('change', (e) => {
-      const errEl = document.getElementById('topicError');
-      const fileErrors = [];
-      Array.from(e.target.files).forEach(file => {
-        const ext = '.' + file.name.split('.').pop().toLowerCase();
-        if (BLOCKED_EXTS.includes(ext)) { fileErrors.push(`File type ${ext} is not allowed.`); return; }
-        if (file.size > MAX_BYTES) { fileErrors.push(`${file.name} exceeds the 20 MB limit.`); return; }
-        pendingAttachments.push({ file, name: sanitizeFilename(file.name) });
-      });
-      renderAttachmentChips();
-      e.target.value = '';
-      if (fileErrors.length) {
-        errEl.textContent = fileErrors.join(' ');
-        errEl.classList.add('visible');
-      }
-    });
-  }
-
-  function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  // ===== Browser back/forward support =====
-  window.addEventListener('popstate', (e) => {
-    if (e.state?.topicId) {
-      openThread(e.state.topicId);
-    } else {
-      showView('list');
-    }
   });
 
-  // Handle direct URL with hash on load (after topics are loaded)
-  function handleInitialHash() {
-    const hash = location.hash.slice(1);
-    if (hash && allTopics.find(t => t.id === hash)) {
-      openThread(hash);
+  // Overall level row
+  document.querySelectorAll('button[data-overall-lvl]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.appraiserOverride.validatedOverallLevel = parseInt(btn.dataset.overallLvl, 10);
+      renderModal();
+    });
+  });
+
+  // Notes textarea
+  document.getElementById('appraiserNotes').addEventListener('input', (e) => {
+    state.appraiserOverride.appraiserNotes = e.target.value;
+  });
+
+  // Add recommendation button
+  document.getElementById('btnAddRec').addEventListener('click', () => {
+    if (state.appraiserOverride.recommendations.length >= 8) return;
+    state.appraiserOverride.recommendations.push('');
+    renderRecommendations(true);
+  });
+}
+
+function renderRecommendations(editable) {
+  const list = document.getElementById('recommendList');
+  if (!list) return;
+  list.innerHTML = '';
+  state.appraiserOverride.recommendations.forEach((txt, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;';
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.maxLength = 280;
+    ta.placeholder = 'One concrete recommendation, ≤ 280 chars…';
+    ta.style.cssText = 'flex:1;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;font-family:inherit;min-height:36px;';
+    ta.disabled = !editable;
+    ta.addEventListener('input', () => { state.appraiserOverride.recommendations[i] = ta.value; });
+    row.appendChild(ta);
+    if (editable) {
+      const rm = document.createElement('button');
+      rm.textContent = '✕';
+      rm.title = 'Remove';
+      rm.style.cssText = 'width:32px;flex-shrink:0;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;border-radius:6px;cursor:pointer;';
+      rm.addEventListener('click', () => {
+        state.appraiserOverride.recommendations.splice(i, 1);
+        renderRecommendations(true);
+      });
+      row.appendChild(rm);
+    }
+    list.appendChild(row);
+  });
+}
+
+// ---- Submit validation: flip status to 'appraised' + write appraisal.* ----
+async function submitValidation() {
+  const d = state.openDoc;
+  if (!d || d.status !== 'submitted') return;
+  if (!state.appraiserOverride.validatedOverallLevel) {
+    showToast('Pick the validated overall step before saving.', 'error');
+    return;
+  }
+  // Sanity check: all domains have validated current level
+  for (const dm of DOMAINS) {
+    const v = state.appraiserOverride.validatedDomainRatings[dm.id];
+    if (!v.currentLevel) {
+      showToast(`Set the validated current step for ${dm.title}.`, 'error');
+      return;
     }
   }
+  if (!confirm('Mark this school as validated and flip the status to "appraised"?\n\nAfter saving, the school can see your notes and recommendations.')) return;
 
-  // Expose onclick handlers to global scope (called from dynamic HTML)
-  window.selectCat  = selectCat;
-  window.openThread = openThread;
+  const ref = doc(window.db, 'ai_maturity_assessments', d.id);
+  try {
+    const payload = {
+      status: 'appraised',
+      appraisal: {
+        appraiserUid: window.currentUser.uid,
+        appraisedAt: serverTimestamp(),
+        validatedDomainRatings: state.appraiserOverride.validatedDomainRatings,
+        validatedOverallLevel: state.appraiserOverride.validatedOverallLevel,
+        appraiserNotes: state.appraiserOverride.appraiserNotes || '',
+        recommendations: state.appraiserOverride.recommendations.map(s => String(s).trim()).filter(Boolean)
+      }
+    };
+    await updateDoc(ref, payload);
+    showToast('Saved. School marked as validated.', 'success');
+    closeModal();
+    await loadAssessments();
+  } catch (err) {
+    console.error('[ai-maturity-admin] save validation failed', err);
+    showToast('Save failed: ' + (err.code || err.message), 'error');
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  state.openDoc = null;
+  state.appraiserOverride = null;
+}
+
+// Expose for inline onclick handlers
+window.closeModal = closeModal;
+window.submitValidation = submitValidation;
+
+// ---- Filter wiring ----
+document.getElementById('yearFilter').addEventListener('change', async (e) => {
+  state.filterYear = e.target.value;
+  await loadAssessments();
+});
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  state.search = e.target.value;
+  applyFilters();
+});
+document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.filterTab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    applyFilters();
+  });
+});
+
+// Backdrop click closes
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// CH dispatches authReady on document
+document.addEventListener('authReady', async () => {
+  // Only central_admin OR ch_sub_roles.director have meaningful access
+  const profile = window.userProfile;
+  const isAdmin = profile?.role_centralhub === 'central_admin';
+  const subs = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  const isDirector = subs.includes('director');
+  if (!isAdmin && !isDirector) {
+    document.getElementById('listContainer').innerHTML = `
+      <div class="empty-state">
+        <h3>Restricted</h3>
+        <p>This page is for the Eduversal Academic Directorate (central_admin or Director sub-role).</p>
+      </div>
+    `;
+    return;
+  }
+  await loadSchoolNames();
+  await loadAssessments();
+});
 </script>
 <script src="cambridge-crossref.js" defer></script>
 </body>

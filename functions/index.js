@@ -1693,6 +1693,308 @@ exports.practiceBankAiSuggest = onCall(
 );
 
 // ───────────────────────────────────────────────────────────────
+// AICF PHASE 3 — rebuildAiCompetencyAggregates (2026-05-18)
+//   Walks ai_competency_self_assessments + ai_maturity_assessments
+//   for each (schoolId, academicYear) pair and writes summary docs
+//   to ai_competency_aggregates/{schoolId}_{academicYear} and one
+//   network-wide ai_competency_aggregates/network_{academicYear}.
+//
+//   Two triggers:
+//     (a) Weekly schedule (Mondays 02:00 Asia/Jakarta) — full rebuild.
+//     (b) onDocumentWritten on ai_maturity_assessments — partial
+//         rebuild when a single school flips to 'appraised'.
+//
+//   Schema: docs/architecture/FIRESTORE_SCHEMA.md §24
+//   (ai_competency_aggregates).
+//
+//   Admin SDK bypasses rules — aggregate docs are Cloud-Function-only
+//   writers per the rule block.
+// ───────────────────────────────────────────────────────────────
+
+async function recomputeSchoolAggregate(schoolId, academicYear) {
+  if (!schoolId || !academicYear) return;
+  const aggregateId = `${schoolId}_${academicYear}`;
+
+  // 1. Pull all teacher self-assessments for this school + year.
+  //    Same-school AH leadership writes to ai_competency_self_assessments
+  //    with userId = teacher; we filter on schoolId stamped on the doc.
+  let staffSnap;
+  try {
+    staffSnap = await db.collection("ai_competency_self_assessments")
+      .where("schoolId", "==", schoolId)
+      .where("academicYear", "==", academicYear)
+      .get();
+  } catch (err) {
+    console.error(`[rebuildAiCompetencyAggregates] staff query failed for ${aggregateId}`, err);
+    staffSnap = { docs: [] };
+  }
+
+  const staffCounts = { foundation: 0, practitioner: 0, leader: 0, unsubmitted: 0 };
+  let validationLagSum = 0, validationLagN = 0, pendingValidation = 0, submittedCount = 0;
+
+  staffSnap.docs.forEach((d) => {
+    const data = d.data() || {};
+    if (data.status === "submitted") {
+      pendingValidation += 1;
+      submittedCount += 1;
+    }
+    if (data.status === "validated") {
+      submittedCount += 1;
+      const agreed = data?.validation?.agreedLevel || data.selfDeclaredLevel;
+      if (agreed && Object.prototype.hasOwnProperty.call(staffCounts, agreed)) {
+        staffCounts[agreed] += 1;
+      }
+      // Validation lag (submittedAt → validatedAt)
+      const sub = data.submittedAt?.toMillis?.();
+      const val = data?.validation?.validatedAt?.toMillis?.();
+      if (sub && val && val > sub) {
+        validationLagSum += (val - sub);
+        validationLagN += 1;
+      }
+    }
+    if (data.status === "draft" || !data.status) {
+      // We don't count drafts as 'unsubmitted staff' here because we
+      // can't tell the eligible-staff denominator without a separate
+      // staff roster query. Field is left for future expansion.
+    }
+  });
+
+  const submissionRate = submittedCount > 0
+    ? Math.round((submittedCount / Math.max(submittedCount + staffCounts.unsubmitted, 1)) * 100) / 100
+    : 0;
+  const medianDaysToValidation = validationLagN > 0
+    ? Math.round((validationLagSum / validationLagN) / 86400000)
+    : null;
+
+  // 2. Pull this school's institutional maturity doc.
+  const matRef = db.collection("ai_maturity_assessments").doc(`${schoolId}_${academicYear}`);
+  let mat = null;
+  try {
+    const matSnap = await matRef.get();
+    if (matSnap.exists) mat = matSnap.data();
+  } catch (err) {
+    console.warn(`[rebuildAiCompetencyAggregates] maturity load failed for ${aggregateId}`, err);
+  }
+
+  let institutionalCurrentLevel = null;
+  let institutionalDomainLevels = [];
+  let institutionalAppraised = false;
+  if (mat) {
+    institutionalAppraised = mat.status === "appraised";
+    const ratings = institutionalAppraised
+      ? (mat.appraisal?.validatedDomainRatings || mat.domainRatings || {})
+      : (mat.domainRatings || {});
+    institutionalCurrentLevel = institutionalAppraised
+      ? (mat.appraisal?.validatedOverallLevel ?? mat.overallLevel ?? null)
+      : (mat.overallLevel ?? null);
+    institutionalDomainLevels = [
+      "strategy_leadership","policy_compliance","staff_capability",
+      "teaching_learning","student_outcomes","infrastructure_resources"
+    ].map((k) => ratings?.[k]?.currentLevel ?? null);
+  }
+
+  // 3. Look up the previous year for trend (best-effort).
+  const previousYear = previousAcademicYear(academicYear);
+  let previousOverallLevel = null, levelDelta = null;
+  let previousStaffPractitionerCount = null, practitionerDelta = null;
+  if (previousYear) {
+    try {
+      const prevAgg = await db
+        .collection("ai_competency_aggregates")
+        .doc(`${schoolId}_${previousYear}`)
+        .get();
+      if (prevAgg.exists) {
+        const pd = prevAgg.data();
+        previousOverallLevel = pd.institutionalCurrentLevel ?? null;
+        previousStaffPractitionerCount = pd.staffCounts?.practitioner ?? null;
+        if (institutionalCurrentLevel != null && previousOverallLevel != null) {
+          levelDelta = institutionalCurrentLevel - previousOverallLevel;
+        }
+        if (previousStaffPractitionerCount != null) {
+          practitionerDelta = (staffCounts.practitioner || 0) - previousStaffPractitionerCount;
+        }
+      }
+    } catch (err) {
+      console.warn(`[rebuildAiCompetencyAggregates] previous-year lookup failed for ${aggregateId}`, err);
+    }
+  }
+
+  const payload = {
+    scopeKind: "school",
+    schoolId,
+    academicYear,
+    staffCounts,
+    submissionRate,
+    pendingValidationCount: pendingValidation,
+    medianDaysToValidation,
+    institutionalCurrentLevel,
+    institutionalDomainLevels,
+    institutionalAppraised,
+    previousOverallLevel,
+    levelDelta,
+    previousStaffPractitionerCount,
+    practitionerDelta,
+    recomputedAt: admin.firestore.FieldValue.serverTimestamp(),
+    recomputedBy: "rebuildAiCompetencyAggregates",
+  };
+
+  await db.collection("ai_competency_aggregates").doc(aggregateId).set(payload, { merge: true });
+  console.log(`[rebuildAiCompetencyAggregates] wrote school aggregate ${aggregateId} (institutional level ${institutionalCurrentLevel}, staff ${JSON.stringify(staffCounts)})`);
+}
+
+async function recomputeNetworkAggregate(academicYear) {
+  const aggregateId = `network_${academicYear}`;
+
+  // Load all school-level aggregates for this year (school-level only).
+  // Network doc is computed FROM the school docs, so school recomputation
+  // must complete first; the schedule trigger orders this naturally.
+  const aggsSnap = await db
+    .collection("ai_competency_aggregates")
+    .where("academicYear", "==", academicYear)
+    .where("scopeKind", "==", "school")
+    .get();
+
+  const staffTotals = { foundation: 0, practitioner: 0, leader: 0, unsubmitted: 0 };
+  const schoolsByMaturityLevel = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, unknown: 0 };
+  // Per-domain levels collected for median later
+  const domainSamples = [[], [], [], [], [], []]; // 6 domains, index 0-5
+  const perDomainTop = [[], [], [], [], [], []];
+
+  aggsSnap.docs.forEach((d) => {
+    const data = d.data() || {};
+    for (const k of ["foundation", "practitioner", "leader", "unsubmitted"]) {
+      staffTotals[k] += (data.staffCounts?.[k] || 0);
+    }
+    const lvl = data.institutionalCurrentLevel;
+    if (lvl >= 1 && lvl <= 5) {
+      schoolsByMaturityLevel[lvl] += 1;
+    } else {
+      schoolsByMaturityLevel.unknown += 1;
+    }
+    const domains = Array.isArray(data.institutionalDomainLevels) ? data.institutionalDomainLevels : [];
+    for (let i = 0; i < 6; i++) {
+      const v = domains[i];
+      if (typeof v === "number" && v >= 1 && v <= 5) {
+        domainSamples[i].push(v);
+        perDomainTop[i].push({ schoolId: data.schoolId, level: v });
+      }
+    }
+  });
+
+  const networkDomainMedian = domainSamples.map((arr) => median(arr));
+  const domainNames = [
+    "strategy_leadership","policy_compliance","staff_capability",
+    "teaching_learning","student_outcomes","infrastructure_resources"
+  ];
+  const topSchoolsByDomain = {};
+  const bottomSchoolsByDomain = {};
+  for (let i = 0; i < 6; i++) {
+    const sorted = perDomainTop[i].slice().sort((a, b) => b.level - a.level);
+    topSchoolsByDomain[domainNames[i]] = sorted.slice(0, 3).map((s) => s.schoolId);
+    bottomSchoolsByDomain[domainNames[i]] = sorted.slice(-3).reverse().map((s) => s.schoolId);
+  }
+
+  const payload = {
+    scopeKind: "network",
+    academicYear,
+    staffCounts: staffTotals,
+    schoolsByMaturityLevel,
+    networkDomainMedian,
+    topSchoolsByDomain,
+    bottomSchoolsByDomain,
+    recomputedAt: admin.firestore.FieldValue.serverTimestamp(),
+    recomputedBy: "rebuildAiCompetencyAggregates",
+  };
+  await db.collection("ai_competency_aggregates").doc(aggregateId).set(payload, { merge: true });
+  console.log(`[rebuildAiCompetencyAggregates] wrote network aggregate ${aggregateId} (${aggsSnap.size} schools, ${JSON.stringify(schoolsByMaturityLevel)})`);
+}
+
+function median(arr) {
+  if (!arr.length) return null;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function previousAcademicYear(year) {
+  // "2026-2027" → "2025-2026"
+  const m = /^(\d{4})-(\d{4})$/.exec(year);
+  if (!m) return null;
+  const start = parseInt(m[1], 10) - 1;
+  return `${start}-${start + 1}`;
+}
+
+// Weekly full rebuild (Mondays 02:00 Asia/Jakarta).
+exports.rebuildAiCompetencyAggregates = onSchedule(
+  {
+    schedule: "0 2 * * 1",
+    timeZone: "Asia/Jakarta",
+    region: "asia-southeast1",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+  },
+  async () => {
+    console.log("[rebuildAiCompetencyAggregates] weekly run started");
+
+    // Discover (schoolId, academicYear) pairs from both source collections.
+    const pairs = new Map();
+    const addPair = (sid, ay) => { if (sid && ay) pairs.set(`${sid}_${ay}`, { schoolId: sid, academicYear: ay }); };
+
+    const staffSnap = await db.collection("ai_competency_self_assessments").select("schoolId", "academicYear").get();
+    staffSnap.docs.forEach((d) => addPair(d.data().schoolId, d.data().academicYear));
+
+    const matSnap = await db.collection("ai_maturity_assessments").select("schoolId", "academicYear").get();
+    matSnap.docs.forEach((d) => addPair(d.data().schoolId, d.data().academicYear));
+
+    console.log(`[rebuildAiCompetencyAggregates] recomputing ${pairs.size} school-year aggregates`);
+    for (const { schoolId, academicYear } of pairs.values()) {
+      try {
+        await recomputeSchoolAggregate(schoolId, academicYear);
+      } catch (err) {
+        console.error(`[rebuildAiCompetencyAggregates] school recompute failed: ${schoolId} ${academicYear}`, err);
+      }
+    }
+
+    // Now network-level rebuild — one per distinct academic year.
+    const years = new Set([...pairs.values()].map((p) => p.academicYear));
+    for (const y of years) {
+      try {
+        await recomputeNetworkAggregate(y);
+      } catch (err) {
+        console.error(`[rebuildAiCompetencyAggregates] network recompute failed: ${y}`, err);
+      }
+    }
+
+    console.log("[rebuildAiCompetencyAggregates] weekly run done");
+  }
+);
+
+// On-demand: recompute one school when its maturity doc flips to 'appraised'.
+exports.onMaturityAppraisalWritten = onDocumentWritten(
+  {
+    document: "ai_maturity_assessments/{docId}",
+    region: "asia-southeast1",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+  },
+  async (event) => {
+    const before = event.data?.before?.data?.() || null;
+    const after  = event.data?.after?.data?.()  || null;
+    if (!after) return; // delete — skip
+    const flippedToAppraised = (after.status === "appraised") && (!before || before.status !== "appraised");
+    if (!flippedToAppraised) return;
+    const { schoolId, academicYear } = after;
+    if (!schoolId || !academicYear) return;
+    try {
+      await recomputeSchoolAggregate(schoolId, academicYear);
+      await recomputeNetworkAggregate(academicYear);
+    } catch (err) {
+      console.error(`[onMaturityAppraisalWritten] recompute failed for ${schoolId}_${academicYear}`, err);
+    }
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
 // HELPERS
 // ───────────────────────────────────────────────────────────────
 function isoWeekStart(d) {

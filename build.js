@@ -437,6 +437,8 @@ const htmlFiles = [
   "ai-framework-teacher.html",
   "ai-framework-student.html",
   "ai-framework-institutional.html",
+  // AICF Phase 3 (2026-05-18) — Institutional Maturity appraisal queue
+  "ai-maturity-admin.html",
 ];
 
 htmlFiles.forEach((file) => {
