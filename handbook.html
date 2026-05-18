@@ -282,6 +282,20 @@
     .hb-card.hb-card-school .hb-card-icon {
       background: #e0f2fe; color: #075985;
     }
+    /* Policy-topic handbook variant — amber accent stripe (parchment/policy
+       vibe). 4th handbookKind in the system (Safeguarding, Behaviour, Anti-
+       Bullying, AI Use, Digital Citizenship, Assessment Guide, Attendance).
+       Distinct from induction (mor), role-operational (pink), school-facing (cyan). */
+    .hb-card.hb-card-policy-topic {
+      box-shadow: inset 4px 0 0 #b45309;
+    }
+    .hb-card.hb-card-policy-topic:hover {
+      background: #fffbeb; border-color: #fde68a;
+      box-shadow: inset 4px 0 0 #b45309, 0 6px 18px -10px rgba(180,83,9,0.32);
+    }
+    .hb-card.hb-card-policy-topic .hb-card-icon {
+      background: #fef3c7; color: #92400e;
+    }
 
     /* ── SCHOOL-FACING SECTION RENDERER (reader mode) ──
        Distinct styling layer that piggybacks on .hb-stage but tunes the
@@ -1541,14 +1555,19 @@
 
   /* ── Browser mode (partitioned by handbookKind) ─────────────────── */
   function bootBrowserMode() {
-    // 3-way partition by handbookKind: induction (default), role-operational, school-facing.
-    const partition = (kind) => allHandbooks.filter(hb => {
+    // 4-way partition by handbookKind: induction (default), role-operational,
+    // school-facing, policy-topic. The 'school' bucket now collects BOTH
+    // school-facing (Student/Teacher/Parent/Staff CoC) AND policy-topic
+    // (Safeguarding/Behaviour/Anti-Bullying) since both target partner-school
+    // audiences. Cards inside the grid are visually distinct via sectionGlyph
+    // + handbookKind-driven cardCls below.
+    const partition = (...kinds) => allHandbooks.filter(hb => {
       const k = hb.handbookKind || 'induction';
-      return k === kind;
+      return kinds.includes(k);
     });
     const induction = partition('induction');
     const role = partition('role-operational');
-    const school = partition('school-facing');
+    const school = partition('school-facing', 'policy-topic');
 
     // Hero KPIs — total + per-category breakdown.
     document.getElementById('heroKpiTotal').textContent = allHandbooks.length;
@@ -1633,15 +1652,21 @@
       const kind = hb.handbookKind || 'induction';
       const isRoleOps = kind === 'role-operational';
       const isSchoolFacing = kind === 'school-facing';
-      // Card icon: 📕 induction (year-long journey), 🛡 role-operational
-      // (DSL etc. — protection/readiness), 🧭 school-facing (compass —
-      // guidance for the school community).
-      const icon = isSchoolFacing ? '🧭' : (isRoleOps ? '🛡' : '📕');
-      const cardCls = isSchoolFacing
-        ? 'hb-card hb-card-school'
-        : (isRoleOps ? 'hb-card hb-card-role' : 'hb-card');
-      // Counts pill: stages for induction + role-operational; sections for school-facing
-      const countsPill = isSchoolFacing
+      const isPolicyTopic = kind === 'policy-topic';
+      const hasSections = isSchoolFacing || isPolicyTopic;
+      // Card icon by handbookKind:
+      //   📕 induction         — year-long mentee journey
+      //   🛡 role-operational  — DSL/AC/CC etc. protection/readiness ramp
+      //   🧭 school-facing     — compass for the partner-school community
+      //   📜 policy-topic      — deep-dive policy (Safeguarding, Behaviour, etc.)
+      const icon = isPolicyTopic ? '📜' : (isSchoolFacing ? '🧭' : (isRoleOps ? '🛡' : '📕'));
+      const cardCls = isPolicyTopic
+        ? 'hb-card hb-card-policy-topic'
+        : (isSchoolFacing
+          ? 'hb-card hb-card-school'
+          : (isRoleOps ? 'hb-card hb-card-role' : 'hb-card'));
+      // Counts pill: stages for induction + role-operational; sections for school-facing + policy-topic.
+      const countsPill = hasSections
         ? (sections ? `<span class="pill">${sections} sections</span>` : '')
         : (stages ? `<span class="pill">${stages} stages</span>` : '');
       return `
@@ -1740,20 +1765,24 @@
         || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null)
         || hb.audience?.primaryReader,
     ].filter(Boolean).join(' · ');
-    // School-facing handbooks use sections[] (topic chapters), induction +
-    // role-operational use stages[] (time-windowed phases). Reader treats
-    // both as an ordered list of content blocks — renderStage and
-    // renderSection produce compatible HTML.
+    // School-facing + policy-topic handbooks use sections[] (topic chapters),
+    // induction + role-operational use stages[] (time-windowed phases).
+    // Reader treats both as an ordered list of content blocks — renderStage
+    // and renderSection produce compatible HTML.
     const handbookKind = hb.handbookKind || 'induction';
     const isSchoolFacing = handbookKind === 'school-facing';
-    const stagesArr = isSchoolFacing
+    const isPolicyTopic = handbookKind === 'policy-topic';
+    const hasSectionsArr = isSchoolFacing || isPolicyTopic;
+    const stagesArr = hasSectionsArr
       ? (Array.isArray(hb.sections) ? hb.sections : [])
       : (Array.isArray(hb.stages) ? hb.stages : []);
-    const stageLabelPlural = isSchoolFacing ? 'Sections' : 'Stages';
+    const stageLabelPlural = hasSectionsArr ? 'Sections' : 'Stages';
 
-    const eyebrowLabel = isSchoolFacing
-      ? 'Eduversal School-Facing Handbook'
-      : (handbookKind === 'role-operational' ? 'Eduversal Operational Handbook' : 'Eduversal Induction Handbook');
+    const eyebrowLabel = isPolicyTopic
+      ? 'Eduversal Policy Handbook'
+      : (isSchoolFacing
+        ? 'Eduversal School-Facing Handbook'
+        : (handbookKind === 'role-operational' ? 'Eduversal Operational Handbook' : 'Eduversal Induction Handbook'));
     document.getElementById('hbReaderEyebrow').textContent =
       `${eyebrowLabel} · v${hb.version || '?'}`;
     document.getElementById('hbReaderTitle').textContent = hb.title || hb.id;
@@ -1811,20 +1840,20 @@
 
     // Content — single column, section anchors id'd for TOC + scroll-spy.
     // Section id pattern: hb-sec-<key>; stage ids: hb-sec-stage-<index>
-    // (we reuse the stage id scheme for school-facing sections too so the
-    // TOC + scroll-spy work unchanged).
+    // (we reuse the stage id scheme for school-facing + policy-topic sections
+    // too so the TOC + scroll-spy work unchanged).
     const stageBlocks = stagesArr.map((s, i) =>
-      isSchoolFacing ? renderSection(s, i) : renderStage(s, i)
+      hasSectionsArr ? renderSection(s, i) : renderStage(s, i)
     ).join('');
 
     content.innerHTML = `
-      ${isSchoolFacing ? `
+      ${hasSectionsArr ? `
         <aside class="hb-charter hb-charter-school" id="hb-sec-charter">
           <div>
-            <strong>Network handbook for partner schools.</strong>
+            <strong>${isPolicyTopic ? 'Network policy handbook.' : 'Network handbook for partner schools.'}</strong>
             ${hb.customizationModel === 'hybrid'
               ? `This handbook is the network-uniform core. Your school adds school-specific information in the clearly-marked slots. Eduversal sets the framing; your school sets the local detail.`
-              : `Edits go through <code>docs/handbooks/school-facing/*.json</code> + <code>scripts/induction/seed-induction-programs.js</code> — never Firestore directly.`}
+              : `Edits go through <code>docs/handbooks/${isPolicyTopic ? 'policy-topic' : 'school-facing'}/*.json</code> + <code>scripts/induction/seed-induction-programs.js</code> — never Firestore directly.`}
           </div>
         </aside>
       ` : `
@@ -2498,7 +2527,8 @@
      scroll-margin-top on each section to clear the sticky toolbar. */
   function buildTOC(hb, stages) {
     const list = document.getElementById('hbTocList');
-    const isSchoolFacing = (hb.handbookKind || 'induction') === 'school-facing';
+    const kind = hb.handbookKind || 'induction';
+    const isSchoolFacing = kind === 'school-facing' || kind === 'policy-topic';
     const stageLabelPlural = isSchoolFacing ? 'Sections' : 'Stages';
     const items = [];
     items.push(`<li><a href="#hb-sec-charter">Charter</a></li>`);
