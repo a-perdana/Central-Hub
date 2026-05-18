@@ -207,6 +207,8 @@
     ['effective_date',  'Effective',       false],
     ['publishedOn',     'Published',       false],
     ['downloadedOn',    'Downloaded',      false],
+    ['lastUpdated',     'Last Updated',    false],
+    ['id',              'Section ID',      false],
     ['publisher',       'Publisher',       false],
     ['status',          'Status',          false],
     ['track',           'Track',           false],
@@ -345,6 +347,68 @@
       <section class="doc-view-section">
         <h3>${escapeHtml(label)} <span class="count">${items.length}</span></h3>
         <div class="doc-view-fw-grid">${cards}</div>
+      </section>`;
+  }
+
+  /* Eduversal Academic Standards section shape:
+       { id, title, lastUpdated, subsections: [{ id, title, content: [...] }] }
+     Content block types: 'text' {text,title?} · 'list' {items[],title?} ·
+                          'process' {steps[],title?} · 'table' {headers[],rows[][],title?}.
+     Renders subsection cards (id chip + title + typed content blocks) instead
+     of raw JSON. */
+  function renderContentBlock(block) {
+    if (!block || typeof block !== 'object') return '';
+    const t = block.type;
+    const titleHtml = (typeof block.title === 'string' && block.title.trim())
+      ? `<div class="doc-view-block-title">${richString(block.title)}</div>`
+      : '';
+    if (t === 'text' && typeof block.text === 'string') {
+      return `<div class="doc-view-block doc-view-block-text">${titleHtml}<p>${richString(block.text)}</p></div>`;
+    }
+    if (t === 'list' && Array.isArray(block.items) && block.items.length) {
+      const lis = block.items
+        .filter(x => typeof x === 'string')
+        .map(s => `<li>${richString(s)}</li>`).join('');
+      return `<div class="doc-view-block doc-view-block-list">${titleHtml}<ul>${lis}</ul></div>`;
+    }
+    if (t === 'process' && Array.isArray(block.steps) && block.steps.length) {
+      const lis = block.steps
+        .filter(x => typeof x === 'string')
+        .map((s, i) => `<li><span class="step-num">${i + 1}</span><span class="step-body">${richString(s)}</span></li>`).join('');
+      return `<div class="doc-view-block doc-view-block-process">${titleHtml}<ol class="doc-view-process">${lis}</ol></div>`;
+    }
+    if (t === 'table' && Array.isArray(block.headers) && Array.isArray(block.rows)) {
+      const th = block.headers.map(h => `<th>${richString(h)}</th>`).join('');
+      const tr = block.rows.map(row => {
+        if (!Array.isArray(row)) return '';
+        const tds = row.map(cell => `<td>${richString(cell)}</td>`).join('');
+        return `<tr>${tds}</tr>`;
+      }).join('');
+      return `<div class="doc-view-block doc-view-block-table">${titleHtml}<div class="doc-view-table-scroll"><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div></div>`;
+    }
+    return '';
+  }
+
+  function renderSubsectionsSection(label, items) {
+    if (!Array.isArray(items) || !items.length) return null;
+    if (!items.every(it => it && typeof it === 'object' && Array.isArray(it.content))) return null;
+    const cards = items.map(sub => {
+      const id    = typeof sub.id === 'string' ? sub.id : '';
+      const title = typeof sub.title === 'string' ? sub.title : '';
+      const blocks = sub.content.map(renderContentBlock).filter(Boolean).join('');
+      return `
+        <article class="doc-view-subsection">
+          <header class="doc-view-subsection-head">
+            ${id ? `<span class="doc-view-subsection-id">${escapeHtml(id)}</span>` : ''}
+            ${title ? `<h4 class="doc-view-subsection-title">${richString(title)}</h4>` : ''}
+          </header>
+          ${blocks ? `<div class="doc-view-subsection-body">${blocks}</div>` : ''}
+        </article>`;
+    }).join('');
+    return `
+      <section class="doc-view-section">
+        <h3>${escapeHtml(label)} <span class="count">${items.length}</span></h3>
+        <div class="doc-view-subsections">${cards}</div>
       </section>`;
   }
 
@@ -574,6 +638,7 @@
       ['polished_readings',         'Polished Readings',          renderObjArrayOrFlat],
       ['meta',                      'Meta',                       renderRefOrFlatSection],
       ['level_order',               'Level Order',                renderStringArraySection],
+      ['subsections',               'Subsections',                renderSubsectionsSection],
     ];
     for (const [key, label, fn] of patterns) {
       if (!(key in obj)) continue;
