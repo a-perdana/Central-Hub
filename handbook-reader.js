@@ -641,12 +641,15 @@ function initProgress(hb, stagesArr) {
   const allTaskIds = new Set();
   stages.forEach(st => st.taskIds.forEach(id => allTaskIds.add(id)));
 
-  _progressState = { hbId: hb.id, stages, allTaskIds };
+  _progressState = { hbId: hb.id, kind: hb.handbookKind || '', stages, allTaskIds };
 
-  // Show the bar only when there are stages to track + at least one
-  // task carries a stable taskId (older docs without taskIds get a
-  // tickless reader).
-  if (!stages.length || !allTaskIds.size) { bar.hidden = true; return; }
+  // Show the bar whenever there's at least one stage/section to track.
+  // School-facing handbooks (Parent / Student / Teacher / Staff CoC)
+  // carry prose-only sections without task ids; we still want the
+  // Section N / Total chip + scroll-position updates even though
+  // there's nothing to tick. Tickless mode = fill stays at 0% and
+  // the per-task checkbox JS is a no-op.
+  if (!stages.length) { bar.hidden = true; return; }
   bar.hidden = false;
 
   // Restore previous ticks from localStorage onto the rendered
@@ -744,7 +747,11 @@ function updateProgressStage() {
   const nameEl = document.getElementById('hbProgressName');
   const daysEl = document.getElementById('hbProgressDays');
   if (glyphEl) glyphEl.textContent = active.glyph;
-  if (numEl)   numEl.textContent   = `Stage ${active.index + 1} / ${_progressState.stages.length}`;
+  // School-facing handbooks read as "Section N / Total"; induction
+  // and role-operational ones read as "Stage N / Total". The schema
+  // discriminator (handbookKind) is in _progressState.kind.
+  const unit = _progressState.kind === 'school-facing' ? 'Section' : 'Stage';
+  if (numEl)   numEl.textContent   = `${unit} ${active.index + 1} / ${_progressState.stages.length}`;
   if (nameEl)  nameEl.textContent  = active.label;
   if (daysEl)  daysEl.textContent  = active.days;
 }
