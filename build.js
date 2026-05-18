@@ -511,6 +511,17 @@ if (fs.existsSync("cambridge-crossref.js")) {
   console.log("Copied: cambridge-crossref.js");
 }
 
+// -- Copy handbook-reader.{css,js} — shared handbook reader module.
+//    Source-of-truth is shared-design/; synced to each hub root via
+//    `npm run sync:handbook -- --apply`. handbook.html loads these by
+//    relative path so they must land at dist root next to handbook.html.
+["handbook-reader.css", "handbook-reader.js"].forEach(name => {
+  if (fs.existsSync(name)) {
+    fs.copyFileSync(name, path.join("dist", name));
+    console.log(`Copied: ${name}`);
+  }
+});
+
 // -- Indonesian statutory references (PIGP + SKL) for the cross-ref
 //    runtime. Fetched on-demand when the user clicks an SKL / PIGP chip.
 //    Source JSONs live in monorepo-root docs/research/permendiknas/.

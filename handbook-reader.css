@@ -1,0 +1,1340 @@
+/* Eduversal Handbook Reader — shared design module
+ * Canonical source: Central Hub/handbook.html
+ * Synced to AH/TH via npm run sync:handbook
+ * Edit this file, then run sync to propagate.
+ */
+    :root { --accent: #6c5ce7; --accent-dk: #4e3db8; --accent-2: #ddd6fe; }
+    body { background: var(--paper); }
+
+    /* Dual-mode visibility toggle. JS flips a class on <body> based on
+       URL: 'is-browser-mode' shows the grid view, 'is-reader-mode' shows
+       the single-handbook reader. Both modes pre-rendered in HTML for
+       fast first paint; CSS hides the inactive one. */
+    body.is-reader-mode  .hb-browser { display: none; }
+    body.is-browser-mode .hb-reader  { display: none; }
+
+    /* ── Browser-mode shell (mirrors /references pattern) ─────────── */
+
+    /* Hero — canonical CH page-hero (matches /references, question-bank, etc.) */
+    .hero {
+      background: linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5a4ed1 75%, #6c5ce7 100%);
+      padding: 28px 40px 0; color: #fff; position: relative; overflow: hidden;
+      /* Fixed minimum keeps the hero the same height whether 3 or 4 KPI
+         tiles render, and matches the AH+TH handbook hero band. */
+      min-height: 280px;
+      display: flex; align-items: center;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 85% 20%, rgba(108,92,231,.35) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-inner {
+      max-width: 1200px; margin: 0 auto; width: 100%;
+      /* width: 100% is critical — .hero is a flex container, so .hero-inner
+         (a flex item) defaults to content-sized rather than 1200px-wide.
+         Without it, margin: 0 auto centres a narrow block instead of the
+         expected full 1200px clamp, and KPI tiles end up far right of the
+         search box. Matches AH/TH .hb-browser-hero-inner. */
+      padding-left: 40px;
+      display: flex; flex-direction: column; gap: 20px;
+      position: relative; z-index: 1;
+    }
+    @media (max-width: 720px) {
+      .hero-inner { padding-left: 0; }
+    }
+    .hero-title { width: 100%; }
+    .hero-eyebrow {
+      font-size: .65rem; font-weight: 700; letter-spacing: .2em;
+      text-transform: uppercase; color: rgba(196,181,253,.85); margin-bottom: 6px;
+    }
+    .hero h1 {
+      font-family: 'Lora', serif; font-size: 2rem; margin: 0 0 8px;
+      line-height: 1.1; font-weight: 600; letter-spacing: -.01em;
+    }
+    .hero p { color: rgba(255,255,255,.72); font-size: .92rem; margin: 0; max-width: 540px; line-height: 1.5; }
+    .hero p code { background: rgba(255,255,255,.12); padding: 1px 6px; border-radius: 3px; color: #ddd6fe; font-family: 'DM Mono', monospace; font-size: 11.5px; }
+    .hero-kpis { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; padding-bottom: 28px; }
+    .hero-kpi {
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px; padding: 14px 18px; min-width: 130px; backdrop-filter: blur(4px);
+    }
+    .hero-kpi.hero-kpi-primary {
+      background: linear-gradient(135deg, rgba(108,92,231,.32) 0%, rgba(108,92,231,.18) 100%);
+      border-color: rgba(196,181,253,.4); min-width: 170px;
+    }
+    .hero-kpi-num {
+      font-family: 'Lora', serif; font-size: 2.4rem; line-height: 1; font-weight: 600;
+      letter-spacing: -.02em; color: #fff; font-feature-settings: 'tnum';
+    }
+    .hero-kpi-primary .hero-kpi-num { font-size: 2.8rem; }
+    .hero-kpi-lbl { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.6); margin-top: 6px; }
+    .hero-kpi-primary .hero-kpi-lbl { color: rgba(221,214,254,.85); }
+    .hero-kpi-sub { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 3px; font-weight: 400; }
+    @media (max-width: 720px) {
+      .hero {
+        padding: 22px 22px 0;
+        min-height: 0;            /* let mobile reflow to natural height */
+        align-items: flex-start;
+      }
+      .hero h1 { font-size: 1.55rem; }
+      .hero-kpi-primary .hero-kpi-num { font-size: 2.2rem; }
+      .hero-kpi-num { font-size: 1.8rem; }
+    }
+
+    /* Sticky search toolbar — search + facet chips. Round 1 has a single
+       'Induction Handbooks' facet; future rounds add Role / Mentor / Policy
+       chips by appending to .hb-facets in the markup. */
+    .hb-toolbar {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--paper);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .15s, background .15s;
+    }
+    .hb-toolbar.is-stuck {
+      background: rgba(248,250,252,0.94);
+      backdrop-filter: saturate(160%) blur(8px);
+      box-shadow: 0 6px 16px -16px rgba(15,23,42,0.4);
+    }
+    .hb-toolbar-inner {
+      max-width: 1200px; margin: 0 auto; padding: 16px 32px 12px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .hb-search-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .hb-search {
+      flex: 1; min-width: 260px; max-width: 560px; position: relative;
+      display: flex; align-items: center;
+    }
+    .hb-search svg {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      width: 18px; height: 18px; color: var(--ink-3); pointer-events: none;
+    }
+    .hb-search input {
+      width: 100%; padding: 11px 36px 11px 42px;
+      font-family: inherit; font-size: 14px; font-weight: 500;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: #fff; color: var(--ink);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    .hb-search input::placeholder { color: var(--ink-3); font-weight: 400; }
+    .hb-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .hb-search-clear {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--ink-3);
+      font-size: 18px; padding: 2px 8px; border-radius: 6px; line-height: 1;
+    }
+    .hb-search-clear:hover { color: var(--ink); background: #f3f4f6; }
+    .hb-search-info { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+    /* Facet chips. Single 'Induction Handbooks' chip in Round 1 — sits
+       beside 'All' for symmetry. Grid layout matches /references so when
+       future categories land (Role, Mentor, Policy) the row fills naturally
+       to 4 cols. */
+    .hb-facets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+    .hb-facet {
+      padding: 9px 14px; font-size: 13px; font-weight: 600;
+      color: var(--ink-2); background: #fff;
+      border: 1px solid var(--border); border-radius: 9px;
+      cursor: pointer; user-select: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      transition: background .12s, border-color .12s, color .12s;
+      text-align: left; min-width: 0;
+      font-family: inherit;
+    }
+    .hb-facet > span:first-child {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+    }
+    .hb-facet:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--ink); }
+    .hb-facet.active {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .hb-facet .count {
+      display: inline-block; padding: 1px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums; flex-shrink: 0;
+    }
+    .hb-facet.active .count { background: rgba(255,255,255,0.22); color: #fff; }
+    .hb-facet.is-empty { opacity: 0.5; }
+    .hb-facet.is-empty .count { background: #f3f4f6; color: var(--ink-3); }
+    .hb-facet.active.is-empty .count { background: rgba(255,255,255,0.22); color: #fff; }
+    @media (max-width: 960px) {
+      .hb-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Results: accordion sections with handbook cards inside. Round 1 ships
+       a single section open by default (Induction Handbooks) — when more
+       categories arrive, default-closed semantics from /references apply. */
+    .hb-results { max-width: 1200px; margin: 0 auto; padding: 22px 32px 80px; }
+    .hb-results-empty {
+      display: none; padding: 60px 20px; text-align: center;
+      color: var(--ink-3); font-size: 13px;
+    }
+    .hb-results-empty.visible { display: block; }
+    .hb-results-empty strong { color: var(--ink-2); display: block; margin-bottom: 6px; font-size: 14px; }
+
+    .hb-section {
+      margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: #fff; overflow: hidden;
+    }
+    .hb-section.is-hidden { display: none; }
+    .hb-section[open] { box-shadow: 0 4px 14px -10px rgba(15,23,42,0.18); }
+    .hb-section-head {
+      list-style: none; cursor: pointer;
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid transparent;
+      transition: background .12s, border-color .15s;
+      user-select: none;
+    }
+    .hb-section-head::-webkit-details-marker { display: none; }
+    .hb-section[open] .hb-section-head { border-bottom-color: var(--border); }
+    .hb-section-head:hover { background: #fafbfc; }
+    .hb-section-caret {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; margin-right: 4px;
+      color: var(--accent); font-size: 11px; font-weight: 700;
+      transition: transform .15s;
+      align-self: center;
+    }
+    .hb-section[open] .hb-section-caret { transform: rotate(90deg); }
+    .hb-section-title {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink); margin: 0;
+    }
+    .hb-section-count {
+      font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums;
+    }
+    .hb-section-blurb { font-size: 12px; color: var(--ink-3); margin-left: auto; max-width: 540px; line-height: 1.5; text-align: right; }
+    .hb-section-blurb code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'DM Mono', monospace; }
+
+    .hb-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px; padding: 18px 20px 22px;
+    }
+    .hb-card.filtered-out { display: none !important; }
+    .hb-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 18px 20px 18px 22px;
+      display: flex; flex-direction: column; gap: 10px;
+      text-decoration: none; color: inherit;
+      box-shadow: inset 4px 0 0 #7c3aed;   /* induction palette */
+      transition: border-color .15s, transform .12s, box-shadow .15s, background .15s;
+    }
+    .hb-card:hover {
+      transform: translateY(-1px); background: #faf5ff; border-color: #ddd6fe;
+      box-shadow: inset 4px 0 0 #7c3aed, 0 6px 18px -10px rgba(124,58,237,0.32);
+    }
+    .hb-card-head { display: flex; align-items: flex-start; gap: 10px; }
+    .hb-card-icon {
+      flex: 0 0 36px; width: 36px; height: 36px; border-radius: 9px;
+      background: #ede9fe; color: #5b21b6;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .hb-card-title { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+    .hb-card-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+    .hb-card-meta {
+      margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--border);
+      display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--ink-3);
+    }
+    .hb-card-meta .pill {
+      padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: var(--ink-2);
+      font-weight: 500;
+    }
+    .hb-card-meta .pill.firestore { background: #ddd6fe; color: #5b21b6; }
+    /* Role-operational handbook variant — pink accent stripe so the eye
+       tells DSL/operational cards apart from induction cards. Icon
+       background swaps too. */
+    .hb-card.hb-card-role {
+      box-shadow: inset 4px 0 0 #db2777;
+    }
+    .hb-card.hb-card-role:hover {
+      background: #fdf2f8; border-color: #fbcfe8;
+      box-shadow: inset 4px 0 0 #db2777, 0 6px 18px -10px rgba(219,39,119,0.32);
+    }
+    .hb-card.hb-card-role .hb-card-icon {
+      background: #fce7f3; color: #9d174d;
+    }
+    /* School-facing handbook variant — blue accent stripe (compass/guide
+       vibe). Distinct from induction (mor) and role-operational (pink). */
+    .hb-card.hb-card-school {
+      box-shadow: inset 4px 0 0 #0ea5e9;
+    }
+    .hb-card.hb-card-school:hover {
+      background: #f0f9ff; border-color: #bae6fd;
+      box-shadow: inset 4px 0 0 #0ea5e9, 0 6px 18px -10px rgba(14,165,233,0.32);
+    }
+    .hb-card.hb-card-school .hb-card-icon {
+      background: #e0f2fe; color: #075985;
+    }
+    /* Policy-topic handbook variant — amber accent stripe (parchment/policy
+       vibe). 4th handbookKind in the system (Safeguarding, Behaviour, Anti-
+       Bullying, AI Use, Digital Citizenship, Assessment Guide, Attendance).
+       Distinct from induction (mor), role-operational (pink), school-facing (cyan). */
+    .hb-card.hb-card-policy-topic {
+      box-shadow: inset 4px 0 0 #b45309;
+    }
+    .hb-card.hb-card-policy-topic:hover {
+      background: #fffbeb; border-color: #fde68a;
+      box-shadow: inset 4px 0 0 #b45309, 0 6px 18px -10px rgba(180,83,9,0.32);
+    }
+    .hb-card.hb-card-policy-topic .hb-card-icon {
+      background: #fef3c7; color: #92400e;
+    }
+    /* AICF Companion handbook variant — electric blue accent (AI/circuit vibe).
+       5th handbookKind. Navigable wrappers for AICF v1.0 practical layer
+       (Teacher Playbook, Prompt Library, Red Lines, Decision Trees, Weekly Tips,
+       Classroom Activities). Distinct from all 4 prior kinds. */
+    .hb-card.hb-card-aicf {
+      box-shadow: inset 4px 0 0 #1d4ed8;
+    }
+    .hb-card.hb-card-aicf:hover {
+      background: #eff6ff; border-color: #bfdbfe;
+      box-shadow: inset 4px 0 0 #1d4ed8, 0 6px 18px -10px rgba(29,78,216,0.32);
+    }
+    .hb-card.hb-card-aicf .hb-card-icon {
+      background: #dbeafe; color: #1e40af;
+    }
+
+    /* ── SCHOOL-FACING SECTION RENDERER (reader mode) ──
+       Distinct styling layer that piggybacks on .hb-stage but tunes the
+       feel for prose reading (vs. task-list browsing). Cyan accent +
+       lighter chapter-card chrome — 23 sections in a row would feel
+       heavy with the full induction stage-banner treatment, so:
+       - drop the mor→cyan gradient top strip
+       - shrink the section number (chip-sized DM Mono)
+       - white banner background (was lilac gradient)
+       - cyan left-rail accent + cyan eyebrow + per-section glyph
+       Section-specific glyphs (Welcome 👋 / Values 💚 / CTS 🎯 / …) are
+       set inline by renderSection() via the section.glyph field or a
+       title-keyword infer fallback. */
+    .hb-stage.hb-sec-school {
+      box-shadow: inset 3px 0 0 #0891b2;
+      border-color: #e5e7eb;
+    }
+    /* Override the induction banner's lilac gradient + top accent strip
+       — school-facing reads as a long-form chapter list, not a 4-window
+       timeline, so the chrome stays out of the way. */
+    .hb-stage.hb-sec-school .hb-stage-head {
+      background: #fff;
+      padding: 14px 20px 12px;
+    }
+    .hb-stage.hb-sec-school .hb-stage-head::before { display: none; }
+    .hb-stage.hb-sec-school .hb-stage-head:hover { background: #f8fafc; }
+    .hb-stage.hb-sec-school[open] .hb-stage-head { border-bottom-color: #e5e7eb; }
+    /* Section-break ornament — sits in the negative space between two
+       sibling school-facing sections. Cyan triple-diamond, decorative
+       only (aria-hidden). Mirrors the mor ornament on .hb-sec siblings
+       in induction reader mode. */
+    .hb-stage.hb-sec-school + .hb-stage.hb-sec-school {
+      margin-top: 28px;
+      position: relative;
+    }
+    .hb-stage.hb-sec-school + .hb-stage.hb-sec-school::before {
+      content: '◇ ◇ ◇';
+      position: absolute;
+      top: -22px; left: 0; right: 0;
+      text-align: center;
+      letter-spacing: 0.7em;
+      font-size: 9px;
+      color: #0891b2;
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    /* Section number — chip-sized DM Mono, cyan, sits left of the glyph.
+       Replaces the 2.4rem Lora number which suits 4-window induction
+       but overwhelms a 23-section list. */
+    .hb-stage.hb-sec-school .hb-stage-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px; font-weight: 700;
+      color: #0e7490;
+      width: auto; min-width: 24px;
+      padding: 3px 8px;
+      background: #ecfeff; border: 1px solid #cffafe;
+      border-radius: 999px;
+      line-height: 1.4; letter-spacing: 0.04em;
+    }
+    .hb-stage.hb-sec-school .hb-stage-glyph {
+      font-size: 20px;
+      background: transparent; padding: 0;
+    }
+    .hb-stage.hb-sec-school .hb-stage-name {
+      font-size: 17px; line-height: 1.3;
+    }
+    .hb-stage.hb-sec-school .hb-stage-eyebrow {
+      color: #0e7490;
+    }
+    .hb-stage.hb-sec-school .hb-stage-caret { color: #0891b2; }
+    .hb-charter.hb-charter-school {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border-color: #bae6fd;
+    }
+    .hb-charter.hb-charter-school strong { color: #075985; }
+    .hb-section-body {
+      padding: 14px 22px 18px;
+      font-size: 15px; line-height: 1.75; color: var(--ink);
+      font-feature-settings: 'kern', 'liga';
+    }
+    /* Drop-cap on the first paragraph of each school-facing section
+       body — cyan serif capital that hangs to the left of the column,
+       giving the long reading list a Stripe-Press / editorial feel
+       without competing with the section header. Only applies when the
+       first child is a paragraph (not a heading or list). */
+    .hb-stage.hb-sec-school .hb-section-body > .hb-body-p:first-child::first-letter {
+      font-family: 'Lora', Georgia, serif;
+      font-size: 2.8rem; font-weight: 600;
+      color: #0e7490;
+      float: left;
+      line-height: 0.95;
+      margin: 4px 8px 0 0;
+      padding: 0;
+    }
+    .hb-body-p { margin: 0 0 14px; }
+    /* Numbered-promise / principle paragraphs — a body paragraph that
+       starts with "<strong>N. Title.</strong> …" reads better with a
+       slightly tighter top margin and a small left-rail to set it apart
+       from regular prose. We can't easily target it via :has() in older
+       browsers, so the visual lift comes from generous spacing alone. */
+    .hb-body-p strong:first-child {
+      color: #0e7490;
+    }
+    /* Sub-section heading inside a section body — appears between
+       paragraphs to group content (e.g. "Pattern" / "When trees disagree").
+       Mor accent rail on the left + tighter spacing reads as part of the
+       narrative without the cold ruler that the old <hr>-style border
+       suggested. */
+    .hb-body-h3 {
+      font-family: 'Lora', Georgia, serif;
+      font-size: 17px; font-weight: 600; color: var(--ink);
+      margin: 28px 0 10px;
+      padding: 2px 0 2px 12px;
+      border-left: 3px solid var(--accent);
+      line-height: 1.3;
+    }
+    .hb-body-h3:first-child { margin-top: 6px; }
+    .hb-body-h4 {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin: 20px 0 8px;
+    }
+    .hb-body-ul, .hb-body-ol { margin: 6px 0 14px; padding-left: 24px; }
+    .hb-body-ul li, .hb-body-ol li {
+      margin-bottom: 6px; line-height: 1.65;
+      color: var(--ink-2);
+    }
+    .hb-body-ul li::marker { color: var(--accent); }
+    .hb-body-ol li::marker { color: var(--accent); font-weight: 600; }
+    .hb-body-quote {
+      margin: 12px 0; padding: 10px 14px;
+      background: #f9fafb; border-left: 3px solid #0ea5e9;
+      color: var(--ink-2); font-style: italic;
+    }
+    /* Inline markdown link inside section body. Underline appears on hover
+       to keep the prose calm; accent colour signals interactivity. */
+    .hb-body-link {
+      color: var(--accent-dk); text-decoration: none;
+      border-bottom: 1px dotted var(--accent);
+      transition: color 0.15s, border-bottom-color 0.15s;
+    }
+    .hb-body-link:hover {
+      color: var(--accent); border-bottom-color: var(--accent-dk);
+      border-bottom-style: solid;
+    }
+    /* Inline code from `text` syntax — used to flag refIds, prompt IDs,
+       Firestore field paths, etc. Light grey pill, mono font. */
+    .hb-body-code {
+      font-family: 'DM Mono', 'Menlo', monospace;
+      font-size: 0.88em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: #0e7490;
+      border: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    .hb-body-hr {
+      border: 0; height: 0; margin: 22px auto;
+      width: 80px; text-align: center;
+      color: var(--accent); opacity: 0.55;
+    }
+    .hb-body-hr::before {
+      content: '· · ·';
+      font-size: 14px; letter-spacing: 0.4em;
+      font-weight: 700;
+    }
+
+    /* ── Numbered-value cards ───────────────────────────────────────
+       Authored value lists ("1. **We respect every child.** Every…")
+       and inline numbered enumerations ("Three commitments. (1) X. (2)
+       Y.") get auto-promoted by renderBodyMarkdown into a card grid.
+       Visually distinct from <ol> — each card has a numbered chip on
+       the left, the value title bold, then the rationale below. */
+    .hb-value-grid {
+      display: grid; gap: 10px;
+      margin: 14px 0 18px;
+      grid-template-columns: 1fr;
+    }
+    .hb-value-card {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 4px 14px;
+      align-items: start;
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+      border: 1px solid #ede9fe;
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+    }
+    .hb-value-card-num {
+      grid-row: 1 / span 2;
+      width: 34px; height: 34px; border-radius: 999px;
+      background: #fff; border: 2px solid var(--accent);
+      color: var(--accent-dk);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: 'Lora', serif; font-weight: 700; font-size: 15px;
+      box-shadow: 0 1px 3px rgba(108,92,231,0.18);
+      align-self: center;
+    }
+    .hb-value-card-title {
+      grid-column: 2;
+      font-size: 14.5px; font-weight: 700;
+      color: var(--ink); line-height: 1.35;
+    }
+    .hb-value-card-body {
+      grid-column: 2;
+      font-size: 14px; color: var(--ink-2); line-height: 1.6;
+    }
+    .hb-value-card.no-body .hb-value-card-title { grid-column: 2; align-self: center; }
+    .hb-value-grid.is-inline .hb-value-card { padding: 10px 14px; }
+    .hb-value-grid.is-inline .hb-value-card-num {
+      width: 28px; height: 28px; font-size: 13px;
+    }
+    .hb-value-grid.is-inline .hb-value-card-title { font-size: 14px; }
+    .hb-value-grid.is-inline .hb-value-card-body { font-size: 13.5px; }
+    .hb-value-leadin {
+      font-size: 13.5px; color: var(--ink-3); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin: 4px 0 8px;
+    }
+    /* CH school-facing variant — switch card accent to cyan (matches
+       the section's cyan rail) so values feel like part of the chapter
+       rather than a foreign mor block. */
+    .hb-stage.hb-sec-school .hb-value-card {
+      background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+      border-color: #cffafe;
+      border-left-color: #0891b2;
+    }
+    .hb-stage.hb-sec-school .hb-value-card-num {
+      border-color: #0891b2; color: #0e7490;
+      box-shadow: 0 1px 3px rgba(14,116,144,0.18);
+    }
+    .hb-stage.hb-sec-school .hb-value-leadin { color: #0e7490; }
+
+    .hb-section-slot-guide {
+      margin: 8px 4px 12px;
+      padding: 10px 14px;
+      background: #fef3c7; border: 1px solid #fde68a;
+      border-radius: 8px;
+      font-size: 13px; color: #78350f; line-height: 1.6;
+    }
+    .hb-section-slot-guide strong { color: #78350f; }
+    .hb-callout {
+      margin: 12px 4px;
+      padding: 12px 14px;
+      background: #f9fafb; border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13.5px;
+    }
+    .hb-callout-label {
+      font-weight: 600; font-size: 13px; color: var(--ink);
+      margin-bottom: 6px;
+    }
+    .hb-callout ul, .hb-callout ol { margin: 0; padding-left: 20px; }
+    .hb-callout li { margin-bottom: 3px; }
+    .hb-callout.hb-callout-slot {
+      background: #fef3c7; border-color: #fde68a;
+    }
+    .hb-callout.hb-callout-slot .hb-callout-label { color: #78350f; }
+    .hb-callout.hb-callout-ref {
+      background: #ecfeff; border-color: #a5f3fc;
+    }
+    .hb-callout.hb-callout-ref .hb-callout-label { color: #155e75; }
+    .hb-callout.hb-callout-quickref {
+      background: #f5f3ff; border-color: #ddd6fe;
+    }
+    .hb-callout.hb-callout-quickref .hb-callout-label { color: #5b21b6; }
+    .hb-callout.hb-callout-violated {
+      background: #fef2f2; border-color: #fecaca;
+    }
+    .hb-callout.hb-callout-violated .hb-callout-label { color: #991b1b; }
+
+    /* ── READER MODE — full redesign (canonical CH hero + 2-col TOC layout) ──
+       The reader uses the same mor page-hero as browser mode (and /references),
+       then a 240px sticky TOC sidebar + content area underneath. Section
+       anchors + scroll-spy give the user a sense of where they are inside a
+       300+ task handbook. Print CSS collapses the TOC + toolbar so the
+       content prints clean. */
+
+    /* Reader-only hero variant carries 3 KPI tiles (Duration / Stages /
+       Audience) populated at render time. Reuses .hero rules from above. */
+    .hero-reader-back {
+      position: absolute; top: 16px; left: 32px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 8px;
+      background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85);
+      font-size: 12px; font-weight: 600; text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      z-index: 2; transition: background .12s, color .12s;
+    }
+    .hero-reader-back:hover { background: rgba(255,255,255,0.18); color: #fff; }
+    .hero-reader-back::before { content: '←'; font-weight: 700; }
+
+    /* Compact reader toolbar — handbook switcher + print button. Sits
+       UNDER the hero (not sticky overlapping it). Sticky once hero
+       scrolls past so the user can still switch handbooks mid-scroll. */
+    .hb-reader-toolbar {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: saturate(160%) blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .hb-reader-toolbar .label {
+      font-size: 11px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .hb-reader-toolbar select {
+      padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: 13px; background: #fff; color: var(--ink);
+      min-width: 260px;
+    }
+    .hb-reader-toolbar select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .hb-reader-toolbar .btn-print {
+      margin-left: auto; padding: 7px 14px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: background .12s;
+    }
+    .hb-reader-toolbar .btn-print:hover { background: var(--accent-dk); }
+    .hb-reader-toolbar .btn-print svg { width: 14px; height: 14px; }
+
+    /* ── Sticky reading-progress bar (under the reader toolbar) ──
+       Tracks the active stage during scroll, shows a 0-100% completion
+       bar (based on localStorage task ticks), and a "Stage N / total"
+       chip with the inferred window glyph. Companion to the
+       per-task checkbox feature. Hidden on mobile to keep room. */
+    .hb-progress {
+      position: sticky; top: 56px; z-index: 39;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%);
+      backdrop-filter: saturate(160%) blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 32px 12px;
+      display: flex; align-items: center; gap: 16px;
+      font-size: 12.5px; color: var(--ink-2);
+    }
+    .hb-progress-stage {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-weight: 600; color: var(--ink);
+      flex-shrink: 0;
+    }
+    .hb-progress-stage .glyph { font-size: 16px; line-height: 1; }
+    .hb-progress-stage .num {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: var(--accent-2); color: var(--accent-dk);
+      padding: 2px 7px; border-radius: 999px; font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .hb-progress-days {
+      font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    .hb-progress-track {
+      flex: 1; height: 6px; min-width: 80px;
+      background: var(--accent-2); border-radius: 999px; overflow: hidden;
+      position: relative;
+    }
+    .hb-progress-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 50%, var(--cyan) 100%);
+      border-radius: 999px;
+      transition: width .25s ease-out;
+      width: 0;
+    }
+    .hb-progress-count {
+      font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+      flex-shrink: 0; min-width: 56px; text-align: right;
+    }
+    .hb-progress-count b { color: var(--accent-dk); font-weight: 700; }
+    .hb-progress-reset {
+      font-size: 11px; padding: 4px 8px; border-radius: 6px;
+      background: transparent; color: var(--ink-3); border: 1px solid transparent;
+      cursor: pointer; font-family: inherit;
+      transition: color .12s, border-color .12s;
+      flex-shrink: 0;
+    }
+    .hb-progress-reset:hover { color: var(--accent-dk); border-color: var(--accent-2); }
+    @media (max-width: 720px) {
+      .hb-progress { display: none; }
+    }
+
+    /* Per-task checkbox — sits inside the .hb-task grid cell where the
+       glyph used to live. When checked, strikes through the title and
+       fades the row. Persists in localStorage keyed by handbook id +
+       task id. Personal-use feature; not synced to Firestore. */
+    .hb-task-check {
+      grid-row: 1 / span 3;
+      width: 22px; height: 22px;
+      appearance: none; -webkit-appearance: none;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      background: #fff; cursor: pointer;
+      margin-top: 2px;
+      transition: background .12s, border-color .12s;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .hb-task-check:hover { border-color: var(--accent); }
+    .hb-task-check:checked {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .hb-task-check:checked::after {
+      content: ''; position: absolute;
+      left: 6px; top: 2px;
+      width: 6px; height: 11px;
+      border: solid #fff; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .hb-task:has(.hb-task-check:checked) {
+      background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+    }
+    .hb-task:has(.hb-task-check:checked) .hb-task-title {
+      text-decoration: line-through;
+      text-decoration-color: var(--ink-3);
+      color: var(--ink-3);
+    }
+    .hb-task:has(.hb-task-check:checked) .hb-task-desc { opacity: 0.6; }
+    .hb-task:has(.hb-task-check:checked) .hb-task-glyph {
+      /* The glyph still renders inside the same grid cell as the
+         checkbox — overlap is fine, both sit at grid-row 1/span 3 but
+         the checkbox is opaque on top. Fade the emoji so the check
+         dominates. */
+      opacity: 0.35;
+    }
+    /* When checkbox is rendered, hide the glyph entirely to avoid the
+       overlap completely. JS only adds the checkbox in reader mode. */
+    .hb-task.has-check .hb-task-glyph { display: none; }
+
+    /* Two-column layout: sticky TOC + content. Wraps to single column
+       at narrow widths; TOC becomes a horizontal scroll-strip on mobile. */
+    .hb-reader-layout {
+      max-width: 1200px; margin: 0 auto; padding: 0 32px 80px;
+      display: grid; grid-template-columns: 240px 1fr;
+      gap: 36px; align-items: start;
+    }
+    @media (max-width: 960px) {
+      .hb-reader-layout { grid-template-columns: 1fr; gap: 18px; padding: 0 20px 60px; }
+    }
+
+    /* TOC sidebar — anchors keyed to section ids set at render time
+       (hb-sec-charter, hb-sec-design, hb-sec-roles, hb-sec-stages,
+       hb-sec-stage-<n>, hb-sec-open). */
+    .hb-toc {
+      position: sticky; top: 64px;   /* below reader toolbar */
+      padding-top: 24px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    @media (max-width: 960px) {
+      .hb-toc {
+        position: relative; top: auto; max-height: none; padding-top: 14px;
+        border-bottom: 1px solid var(--border); padding-bottom: 14px;
+      }
+    }
+    .hb-toc-title {
+      font-size: 10.5px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .hb-toc ul { list-style: none; padding: 0; margin: 0; }
+    .hb-toc li { margin: 1px 0; }
+    .hb-toc a {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 6px;
+      font-size: 13px; color: var(--ink-2); text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .hb-toc a:hover { background: #fafbfc; color: var(--ink); }
+    .hb-toc a.active {
+      background: var(--accent-2); color: var(--accent-dk);
+      border-left-color: var(--accent); font-weight: 600;
+    }
+    .hb-toc a.toc-sub { padding-left: 14px; font-size: 12.5px; color: var(--ink-3); }
+    .hb-toc a.toc-sub.active { color: var(--accent-dk); }
+    /* Section-number prefix for school-facing TOC sub-links — DM Mono
+       tabular figures sit in a fixed-width slot so multi-line titles
+       indent under the title text, not back under the number. */
+    .hb-toc a.toc-sub .toc-num {
+      font-family: 'DM Mono', monospace; font-size: 10.5px;
+      color: var(--ink-3); font-weight: 600;
+      flex-shrink: 0; width: 22px; text-align: right;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.7;
+    }
+    .hb-toc a.toc-sub.active .toc-num { color: var(--accent-dk); opacity: 1; }
+    .hb-toc a.toc-sub .toc-label { flex: 1; min-width: 0; }
+    .hb-toc-divider {
+      height: 1px; background: var(--border); margin: 8px 0;
+    }
+    /* TOC filter input — only shown when sub-link count ≥ 8 (school-facing
+       handbooks have 20+ sections; induction has 4 stages and doesn't
+       need filtering). Subtle so it never competes with the section
+       links visually. */
+    .hb-toc-filter-wrap { margin: 0 0 8px; padding: 0 2px; }
+    .hb-toc-filter {
+      width: 100%; box-sizing: border-box;
+      padding: 6px 10px;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: #fff;
+      font: 12.5px 'DM Sans', sans-serif; color: var(--ink);
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .hb-toc-filter::placeholder { color: var(--ink-3); }
+    .hb-toc-filter:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-2);
+    }
+
+    /* Content column. Editorial typography upgrade (2026-05-15) —
+       larger body type, generous vertical rhythm, serif headings with
+       breathing room, drop-cap on the lead paragraph of each section,
+       and decorative section-break ornaments between major sections.
+       Aim: Medium / Stripe Press reading feel without sacrificing the
+       reference-doc density inside stage / task blocks. */
+    .hb-content { padding-top: 28px; min-width: 0; color: var(--ink); }
+
+    /* Section wrappers — h2 anchor + content card. Bigger gap between
+       sections (56px vs old 36px) lets the section-break ornament
+       breathe, and matches the larger H2 size. */
+    .hb-sec {
+      margin-bottom: 56px;
+      scroll-margin-top: 80px;
+      position: relative;
+    }
+    .hb-sec + .hb-sec::before {
+      /* Triple-mor lozenge section break sits in the negative-space
+         between sibling sections. Pure decorative, hidden from a11y. */
+      content: '◆ ◆ ◆';
+      display: block;
+      position: absolute;
+      top: -36px; left: 0; right: 0;
+      text-align: center;
+      letter-spacing: 0.7em;
+      font-size: 8px;
+      color: var(--accent);
+      opacity: 0.4;
+      pointer-events: none;
+    }
+    .hb-sec-h {
+      font-family: 'Lora', serif; font-size: 2rem; font-weight: 600;
+      color: var(--ink); margin: 0 0 18px;
+      display: flex; align-items: baseline; gap: 14px;
+      line-height: 1.15; letter-spacing: -0.01em;
+    }
+    .hb-sec-h .count {
+      font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums;
+      font-family: 'DM Sans', sans-serif;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .hb-sec-text {
+      font-size: 16px; line-height: 1.75; color: var(--ink-2);
+      margin: 0 0 18px;
+      font-feature-settings: 'kern', 'liga';
+    }
+    /* Compact subtitle variant — used by escalation / contacts /
+       decision-points where the .hb-sec-text is a short caption above
+       a card grid or a ladder. No drop-cap. */
+    .hb-sec-text--compact {
+      font-size: 14px; line-height: 1.6;
+      color: var(--ink-3); margin: 0 0 16px;
+    }
+    /* Drop-cap on the FIRST paragraph of each section's narrative —
+       single mor Lora capital that hangs to the left of the body
+       column. Applied only when .hb-sec-text is the first child of
+       .hb-sec after the h2, so we never drop-cap a subtitle or a list. */
+    .hb-sec-h + .hb-sec-text:not(.hb-sec-text--compact)::first-letter {
+      font-family: 'Lora', serif;
+      font-size: 3.2rem; font-weight: 600;
+      color: var(--accent-dk);
+      float: left;
+      line-height: 0.95;
+      margin: 6px 10px 0 0;
+      padding: 0;
+    }
+    /* Inline emphasis pulled from JSON narrative text (italic + serif). */
+    .hb-sec-text em { font-style: italic; color: var(--ink); font-family: 'Lora', serif; }
+    .hb-sec-text strong { color: var(--ink); font-weight: 700; }
+
+    /* Pull-quote — surfaces a short callout from the JSON when an
+       authoring pass adds .pullQuote to a section. Renders as a
+       left-bordered serif block, slightly bigger than body, mor accent.
+       Wrapped in a <blockquote class="hb-pull"> so semantic HTML stays
+       intact for screen readers + print. */
+    .hb-pull {
+      margin: 22px 0 28px;
+      padding: 8px 0 8px 22px;
+      border-left: 3px solid var(--accent);
+      font-family: 'Lora', serif;
+      font-size: 1.15rem; line-height: 1.55; font-style: italic;
+      color: var(--ink);
+    }
+    .hb-pull cite {
+      display: block; margin-top: 8px;
+      font-family: 'DM Sans', sans-serif; font-style: normal;
+      font-size: 12px; color: var(--ink-3); letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* Charter callout — refined */
+    .hb-charter {
+      background: linear-gradient(135deg, #faf5ff 0%, #fdf2f8 100%);
+      border: 1px solid var(--accent-2); border-radius: 12px;
+      padding: 18px 22px; font-size: 13px; color: #4c1d95;
+      display: flex; gap: 14px; align-items: flex-start;
+      margin-bottom: 36px;
+    }
+    .hb-charter::before {
+      content: '⚖'; font-size: 22px; line-height: 1; flex-shrink: 0;
+      color: var(--accent);
+    }
+    .hb-charter strong { display: block; font-weight: 700; margin-bottom: 4px; color: #3b0764; font-size: 13.5px; }
+    .hb-charter code { background: rgba(108,92,231,0.12); padding: 1px 6px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; }
+
+    /* Design philosophy — windows displayed as a horizontal timeline
+       (gradient progress bar + window labels) rather than disconnected
+       cards. Reads as one continuous year. */
+    .hb-timeline {
+      margin: 18px 0 4px;
+      display: grid; grid-template-columns: repeat(var(--windows, 4), 1fr);
+      gap: 2px;
+      border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .hb-tl-cell {
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
+      border-right: 1px solid var(--accent-2);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .hb-tl-cell:last-child { border-right: none; }
+    .hb-tl-cell:nth-child(1) { background: linear-gradient(180deg, #ede9fe 0%, #faf5ff 100%); }
+    .hb-tl-cell:nth-child(2) { background: linear-gradient(180deg, #ddd6fe 0%, #faf5ff 100%); }
+    .hb-tl-cell:nth-child(3) { background: linear-gradient(180deg, #c4b5fd 0%, #faf5ff 100%); }
+    .hb-tl-cell:nth-child(4) { background: linear-gradient(180deg, #a78bfa 0%, #faf5ff 100%); }
+    .hb-tl-label {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .hb-tl-days { font-size: 13px; font-weight: 700; color: var(--ink); font-feature-settings: 'tnum'; }
+    .hb-tl-priority { font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+    .hb-tl-success {
+      font-size: 11.5px; font-style: italic; color: var(--ink-2); line-height: 1.45;
+      padding-top: 6px; border-top: 1px dashed rgba(108,92,231,0.3);
+    }
+    .hb-tl-success b { color: var(--accent-dk); font-style: normal; font-weight: 700; }
+    @media (max-width: 720px) {
+      .hb-timeline { grid-template-columns: 1fr; }
+      .hb-tl-cell { border-right: none; border-bottom: 1px solid var(--accent-2); }
+      .hb-tl-cell:last-child { border-bottom: none; }
+    }
+
+    /* Roles grid — refined cards */
+    .hb-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+    .hb-role {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .hb-role:hover { border-color: var(--accent-2); box-shadow: 0 4px 14px -10px rgba(108,92,231,0.2); }
+    .hb-role-label {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .hb-role-label::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    }
+    .hb-role .role-name { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 8px; line-height: 1.3; }
+    .hb-role .role-ownership {
+      font-size: 12px; line-height: 1.5; color: var(--ink-2);
+      padding: 8px 10px; background: #faf5ff; border-radius: 6px; margin-bottom: 8px;
+      border-left: 2px solid var(--accent);
+    }
+    .hb-role .role-ownership strong { color: var(--accent-dk); }
+    .hb-role ul { padding-left: 18px; margin: 6px 0 0; }
+    .hb-role li { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin-bottom: 4px; }
+
+    /* Stages — accordion list with editorial banner header. Default-open
+       for the active scroll-spy section, others stay open too (this is
+       a reader; scrolling through is the use-case). User can collapse
+       to scan. The banner carries a large Lora stage number on the
+       left, a window glyph (emoji) inferred from the stage label, the
+       stage name itself, and the day range / task count pills. */
+    .hb-stage {
+      border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+      margin-bottom: 18px; background: #fff;
+      scroll-margin-top: 80px;
+    }
+    .hb-stage[open] { box-shadow: 0 4px 14px -10px rgba(15,23,42,0.12); }
+    .hb-stage-head {
+      list-style: none; cursor: pointer;
+      background: linear-gradient(135deg, #ede9fe 0%, #faf5ff 60%, #fff 100%);
+      padding: 18px 22px 16px;
+      border-bottom: 1px solid transparent;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      transition: background .12s;
+      position: relative;
+    }
+    .hb-stage-head::before {
+      /* Decorative top accent strip — mor → cyan gradient across the
+         full banner width. Reinforces the editorial "chapter heading"
+         feel without obscuring text. */
+      content: ''; position: absolute; left: 0; right: 0; top: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 35%, var(--cyan) 100%);
+    }
+    .hb-stage-head::-webkit-details-marker { display: none; }
+    .hb-stage[open] .hb-stage-head { border-bottom-color: var(--accent-2); }
+    .hb-stage-head:hover { background: linear-gradient(135deg, #ddd6fe 0%, #ede9fe 60%, #faf5ff 100%); }
+    .hb-stage-caret {
+      color: var(--accent); font-size: 11px; transition: transform .15s;
+      width: 14px; display: inline-block; align-self: center;
+    }
+    .hb-stage[open] .hb-stage-caret { transform: rotate(90deg); }
+    /* Big Lora stage number — sits at the left of the banner like a
+       book chapter number. Tabular for alignment. */
+    .hb-stage-num {
+      font-family: 'Lora', serif;
+      font-size: 2.4rem; font-weight: 600;
+      color: var(--accent);
+      line-height: 1; letter-spacing: -0.02em;
+      font-feature-settings: 'tnum';
+      flex-shrink: 0;
+      width: 48px; text-align: center;
+    }
+    /* Window glyph — emoji inferred from stage.label keywords
+       (Listen 🌱 / Diagnose 🔍 / Act 🎯 / Anchor ⚓ / fallback 📕).
+       Sits between the number and the stage name. */
+    .hb-stage-glyph {
+      font-size: 24px; line-height: 1;
+      flex-shrink: 0;
+      filter: saturate(1.1);
+    }
+    .hb-stage-name-block { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+    .hb-stage-name {
+      font-family: 'Lora', serif;
+      font-size: 18px; font-weight: 600; color: var(--ink); margin: 0;
+      line-height: 1.25;
+    }
+    .hb-stage-eyebrow {
+      font-size: 10.5px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .hb-stage-days {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      background: rgba(255,255,255,0.7); padding: 4px 10px; border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid var(--accent-2);
+    }
+    .hb-stage-tasks-pill {
+      font-size: 11px; color: var(--ink-3); font-weight: 500;
+      margin-left: auto;
+    }
+    /* Week-mapped reading-cycle badge (Teacher Handbook v0.4+ + Staff CoC v0.4+).
+       Renders inside the eyebrow next to "Section N" when section.weekNumber is set.
+       Cyan family matches the school-facing handbookKind colour. */
+    .hb-week-pill {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #cffafe;
+      color: #0e7490;
+      border: 1px solid #a5f3fc;
+    }
+    /* Weekly-checklist cross-ref strip inside a stage. Sits between
+       narrative + tasks. Shows anchoredWeeks + clickable task IDs. */
+    .hb-stage-cl-strip {
+      font-size: 12px; color: var(--ink-2);
+      padding: 10px 22px 12px;
+      background: linear-gradient(180deg, #ecfeff 0%, #fff 100%);
+      border-bottom: 1px solid #cffafe;
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
+    }
+    .hb-stage-cl-strip::before { content: '📅'; font-size: 12px; }
+    .hb-stage-cl-strip .label {
+      font-size: 10.5px; font-weight: 700; color: #0e7490;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .hb-stage-cl-strip .week-anchor {
+      font-size: 12px; color: #0e7490; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; background: #cffafe;
+      font-variant-numeric: tabular-nums;
+    }
+    .hb-stage-cl-strip .cl-task-id {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      padding: 2px 7px; border-radius: 4px;
+      background: #f0f9ff; color: #0c4a6e; border: 1px solid #bae6fd;
+    }
+    /* Task-level weekly-checklist task-ids (smaller, inline pill) */
+    .hb-tag.cl {
+      background: #f0f9ff; color: #0c4a6e; font-family: 'DM Mono', monospace;
+      border: 1px solid #bae6fd; font-size: 10.5px;
+    }
+    .hb-tag.cl::before { content: '📅'; font-size: 9px; }
+    .hb-stage-narrative {
+      font-size: 13px; color: var(--ink-2); line-height: 1.55;
+      padding: 14px 22px; background: #fafbfc; border-bottom: 1px solid var(--border);
+    }
+
+    /* Task rows inside stages — refined typography + meta layout.
+       Each task gets a category glyph (emoji) inferred from its
+       evidenceType, sitting to the left of the title like a list
+       bullet. Generic ◆ falls back when evidenceType is missing. */
+    .hb-task {
+      padding: 16px 22px 14px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 4px 14px;
+      align-items: start;
+    }
+    .hb-task:first-of-type { border-top: none; }
+    .hb-task-glyph {
+      grid-row: 1 / span 3;
+      font-size: 20px; line-height: 1;
+      margin-top: 1px;
+      filter: saturate(1.1);
+      user-select: none;
+    }
+    .hb-task-title {
+      grid-column: 2;
+      font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    .hb-task-desc {
+      grid-column: 2;
+      font-size: 14px; color: var(--ink-2); line-height: 1.65; margin-bottom: 10px;
+    }
+    .hb-task-meta { grid-column: 2; }
+    .hb-task-meta { display: flex; gap: 5px; flex-wrap: wrap; font-size: 11px; align-items: center; }
+    .hb-tag {
+      padding: 2px 8px; border-radius: 999px; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .hb-tag.role { background: #f3f4f6; color: #4b5563; }
+    .hb-tag.mentor { background: #fef3c7; color: #92400e; }
+    .hb-tag.mentor::before { content: '👤'; font-size: 10px; }
+    .hb-tag.minutes { background: #e0e7ff; color: #3730a3; font-feature-settings: 'tnum'; }
+    .hb-tag.minutes::before { content: '⏱'; font-size: 10px; }
+    .hb-tag.cts { background: var(--accent-2); color: var(--accent-dk); font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    .hb-tag.skl { background: #d1fae5; color: #065f46; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    .hb-tag.pigp { background: #fee2e2; color: #991b1b; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    /* ES chip (Eduversal Academic Standards — 4th chip family, 2026-05-15).
+       Cyan-deep (#0e7490) on cyan-100 (#cffafe) — Eduversal's 2nd brand
+       colour. cambridge-crossref.js auto-wires .hb-tag.es into the ES
+       popover (manifest.json lookup + deep-link to /references). */
+    .hb-tag.es { background: #cffafe; color: #0e7490; font-family: 'DM Mono', monospace; font-size: 10.5px; }
+    /* Charter Non-Negotiables — purple ⚖ chip. Click pops a tooltip
+       showing the rule verbatim from INDUCTION_CHARTER.json (loaded
+       lazily, cached). Parallel to cts/skl/pigp pattern but Charter is
+       binding (rule-enforced at firestore.rules) so colour is darker. */
+    .hb-tag.nn {
+      background: #ede9fe; color: #4c1d95;
+      font-family: 'DM Mono', monospace; font-size: 10.5px;
+      font-weight: 700;
+      cursor: help; user-select: none;
+      transition: background .12s;
+    }
+    .hb-tag.nn::before { content: '\2696'; font-size: 10px; margin-right: 2px; }
+    .hb-tag.nn:hover, .hb-tag.nn[aria-expanded="true"] { background: #ddd6fe; }
+
+    /* NN popover — anchored to chip on click, single instance reused. */
+    .hb-nn-popover {
+      position: absolute; z-index: 200;
+      max-width: 360px; padding: 12px 14px;
+      background: #fff; border: 1px solid var(--accent-2);
+      border-radius: 10px; box-shadow: 0 12px 28px -16px rgba(76,29,149,0.4);
+      font-size: 12.5px; line-height: 1.5; color: var(--ink);
+      display: none;
+    }
+    .hb-nn-popover.open { display: block; }
+    .hb-nn-popover-head {
+      font-size: 10.5px; font-weight: 700;
+      color: #4c1d95; letter-spacing: 0.06em; text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    .hb-nn-popover-head::before { content: '\2696'; font-size: 12px; }
+    .hb-nn-popover-id {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: #ede9fe; padding: 1px 6px; border-radius: 4px;
+    }
+    .hb-nn-popover-rule { color: var(--ink-2); }
+    .hb-nn-popover-source {
+      margin-top: 8px; padding-top: 6px;
+      border-top: 1px dashed var(--border);
+      font-size: 10.5px; color: var(--ink-3);
+    }
+    .hb-nn-popover-source code {
+      background: #f3f4f6; padding: 1px 4px; border-radius: 3px;
+      font-family: 'DM Mono', monospace; font-size: 10.5px;
+    }
+    .hb-tag.signoff { background: #ddd6fe; color: #5b21b6; font-weight: 700; }
+    .hb-tag.signoff::before { content: '✓'; font-weight: 800; }
+
+    .hb-substage-h {
+      font-size: 12.5px; font-weight: 700; color: var(--accent-dk);
+      padding: 10px 22px; background: #fafafa; border-top: 1px solid var(--border);
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+
+    /* Observation / walkthrough cycle — visual rotation list */
+    .hb-obs-cycle {
+      background: linear-gradient(135deg, #fafbfc 0%, #faf5ff 100%);
+      border: 1px solid var(--accent-2); border-radius: 10px;
+      padding: 14px 18px; margin: 14px 22px;
+    }
+    .hb-obs-cycle h4 {
+      font-size: 13px; font-weight: 700; color: var(--accent-dk); margin: 0 0 10px;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .hb-obs-cycle h4::before { content: '🔄'; font-size: 13px; }
+    .hb-obs-cycle ol {
+      list-style: none; counter-reset: rot; padding-left: 0; margin: 0;
+      display: grid; gap: 6px;
+    }
+    .hb-obs-cycle li {
+      counter-increment: rot;
+      padding: 8px 12px 8px 36px; position: relative;
+      background: rgba(255,255,255,0.6); border-radius: 6px;
+      font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+    }
+    .hb-obs-cycle li::before {
+      content: counter(rot);
+      position: absolute; left: 10px; top: 8px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-feature-settings: 'tnum';
+    }
+    .hb-obs-cycle li b { color: var(--ink); font-weight: 600; }
+
+    /* Escalation ladder — vertical list with level number on the left.
+       Connector line between rungs gives the "ladder" affordance. */
+    .hb-ladder { list-style: none; padding: 0; padding-inline-start: 0; margin: 0; }
+    .hb-ladder-step {
+      display: flex; gap: 14px; align-items: stretch;
+      padding: 12px 0; position: relative;
+    }
+    .hb-ladder-step + .hb-ladder-step { border-top: 1px dashed var(--border); }
+    .hb-ladder-num {
+      flex: 0 0 44px; height: 44px; border-radius: 10px;
+      background: var(--accent); color: #fff;
+      font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .hb-ladder-step:nth-child(1) .hb-ladder-num { background: #a78bfa; }
+    .hb-ladder-step:nth-child(2) .hb-ladder-num { background: #8b5cf6; }
+    .hb-ladder-step:nth-child(3) .hb-ladder-num { background: #7c3aed; }
+    .hb-ladder-step:nth-child(4) .hb-ladder-num { background: #5b21b6; }
+    .hb-ladder-body { flex: 1; min-width: 0; }
+    .hb-ladder-label {
+      font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 4px;
+    }
+    .hb-ladder-desc { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+
+    /* Key contacts — card grid (lean: taxonomy + purpose only; actual
+       contact details live in restricted CentralHub records, not here). */
+    .hb-contacts {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+    }
+    .hb-contact {
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; border-left: 3px solid var(--accent);
+    }
+    .hb-contact-id {
+      font-family: 'DM Mono', monospace; font-size: 10px;
+      color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .hb-contact-label { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }
+    .hb-contact-purpose { font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+
+    /* Open items section */
+    .hb-open-items { list-style: none; padding: 0; margin: 0; }
+    .hb-open-items li {
+      padding: 10px 14px 10px 32px; position: relative;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      font-size: 13px; line-height: 1.55; color: #78350f;
+      margin-bottom: 6px;
+    }
+    .hb-open-items li::before {
+      content: '◆'; position: absolute; left: 12px; top: 10px;
+      color: #d97706; font-size: 10px;
+    }
+
+    .hb-loading { padding: 60px 40px; text-align: center; color: var(--ink-3); }
+
+    /* PRINT — clean single-column layout, hide chrome */
+    @media print {
+      .navbar, #navbar-container, .hero-reader-back,
+      .hb-reader-toolbar, .hb-toc, .hb-section-blurb { display: none !important; }
+      body { background: #fff !important; }
+      .hero { padding: 14px 24px; }
+      .hero h1 { font-size: 1.6rem; }
+      .hero p { font-size: 12px; }
+      .hero-kpis { gap: 8px; padding-bottom: 14px; }
+      .hero-kpi { padding: 8px 12px; min-width: 100px; }
+      .hero-kpi-num { font-size: 1.4rem; }
+      .hero-kpi-primary .hero-kpi-num { font-size: 1.4rem; }
+      .hb-reader-layout {
+        grid-template-columns: 1fr; max-width: 100%; padding: 0 24px 20px;
+      }
+      .hb-content { padding-top: 16px; }
+      .hb-stage { break-inside: avoid; box-shadow: none; }
+      .hb-stage[open] .hb-stage-head { border-bottom-color: var(--border); }
+      .hb-task { break-inside: avoid; }
+      .hb-charter { background: #fef3c7 !important; border-color: #fde68a !important; }
+      a { color: var(--ink) !important; text-decoration: none !important; }
+      details[open] > * { display: block; }  /* force-open all accordions for print */
+    }
+    @page { margin: 18mm; }
+
+    .hb-loading { padding: 60px 40px; text-align: center; color: var(--ink-3); }
+
+    /* PRINT — keep readable, hide chrome. */
+    @media print {
+      .toolbar, nav, .navbar, #navbar-container { display: none !important; }
+      body { background: #fff !important; }
+      .handbook-page { max-width: 100%; padding: 20px 24px; }
+      .hb-stage { break-inside: avoid; box-shadow: none; }
+      .hb-task { break-inside: avoid; }
+      .hb-charter-box { background: #fef3c7 !important; border-color: #fde68a !important; }
+      a { color: var(--ink) !important; text-decoration: none !important; }
+    }
+    @page { margin: 18mm; }
