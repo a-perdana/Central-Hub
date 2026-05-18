@@ -413,18 +413,33 @@
     .hb-body-p strong:first-child {
       color: #0e7490;
     }
+    /* Sub-section heading inside a section body — appears between
+       paragraphs to group content (e.g. "Pattern" / "When trees disagree").
+       Mor accent rail on the left + tighter spacing reads as part of the
+       narrative without the cold ruler that the old <hr>-style border
+       suggested. */
     .hb-body-h3 {
       font-family: 'Lora', Georgia, serif;
       font-size: 17px; font-weight: 600; color: var(--ink);
-      margin: 18px 0 8px; padding-bottom: 4px;
-      border-bottom: 1px solid var(--border);
+      margin: 28px 0 10px;
+      padding: 2px 0 2px 12px;
+      border-left: 3px solid var(--accent);
+      line-height: 1.3;
     }
+    .hb-body-h3:first-child { margin-top: 6px; }
     .hb-body-h4 {
-      font-size: 14px; font-weight: 600; color: var(--ink);
-      margin: 14px 0 6px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin: 20px 0 8px;
     }
-    .hb-body-ul, .hb-body-ol { margin: 6px 0 14px; padding-left: 22px; }
-    .hb-body-ul li, .hb-body-ol li { margin-bottom: 4px; }
+    .hb-body-ul, .hb-body-ol { margin: 6px 0 14px; padding-left: 24px; }
+    .hb-body-ul li, .hb-body-ol li {
+      margin-bottom: 6px; line-height: 1.65;
+      color: var(--ink-2);
+    }
+    .hb-body-ul li::marker { color: var(--accent); }
+    .hb-body-ol li::marker { color: var(--accent); font-weight: 600; }
     .hb-body-quote {
       margin: 12px 0; padding: 10px 14px;
       background: #f9fafb; border-left: 3px solid #0ea5e9;
@@ -2341,38 +2356,60 @@
     let s = escapeHtml(String(text));
     // Step 2: split into paragraphs by blank line
     const paragraphs = s.split(/\n\s*\n/);
-    return paragraphs.map(p => {
-      const trimmed = p.trim();
-      if (!trimmed) return '';
-      // Heading lines
-      if (/^###\s+/.test(trimmed)) {
-        return `<h4 class="hb-body-h4">${inlineMd(trimmed.replace(/^###\s+/, ''))}</h4>`;
+    return paragraphs.map(p => renderParagraphBlock(p)).join('');
+  }
+
+  /* A single blank-line-separated paragraph can contain mixed content:
+     an intro line followed by bullets, or a heading-shaped first line.
+     This walks the lines and emits a sequence of HTML blocks. */
+  function renderParagraphBlock(p) {
+    const trimmed = p.trim();
+    if (!trimmed) return '';
+
+    // Whole-block matches first (heading / hr / blockquote / pure list)
+    if (/^###\s+/.test(trimmed)) {
+      return `<h4 class="hb-body-h4">${inlineMd(trimmed.replace(/^###\s+/, ''))}</h4>`;
+    }
+    if (/^##\s+/.test(trimmed)) {
+      return `<h3 class="hb-body-h3">${inlineMd(trimmed.replace(/^##\s+/, ''))}</h3>`;
+    }
+    if (/^---+$/.test(trimmed)) {
+      return `<hr class="hb-body-hr">`;
+    }
+    if (/^&gt;\s+/.test(trimmed) && trimmed.split('\n').every(l => /^&gt;\s?/.test(l) || l.trim() === '')) {
+      const quoted = trimmed.split('\n').map(l => l.replace(/^&gt;\s?/, '')).join(' ');
+      return `<blockquote class="hb-body-quote">${inlineMd(quoted)}</blockquote>`;
+    }
+
+    // Mixed content: walk the lines and group them.
+    // Buffers: collecting consecutive lines of the same kind, flushing on kind-change.
+    const lines = trimmed.split('\n');
+    const out = [];
+    let buf = [];
+    let kind = null; // 'p' | 'ul' | 'ol'
+    const flush = () => {
+      if (!buf.length) return;
+      if (kind === 'ul') {
+        out.push('<ul class="hb-body-ul">' + buf.map(l => `<li>${inlineMd(l.replace(/^[-•*]\s+/, ''))}</li>`).join('') + '</ul>');
+      } else if (kind === 'ol') {
+        out.push('<ol class="hb-body-ol">' + buf.map(l => `<li>${inlineMd(l.replace(/^\d+\.\s+/, ''))}</li>`).join('') + '</ol>');
+      } else {
+        // Paragraph — collapse internal newlines into <br>
+        out.push(`<p class="hb-body-p">${inlineMd(buf.join('<br>'))}</p>`);
       }
-      if (/^##\s+/.test(trimmed)) {
-        return `<h3 class="hb-body-h3">${inlineMd(trimmed.replace(/^##\s+/, ''))}</h3>`;
-      }
-      // Horizontal rule
-      if (/^---+$/.test(trimmed)) {
-        return `<hr class="hb-body-hr">`;
-      }
-      // Blockquote
-      if (/^&gt;\s+/.test(trimmed)) {
-        const quoted = trimmed.split('\n').map(l => l.replace(/^&gt;\s?/, '')).join(' ');
-        return `<blockquote class="hb-body-quote">${inlineMd(quoted)}</blockquote>`;
-      }
-      // Bullet list
-      if (/^[-•*]\s+/m.test(trimmed) && trimmed.split('\n').every(l => /^[-•*]\s+/.test(l) || l.trim() === '')) {
-        const items = trimmed.split('\n').filter(Boolean).map(l => `<li>${inlineMd(l.replace(/^[-•*]\s+/, ''))}</li>`).join('');
-        return `<ul class="hb-body-ul">${items}</ul>`;
-      }
-      // Numbered list
-      if (/^\d+\.\s+/.test(trimmed) && trimmed.split('\n').every(l => /^\d+\.\s+/.test(l) || l.trim() === '')) {
-        const items = trimmed.split('\n').filter(Boolean).map(l => `<li>${inlineMd(l.replace(/^\d+\.\s+/, ''))}</li>`).join('');
-        return `<ol class="hb-body-ol">${items}</ol>`;
-      }
-      // Plain paragraph — preserve single newlines as <br>
-      return `<p class="hb-body-p">${inlineMd(trimmed.replace(/\n/g, '<br>'))}</p>`;
-    }).join('');
+      buf = [];
+    };
+    for (const line of lines) {
+      const lineKind =
+        /^[-•*]\s+/.test(line)   ? 'ul' :
+        /^\d+\.\s+/.test(line)   ? 'ol' :
+        'p';
+      if (lineKind !== kind && buf.length) flush();
+      kind = lineKind;
+      buf.push(line);
+    }
+    flush();
+    return out.join('');
   }
   function inlineMd(s) {
     // Bold + italic. Already HTML-escaped, so safe to wrap with tags.
