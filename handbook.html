@@ -445,6 +445,29 @@
       background: #f9fafb; border-left: 3px solid #0ea5e9;
       color: var(--ink-2); font-style: italic;
     }
+    /* Inline markdown link inside section body. Underline appears on hover
+       to keep the prose calm; accent colour signals interactivity. */
+    .hb-body-link {
+      color: var(--accent-dk); text-decoration: none;
+      border-bottom: 1px dotted var(--accent);
+      transition: color 0.15s, border-bottom-color 0.15s;
+    }
+    .hb-body-link:hover {
+      color: var(--accent); border-bottom-color: var(--accent-dk);
+      border-bottom-style: solid;
+    }
+    /* Inline code from `text` syntax — used to flag refIds, prompt IDs,
+       Firestore field paths, etc. Light grey pill, mono font. */
+    .hb-body-code {
+      font-family: 'DM Mono', 'Menlo', monospace;
+      font-size: 0.88em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: #0e7490;
+      border: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
     .hb-body-hr {
       border: 0; height: 1px; background: var(--border);
       margin: 18px 0;
@@ -2412,10 +2435,37 @@
     return out.join('');
   }
   function inlineMd(s) {
-    // Bold + italic. Already HTML-escaped, so safe to wrap with tags.
-    return s
+    // Order matters:
+    //   1. Inline code first — its body must NOT be re-interpreted as bold /
+    //      italic / link. Stash code spans before the other transforms run,
+    //      restore them at the end.
+    //   2. Links — [label](url) — supports relative paths + http(s). Body of
+    //      label still flows through bold/italic after restore, but URL is
+    //      treated as opaque. Allows /references?doc=... query strings.
+    //   3. Bold (**…**) before italic (*…*) so '**' doesn't match the italic
+    //      pattern (legacy ordering).
+    //
+    // Input is already HTML-escaped, so '<' and '>' are safe to inject.
+    const codeStash = [];
+    let out = s.replace(/`([^`]+)`/g, (_, body) => {
+      codeStash.push(body);
+      return ` CODE${codeStash.length - 1} `;
+    });
+    // Markdown link [label](url). URL must be http(s) or start with '/' or '#'
+    // to be considered safe — anything else renders as plain text label.
+    out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, url) => {
+      const safe = /^(https?:\/\/|\/|#)/.test(url);
+      if (!safe) return label;
+      const isExternal = /^https?:\/\//.test(url);
+      const attrs = isExternal ? ' target="_blank" rel="noopener"' : '';
+      return `<a class="hb-body-link" href="${url}"${attrs}>${label}</a>`;
+    });
+    out = out
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+    // Restore code spans last so their literal content isn't re-formatted.
+    out = out.replace(/ CODE(\d+) /g, (_, idx) => `<code class="hb-body-code">${codeStash[+idx]}</code>`);
+    return out;
   }
 
   /* renderCallout — sidebar boxes inside a section body. Four types,
