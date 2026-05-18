@@ -392,18 +392,23 @@
   function renderSubsectionsSection(label, items) {
     if (!Array.isArray(items) || !items.length) return null;
     if (!items.every(it => it && typeof it === 'object' && Array.isArray(it.content))) return null;
-    const cards = items.map(sub => {
+    /* Native <details> accordion: only the first subsection opens by default —
+       keeps long policy sections (ES 5 has 17 subsections) scannable. Users can
+       expand others one at a time without JS overhead. */
+    const cards = items.map((sub, idx) => {
       const id    = typeof sub.id === 'string' ? sub.id : '';
       const title = typeof sub.title === 'string' ? sub.title : '';
       const blocks = sub.content.map(renderContentBlock).filter(Boolean).join('');
+      const openAttr = idx === 0 ? ' open' : '';
       return `
-        <article class="doc-view-subsection">
-          <header class="doc-view-subsection-head">
+        <details class="doc-view-subsection"${openAttr}>
+          <summary class="doc-view-subsection-head">
             ${id ? `<span class="doc-view-subsection-id">${escapeHtml(id)}</span>` : ''}
-            ${title ? `<h4 class="doc-view-subsection-title">${richString(title)}</h4>` : ''}
-          </header>
+            ${title ? `<span class="doc-view-subsection-title">${richString(title)}</span>` : ''}
+            <span class="doc-view-subsection-chevron" aria-hidden="true">▸</span>
+          </summary>
           ${blocks ? `<div class="doc-view-subsection-body">${blocks}</div>` : ''}
-        </article>`;
+        </details>`;
     }).join('');
     return `
       <section class="doc-view-section">
