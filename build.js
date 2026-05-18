@@ -693,6 +693,29 @@ const refAssetMap = [
     ];
   }),
 
+  // ── AI Competency Framework v1.0 (AICF) ─────────────────────
+  // Mirror the framework spine + 4 reference JSONs (verbatim PDF parts) +
+  // 6 practical layer JSONs into references-data/ so the /references hub
+  // can index, search, and deep-link them (?doc=aicf-...). Source is the
+  // same monorepo tree the 3 reader pages (/ai-framework-{teacher,student,
+  // institutional}) and the chip family already consume, so this is a
+  // duplicate-mirror — both copies stay in sync via this single build step.
+  ["aicf/manifest.json",                  path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "manifest.json")],
+  ["aicf/eduversal-v1-part1-teacher.json", path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "eduversal-v1-part1-teacher.json")],
+  ["aicf/eduversal-v1-part2-student.json", path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "eduversal-v1-part2-student.json")],
+  ["aicf/eduversal-v1-part3-institutional.json", path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "eduversal-v1-part3-institutional.json")],
+  ["aicf/eduversal-v1-appendices.json",   path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "eduversal-v1-appendices.json")],
+  ["aicf/unesco-ai-cft-2024.json",        path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "unesco-ai-cft-2024.json")],
+  ["aicf/external-sources-index.json",    path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "external-sources-index.json")],
+  ["aicf/teacher-playbook.json",          path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "teacher-playbook.json")],
+  ["aicf/leader-playbook.json",           path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "leader-playbook.json")],
+  ["aicf/specialist-playbook.json",       path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "specialist-playbook.json")],
+  ["aicf/prompt-library.json",            path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "prompt-library.json")],
+  ["aicf/redFlagsAndRedlines.json",       path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "redFlagsAndRedlines.json")],
+  ["aicf/decision-trees.json",            path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "decision-trees.json")],
+  ["aicf/weekly-tips.json",               path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "weekly-tips.json")],
+  ["aicf/classroom-activities.json",      path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "classroom-activities.json")],
+
   // ── Schemas & Governance ────────────────────────────────────
   ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "architecture", "FIRESTORE_SCHEMA.md")],
   ["schemas/DESIGN_SYSTEM.md",                     path.join("..", "docs", "architecture", "DESIGN_SYSTEM.md")],
