@@ -5289,7 +5289,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   function renderCallout(c) {
     if (!c || !c.type) return '';
     const items = Array.isArray(c.items) ? c.items : [];
-    const itemsHtml = items.map(x => `<li>${escapeHtml(x)}</li>`).join('');
+    // Defensive guard: strip leading "1. " / "2. " etc. from items so that
+    // hand-authored JSON that prefixed each line never double-numbers when
+    // rendered inside an <ol>. Past bug 2026-05-18: quick_ref_card on Staff
+    // CoC s2 rendered "1. 1. Stop. Listen." Caused by <ol> + prefixed string.
+    const cleanItem = (s) => typeof s === 'string' ? s.replace(/^\s*\d+\.\s+/, '') : s;
+    const itemsHtml = items.map(x => `<li>${escapeHtml(cleanItem(x))}</li>`).join('');
     const label = escapeHtml(c.label || '');
     switch (c.type) {
       case 'school_slot_inline':
