@@ -3440,9 +3440,83 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       white-space: nowrap;
     }
     .hb-body-hr {
-      border: 0; height: 1px; background: var(--border);
-      margin: 18px 0;
+      border: 0; height: 0; margin: 22px auto;
+      width: 80px; text-align: center;
+      color: var(--accent); opacity: 0.55;
     }
+    .hb-body-hr::before {
+      content: '· · ·';
+      font-size: 14px; letter-spacing: 0.4em;
+      font-weight: 700;
+    }
+
+    /* ── Numbered-value cards ───────────────────────────────────────
+       Authored value lists ("1. **We respect every child.** Every…")
+       and inline numbered enumerations ("Three commitments. (1) X. (2)
+       Y.") get auto-promoted by renderBodyMarkdown into a card grid.
+       Visually distinct from <ol> — each card has a numbered chip on
+       the left, the value title bold, then the rationale below. */
+    .hb-value-grid {
+      display: grid; gap: 10px;
+      margin: 14px 0 18px;
+      grid-template-columns: 1fr;
+    }
+    .hb-value-card {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 4px 14px;
+      align-items: start;
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+      border: 1px solid #ede9fe;
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+    }
+    .hb-value-card-num {
+      grid-row: 1 / span 2;
+      width: 34px; height: 34px; border-radius: 999px;
+      background: #fff; border: 2px solid var(--accent);
+      color: var(--accent-dk);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: 'Lora', serif; font-weight: 700; font-size: 15px;
+      box-shadow: 0 1px 3px rgba(108,92,231,0.18);
+      align-self: center;
+    }
+    .hb-value-card-title {
+      grid-column: 2;
+      font-size: 14.5px; font-weight: 700;
+      color: var(--ink); line-height: 1.35;
+    }
+    .hb-value-card-body {
+      grid-column: 2;
+      font-size: 14px; color: var(--ink-2); line-height: 1.6;
+    }
+    .hb-value-card.no-body .hb-value-card-title { grid-column: 2; align-self: center; }
+    .hb-value-grid.is-inline .hb-value-card { padding: 10px 14px; }
+    .hb-value-grid.is-inline .hb-value-card-num {
+      width: 28px; height: 28px; font-size: 13px;
+    }
+    .hb-value-grid.is-inline .hb-value-card-title { font-size: 14px; }
+    .hb-value-grid.is-inline .hb-value-card-body { font-size: 13.5px; }
+    .hb-value-leadin {
+      font-size: 13.5px; color: var(--ink-3); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin: 4px 0 8px;
+    }
+    /* CH school-facing variant — switch card accent to cyan (matches
+       the section's cyan rail) so values feel like part of the chapter
+       rather than a foreign mor block. */
+    .hb-stage.hb-sec-school .hb-value-card {
+      background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+      border-color: #cffafe;
+      border-left-color: #0891b2;
+    }
+    .hb-stage.hb-sec-school .hb-value-card-num {
+      border-color: #0891b2; color: #0e7490;
+      box-shadow: 0 1px 3px rgba(14,116,144,0.18);
+    }
+    .hb-stage.hb-sec-school .hb-value-leadin { color: #0e7490; }
+
     .hb-section-slot-guide {
       margin: 8px 4px 12px;
       padding: 10px 14px;
@@ -5373,6 +5447,71 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     if (/^&gt;\s+/.test(trimmed) && trimmed.split('\n').every(l => /^&gt;\s?/.test(l) || l.trim() === '')) {
       const quoted = trimmed.split('\n').map(l => l.replace(/^&gt;\s?/, '')).join(' ');
       return `<blockquote class="hb-body-quote">${inlineMd(quoted)}</blockquote>`;
+    }
+
+    // Block-level value cards — every line starts with `\d+. **Title.**`.
+    // Promotes a numbered value list with bold titles into a card grid
+    // (visually distinct from <ol>, makes 6-promise / 5-commitment lists
+    // far more scannable).
+    const blockLines = trimmed.split('\n').filter(Boolean);
+    if (blockLines.length >= 2 && blockLines.every(l => /^\d+\.\s+\*\*[^*]+\*\*/.test(l))) {
+      const cards = blockLines.map(l => {
+        const m = l.match(/^(\d+)\.\s+\*\*([^*]+)\*\*\s*(.*)$/);
+        if (!m) return '';
+        const num = m[1];
+        const title = inlineMd(m[2].trim());
+        const body = inlineMd(m[3].trim().replace(/^[-—–:.\s]+/, ''));
+        return `<div class="hb-value-card${body ? '' : ' no-body'}">
+          <div class="hb-value-card-num">${num}</div>
+          <div class="hb-value-card-title">${title}</div>
+          ${body ? `<div class="hb-value-card-body">${body}</div>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="hb-value-grid">${cards}</div>`;
+    }
+
+    // Inline value cards — single paragraph with ≥2 `(N) X` enumerations.
+    // Pre-(1) text becomes a small uppercase lead-in when short, or a
+    // normal paragraph when long.
+    const inlineMatches = trimmed.match(/\((\d)\)\s+/g);
+    if (inlineMatches && inlineMatches.length >= 2 && !/\n/.test(trimmed)) {
+      const firstIdx = trimmed.indexOf('(1) ');
+      if (firstIdx >= 0) {
+        const leadin = firstIdx > 0 ? trimmed.slice(0, firstIdx).trim() : '';
+        const rest = trimmed.slice(firstIdx);
+        const parts = rest.split(/\((\d)\)\s+/).filter(x => x !== '');
+        if (parts.length >= 4 && parts.length % 2 === 0) {
+          const cards = [];
+          for (let i = 0; i < parts.length; i += 2) {
+            const num = parts[i];
+            const body = parts[i + 1].trim().replace(/\s+/g, ' ');
+            if (!body) continue;
+            let title = body, rationale = '';
+            const dashSplit = body.match(/^([^—–\-]+?)\s+[—–\-]\s+(.+)$/);
+            if (dashSplit) {
+              title = dashSplit[1].trim();
+              rationale = dashSplit[2].trim();
+            }
+            cards.push(`<div class="hb-value-card${rationale ? '' : ' no-body'}">
+              <div class="hb-value-card-num">${num}</div>
+              <div class="hb-value-card-title">${inlineMd(title)}</div>
+              ${rationale ? `<div class="hb-value-card-body">${inlineMd(rationale)}</div>` : ''}
+            </div>`);
+          }
+          if (cards.length >= 2) {
+            let leadinHtml = '';
+            if (leadin) {
+              const stripped = leadin.replace(/[.:]\s*$/, '');
+              if (leadin.length <= 80) {
+                leadinHtml = `<div class="hb-value-leadin">${inlineMd(stripped)}</div>`;
+              } else {
+                leadinHtml = `<p class="hb-body-p">${inlineMd(leadin)}</p>`;
+              }
+            }
+            return `${leadinHtml}<div class="hb-value-grid is-inline">${cards.join('')}</div>`;
+          }
+        }
+      }
     }
 
     // Mixed content: walk the lines and group them.
