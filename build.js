@@ -353,7 +353,7 @@ const htmlFiles = [
   "schools.html",
   "pilot-enrolment.html",
   "staff.html",
-  "documents.html",
+  "inventory.html",
   "login.html",
   "academic-calendar.html",
   "appraisals.html",

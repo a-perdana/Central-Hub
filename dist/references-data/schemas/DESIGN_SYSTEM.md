@@ -153,6 +153,41 @@ If you need `z-index: 9999`, you're fighting the system. Stop and check whether 
 
 ---
 
+## Page families & canonical hero
+
+Feature pages (user-facing content surfaces — NOT dashboards, NOT admin/authoring tools) belong to one of **four families**. The family chooses the hero gradient + accent; the page does not pick its own colour scheme.
+
+**Why this exists:** the 2026-05-19 audit found 6 hero gradients across 6 hero-bearing CH pages (notifications cyan, library dark-purple, references mor, handbook mor, my-induction dark-card, roles-positions dark-card, my-school-visits 3-window). Each carried 50-300 lines of bespoke hero CSS. The families collapse that to 3 canonical gradients consumed via `data-accent` on `.page-hero`.
+
+| Family | Accent | Pages | Hero variant |
+|---|---|---|---|
+| **Communication** — feeds, threads, broadcast | cyan `#0891b2` | `message-board`, `announcements`, `notifications` | `data-accent="cyan"` → `--hero-grad-cyan` |
+| **Knowledge** — read/browse content, reference, taxonomy | mor `#6c5ce7` | `references`, `handbook`, `library`, `roles-positions` | `data-accent="mor"` → `--hero-grad-mor` |
+| **My Work** — per-uid CPD / induction / personal surfaces | mor on dark | `my-induction`, `my-school-visits` | `data-accent="dark"` → `--hero-grad-dark` |
+| **Operations** — record-keeping, inventory, logs | neutral (no hero accent stripe) | `documents` / `inventory` | no hero — plain `<h1 class="page-title">` |
+
+**Canonical markup** (in any feature page that has a hero):
+
+```html
+<header class="page-hero" data-accent="cyan">
+  <div class="page-hero__inner">
+    <div class="page-hero__icon" aria-hidden="true"><!-- optional 64px square --></div>
+    <div class="page-hero__text">
+      <p class="page-hero__eyebrow">Platform Activity · CentralHub</p>
+      <h1 class="page-hero__title">Notifications</h1>
+      <p class="page-hero__desc">All platform activity in one place...</p>
+    </div>
+    <aside class="page-hero__kpis"><!-- optional: 1–4 .page-hero__kpi tiles --></aside>
+  </div>
+</header>
+```
+
+Don't write a new gradient. Don't override `.page-hero` background in a page `<style>` block. If a future page genuinely needs a 4th family (e.g. ever a "Wellbeing" zone), add it to this table FIRST and add `--hero-grad-<name>` to `tokens.css` — page-level invention is forbidden.
+
+The same discipline applies to **shared chrome under the hero** — `.page-toolbar` (sticky filter/search bar) and `.page-empty` (empty state with icon + title + desc) live in `shared-styles.css`; don't fork them per page.
+
+---
+
 ## Per-app status
 
 | App | Has shared `tokens.css`? | Has `base.css`? | Brand consistency |
