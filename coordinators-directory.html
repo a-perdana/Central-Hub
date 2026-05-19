@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coordinators Directory — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .main-content { padding: 24px 32px; width: min(100%, 1180px); margin: 0 auto; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .main-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .main-header .subtitle { font-size: 0.86rem; color: var(--ink-3); margin-top: 4px; }
+
+    .cd-filter-bar { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 18px; background: var(--white); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; align-items: center; }
+    .cd-filter { padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); cursor: pointer; }
+    .cd-filter:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .cd-search-wrap { position: relative; flex: 1; min-width: 200px; }
+    .cd-search { width: 100%; padding: 7px 12px 7px 32px; border: 1px solid var(--border); border-radius: 7px; font-size: 0.84rem; color: var(--ink); background: var(--paper); }
+    .cd-search:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .cd-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+    .cd-btn-add { padding: 8px 16px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .12s; }
+    .cd-btn-add:hover { opacity: 0.9; transform: translateY(-1px); }
+    .cd-btn-add:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* === Tabs === */
+    .cd-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+    .cd-tab { padding: 9px 14px; background: none; border: none; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; transition: all .12s; font-weight: 500; }
+    .cd-tab:hover { color: var(--ink-2); }
+    .cd-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .cd-tab-count { background: var(--paper-2); padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 5px; color: var(--ink-3); }
+    .cd-tab.active .cd-tab-count { background: #ede9fe; color: var(--accent); }
+
+    /* === Cards grid === */
+    .entries-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .entry-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow-sm); transition: box-shadow .15s; position: relative; }
+    .entry-card:hover { box-shadow: var(--shadow); }
+    .entry-card.archived { opacity: 0.55; border-style: dashed; }
+    .ec-row1 { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .ec-avatar { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; flex-shrink: 0; font-size: 0.9rem; }
+    .ec-avatar.hq_coordinator { background: linear-gradient(135deg,#7c3aed,#0891b2); }
+    .ec-avatar.school_subject_leader { background: linear-gradient(135deg,#10b981,#047857); }
+    .ec-avatar.grade_coordinator { background: linear-gradient(135deg,#f59e0b,#b45309); }
+    .ec-name { font-weight: 600; color: var(--ink); font-size: 0.95rem; line-height: 1.25; }
+    .ec-kind { font-size: 0.72rem; color: var(--ink-3); margin-top: 1px; }
+    .ec-pills { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 8px; }
+    .ec-pill { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+    .ec-pill.subj { background: #eff6ff; color: #1d4ed8; }
+    .ec-pill.grade { background: #fef3c7; color: #92400e; }
+    .ec-pill.school { background: #d1fae5; color: #065f46; }
+    .ec-meta { font-size: 0.78rem; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
+    .ec-meta a { color: var(--accent); text-decoration: none; }
+    .ec-meta a:hover { text-decoration: underline; }
+    .ec-notes { font-size: 0.78rem; color: var(--ink-3); margin-top: 8px; font-style: italic; line-height: 1.4; }
+    .ec-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+    .entry-card:hover .ec-actions { opacity: 1; }
+    .ec-icon-btn { width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .ec-icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .ec-icon-btn.danger:hover { color: #dc2626; border-color: #fecdd3; background: #fff1f2; }
+
+    /* === Modal === */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--white); border-radius: 12px; width: 100%; max-width: 520px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
+    .modal-head { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); }
+    .modal-head h3 { font-family: 'Lora', serif; font-size: 1.1rem; font-weight: 600; color: var(--ink); }
+    .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; background: var(--paper); }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--ink-3); background: var(--white); border: 1px dashed var(--border); border-radius: 10px; }
+    .empty-state h3 { font-family: 'Lora', serif; color: var(--ink); margin-bottom: 6px; font-size: 1.05rem; }
+
+    .readonly-banner { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 0.84rem; color: #92400e; }
+
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 0.86rem; font-weight: 500; z-index: 9999; opacity: 0; transition: all .25s; pointer-events: none; max-width: 460px; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <main class="main-content" id="mainRoot" style="display:none">
+    <div class="main-header">
+      <div>
+        <h1>Coordinators Directory</h1>
+        <div class="subtitle">HQ Coordinators · per-school Subject Leaders · per-grade Grade Coordinators (e.g. EASE G7-G12).</div>
+      </div>
+      <button class="cd-btn-add" id="btnAdd">+ New entry</button>
+    </div>
+
+    <div id="readonlyBanner" class="readonly-banner" style="display:none">
+      Read-only view — directory curation is restricted to <strong>central_admin</strong> and <strong>director</strong>. Ask one of them to add or correct an entry.
+    </div>
+
+    <div class="cd-filter-bar">
+      <div class="cd-search-wrap">
+        <svg class="cd-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="cd-search" id="filterSearch" placeholder="Search name, email, or notes…">
+      </div>
+      <select class="cd-filter" id="filterSubject">
+        <option value="">All subjects</option>
+      </select>
+      <select class="cd-filter" id="filterSchool">
+        <option value="">All schools</option>
+      </select>
+      <select class="cd-filter" id="filterGrade">
+        <option value="">All grades</option>
+        <option value="7">G7</option><option value="8">G8</option><option value="9">G9</option>
+        <option value="10">G10</option><option value="11">G11</option><option value="12">G12</option>
+      </select>
+      <select class="cd-filter" id="filterStatus">
+        <option value="active">Active</option>
+        <option value="archived">Archived</option>
+        <option value="all">All</option>
+      </select>
+    </div>
+
+    <div class="cd-tabs">
+      <button class="cd-tab active" data-tab="all">All <span class="cd-tab-count" id="cntAll">0</span></button>
+      <button class="cd-tab" data-tab="hq_coordinator">HQ Coordinators <span class="cd-tab-count" id="cntHq">0</span></button>
+      <button class="cd-tab" data-tab="school_subject_leader">School Subject Leaders <span class="cd-tab-count" id="cntSl">0</span></button>
+      <button class="cd-tab" data-tab="grade_coordinator">Grade Coordinators <span class="cd-tab-count" id="cntGc">0</span></button>
+    </div>
+
+    <div class="entries-grid" id="entriesGrid"></div>
+  </main>
+
+  <!-- Add / Edit modal -->
+  <div class="modal-overlay" id="modalEntry">
+    <div class="modal">
+      <div class="modal-head"><h3 id="modalTitle">New entry</h3></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Entry kind</label>
+          <select class="form-select" id="eKind">
+            <option value="hq_coordinator">HQ Coordinator (Eduversal HQ)</option>
+            <option value="school_subject_leader">School Subject Leader (per-school)</option>
+            <option value="grade_coordinator">Grade Coordinator (e.g. EASE G7-G12)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Display name</label>
+          <input type="text" class="form-input" id="eName" placeholder="Full name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="eEmail" placeholder="name@eduversal.org or @school domain">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone (optional)</label>
+          <input type="tel" class="form-input" id="ePhone" placeholder="+62…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Subject</label>
+          <select class="form-select" id="eSubject">
+            <option value="">— None / cross-subject —</option>
+          </select>
+        </div>
+        <div class="form-group" id="eSchoolGroup">
+          <label class="form-label">School</label>
+          <select class="form-select" id="eSchool">
+            <option value="">— None —</option>
+          </select>
+        </div>
+        <div class="form-group" id="eGradeGroup" style="display:none">
+          <label class="form-label">Grade level</label>
+          <select class="form-select" id="eGrade">
+            <option value="">— None —</option>
+            <option value="7">Grade 7</option><option value="8">Grade 8</option>
+            <option value="9">Grade 9</option><option value="10">Grade 10</option>
+            <option value="11">Grade 11</option><option value="12">Grade 12</option>
+          </select>
+          <label class="form-label" style="margin-top:8px;">Grade context (optional tag)</label>
+          <input type="text" class="form-input" id="eGradeContext" placeholder="e.g. ease_g7, ease_g8">
+          <div class="form-hint">Open string. Today's usage: EASE per-grade committees from the meeting corpus.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role notes (optional)</label>
+          <textarea class="form-textarea" id="eNotes" rows="2" placeholder="e.g. EASE Committee member; cross-subject Olympiad lead."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Linked user (optional)</label>
+          <select class="form-select" id="eUser">
+            <option value="">— Not on platform yet —</option>
+          </select>
+          <div class="form-hint">Pick a CH / AH / TH user if this person already has an account. Skip if they haven't onboarded yet.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="eStatus">
+            <option value="active" selected>Active</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" id="modalCancel">Cancel</button>
+        <button class="btn-save" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  collection, query, where, orderBy, onSnapshot,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, limit
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion'];
+const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion' };
+const KIND_LABELS = {
+  hq_coordinator: 'HQ Coordinator',
+  school_subject_leader: 'School Subject Leader',
+  grade_coordinator: 'Grade Coordinator',
+};
+
+let db, currentUser, userProfile;
+let isAdmin = false, isDirector = false, canEdit = false;
+let allEntries = [];
+let allSchools = [];
+let allUsers = [];
+let activeTab = 'all';
+let editingId = null;
+
+const $ = (id) => document.getElementById(id);
+const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function initials(name) {
+  return String(name || '?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
+}
+
+document.addEventListener('authReady', async () => {
+  currentUser = window.currentUser;
+  userProfile = window.userProfile || {};
+  db = window.db;
+
+  isAdmin = userProfile.role_centralhub === 'central_admin';
+  const subRoles = Array.isArray(userProfile.ch_sub_roles) ? userProfile.ch_sub_roles : [];
+  isDirector = isAdmin || subRoles.includes('director');
+  const isCoord = subRoles.includes('coordinator');
+  canEdit = isAdmin || isDirector;
+
+  if (!isAdmin && !isDirector && !isCoord) {
+    location.href = '/?denied=coordinators-directory';
+    return;
+  }
+
+  $('mainRoot').style.display = 'block';
+  if (!canEdit) {
+    $('readonlyBanner').style.display = 'block';
+    $('btnAdd').disabled = true;
+  }
+
+  populateSubjectFilter();
+  await prefetchSchools();
+  await prefetchUsers();
+  populateModalDropdowns();
+  wireUI();
+  subscribeEntries();
+});
+
+async function prefetchSchools() {
+  try {
+    const snap = await getDocs(query(collection(db, 'partner_schools'), limit(50)));
+    allSchools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('[prefetchSchools]', err);
+    allSchools = [];
+  }
+}
+
+async function prefetchUsers() {
+  try {
+    // Pull a reasonable working set across hubs. The directory entry's
+    // 'linked user' field is optional, so falling back to the email
+    // string when a user isn't found in this cache is fine.
+    const snap = await getDocs(query(collection(db, 'users'), limit(500)));
+    allUsers = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('[prefetchUsers]', err);
+    allUsers = [];
+  }
+}
+
+function populateSubjectFilter() {
+  const sel = $('filterSubject');
+  sel.innerHTML = '<option value="">All subjects</option>' +
+    CH_SUBJECTS.map(s => `<option value="${s}">${SUBJECT_LABELS[s]}</option>`).join('');
+}
+
+function populateModalDropdowns() {
+  $('eSubject').innerHTML = '<option value="">— None / cross-subject —</option>' +
+    CH_SUBJECTS.map(s => `<option value="${s}">${SUBJECT_LABELS[s]}</option>`).join('');
+
+  $('eSchool').innerHTML = '<option value="">— None —</option>' +
+    allSchools.map(s => `<option value="${s.id}">${escHtml(s.name || s.id)}</option>`).join('');
+
+  $('filterSchool').innerHTML = '<option value="">All schools</option>' +
+    allSchools.map(s => `<option value="${s.id}">${escHtml(s.name || s.id)}</option>`).join('');
+
+  $('eUser').innerHTML = '<option value="">— Not on platform yet —</option>' +
+    allUsers
+      .filter(u => u.displayName || u.email)
+      .sort((a, b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''))
+      .map(u => `<option value="${u.uid}">${escHtml(u.displayName || u.email)}</option>`)
+      .join('');
+}
+
+function wireUI() {
+  $('btnAdd').addEventListener('click', () => openModal(null));
+  $('modalCancel').addEventListener('click', closeModal);
+  $('modalSave').addEventListener('click', saveEntry);
+
+  document.querySelectorAll('.cd-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.cd-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      activeTab = t.dataset.tab;
+      renderGrid();
+    });
+  });
+
+  ['filterSearch','filterSubject','filterSchool','filterGrade','filterStatus'].forEach(id => {
+    $(id).addEventListener(id === 'filterSearch' ? 'input' : 'change', renderGrid);
+  });
+
+  $('eKind').addEventListener('change', () => {
+    const kind = $('eKind').value;
+    $('eGradeGroup').style.display = kind === 'grade_coordinator' ? 'block' : 'none';
+    $('eSchoolGroup').style.display = (kind === 'school_subject_leader' || kind === 'grade_coordinator') ? 'block' : 'none';
+  });
+}
+
+function subscribeEntries() {
+  const q = query(
+    collection(db, 'coordinators_directory_entries'),
+    orderBy('displayName', 'asc'),
+    limit(500)
+  );
+  onSnapshot(q, (snap) => {
+    allEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderGrid();
+  }, (err) => {
+    console.error('[subscribeEntries]', err);
+    $('entriesGrid').innerHTML = `<div class="empty-state"><h3>Could not load</h3><p>${escHtml(err.code || err.message)}</p></div>`;
+  });
+}
+
+function renderGrid() {
+  const search = ($('filterSearch').value || '').trim().toLowerCase();
+  const subF = $('filterSubject').value;
+  const schF = $('filterSchool').value;
+  const grdF = $('filterGrade').value;
+  const statF = $('filterStatus').value;
+
+  // Tab counts
+  const counts = { all: 0, hq_coordinator: 0, school_subject_leader: 0, grade_coordinator: 0 };
+  for (const e of allEntries) {
+    if ((e.status || 'active') !== 'active' && statF === 'active') continue;
+    counts.all += 1;
+    if (counts.hasOwnProperty(e.entryKind)) counts[e.entryKind] += 1;
+  }
+  $('cntAll').textContent = counts.all;
+  $('cntHq').textContent = counts.hq_coordinator;
+  $('cntSl').textContent = counts.school_subject_leader;
+  $('cntGc').textContent = counts.grade_coordinator;
+
+  const filtered = allEntries.filter(e => {
+    const st = e.status || 'active';
+    if (statF === 'active' && st !== 'active') return false;
+    if (statF === 'archived' && st !== 'archived') return false;
+    if (activeTab !== 'all' && e.entryKind !== activeTab) return false;
+    if (subF && e.subjectId !== subF) return false;
+    if (schF && e.schoolId !== schF) return false;
+    if (grdF && String(e.gradeLevel || '') !== grdF) return false;
+    if (search) {
+      const hay = `${e.displayName || ''} ${e.email || ''} ${e.roleNotes || ''}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const grid = $('entriesGrid');
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state"><h3>No entries match</h3><p>${canEdit ? 'Try clearing filters, or hit <strong>+ New entry</strong> to add one.' : 'Ask a director to populate the directory.'}</p></div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(renderCard).join('');
+
+  grid.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openModal(b.dataset.edit)));
+  grid.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', () => confirmDelete(b.dataset.delete, b)));
+}
+
+function renderCard(e) {
+  const kind = e.entryKind || 'hq_coordinator';
+  const status = e.status || 'active';
+  const school = allSchools.find(s => s.id === e.schoolId);
+  const linkedUser = e.userId ? allUsers.find(u => u.uid === e.userId) : null;
+
+  const pills = [];
+  if (e.subjectId) pills.push(`<span class="ec-pill subj">${SUBJECT_LABELS[e.subjectId] || e.subjectId}</span>`);
+  if (e.gradeLevel) pills.push(`<span class="ec-pill grade">G${e.gradeLevel}${e.gradeContext ? ` · ${escHtml(e.gradeContext)}` : ''}</span>`);
+  if (school || e.schoolName) pills.push(`<span class="ec-pill school">${escHtml(school?.name || e.schoolName)}</span>`);
+
+  const meta = [];
+  if (e.email) meta.push(`<a href="mailto:${escHtml(e.email)}">${escHtml(e.email)}</a>`);
+  if (e.phone) meta.push(`<a href="tel:${escHtml(e.phone)}">${escHtml(e.phone)}</a>`);
+  if (linkedUser) meta.push(`<span style="color:var(--ink-3);font-size:0.72rem">✓ Linked to ${escHtml(linkedUser.displayName || linkedUser.email)}</span>`);
+
+  const actions = canEdit ? `
+    <div class="ec-actions">
+      <button class="ec-icon-btn" data-edit="${e.id}" title="Edit">✎</button>
+      ${isAdmin ? `<button class="ec-icon-btn danger" data-delete="${e.id}" data-confirming="false" title="Delete">×</button>` : ''}
+    </div>
+  ` : '';
+
+  return `
+    <div class="entry-card ${status}">
+      ${actions}
+      <div class="ec-row1">
+        <div class="ec-avatar ${kind}">${initials(e.displayName)}</div>
+        <div style="min-width:0;flex:1;">
+          <div class="ec-name">${escHtml(e.displayName || 'Unnamed')}</div>
+          <div class="ec-kind">${KIND_LABELS[kind] || kind}</div>
+        </div>
+      </div>
+      ${pills.length ? `<div class="ec-pills">${pills.join('')}</div>` : ''}
+      <div class="ec-meta">${meta.join('') || '<span style="color:var(--ink-3);font-style:italic">No contact details on file</span>'}</div>
+      ${e.roleNotes ? `<div class="ec-notes">${escHtml(e.roleNotes)}</div>` : ''}
+    </div>
+  `;
+}
+
+function openModal(entryId) {
+  editingId = entryId;
+  if (entryId) {
+    const e = allEntries.find(x => x.id === entryId);
+    if (!e) { showToast('Not found.'); return; }
+    $('modalTitle').textContent = 'Edit entry';
+    $('eKind').value = e.entryKind || 'hq_coordinator';
+    $('eName').value = e.displayName || '';
+    $('eEmail').value = e.email || '';
+    $('ePhone').value = e.phone || '';
+    $('eSubject').value = e.subjectId || '';
+    $('eSchool').value = e.schoolId || '';
+    $('eGrade').value = e.gradeLevel || '';
+    $('eGradeContext').value = e.gradeContext || '';
+    $('eNotes').value = e.roleNotes || '';
+    $('eUser').value = e.userId || '';
+    $('eStatus').value = e.status || 'active';
+  } else {
+    $('modalTitle').textContent = 'New entry';
+    $('eKind').value = 'hq_coordinator';
+    $('eName').value = '';
+    $('eEmail').value = '';
+    $('ePhone').value = '';
+    $('eSubject').value = '';
+    $('eSchool').value = '';
+    $('eGrade').value = '';
+    $('eGradeContext').value = '';
+    $('eNotes').value = '';
+    $('eUser').value = '';
+    $('eStatus').value = 'active';
+  }
+  // Sync conditional groups
+  $('eKind').dispatchEvent(new Event('change'));
+  $('modalEntry').classList.add('open');
+}
+
+function closeModal() {
+  $('modalEntry').classList.remove('open');
+  editingId = null;
+}
+
+async function saveEntry() {
+  const name = $('eName').value.trim();
+  if (!name) { showToast('Display name required.'); return; }
+  const kind = $('eKind').value;
+  const subjectId = $('eSubject').value || null;
+  const schoolId = $('eSchool').value || null;
+  const gradeLevel = $('eGrade').value ? parseInt($('eGrade').value, 10) : null;
+  const userId = $('eUser').value || null;
+
+  const school = allSchools.find(s => s.id === schoolId);
+  const payload = {
+    entryKind: kind,
+    displayName: name,
+    email: $('eEmail').value.trim(),
+    phone: $('ePhone').value.trim(),
+    subjectId,
+    schoolId,
+    schoolName: school ? (school.name || schoolId) : null,
+    gradeLevel,
+    gradeContext: $('eGradeContext').value.trim(),
+    roleNotes: $('eNotes').value.trim(),
+    userId,
+    status: $('eStatus').value,
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    if (editingId) {
+      await updateDoc(doc(db, 'coordinators_directory_entries', editingId), payload);
+      showToast('Entry updated.');
+    } else {
+      payload.createdBy = currentUser.uid;
+      payload.createdAt = serverTimestamp();
+      await addDoc(collection(db, 'coordinators_directory_entries'), payload);
+      showToast('Entry added.');
+    }
+    closeModal();
+  } catch (err) {
+    console.error('[saveEntry]', err);
+    showToast(`Save failed: ${err.code || err.message}`);
+  }
+}
+
+async function confirmDelete(id, btn) {
+  if (!isAdmin) { showToast('Only admin can delete.'); return; }
+  if (btn.dataset.confirming === 'true') {
+    btn.dataset.confirming = 'false';
+    btn.textContent = '×';
+    try {
+      await deleteDoc(doc(db, 'coordinators_directory_entries', id));
+      showToast('Entry deleted.');
+    } catch (err) {
+      console.error('[deleteEntry]', err);
+      showToast(`Delete failed: ${err.code || err.message}`);
+    }
+    return;
+  }
+  btn.dataset.confirming = 'true';
+  btn.textContent = '!';
+  setTimeout(() => {
+    if (btn.dataset.confirming === 'true') {
+      btn.dataset.confirming = 'false';
+      btn.textContent = '×';
+    }
+  }, 3000);
+}
+</script>
+</body>
+</html>

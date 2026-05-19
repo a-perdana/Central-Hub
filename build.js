@@ -445,6 +445,7 @@ const htmlFiles = [
   "coordinators-meetings.html",
   "department-artifacts.html",
   "decisions-register.html",
+  "coordinators-directory.html",
 ];
 
 htmlFiles.forEach((file) => {
