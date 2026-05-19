@@ -65,6 +65,32 @@
 .skel { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
+/* ── New-user intro banner (dismissable) ─────────────────────── */
+.page-intro {
+  display: none;
+  background: linear-gradient(135deg, #ede9fe 0%, #e0f2fe 100%);
+  border: 1px solid #c4b5fd; border-radius: 14px;
+  padding: 16px 20px 16px 18px; margin-bottom: 22px;
+  position: relative;
+}
+.page-intro.show { display: flex; gap: 14px; align-items: flex-start; }
+.page-intro-icon { font-size: 22px; flex-shrink: 0; padding-top: 1px; }
+.page-intro-body { flex: 1; min-width: 0; padding-right: 26px; }
+.page-intro-title { font-size: 13.5px; font-weight: 700; color: var(--accent-dk); margin-bottom: 4px; }
+.page-intro-text { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.page-intro-text strong { color: var(--accent-dk); }
+.page-intro-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.page-intro-link:hover { text-decoration: underline; }
+.page-intro-dismiss {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(255,255,255,0.7); border: 1px solid #c4b5fd;
+  border-radius: 6px; width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--accent-dk); font-size: 14px; line-height: 1;
+  transition: all 0.15s;
+}
+.page-intro-dismiss:hover { background: #fff; }
+
 @media (max-width: 720px) {
   .hero { padding: 28px 22px 26px; }
   .hero-title { font-size: 1.3rem; }
@@ -91,6 +117,19 @@
 
 <div class="page-wrap">
 
+  <!-- New-user intro banner (auto-dismisses via localStorage) -->
+  <div class="page-intro" id="pageIntro" data-intro-key="specialist-certificates">
+    <div class="page-intro-icon">🏆</div>
+    <div class="page-intro-body">
+      <div class="page-intro-title">First time on My Certificates?</div>
+      <div class="page-intro-text">
+        This page shows what you have <strong>earned so far</strong>: a few numbers at the top, your certificates (once you have any), and a progress bar for each of the 6 domains. A certificate is given when <strong>every skill in a domain reaches the top stage (Lead)</strong>. On day 1, everything is at 0 — that is normal.
+      </div>
+      <a class="page-intro-link" href="orientation#page-certificates">📖 Read the full guide →</a>
+    </div>
+    <button class="page-intro-dismiss" type="button" aria-label="Dismiss intro" onclick="window.__dismissIntro('specialist-certificates')">✕</button>
+  </div>
+
   <div class="stats-row" id="statsRow">
     <div class="stat-card"><div class="skel" style="height:40px;"></div></div>
     <div class="stat-card"><div class="skel" style="height:40px;"></div></div>
@@ -111,6 +150,26 @@
   </div>
 
 </div>
+
+<!-- Intro banner show/dismiss (runs early, no Firebase dep) -->
+<script>
+(function() {
+  const KEY_PREFIX = 'ch_intro_dismissed_';
+  window.__dismissIntro = function(slug) {
+    try { localStorage.setItem(KEY_PREFIX + slug, '1'); } catch (_) {}
+    const el = document.querySelector(`.page-intro[data-intro-key="${slug}"]`);
+    if (el) el.classList.remove('show');
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.page-intro[data-intro-key]').forEach(el => {
+      const slug = el.getAttribute('data-intro-key');
+      let dismissed = false;
+      try { dismissed = localStorage.getItem(KEY_PREFIX + slug) === '1'; } catch (_) {}
+      if (!dismissed) el.classList.add('show');
+    });
+  });
+})();
+</script>
 
 <script type="module">
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';

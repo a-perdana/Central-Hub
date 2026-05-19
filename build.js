@@ -416,6 +416,7 @@ const htmlFiles = [
   "specialist-path.html",
   "specialist-portfolio.html",
   "specialist-certificates.html",
+  "orientation.html",
   "orientation-admin.html",
   "chapter-test-author.html",
   "ease-item-author.html",
