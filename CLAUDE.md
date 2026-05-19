@@ -260,12 +260,27 @@ All pages share **`shared-styles.css`** (build-injected before the first `<style
 - `.btn-{primary,save,add,cancel,delete,icon}`
 - `.toolbar`, `.avatar(-sm/-lg)`, `.pagination`, `.page-btn`, `.empty-state`
 - Profile modal CSS (`.profile-modal-*`)
+- **`.page-hero` + `.page-toolbar` + `.page-empty`** — canonical feature-page chrome (2026-05-19). See "Page Hero Standard" below.
 
 **Page-specific `<style>` blocks should contain ONLY:**
 - `:root` accent overrides (e.g. `--accent: #7c3aed` for assessments, `#d97706` for appraisals)
 - Component styles unique to that page
 - Override rules differing from shared defaults
 - `display: none` overrides for admin-only elements
+- **NEVER** override `.page-hero` background, `.page-hero__inner` layout, or `.page-hero__kpi*` chrome — those come from tokens. Page-local extras (a title stripe, a custom pill in the eyebrow row) must use page-local class names.
+
+### Page Hero Standard (2026-05-19)
+
+Every CH feature page (user-facing content surface — NOT dashboard, NOT admin tool) belongs to one of four families and uses the canonical `.page-hero` markup. See root [`CLAUDE.md`](../CLAUDE.md) "Design System — Page Families" + [`docs/architecture/DESIGN_SYSTEM.md`](../docs/architecture/DESIGN_SYSTEM.md) "Page families & canonical hero" for the family table + markup snippet.
+
+**Adopted (7):** notifications, references, roles-positions, messageboard, announcements, my-induction, my-school-visits.
+
+**Intentionally skipped (3):**
+- `handbook.html` — `handbook-reader.css` is shared with AH+TH via [`shared-design/`](../shared-design/), so swapping `.hero` → `.page-hero` here breaks AH+TH handbook rendering. Cross-hub refactor required (sync canonical CSS into all 3 hubs' handbook-reader.css first).
+- `library.html` — Featured Bookshelf is embedded *inside* the hero block. Canonical `.page-hero__inner` is a flex container with title + KPI slots; the bookshelf grid doesn't fit. Either extract the shelf to a separate section (UX change) or extend the canonical with a `.page-hero__extras` slot first.
+- `inventory.html` — Already Operations-family compliant (no hero, plain `<h1>` in `.main-header`). No refactor needed.
+
+**When adding a new feature page**, default to the canonical hero. The only legitimate reason to skip is one of the three above (cross-hub coupling, embedded non-canonical content, Operations family). Inventing a new gradient in a page `<style>` block is a regression — see root CLAUDE.md Common Mistake #50.
 
 ---
 
