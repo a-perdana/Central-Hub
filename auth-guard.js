@@ -82,6 +82,11 @@ const SUBJECT_PAGE_MAP = {
   'primary-math-pacing':         ['math'],
   'primary-english-pacing':      ['english'],
   'primary-science-pacing':      ['biology', 'chemistry', 'physics', 'science'],
+  // National Alignment (Cambridge ↔ KM) — one page per subject
+  'national-math-alignment':      ['math'],
+  'national-biology-alignment':   ['biology'],
+  'national-chemistry-alignment': ['chemistry'],
+  'national-physics-alignment':   ['physics'],
 };
 
 // Syllabus pages render multiple subject tabs in one page. Each entry

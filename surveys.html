@@ -290,7 +290,21 @@
     <div class="page-hero__text">
       <p class="page-hero__eyebrow">Communications · CentralHub</p>
       <h1 class="page-hero__title">Surveys</h1>
-      <p class="page-hero__desc">Surveys published to CentralHub appear here. Submit your response to open surveys below — only surveys shared to CentralHub are listed.</p>
+      <p class="page-hero__desc">Surveys shared to CentralHub appear here. Open the ones awaiting your response — only surveys you've been invited to are listed.</p>
+    </div>
+    <div class="page-hero__kpis" id="heroKpis">
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiAwaiting">–</div>
+        <div class="page-hero__kpi-lbl">Awaiting you</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiResponded">–</div>
+        <div class="page-hero__kpi-lbl">Responded</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiTotal">–</div>
+        <div class="page-hero__kpi-lbl">Total shared</div>
+      </div>
     </div>
   </div>
 </header>
@@ -303,9 +317,11 @@
       <input class="search-input" id="searchInput" type="text" placeholder="Search surveys, descriptions, or questions…" aria-label="Search surveys">
     </div>
     <select class="sv-toolbar-select" id="statusFilter" aria-label="Status filter">
-      <option value="all">All</option>
-      <option value="open">Open</option>
+      <option value="awaiting">Awaiting your response</option>
+      <option value="responded">Responded</option>
+      <option value="open">Open (all)</option>
       <option value="closed">Closed</option>
+      <option value="all">All surveys</option>
     </select>
   </div>
 </div>
@@ -338,7 +354,8 @@
     let responseUiState = {};
     let savingSurveyId = null;
     let searchText = "";
-    let statusFilter = "all";
+    let statusFilter = "awaiting";
+    let expandedSurveyIds = new Set();
     let controlsBound = false;
 
     document.addEventListener("authReady", async ({ detail: { user } }) => {
@@ -363,6 +380,18 @@
       });
 
       document.getElementById("surveyList").addEventListener("click", async (e) => {
+        // Expand / collapse toggle — click on .survey-toggle anywhere on the head.
+        const toggle = e.target.closest(".survey-toggle");
+        if (toggle) {
+          const surveyId = toggle.dataset.surveyId;
+          if (!surveyId) return;
+          if (expandedSurveyIds.has(surveyId)) expandedSurveyIds.delete(surveyId);
+          else expandedSurveyIds.add(surveyId);
+          renderSurveys();
+          return;
+        }
+
+        // Submit / Update response.
         const btn = e.target.closest(".response-btn");
         if (!btn) return;
 
@@ -473,13 +502,35 @@
       }
     }
 
+    function updateKpis() {
+      let total = 0, responded = 0, awaiting = 0;
+      allSurveys.forEach((s) => {
+        const status = normalizeStatus(s.status);
+        const isOpen = status === "published" && s.allowResponses !== false;
+        const questions = getQuestions(s.questionsRaw, s.questions);
+        if (!questions.length) return;
+        total++;
+        const hasResp = !!myResponses[s.id];
+        if (hasResp) responded++;
+        else if (isOpen) awaiting++;
+      });
+      document.getElementById("kpiAwaiting").textContent = awaiting;
+      document.getElementById("kpiResponded").textContent = responded;
+      document.getElementById("kpiTotal").textContent = total;
+    }
+
     function renderSurveys() {
+      updateKpis();
       const listEl = document.getElementById("surveyList");
       const filtered = allSurveys.filter((s) => {
         const status = normalizeStatus(s.status);
         const isOpen = status === "published" && s.allowResponses !== false;
+        const hasResp = !!myResponses[s.id];
+
         if (statusFilter === "open" && !isOpen) return false;
         if (statusFilter === "closed" && isOpen) return false;
+        if (statusFilter === "awaiting" && (hasResp || !isOpen)) return false;
+        if (statusFilter === "responded" && !hasResp) return false;
         if (!searchText) return true;
         const qTexts = getQuestions(s.questionsRaw, s.questions).map((q) => q.text).join(" ");
         const haystack = [s.title || "", stripHtml(s.body || ""), s.questionsRaw || "", qTexts].join(" ").toLowerCase();
@@ -487,41 +538,39 @@
       });
 
       if (!filtered.length) {
-        listEl.innerHTML = '<div class="empty">No shared surveys found.</div>';
+        const emptyMsg = emptyStateFor(statusFilter, !!searchText);
+        listEl.innerHTML = `<div class="empty">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="9" y1="14" x2="15" y2="14"/>
+            <line x1="9" y1="18" x2="13" y2="18"/>
+          </svg>
+          <div class="empty-title">${esc(emptyMsg.title)}</div>
+          <div class="empty-desc">${esc(emptyMsg.desc)}</div>
+        </div>`;
         return;
       }
 
       listEl.innerHTML = filtered.map((s) => {
         const status = normalizeStatus(s.status);
         const isOpen = status === "published" && s.allowResponses !== false;
-        const statusLabel = status === "closed" ? "Closed" : "Published";
-        const badges = `
-          <span class="badge ${isOpen ? "badge-open" : "badge-closed"}">${isOpen ? "Open for Response" : "Closed"}</span>
-          <span class="badge badge-status">${statusLabel}</span>
-        `;
-
         const questions = getQuestions(s.questionsRaw, s.questions);
+        const response = myResponses[s.id] || null;
+        const isExpanded = expandedSurveyIds.has(s.id);
 
-        const questionsHtml = questions.length ? `<div class="questions-wrap">
-          <div class="questions-title">Questions (${questions.length})</div>
-          <ol class="questions-list">${questions.map((q) => {
-            let chip = "";
-            if (q.type === "multiple_choice") chip = `<span class="q-type-chip q-type-chip-mc">Multiple Choice</span>`;
-            else if (q.type === "rating") chip = `<span class="q-type-chip q-type-chip-rating">Rating 1–${q.scale || 5}</span>`;
-            else if (q.type === "likert") chip = `<span class="q-type-chip q-type-chip-likert">Likert</span>`;
-            return `<li>${esc(q.text)}${chip}</li>`;
-          }).join("")}</ol>
-        </div>` : "";
+        const stateBadge = response
+          ? `<span class="badge badge-responded">✓ Responded</span>`
+          : (isOpen ? `<span class="badge badge-open">Open · awaiting you</span>` : `<span class="badge badge-closed">Closed</span>`);
 
         const plats = Array.isArray(s.platforms) ? s.platforms : [];
-        const chip = (enabled, cls, label) => `<span class="chip ${enabled ? cls : "chip-off"}">${label}</span>`;
-        const platformChips = `
-          ${chip(plats.includes("centralhub"), "chip-on-central", "CentralHub")}
-          ${chip(plats.includes("academichub"), "chip-on-academic", "Academic Hub")}
-          ${chip(plats.includes("teachershub"), "chip-on-teachers", "Teachers Hub")}
-        `;
+        const chip = (enabled, cls, label) => enabled ? `<span class="chip ${cls}">${label}</span>` : "";
+        const platformChips = [
+          chip(plats.includes("centralhub"), "chip-on-central", "CentralHub"),
+          chip(plats.includes("academichub"), "chip-on-academic", "Academic Hub"),
+          chip(plats.includes("teachershub"), "chip-on-teachers", "Teachers Hub"),
+        ].filter(Boolean).join("");
 
-        const response = myResponses[s.id] || null;
         const savedAnswers = normalizeAnswers(response?.answers, questions.length);
         const responseUi = responseUiState[s.id];
         const noteClass = responseUi ? (responseUi.isError ? "response-note err" : "response-note ok") : "response-note";
