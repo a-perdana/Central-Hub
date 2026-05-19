@@ -437,8 +437,17 @@ The `academics` data-nav-key is virtual (no `academics.html`). Its navbar entry 
 ### 11. Reserved Firestore doc IDs
 `__name__`-style (double-underscore start AND end) is reserved by Firestore — `setDoc` rejects with "Resource id is invalid because it is reserved". Use single-underscore-each-side patterns instead.
 
-### 12. CH navbar is HARDCODED HTML — `nav_config/v1` does not drive rendering
-The CH navbar (`partials/navbar.html`) is bespoke literal HTML for both desktop dropdowns and the mobile drawer. `nav_config/v1` in Firestore is **not** the rendering source — it's only used by the in-place admin editor as its own source-of-truth (drag-reorder state, section labels, hide flags) and by `page-access.html`'s slug lookup. Writing to `nav_config/v1` will NOT change what users see in the rendered menu.
+### 12. CH navbar is HARDCODED HTML — `nav_config/v1` does not drive rendering, **BUT it does override item LABELS at runtime**
+The CH navbar (`partials/navbar.html`) is bespoke literal HTML for both desktop dropdowns and the mobile drawer. `nav_config/v1` in Firestore is **not** the rendering source for structure (add/remove/reorder/section-header changes) — but the editor's `applyConfig()` runs on `authReady` and **re-writes the `.nav-item-label` textContent** + submenu-trigger labels from the saved doc, overwriting whatever was hardcoded in HTML. Net effect:
+- **STRUCTURE** (which items exist, in what column, under what section header) → driven by hardcoded HTML in `partials/navbar.html`. Writing to `nav_config/v1` does NOT change structure on the rendered menu.
+- **ITEM LABELS** (the text inside `.nav-item-label` for every desktop dropdown item + submenu trigger label) → driven by `nav_config/v1` IF the doc exists AND has an entry for that slug. Hardcoded HTML label is the bootstrap that admin first sees; once admin has Saved the in-place editor at any point, the doc carries an entry for every visible item and `applyConfig()` reasserts those labels on every page load.
+- Mobile drawer labels are NOT touched by `applyConfig()` (the editor only walks desktop dropdown panels). So mobile drawer labels are driven by HTML only — a HTML-only rename will show on mobile but get overwritten back on desktop.
+
+**To rename a desktop nav item permanently you must do BOTH:**
+1. Edit the `<span class="nav-item-label">…</span>` text in `partials/navbar.html` (desktop AND mobile blocks — they're separate elements).
+2. Update `nav_config/v1.{panelId}.items[].label` for the same `key`. Either open `/page-access` → click "✎ Edit Navigation" → fix the label inline → Save (writes the whole config back), OR script it directly via firebase-admin (`scripts/` style — fetch doc, mutate `items[]`, `set()`).
+
+**To rename a mobile-only label or a structure-only change** (add/remove/reorder, change section header): hardcoded HTML edit is enough — `nav_config/v1` has no schema slot for section headers or for the mobile drawer, so it can't override them.
 
 **To actually add / remove / reorder a navbar entry you must edit three things in `partials/navbar.html`:**
 1. The desktop dropdown HTML inside the relevant `<div class="ch-dd-panel" id="chDdPanel-...">` block (find the right `<div class="ch-dd-col">` column + section header). Use `<div class="ch-dd-divider"></div>` + `<div class="ch-dd-col-header">` to start a new section.
@@ -447,9 +456,11 @@ The CH navbar (`partials/navbar.html`) is bespoke literal HTML for both desktop 
 
 Then run `node build.js` to propagate the updated `partials/navbar.html` into every `dist/*.html` via `<!-- SHARED_NAVBAR -->`. Forgetting any one of the three causes a silent partial regression: link works on desktop but not mobile, or trigger doesn't highlight on the page, etc.
 
-Past incident 2026-05-12: First attempt to add `/practice-bank-admin` to the navbar wrote a new entry to `nav_config/v1` and the rendered menu didn't change. CLAUDE.md ambiguously said "bespoke editor writes to nav_config/v1" without making clear that nav_config is editor-only — fixed here.
+**Past incidents:**
+- 2026-05-12: First attempt to add `/practice-bank-admin` to the navbar wrote a new entry to `nav_config/v1` and the rendered menu didn't change — structure isn't driven by the doc.
+- 2026-05-19: Renamed Documents→Inventory + Document Library→Library by editing only the HTML (desktop + mobile + dist rebuilt + deployed). Canlıda mobile drawer doğru, ama desktop dropdown'da hâlâ "Documents" + "Document Library" görünüyordu çünkü `nav_config/v1.chDdPanel-comms.items[]` doc'unda eski label'lar kayıtlıydı ve her sayfa yüklemesinde `applyConfig()` HTML'in üzerine eski label'ları yazıyordu. Fix: doc'taki ilgili iki entry'nin label alanlarını da güncellemek (`documents → Inventory`, `library → Library`). Yapılış şekli: bir kerelik firebase-admin script (`fetch → mutate items[] → set`). Pattern aynı: **rename = HTML + nav_config/v1 ikilisi**.
 
-AH/TH navbars are the opposite: their `nav_config/{platform}` doc IS the rendering source (flat shape, `shared-design/nav-edit-simple.js`). Don't carry CH's hardcoded-HTML assumption into AH/TH or vice versa.
+AH/TH navbars are the opposite: their `nav_config/{platform}` doc IS the rendering source for structure too (flat shape, `shared-design/nav-edit-simple.js`). Don't carry CH's hardcoded-HTML assumption into AH/TH or vice versa.
 
 ### 13. CH `auth-guard.js` dispatches `authReady` on `document`, NOT `window`
 Listen with `document.addEventListener('authReady', …)` in every CH page. Listening on `window` makes the listener never fire — the page renders the empty shell because the init code that wires UI / starts onSnapshot / fetches data never runs, and the failure is **silent** (no errors, no toast, no network rejection — Firestore just never gets called).
