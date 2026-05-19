@@ -1445,7 +1445,109 @@ Three collections supporting the Eduversal AI Competency Framework v1.0 (Phase 2
 
 ---
 
-## Standardisation Backlog
+### 25. Department Office — HQ Coordinators Workspace (2026-05-19)
+
+Director + Subject Coordinator workspace replacing the long-running Google Docs "Heads of Departments — Meeting Records" workflow. Four collections, all HQ-internal (`central_admin` + `ch_sub_roles ∈ {director, coordinator}`). No school-side reads. No student-side reads.
+
+**Scope boundary:** these collections **never** participate in the formal rating systems (KPI / Appraisal / Competency / AICF) and **never** feed Students Hub. They are pure HQ coordination + policy authoring. Same precedent as Induction NN1 (induction journal never feeds appraisal).
+
+#### `coordinators_meetings/{meetingId}`
+**PK:** auto-id.
+**Scope:** one doc per meeting (weekly Thursday 09:00 series + ad-hoc sessions).
+**Fields:**
+- Identity: `title` (optional — defaults to date-based "Coordinators Meeting · {date}"), `meetingDate` (Timestamp, the actual session date), `meetingType` (`'hq_internal'` default; `'national_subject_dept'` reserved for future expansion when school subject-teacher meetings move in — see root CLAUDE.md "Department Office" two-meeting-type note).
+- Semester / cycle: `academicYear` (e.g. `'2025-2026'`), `semester` (`'sem1' | 'sem2'`).
+- Attendees: `attendees[]` (array of `{ uid, name, present: boolean }`). Pinning name denormalised so historical minutes survive user renames.
+- Body: `summary` (optional one-paragraph context; rich agenda content lives in `coordinators_meeting_items` rows linked via `meetingId`).
+- Audit: `createdBy →users.uid` (rule-pinned to `auth.uid` on create), `createdAt`, `updatedAt`, `lastEditedBy →users.uid`.
+- Lifecycle: `status` (`'draft' | 'published'`). Drafts hide from per-`/decisions-register` aggregators (incomplete decisions shouldn't propagate).
+
+**FKs:** none — meeting items reference back via `meetingId` field.
+**Indexes:** composite on `(academicYear, meetingDate desc)` for the list view; composite on `(status, meetingDate desc)` for published-only filter.
+**Write scope:**
+- **CREATE:** any dept-office member; rule pins `createdBy == auth.uid`.
+- **UPDATE:** any dept-office member (collaborative — mirrors the G-Docs workflow).
+- **DELETE:** `central_admin` only (audit trail).
+
+#### `coordinators_meeting_items/{itemId}`
+**PK:** auto-id. **Top-level collection, NOT a sub-collection** — kept top-level so cross-meeting queries work (e.g. "every item tagged `decision` in the last 90 days" for the decisions-register feeder).
+**Scope:** one doc per agenda item inside a meeting. Items number 6-15 per meeting on average per the 2025-2026 corpus.
+**Fields:**
+- Linkage: `meetingId →coordinators_meetings.id`, `order` (integer for sortable display).
+- Content: `title` (≤ 200 chars), `body` (≤ 5000 chars, plain text — rich content sanitised via shared HTML allowlist on render). External references live in `links[]` (array of `{ label, url }`).
+- Sub-items: `subItems[]` (array of `{ label, link?, body? }`) — captures the per-subject lists ("English Department Link / Math Department Link") seen throughout the PDF corpus without exploding into N child collections.
+- Tagging: `tags[]` (string array — open set; `'decision' | 'action' | 'discussion' | 'announcement' | 'red_text'` are the seeded vocabulary used by the decisions-register feeder).
+- Subject scope: `subjectIds[]` (subset of the 8 canonical `ch_subjects` keys, or empty for cross-subject items).
+- Action bridge (optional): `activityTaskId →activity_tasks.id` (when an "action"-tagged item is converted into an `/activities` task — see Common Mistakes appendix in root CLAUDE.md for the bridge contract).
+- Decision back-link (optional): `decisionId →coordinators_decisions.id` (when a `decision`-tagged item is promoted into the decisions register).
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**FKs:** `coordinators_meetings.id` (via `meetingId`); optional `activity_tasks.id` (via `activityTaskId`); optional `coordinators_decisions.id` (via `decisionId`); `users.uid` (via `createdBy`).
+**Indexes:** composite on `(meetingId, order)` for the meeting view; composite on `(tags array-contains, updatedAt desc)` if a global cross-meeting query view is added later.
+**Write scope:**
+- **CREATE + UPDATE:** any dept-office member.
+- **DELETE:** the item's `createdBy` or `central_admin`.
+
+#### `department_artifacts/{artifactId}`
+**PK:** auto-id (recommended) OR composite `{subjectId}_{artifactType}_{academicYear}` (if the team prefers deterministic ids; both shapes accommodated — auto-id is the default).
+**Scope:** per-subject living documents that recur in the meeting corpus (Annual Plan, DTP Report, Department Handbook, Subject Policy). One artifact = one subject × one artifactType × one academic year, but versioned via `previousVersionId` chain (each update can either overwrite-in-place OR create a new doc pointing at the previous).
+**Fields:**
+- Identity: `subjectId` (one of the 8 canonical `ch_subjects` keys: `'math' | 'biology' | 'chemistry' | 'physics' | 'science' | 'english' | 'bahasa' | 'religion'`), `artifactType` (`'annual_plan' | 'dtp_report' | 'department_handbook' | 'subject_policy' | 'other'`), `title`, `description` (optional).
+- Academic year: `academicYear` (e.g. `'2025-2026'`).
+- Storage: ONE of `fileUrl` (Cloud Storage path under `specialist_artifacts/{subjectId}/{ts}_{filename}`) OR `externalUrl` (Google Doc / Drive / external link). UI requires exactly one.
+- Versioning: `version` (integer, default 1), `previousVersionId →department_artifacts.id | null`.
+- Ownership: `ownerUid →users.uid` (the coordinator responsible for keeping it current; typically matches the subject's HQ Coordinator).
+- Lifecycle: `status` (`'draft' | 'current' | 'archived'`). Exactly one `current` per `(subjectId, artifactType, academicYear)` triple — UI enforces.
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`, `lastEditedBy →users.uid`.
+
+**FKs:** `users.uid` (via `ownerUid`, `createdBy`, `lastEditedBy`); self-FK via `previousVersionId`.
+**Indexes:** composite on `(subjectId, artifactType, status)` for the per-subject artifact grid; composite on `(status, updatedAt desc)` for the "recently updated" view across subjects.
+**Write scope:**
+- **CREATE + UPDATE:** any dept-office member (typically a coordinator for their `ch_subjects[]`, but director / admin can edit any).
+- **DELETE:** `central_admin` only (artifacts are kept long-term; archive via `status: 'archived'` instead).
+
+**Storage rule extension:** `specialist_artifacts/{subjectId}/{filename}` — dept-office members read + write; ≤ 25 MB per file; MIME allow-list `application/pdf` + `application/vnd.openxmlformats-officedocument.*` + image types.
+
+#### `coordinators_decisions/{decisionId}`
+**PK:** auto-id.
+**Scope:** binding decisions / policies that originate either from a meeting (red-text items in the PDF corpus — dress code, observation score band, "third person in feedback room", "no personal smartphones") OR are authored directly (e.g. a Director publishing a new policy without a meeting attached).
+**Fields:**
+- Identity: `title` (≤ 200 chars — short policy headline), `body` (≤ 3000 chars — full text), `category` (`'pedagogy' | 'appraisal' | 'communications' | 'conduct' | 'safeguarding' | 'admin' | 'other'`).
+- Scope: `scope` (`'network_wide' | 'per_school' | 'per_subject'`); when `per_school` → `schoolIds[]` (subset of `partner_schools` ids); when `per_subject` → `subjectIds[]` (subset of 8 canonical keys).
+- Lifecycle: `status` (`'draft' | 'active' | 'superseded'`). Active is the publishable state; superseded carries forward a `supersededByDecisionId →coordinators_decisions.id` pointer.
+- Source: `sourceMeetingId →coordinators_meetings.id | null`, `sourceItemId →coordinators_meeting_items.id | null` (both null for admin-authored policies). Back-fills from the meeting item that promoted it.
+- Effective dates: `effectiveFrom` (Timestamp — when this decision takes effect), `effectiveUntil` (Timestamp | null — for time-bound policies like a one-academic-year dress code).
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`, `supersededAt` (when status flips to `'superseded'`), `supersededByUid →users.uid`.
+
+**FKs:** `coordinators_meetings.id` (via `sourceMeetingId`); `coordinators_meeting_items.id` (via `sourceItemId`); self-FK via `supersededByDecisionId`; `users.uid` (via `createdBy`, `supersededByUid`); `partner_schools.id` (via `schoolIds[]`).
+**Indexes:** composite on `(status, effectiveFrom desc)` for the active-policies feed; composite on `(scope, status, effectiveFrom desc)` for scope-filtered views; composite on `(category, status, effectiveFrom desc)` for category-filtered views.
+**Write scope:**
+- **CREATE + UPDATE:** any dept-office member. Updates that flip `status: 'active' → 'superseded'` should pair with a new decision whose `supersededByDecisionId` points back; client UI enforces this discipline.
+- **DELETE:** `central_admin` only (typo / draft cleanup). Active decisions are NEVER hard-deleted — supersede them.
+
+**Immutability discipline:** once a decision is `status: 'active'`, the `body` + `effectiveFrom` should not be changed in-place — supersede with a new decision instead. Rule-level immutability is deferred to a future tightening; UI enforces today.
+
+#### `coordinators_directory_entries/{entryId}`
+**PK:** auto-id.
+**Scope:** Eduversal Subject Coordinators (CH) + per-school Subject Leaders (TH `subject_leader` sub-role) + per-grade Grade Coordinators (e.g. EASE G7-G12 in the meeting corpus). Network-wide phone-book of the leadership graph this office runs against.
+**Fields:**
+- Identity: `entryKind` (`'hq_coordinator' | 'school_subject_leader' | 'grade_coordinator'`), `displayName`, `email`, `phone` (optional).
+- Link to user (when applicable): `userId →users.uid | null` (null if the person hasn't been onboarded as a CH/AH/TH user yet — many Grade Coordinators on the PDF list pre-date the platform).
+- Subject context: `subjectId` (one of the 8 canonical `ch_subjects` keys, or `null` for cross-subject roles).
+- School context (when `entryKind != 'hq_coordinator'`): `schoolId →partner_schools.id`, `schoolName` (denormalised).
+- Grade context (when `entryKind == 'grade_coordinator'`): `gradeLevel` (integer 7-12), `gradeContext` (e.g. `'ease_g7'`, `'ease_g8'` — kept open-string for future use beyond EASE).
+- Notes: `roleNotes` (≤ 500 chars — admin-curated description, e.g. "Math G7 coordinator, EASE Committee member").
+- Lifecycle: `status` (`'active' | 'archived'`).
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**FKs:** `users.uid` (via `userId`, `createdBy`); `partner_schools.id` (via `schoolId`).
+**Indexes:** composite on `(entryKind, subjectId, status)` for the most common per-subject directory view; composite on `(schoolId, status)` for per-school views.
+**Write scope:**
+- **CREATE + UPDATE + DELETE:** `central_admin` or any `director`. Plain `coordinator` can READ but NOT mutate — coordinators don't self-promote a school teacher into "Subject Leader" status; directors / admin curate this canonical map.
+
+---
+
+
 
 Things this schema knows are inconsistent. Prioritise these in upcoming refactors.
 
