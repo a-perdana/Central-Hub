@@ -49,13 +49,61 @@
     .survey-card {
       background: #fff;
       border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
       border-radius: 12px;
       box-shadow: var(--shadow-sm);
-      padding: 16px 18px;
-      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+      padding: 18px 20px 18px 18px;
+      transition: box-shadow 0.22s ease, border-color 0.22s ease, transform 0.18s ease;
+      position: relative;
+      overflow: hidden;
     }
-    .survey-card:hover { box-shadow: var(--shadow); border-color: #cbd5e1; }
-    .survey-card.is-expanded { border-color: #7dd3fc; }
+    .survey-card::before {
+      /* Soft state-tinted wash that fades from left → right.
+         Stays in pseudo so it doesn't interfere with content stacking. */
+      content: '';
+      position: absolute; inset: 0;
+      background: transparent;
+      pointer-events: none;
+      transition: background 0.22s ease;
+    }
+    .survey-card > * { position: relative; z-index: 1; }
+    .survey-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+
+    /* AWAITING — amber call-to-action (the visually loudest state) */
+    .survey-card.is-awaiting { border-left-color: #f59e0b; }
+    .survey-card.is-awaiting::before {
+      background: linear-gradient(90deg, rgba(254,243,199,0.55) 0%, rgba(254,243,199,0) 60%);
+    }
+    .survey-card.is-awaiting:hover {
+      border-left-color: #d97706;
+      box-shadow: 0 8px 22px -10px rgba(245,158,11,0.45), var(--shadow);
+    }
+
+    /* RESPONDED — green completed */
+    .survey-card.is-responded { border-left-color: #10b981; }
+    .survey-card.is-responded::before {
+      background: linear-gradient(90deg, rgba(209,250,229,0.5) 0%, rgba(209,250,229,0) 55%);
+    }
+    .survey-card.is-responded:hover {
+      border-left-color: #059669;
+      box-shadow: 0 8px 22px -10px rgba(16,185,129,0.4), var(--shadow);
+    }
+
+    /* CLOSED — slate, muted */
+    .survey-card.is-closed { border-left-color: #94a3b8; opacity: 0.85; }
+    .survey-card.is-closed::before {
+      background: linear-gradient(90deg, rgba(241,245,249,0.5) 0%, rgba(241,245,249,0) 50%);
+    }
+    .survey-card.is-closed:hover { opacity: 1; }
+
+    /* EXPANDED — cyan accent on top of any state */
+    .survey-card.is-expanded {
+      border-color: #7dd3fc;
+      box-shadow: 0 10px 26px -14px rgba(8,145,178,0.35), var(--shadow);
+    }
+    .survey-card.is-expanded.is-awaiting { border-left-color: #f59e0b; }
+    .survey-card.is-expanded.is-responded { border-left-color: #10b981; }
+    .survey-card.is-expanded.is-closed { border-left-color: #94a3b8; }
     .survey-head {
       display: flex;
       justify-content: space-between;
@@ -85,17 +133,34 @@
       font-size: 0.78rem;
       font-weight: 600;
       color: #0e7490;
-      padding: 6px 11px;
+      padding: 6px 12px;
       border-radius: 999px;
-      background: #e0f2fe;
-      transition: background 0.15s;
+      background: linear-gradient(135deg, #e0f2fe 0%, #cffafe 100%);
+      transition: background 0.18s, color 0.18s, transform 0.18s;
     }
-    .survey-head:hover .survey-toggle-btn { background: #bae6fd; }
+    .survey-toggle-btn svg {
+      transition: transform 0.25s ease;
+    }
+    .survey-card.is-expanded .survey-toggle-btn {
+      background: linear-gradient(135deg, #7c3aed, #0891b2);
+      color: #fff;
+    }
+    .survey-card.is-expanded .survey-toggle-btn svg {
+      transform: rotate(180deg);
+    }
+    .survey-head:hover .survey-toggle-btn {
+      transform: translateY(-1px);
+    }
+    .survey-card:not(.is-expanded) .survey-head:hover .survey-toggle-btn {
+      background: linear-gradient(135deg, #bae6fd 0%, #a5f3fc 100%);
+    }
     .survey-title {
-      font-size: 1.02rem;
-      font-weight: 700;
-      line-height: 1.35;
+      font-family: 'Lora', serif;
+      font-size: 1.1rem;
+      font-weight: 600;
+      line-height: 1.3;
       color: var(--ink);
+      letter-spacing: -0.005em;
     }
     .badge-row {
       display: flex;
@@ -105,16 +170,42 @@
     .badge {
       display: inline-flex;
       align-items: center;
+      gap: 5px;
       border-radius: 999px;
-      padding: 2px 9px;
-      font-size: 0.72rem;
+      padding: 3px 11px;
+      font-size: 0.7rem;
       font-weight: 700;
-      letter-spacing: 0.01em;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
-    .badge-open { background: #dcfce7; color: #166534; }
-    .badge-closed { background: #fee2e2; color: #991b1b; }
-    .badge-status { background: #e0f2fe; color: #0e7490; }
-    .badge-responded { background: #ede9fe; color: #5b21b6; }
+    /* "Awaiting you" — amber, attention-getting */
+    .badge-open {
+      background: linear-gradient(135deg, #fef3c7, #fde68a);
+      color: #92400e;
+      box-shadow: 0 1px 0 rgba(245,158,11,0.15);
+    }
+    .badge-open::before {
+      content: '⏳'; font-size: 0.85em; line-height: 1;
+    }
+    /* "Closed" — muted grey */
+    .badge-closed {
+      background: #e2e8f0; color: #475569;
+    }
+    .badge-closed::before {
+      content: '🔒'; font-size: 0.85em; line-height: 1;
+    }
+    /* "Responded" — green check + a hint of celebration */
+    .badge-responded {
+      background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+      color: #065f46;
+      box-shadow: 0 1px 0 rgba(16,185,129,0.18);
+    }
+    .badge-responded::before {
+      content: '✓'; font-size: 0.95em; line-height: 1; font-weight: 900;
+    }
+    .badge-status {
+      background: #e0f2fe; color: #0e7490;
+    }
 
     /* Collapsed-card summary row — questions count + last-saved hint */
     .survey-summary {
@@ -149,19 +240,24 @@
       word-break: break-word;
     }
     .questions-wrap {
-      background: #f0f9ff;
+      background: linear-gradient(135deg, #f0f9ff 0%, #faf8ff 100%);
       border: 1px solid #bae6fd;
-      border-radius: 9px;
-      padding: 10px 12px;
-      margin-bottom: 11px;
+      border-left: 3px solid #0891b2;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
     }
     .questions-title {
-      font-size: 0.75rem;
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: #0e7490;
       font-weight: 700;
-      margin-bottom: 7px;
+      margin-bottom: 8px;
+    }
+    .questions-title::before {
+      content: '❓'; font-size: 0.85em; line-height: 1;
     }
     .questions-list {
       margin-left: 18px;
@@ -263,49 +359,92 @@
     .response-btn {
       border: none;
       border-radius: 8px;
-      padding: 8px 12px;
+      padding: 9px 16px;
       background: linear-gradient(135deg, #7c3aed, #0891b2);
       color: #fff;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 700;
+      letter-spacing: 0.02em;
       cursor: pointer;
       font-family: 'DM Sans', sans-serif;
-      transition: opacity 0.15s ease;
+      transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.18s ease;
+      box-shadow: 0 3px 10px -4px rgba(124,58,237,0.5);
     }
-    .response-btn:hover { opacity: 0.9; }
+    .response-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px -6px rgba(124,58,237,0.55);
+    }
     .response-btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .response-note {
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       color: var(--ink-3);
+      display: inline-flex; align-items: center; gap: 4px;
     }
-    .response-note.ok { color: #166534; }
-    .response-note.err { color: #b91c1c; }
+    .response-note.ok {
+      color: #047857;
+      animation: noteBounce 0.4s ease;
+    }
+    .response-note.ok::before { content: '✓'; font-weight: 900; }
+    .response-note.err {
+      color: #b91c1c;
+    }
+    .response-note.err::before { content: '⚠'; }
+    @keyframes noteBounce {
+      0%   { transform: translateY(-4px); opacity: 0; }
+      60%  { transform: translateY(2px); opacity: 1; }
+      100% { transform: translateY(0); }
+    }
     .empty {
-      background: #fff;
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-      padding: 44px 20px;
+      position: relative;
+      background: linear-gradient(135deg, #f0f9ff 0%, #faf8ff 50%, #f0fdf4 100%);
+      border: 1px solid #e0e7ff;
+      border-radius: 16px;
+      padding: 56px 24px 48px;
       text-align: center;
-      color: var(--ink-3);
+      color: var(--ink-2);
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
+      overflow: hidden;
     }
-    .empty > svg {
-      color: var(--ink-3);
-      opacity: 0.55;
+    .empty::before {
+      /* Soft radial highlight in the top-right */
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at 85% 15%, rgba(108,92,231,0.08) 0%, transparent 55%);
+      pointer-events: none;
+    }
+    .empty > * { position: relative; z-index: 1; }
+    .empty-emoji {
+      font-size: 3.2rem;
+      line-height: 1;
+      filter: drop-shadow(0 4px 10px rgba(108,92,231,0.18));
+      animation: emptyFloat 4s ease-in-out infinite;
+    }
+    @keyframes emptyFloat {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
     }
     .empty-title {
-      font-size: 0.98rem;
-      font-weight: 700;
-      color: var(--ink-2);
+      font-family: 'Lora', serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.25;
+      margin-top: 2px;
     }
     .empty-desc {
-      font-size: 0.85rem;
+      font-size: 0.9rem;
+      color: var(--ink-2);
+      max-width: 460px;
+      line-height: 1.6;
+    }
+    .empty-hint {
+      font-size: 0.78rem;
       color: var(--ink-3);
-      max-width: 440px;
-      line-height: 1.55;
+      margin-top: 6px;
+      font-style: italic;
     }
     .loading-line {
       height: 12px;
@@ -338,10 +477,20 @@
     .likert-opt:has(input:checked) label { border-color: var(--accent); background: var(--accent-2); font-weight: 700; color: var(--ink); }
     .likert-disabled .likert-opt label { cursor: not-allowed; opacity: 0.65; pointer-events: none; }
     .response-section-header { font-size: 0.72rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.07em; padding: 10px 0 4px; border-top: 1.5px dashed #ece9e3; margin-top: 6px; }
-    .q-type-chip { display: inline-flex; align-items: center; font-size: 0.65rem; font-weight: 700; padding: 1px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
-    .q-type-chip-mc { background: #ede9fe; color: #5b21b6; }
+    .q-type-chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 0.66rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 10px;
+      margin-left: 6px; vertical-align: middle;
+      letter-spacing: 0.02em;
+    }
+    .q-type-chip::before { font-size: 0.92em; line-height: 1; }
+    .q-type-chip-mc     { background: #ede9fe; color: #5b21b6; }
+    .q-type-chip-mc::before     { content: '🔘'; }
     .q-type-chip-rating { background: #fef3c7; color: #92400e; }
+    .q-type-chip-rating::before { content: '⭐'; }
     .q-type-chip-likert { background: #dcfce7; color: #166534; }
+    .q-type-chip-likert::before { content: '📊'; }
 
     @media (max-width: 760px) {
       .page-wrap { padding: 20px 20px 40px; }
@@ -3797,15 +3946,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       if (!filtered.length) {
         const emptyMsg = emptyStateFor(statusFilter, !!searchText);
+        const hintHtml = emptyMsg.hint ? `<div class="empty-hint">${esc(emptyMsg.hint)}</div>` : "";
         listEl.innerHTML = `<div class="empty">
-          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="9" y1="14" x2="15" y2="14"/>
-            <line x1="9" y1="18" x2="13" y2="18"/>
-          </svg>
+          <div class="empty-emoji" aria-hidden="true">${emptyMsg.emoji}</div>
           <div class="empty-title">${esc(emptyMsg.title)}</div>
           <div class="empty-desc">${esc(emptyMsg.desc)}</div>
+          ${hintHtml}
         </div>`;
         return;
       }
@@ -3817,9 +3963,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         const response = myResponses[s.id] || null;
         const isExpanded = expandedSurveyIds.has(s.id);
 
+        // State drives both the badge AND the card's left-border colour
+        // (.is-awaiting / .is-responded / .is-closed → tinted wash + amber/green/slate stripe).
         const stateBadge = response
-          ? `<span class="badge badge-responded">✓ Responded</span>`
-          : (isOpen ? `<span class="badge badge-open">Open · awaiting you</span>` : `<span class="badge badge-closed">Closed</span>`);
+          ? `<span class="badge badge-responded">Responded</span>`
+          : (isOpen ? `<span class="badge badge-open">Awaiting you</span>` : `<span class="badge badge-closed">Closed</span>`);
+        const stateCls = response ? 'is-responded' : (isOpen ? 'is-awaiting' : 'is-closed');
 
         const plats = Array.isArray(s.platforms) ? s.platforms : [];
         const chip = (enabled, cls, label) => enabled ? `<span class="chip ${cls}">${label}</span>` : "";
@@ -3931,7 +4080,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         ` : "";
 
         return `
-          <article class="survey-card ${isExpanded ? "is-expanded" : ""}">
+          <article class="survey-card ${stateCls} ${isExpanded ? "is-expanded" : ""}">
             <div class="survey-head survey-toggle" data-survey-id="${s.id}" role="button" tabindex="0" aria-expanded="${isExpanded}">
               <div class="survey-head__main">
                 <h2 class="survey-title">${esc(s.title || "Untitled Survey")}</h2>
@@ -3940,7 +4089,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               <div class="survey-head__cta">
                 <span class="survey-toggle-btn">${ctaLabel}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <polyline points="${isExpanded ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}"/>
+                    <polyline points="6 9 12 15 18 9"/>
                   </svg>
                 </span>
               </div>
@@ -3954,13 +4103,43 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     function emptyStateFor(filterKey, hasSearch) {
-      if (hasSearch) return { title: "No matching surveys", desc: "Try a different search term or clear the search box." };
+      if (hasSearch) return {
+        emoji: "🔍",
+        title: "Nothing matches that search",
+        desc:  "Try a different keyword or clear the search box to see everything again.",
+        hint:  "Tip: search hits titles, descriptions, and question text.",
+      };
       switch (filterKey) {
-        case "awaiting": return { title: "All caught up", desc: "You have responded to every open survey shared with CentralHub. Switch to 'Responded' or 'All surveys' to review past submissions." };
-        case "responded": return { title: "No responses yet", desc: "You haven't submitted any survey responses yet. Switch to 'Awaiting your response' to see what's open." };
-        case "open": return { title: "No open surveys", desc: "No surveys are currently open for response on CentralHub." };
-        case "closed": return { title: "No closed surveys", desc: "No surveys have been closed yet." };
-        default: return { title: "No surveys shared yet", desc: "When HQ publishes a survey to CentralHub it will appear here." };
+        case "awaiting": return {
+          emoji: "🎉",
+          title: "You're all caught up!",
+          desc:  "Every open survey shared with CentralHub has your response.",
+          hint:  "Switch to 'Responded' to review what you've submitted.",
+        };
+        case "responded": return {
+          emoji: "📭",
+          title: "No responses yet",
+          desc:  "You haven't submitted any survey responses. When you do, they'll land here.",
+          hint:  "Switch to 'Awaiting your response' to see what's open.",
+        };
+        case "open": return {
+          emoji: "🌱",
+          title: "No open surveys right now",
+          desc:  "Nothing is currently open for response on CentralHub.",
+          hint:  "Check back when HQ publishes a new one.",
+        };
+        case "closed": return {
+          emoji: "🗃️",
+          title: "Archive is empty",
+          desc:  "No surveys have been closed yet.",
+          hint:  "",
+        };
+        default: return {
+          emoji: "📬",
+          title: "No surveys shared yet",
+          desc:  "When HQ publishes a survey to CentralHub it will appear here.",
+          hint:  "",
+        };
       }
     }
 
