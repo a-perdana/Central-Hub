@@ -555,7 +555,18 @@ Reusable newsletter templates saved from `mail-composer.html` ("Save as Template
 ### 15. Misc / Side-features
 
 #### `school_visits/{visitId}` — Visit & Audit Management
-`central_admin` write; CH user read.
+
+Single collection backing **two surfaces** (discriminated by `visitType`):
+- `/school-visits` (Operations dropdown, HQ-aggregate lens) — institutional visits across all schools, all visitors. `visitType ∈ {'introductory', 'monitoring_onsite', 'midyear_online', 'validation_onsite', 'followup', 'coordinator_note'}`.
+- `/my-school-visits` (Department Office > Workspace, Specialist lens, 2026-05-19) — CH coordinator's own 15-school appraisal walkthrough log (Window 2-4 of specialist induction). `visitType: 'specialist_walkthrough'`.
+
+**PK:** auto-id.
+**Fields (common):** `schoolId →partner_schools.id`, `visitDate` (YYYY-MM-DD string), `visitType` (enum above), `outcome` (`'on_track'`/`'needs_support'`/`'critical_attention'`/null), `purpose`, `visitedBy` (free-text name), `followUpDate`, `strengths`, `areasImprovement`, `observations`, `actionItems[]`, `createdBy` (email), `createdAt`, `updatedAt`.
+**Fields (specialist_walkthrough only):** `specialistUid →users.uid`, `subjectArea ⊂ ch_subjects[] enum`, `windowPhase` (`'W2_apprenticeship'` / `'W3_solo'` / `'W4_initiative'`), `walkthroughType` (`'observe_mentor'` / `'co_led'` / `'solo_mentor_present'` / `'solo_with_review'` / `'solo'` / `'initiative_pilot'`), `mentorPresent` (boolean), `notesState` (`'draft'`/`'submitted'`/`'mentor_reviewed'`/`'finalized'`), `mentorUid →users.uid?` (Window 2).
+**Writers:** any `isCentralUser()` — page UI restricts editing to own docs (own `specialistUid`); `central_admin` override.
+**Read scope:** any `isCentralUser()` — Operations view shows all; Specialist view filters `where('specialistUid', '==', currentUid)` client-side.
+**Indexes:** `(specialistUid ASC, visitDate DESC)` for specialist lens; `(visitType ASC, visitDate DESC)` for Operations type filter.
+**Notes:** Phase 2 plan in [`Central Hub/firestore.rules`](../../Central Hub/firestore.rules:1742) — tighten to "owner-only update + admin override" once `createdByUid` is universally populated. Charter NN1 — Window 2-4 walkthrough records belong to specialist's induction journey and are CONFIDENTIAL between specialist ↔ mentor ↔ HQ Director (specialist UI never surfaces other specialists' walkthroughs; Operations view shows summary visit metadata only, not walkthrough notes when `visitType == 'specialist_walkthrough'`).
 
 #### `timeline_activities/{actId}` + `timeline_completions/{compId}`
 AH Academic Calendar feature. Activities are admin-managed; completions are per-user. `userId →users.uid` on completions; user writes own.
