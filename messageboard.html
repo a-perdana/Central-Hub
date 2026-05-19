@@ -312,7 +312,8 @@
   let allTopics    = [];
   let currentCat   = 'all';
   let currentUser  = null;
-  let isAdmin      = false;
+  let isAdmin      = false;  // central_admin only — delete any topic/reply
+  let canManage    = false;  // central_admin OR CH coordinator — edit any topic/reply
   let openTopicId  = null;
   let editingTopicId = null;
   const PAGE_SIZE  = 20;
@@ -359,6 +360,8 @@
     storage = getStorage(window.firebaseApp);
     currentUser = user;
     isAdmin = profile?.role_centralhub === 'central_admin' || profile?.role === 'central_admin';
+    const subRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+    canManage = isAdmin || subRoles.includes('coordinator');
     await loadTopics();
     bindEvents();
     await loadAnnouncementDropdown();
@@ -478,19 +481,23 @@
     showView('thread');
     document.getElementById('threadCat').innerHTML  = CAT_BADGE[topic.category] || '';
     document.getElementById('threadTitle').textContent = topic.title || 'Untitled';
-    // Admin action buttons (edit / delete) — render fresh each time
+    // Manage buttons (edit / delete) — render fresh each time.
+    // Edit: admin / coordinator / author.  Delete: admin / author.
     let adminActions = document.getElementById('adminTopicActions');
     if (adminActions) adminActions.remove();
-    if (isAdmin) {
+    const isAuthor = !!(topic.authorUid && currentUser && topic.authorUid === currentUser.uid);
+    const showEdit   = canManage || isAuthor;
+    const showDelete = isAdmin   || isAuthor;
+    if (showEdit || showDelete) {
       adminActions = document.createElement('div');
       adminActions.id = 'adminTopicActions';
       adminActions.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;';
       adminActions.innerHTML = `
-        <button class="btn-cancel-form" id="editTopicBtn" style="font-size:0.82rem;">✎ Edit Topic</button>
-        <button class="btn-cancel-form" id="deleteTopicBtn" style="font-size:0.82rem;color:#dc2626;border-color:#fca5a5;">🗑 Delete Topic</button>`;
+        ${showEdit   ? `<button class="btn-cancel-form" id="editTopicBtn" style="font-size:0.82rem;">✎ Edit Topic</button>` : ''}
+        ${showDelete ? `<button class="btn-cancel-form" id="deleteTopicBtn" style="font-size:0.82rem;color:#dc2626;border-color:#fca5a5;">🗑 Delete Topic</button>` : ''}`;
       document.getElementById('backBtn').insertAdjacentElement('afterend', adminActions);
-      document.getElementById('editTopicBtn').onclick = () => openEditForm(topic);
-      document.getElementById('deleteTopicBtn').onclick = () => deleteTopic(topic);
+      if (showEdit)   document.getElementById('editTopicBtn').onclick   = () => openEditForm(topic);
+      if (showDelete) document.getElementById('deleteTopicBtn').onclick = () => deleteTopic(topic);
     }
     document.getElementById('replyText').value = '';
     document.getElementById('replyError').classList.remove('visible');
