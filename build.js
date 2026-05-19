@@ -439,6 +439,10 @@ const htmlFiles = [
   "ai-framework-institutional.html",
   // AICF Phase 3 (2026-05-18) — Institutional Maturity appraisal queue
   "ai-maturity-admin.html",
+  // Department Office workspace (2026-05-19) — Director + Coordinator
+  // meeting + decision + artifact + directory cluster. Replaces the
+  // long-running Heads-of-Departments Google Doc workflow.
+  "coordinators-meetings.html",
 ];
 
 htmlFiles.forEach((file) => {
