@@ -152,16 +152,64 @@
   .dom-card-preview { padding: 12px 18px 16px; }
 }
 
-/* ─── "Show all skills" toggle (flat view) ──────────── */
-.view-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+/* ─── Toolbar: search + view + collapse-all ──────────── */
+.view-toggle-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; flex-wrap: wrap;
+}
+.comp-search-wrap {
+  position: relative; flex: 1 1 320px; min-width: 240px;
+}
+.comp-search-input {
+  width: 100%; padding: 8px 36px 8px 14px;
+  border: 1.5px solid var(--border); border-radius: 9px;
+  background: var(--white); font-size: 13px; color: var(--ink);
+  font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.comp-search-input::placeholder { color: var(--ink-3); }
+.comp-search-input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108,92,231,0.12);
+}
+.comp-search-clear {
+  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  background: var(--paper); border: 1px solid var(--border); border-radius: 6px;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--ink-2); cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.comp-search-clear:hover { background: var(--accent-2); color: var(--accent-dk); }
+.comp-search-count {
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  padding: 4px 9px; border-radius: 5px;
+  background: var(--accent-2); color: var(--accent-dk); font-weight: 700;
+  white-space: nowrap;
+}
+.view-toggle-actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
 .view-toggle-btn {
   padding: 7px 14px; border-radius: 9px;
   border: 1.5px solid var(--border); background: var(--white);
   font-size: 12px; font-weight: 600; color: var(--ink-2);
   cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px;
+  font-family: inherit;
 }
 .view-toggle-btn:hover { border-color: var(--accent); color: var(--accent-dk); }
 .view-toggle-btn.active { background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk); }
+
+/* Hide cards that don't match the search (display:none — preserves DOM) */
+.comp-card.is-search-hidden { display: none !important; }
+.dom-card.is-search-hidden  { display: none !important; }
+/* When a search is active and matches things in a domain, force-open the domain card */
+.dom-card.is-search-open { /* same as .open but driven by search */ }
+.dom-card.is-search-open .dom-card-preview { display: none; }
+.dom-card.is-search-open .dom-card-body    { display: block; }
+.dom-card.is-search-open .dom-card-chev    { transform: rotate(180deg); }
+/* Highlight matched terms inside comp-name / comp-intent */
+.comp-card mark.search-hit {
+  background: #fef08a; color: #713f12; border-radius: 3px;
+  padding: 0 2px;
+}
 
 /* Competency rows */
 .comp-list { display: flex; flex-direction: column; gap: 12px; }
@@ -375,19 +423,66 @@
   box-shadow: 0 6px 18px -8px rgba(108,92,231,0.25);
   transform: translateY(-1px);
 }
+/* Collapsible group head — clickable button covering full row */
 .src-group-head {
-  padding-bottom: 14px; margin-bottom: 12px;
-  border-bottom: 1px dashed var(--border);
+  width: 100%; background: transparent; border: none; padding: 0 0 14px 0;
+  margin-bottom: 0; border-bottom: 1px dashed var(--border);
+  display: flex; align-items: flex-start; gap: 12px;
+  text-align: left; cursor: pointer; font-family: inherit; color: inherit;
+  transition: color 0.15s;
 }
-.src-group-icon { font-size: 22px; display: inline-block; margin-bottom: 6px; }
+.src-group-head:hover .src-group-title { color: var(--accent-dk); }
+.src-group-head:focus { outline: none; }
+.src-group-head:focus-visible .src-group-title { color: var(--accent-dk); text-decoration: underline; text-underline-offset: 3px; }
+.src-group-icon { font-size: 22px; line-height: 1; flex-shrink: 0; padding-top: 2px; }
+.src-group-head-text { flex: 1; min-width: 0; }
 .src-group-title {
   font-family: 'Lora', serif; font-size: 16px; font-weight: 600;
   color: var(--ink); margin: 0 0 4px 0; line-height: 1.3;
+  transition: color 0.15s;
 }
 .src-group-tag {
   font-size: 12px; color: var(--ink-3); margin: 0;
   font-style: italic; line-height: 1.5;
 }
+.src-group-chev {
+  font-size: 13px; color: var(--ink-3); flex-shrink: 0;
+  padding: 4px 6px; border-radius: 5px;
+  transition: transform 0.2s, color 0.15s, background 0.15s;
+}
+.src-group-head[aria-expanded="true"] .src-group-chev {
+  transform: rotate(180deg);
+  color: var(--accent-dk); background: var(--accent-2);
+}
+.src-group-head:hover .src-group-chev { color: var(--accent-dk); }
+
+/* Body: collapsed by default, expands via .is-open class */
+.src-group-body {
+  max-height: 0; overflow: hidden;
+  transition: max-height 0.35s ease, padding-top 0.35s ease;
+  padding-top: 0;
+}
+.src-group.is-open .src-group-body {
+  max-height: 4000px; /* generous ceiling; transitions smoothly */
+  padding-top: 14px;
+}
+
+/* Master toolbar — Expand all / Collapse all */
+.src-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.src-toolbar-count { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.src-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.src-toolbar-btn {
+  padding: 7px 14px; border-radius: 8px;
+  border: 1.5px solid var(--border); background: var(--white);
+  font-size: 12px; font-weight: 600; color: var(--ink-2);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.src-toolbar-btn:hover { border-color: var(--accent); color: var(--accent-dk); }
+.src-toolbar-btn:focus { outline: none; border-color: var(--accent); }
 
 /* Group accent stripes — each group carries a left-edge colour cue */
 .src-group-cambridge { border-left: 4px solid #5b21b6; }
@@ -3580,9 +3675,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   </div>
 
   <div class="view-toggle-row">
-    <button class="view-toggle-btn" id="viewToggleBtn" type="button" onclick="window.toggleFlatView()" title="Switch between grouped (by domain) and flat (all skills) view">
-      <span id="viewToggleLabel">📋 Show all 24 skills flat</span>
-    </button>
+    <div class="comp-search-wrap">
+      <input type="search" class="comp-search-input" id="compSearchInput" placeholder="🔎 Search skills — name, intent, Cambridge/ES/AICF ref…" autocomplete="off" oninput="window.applyCompSearch()" />
+      <button type="button" class="comp-search-clear" id="compSearchClear" onclick="window.clearCompSearch()" aria-label="Clear search" hidden>✕</button>
+    </div>
+    <span class="comp-search-count" id="compSearchCount" hidden></span>
+    <div class="view-toggle-actions">
+      <button class="view-toggle-btn" id="collapseAllBtn" type="button" onclick="window.toggleAllCompCards()" title="Expand or collapse every skill card">
+        <span id="collapseAllLabel">▾ Expand all</span>
+      </button>
+      <button class="view-toggle-btn" id="viewToggleBtn" type="button" onclick="window.toggleFlatView()" title="Switch between grouped (by domain) and flat (all skills) view">
+        <span id="viewToggleLabel">📋 Show all skills flat</span>
+      </button>
+    </div>
   </div>
 
   <!-- Grouped view: 6 domain cards, click to expand and see competencies inside -->
@@ -3609,18 +3714,29 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="src-head">
       <div class="src-eyebrow">Sources &amp; Further Reading</div>
       <h2 class="src-title">Where the reading content comes from</h2>
-      <p class="src-sub">Every paragraph in this Learning Path is anchored to a published source. Skim this list when you have 20 minutes; bookmark anything you want to read in full. Sources are grouped by purpose — Cambridge first, Indonesian regulation second, evidence-based PD third, subject pedagogy fourth, AI policy fifth.</p>
+      <p class="src-sub">Every paragraph in this Learning Path is anchored to a published source. Skim this list when you have 20 minutes; bookmark anything you want to read in full. Sources are grouped by purpose — Cambridge first, Indonesian regulation second, evidence-based PD third, subject pedagogy fourth, AI policy fifth, Eduversal canon sixth. <strong>Click any group header to expand it.</strong></p>
+    </div>
+
+    <div class="src-toolbar">
+      <span class="src-toolbar-count" id="srcToolbarCount">6 groups · click to expand</span>
+      <div class="src-toolbar-actions">
+        <button type="button" class="src-toolbar-btn" onclick="window.expandAllSrcGroups()">▾ Expand all</button>
+        <button type="button" class="src-toolbar-btn" onclick="window.collapseAllSrcGroups()">▴ Collapse all</button>
+      </div>
     </div>
 
     <div class="src-grid">
       <!-- ─── Group 1: Cambridge International ──────────────────────────── -->
       <div class="src-group src-group-cambridge">
-        <div class="src-group-head">
+        <button type="button" class="src-group-head" onclick="window.toggleSrcGroup(this)" aria-expanded="false">
           <span class="src-group-icon">🎓</span>
-          <h3 class="src-group-title">Cambridge International</h3>
-          <p class="src-group-tag">The contract every Specialist works inside.</p>
-        </div>
-        <ul class="src-list">
+          <span class="src-group-head-text">
+            <h3 class="src-group-title">Cambridge International</h3>
+            <p class="src-group-tag">The contract every Specialist works inside.</p>
+          </span>
+          <span class="src-group-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="src-group-body"><ul class="src-list">
           <li class="src-item">
             <a class="src-link" href="https://www.cambridgeinternational.org/Images/cambridge-teacher-standards.pdf" target="_blank" rel="noopener">Cambridge Teacher Standards (2023)</a>
             <div class="src-why">The 5-domain, 27-standard reference every CTS chip on this page points back to. Read once end-to-end; refer to it whenever you are not sure why a competency anchors where it does.</div>
@@ -3651,17 +3767,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="src-why">The position statement behind Cambridge's coursework AI rules. Reading this before the Exams Officers' Guide gives you the "why" behind the "what".</div>
             <div class="src-meta">Article · free · 8 min</div>
           </li>
-        </ul>
+        </ul></div>
       </div>
 
       <!-- ─── Group 2: Indonesian Regulation (2024-2026) ─────────────────── -->
       <div class="src-group src-group-indonesia">
-        <div class="src-group-head">
+        <button type="button" class="src-group-head" onclick="window.toggleSrcGroup(this)" aria-expanded="false">
           <span class="src-group-icon">🇮🇩</span>
-          <h3 class="src-group-title">Indonesian Regulation (2024–2026)</h3>
-          <p class="src-group-tag">The national-law layer every partner school operates inside.</p>
-        </div>
-        <ul class="src-list">
+          <span class="src-group-head-text">
+            <h3 class="src-group-title">Indonesian Regulation (2024–2026)</h3>
+            <p class="src-group-tag">The national-law layer every partner school operates inside.</p>
+          </span>
+          <span class="src-group-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="src-group-body"><ul class="src-list">
           <li class="src-item">
             <a class="src-link" href="https://peraturan.go.id/id/permendikdasmen-no-1-tahun-2026" target="_blank" rel="noopener">Permendikdasmen No. 1 Tahun 2026 — Standar Proses</a>
             <div class="src-why">The replacement for Permendikbudristek 16/2022 (effective 5 January 2026). Three new learning principles — <em>sadar</em> (conscious), <em>bermakna</em> (meaningful), <em>menggembirakan</em> (joyful). Anchors competencies nls-3 (curriculum policy) and cqa-1 (pacing — what "meaningful" pacing looks like).</div>
@@ -3687,17 +3806,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="src-why">The national curriculum your partner schools deliver alongside Cambridge. Capaian Pembelajaran (CP) = learning outcomes by Fase; Alur Tujuan Pembelajaran (ATP) = scope &amp; sequence. Anchor for cqa-2 (Scheme of Work moderation) — every Cambridge SoW in the network must align with KM at the same time.</div>
             <div class="src-meta">Government portal · free · varies by subject</div>
           </li>
-        </ul>
+        </ul></div>
       </div>
 
       <!-- ─── Group 3: Evidence-based Professional Development ───────────── -->
       <div class="src-group src-group-evidence">
-        <div class="src-group-head">
+        <button type="button" class="src-group-head" onclick="window.toggleSrcGroup(this)" aria-expanded="false">
           <span class="src-group-icon">📊</span>
-          <h3 class="src-group-title">Evidence-based Professional Development</h3>
-          <p class="src-group-tag">What 50 years of CPD research actually says works.</p>
-        </div>
-        <ul class="src-list">
+          <span class="src-group-head-text">
+            <h3 class="src-group-title">Evidence-based Professional Development</h3>
+            <p class="src-group-tag">What 50 years of CPD research actually says works.</p>
+          </span>
+          <span class="src-group-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="src-group-body"><ul class="src-list">
           <li class="src-item">
             <a class="src-link" href="https://d2tic4wvo1iusb.cloudfront.net/production/eef-guidance-reports/effective-professional-development/EEF-Effective-Professional-Development-Guidance-Report.pdf" target="_blank" rel="noopener">EEF — Effective Professional Development Guidance Report (2024)</a>
             <div class="src-why">Education Endowment Foundation's evidence synthesis. Names 14 mechanisms in 4 groups (build knowledge / motivate teachers / develop techniques / embed practice). Every workshop you design (tpd-1) should map to at least one mechanism from each group.</div>
@@ -3728,17 +3850,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="src-why">Both are evidence-based; they suit different teachers. Knight Impact Cycles = facilitative (teacher names goal, picks action). Bambrick-Santoyo Get Better Faster = directive (Specialist names granular action steps). Mismatched style fails — tpd-3 Practitioner covers when to pick which.</div>
             <div class="src-meta">Blog article · free · 8 min</div>
           </li>
-        </ul>
+        </ul></div>
       </div>
 
       <!-- ─── Group 4: Subject Pedagogy ──────────────────────────────────── -->
       <div class="src-group src-group-pedagogy">
-        <div class="src-group-head">
+        <button type="button" class="src-group-head" onclick="window.toggleSrcGroup(this)" aria-expanded="false">
           <span class="src-group-icon">📚</span>
-          <h3 class="src-group-title">Subject Pedagogy</h3>
-          <p class="src-group-tag">The classroom-craft references that turn observation into teaching.</p>
-        </div>
-        <ul class="src-list">
+          <span class="src-group-head-text">
+            <h3 class="src-group-title">Subject Pedagogy</h3>
+            <p class="src-group-tag">The classroom-craft references that turn observation into teaching.</p>
+          </span>
+          <span class="src-group-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="src-group-body"><ul class="src-list">
           <li class="src-item">
             <a class="src-link" href="https://www.aft.org/sites/default/files/Rosenshine.pdf" target="_blank" rel="noopener">Rosenshine (2012) — Principles of Instruction</a>
             <div class="src-why">10 evidence-based instructional principles distilled from cognitive science, classroom research, and master-teacher observation. Foundational across the Path — cited in csm-1, csm-2, tpd-2, and the EAL/ESL teaching moves throughout. Read in full; it is 12 pages.</div>
@@ -3779,17 +3904,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="src-why">An ongoing meta-evidence map: every common classroom intervention rated by months of additional learning, evidence strength, and cost. Use it before recommending any intervention to a partner school.</div>
             <div class="src-meta">Web tool · free · search by intervention</div>
           </li>
-        </ul>
+        </ul></div>
       </div>
 
       <!-- ─── Group 5: AI in Education ───────────────────────────────────── -->
       <div class="src-group src-group-ai">
-        <div class="src-group-head">
+        <button type="button" class="src-group-head" onclick="window.toggleSrcGroup(this)" aria-expanded="false">
           <span class="src-group-icon">🤖</span>
-          <h3 class="src-group-title">AI in Education</h3>
-          <p class="src-group-tag">Cambridge's policy + the international AI literacy frame.</p>
-        </div>
-        <ul class="src-list">
+          <span class="src-group-head-text">
+            <h3 class="src-group-title">AI in Education</h3>
+            <p class="src-group-tag">Cambridge's policy + the international AI literacy frame.</p>
+          </span>
+          <span class="src-group-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="src-group-body"><ul class="src-list">
           <li class="src-item">
             <a class="src-link" href="https://unesdoc.unesco.org/ark:/48223/pf0000391104" target="_blank" rel="noopener">UNESCO — AI Competency Framework for Teachers (2024)</a>
             <div class="src-why">The international framework for teacher AI literacy. 5 aspects (Human-centred mindset, Ethics, AI foundations, AI pedagogy, AI for PD) × 3 progression levels (Acquire, Deepen, Create) = 15 blocks. Eduversal AICF anchors map back to this.</div>
@@ -3805,17 +3933,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="src-why">The network's documented AI red lines — what is malpractice, what is fine, what to escalate. Pair with Cambridge's Exams Officers' Guide Phase 3.</div>
             <div class="src-meta">Internal reference · free</div>
           </li>
-        </ul>
+        </ul></div>
       </div>
 
       <!-- ─── Group 6: Eduversal Canon ───────────────────────────────────── -->
       <div class="src-group src-group-internal">
-        <div class="src-group-head">
+        <button type="button" class="src-group-head" onclick="window.toggleSrcGroup(this)" aria-expanded="false">
           <span class="src-group-icon">🏛️</span>
-          <h3 class="src-group-title">Eduversal Canon</h3>
-          <p class="src-group-tag">The network's own authority documents — referenced inline as ES + AICF chips throughout.</p>
-        </div>
-        <ul class="src-list">
+          <span class="src-group-head-text">
+            <h3 class="src-group-title">Eduversal Canon</h3>
+            <p class="src-group-tag">The network's own authority documents — referenced inline as ES + AICF chips throughout.</p>
+          </span>
+          <span class="src-group-chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="src-group-body"><ul class="src-list">
           <li class="src-item">
             <a class="src-link" href="/references?doc=eduversal-standards-section-07" target="_blank" rel="noopener">Eduversal Academic Standards — Section 07: Teaching Quality &amp; Practice</a>
             <div class="src-why">The 27-madde core of teaching practice across the network. ES 7.3 (Appraisal System), 7.4 (Observation Process), 7.7 (Professional Learning Communities), 7.13–7.14 (AI in Teaching) appear repeatedly across this Path.</div>
@@ -3841,7 +3972,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="src-why">The network-wide teacher appraisal lens (F1–F5 + composite + A–F band). Every teacher appraisal you conduct on a partner-school visit lands here. Lives in `Academic Hub/resources/appraisal-framework-v2.json`, byte-identical copy in `Teachers Hub/resources/`.</div>
             <div class="src-meta">Internal reference · free</div>
           </li>
-        </ul>
+        </ul></div>
       </div>
 
     </div>
@@ -3878,7 +4009,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   </div>
 </div>
 
-<!-- Intro banner show/dismiss (runs early, no Firebase dep) -->
+<!-- Intro banner show/dismiss + Sources block collapsible toggle (runs early, no Firebase dep) -->
 <script>
 (function() {
   const KEY_PREFIX = 'ch_intro_dismissed_';
@@ -3894,6 +4025,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       try { dismissed = localStorage.getItem(KEY_PREFIX + slug) === '1'; } catch (_) {}
       if (!dismissed) el.classList.add('show');
     });
+  });
+
+  // ── Sources block collapsible groups ──────────────────────────────
+  function setSrcGroupOpen(group, open) {
+    if (!group) return;
+    const btn = group.querySelector('.src-group-head');
+    group.classList.toggle('is-open', open);
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    updateSrcCount();
+  }
+
+  function updateSrcCount() {
+    const groups = document.querySelectorAll('.src-group');
+    const openCount = document.querySelectorAll('.src-group.is-open').length;
+    const el = document.getElementById('srcToolbarCount');
+    if (!el || !groups.length) return;
+    el.textContent = openCount === 0
+      ? `${groups.length} groups · click to expand`
+      : `${openCount} of ${groups.length} expanded`;
+  }
+
+  window.toggleSrcGroup = function(btn) {
+    const group = btn.closest('.src-group');
+    setSrcGroupOpen(group, !group.classList.contains('is-open'));
+  };
+  window.expandAllSrcGroups = function() {
+    document.querySelectorAll('.src-group').forEach(g => setSrcGroupOpen(g, true));
+  };
+  window.collapseAllSrcGroups = function() {
+    document.querySelectorAll('.src-group').forEach(g => setSrcGroupOpen(g, false));
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    updateSrcCount();
+    // If the URL hash points at #sourcesBlock open everything for instant readability.
+    if (window.location.hash === '#sourcesBlock') {
+      window.expandAllSrcGroups();
+    }
   });
 })();
 </script>
@@ -4184,6 +4353,139 @@ window.toggleFlatView = function() {
 window.toggleCard = function(cardId) {
   document.getElementById(cardId)?.classList.toggle('open');
 };
+
+// ─── Collapse / Expand all comp-cards + dom-cards ─────
+// Tracks the user's intent so the next click does the inverse.
+let allExpanded = false;
+window.toggleAllCompCards = function() {
+  allExpanded = !allExpanded;
+  // Comp cards in BOTH grouped + flat views
+  document.querySelectorAll('.comp-card').forEach(c => {
+    c.classList.toggle('open', allExpanded);
+  });
+  // Dom cards (grouped view containers)
+  document.querySelectorAll('.dom-card').forEach(d => {
+    d.classList.toggle('open', allExpanded);
+  });
+  const btn = document.getElementById('collapseAllBtn');
+  const label = document.getElementById('collapseAllLabel');
+  if (btn) btn.classList.toggle('active', allExpanded);
+  if (label) label.textContent = allExpanded ? '▴ Collapse all' : '▾ Expand all';
+};
+
+// ─── Keyword search across competencies ───────────────
+// Matches against: comp.id, comp.name, comp.intent, domain name,
+// cambridgeStandardRefs[], eduversalStandardRefs[], aicfRefs[], pedagogyRefs[].
+// Highlights matches inside the comp-name + comp-intent.
+function compHaystack(c) {
+  const parts = [
+    c.id, c.name, c.intent || '',
+    (FW.domains || []).find(d => d.id === c.domainId)?.name || '',
+    ...(c.cambridgeStandardRefs || []).map(r => 'CTS ' + r),
+    ...(c.permendiknasRefs || []),
+    ...(c.eduversalStandardRefs || []).map(r => 'ES ' + r),
+    ...(c.aicfRefs || []).map(r => 'AICF ' + r),
+    ...(c.pedagogyRefs || []),
+  ];
+  return parts.join(' || ').toLowerCase();
+}
+
+function highlightTerm(text, term) {
+  if (!term) return text;
+  // Case-insensitive replace with mark wrapping. Escape regex metachars in term.
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp('(' + escaped + ')', 'gi'), '<mark class="search-hit">$1</mark>');
+}
+
+window.applyCompSearch = function() {
+  const input = document.getElementById('compSearchInput');
+  const count = document.getElementById('compSearchCount');
+  const clearBtn = document.getElementById('compSearchClear');
+  const term = (input?.value || '').trim().toLowerCase();
+  const allComps = FW.competencies || [];
+
+  if (clearBtn) clearBtn.hidden = !term;
+
+  if (!term) {
+    // Reset: unhide everything, strip highlights, close forced-open domains
+    document.querySelectorAll('.comp-card.is-search-hidden').forEach(el => el.classList.remove('is-search-hidden'));
+    document.querySelectorAll('.dom-card.is-search-hidden').forEach(el => el.classList.remove('is-search-hidden'));
+    document.querySelectorAll('.dom-card.is-search-open').forEach(el => el.classList.remove('is-search-open'));
+    document.querySelectorAll('.comp-card mark.search-hit').forEach(m => {
+      const parent = m.parentNode;
+      parent.replaceChild(document.createTextNode(m.textContent), m);
+      parent.normalize();
+    });
+    if (count) count.hidden = true;
+    return;
+  }
+
+  // Identify matching competency ids
+  const matchedIds = new Set();
+  for (const c of allComps) {
+    if (compHaystack(c).includes(term)) matchedIds.add(c.id);
+  }
+
+  // Hide non-matching comp cards (grouped + flat views both carry comp-card)
+  let visibleCount = 0;
+  document.querySelectorAll('.comp-card').forEach(card => {
+    const compId = card.id.replace(/^card-(grp|flat)-/, '');
+    const hit = matchedIds.has(compId);
+    card.classList.toggle('is-search-hidden', !hit);
+    if (hit) visibleCount++;
+
+    // Re-highlight name + intent (rebuild from text to avoid nested marks)
+    const nameEl = card.querySelector('.comp-name');
+    const intentEl = card.querySelector('.comp-intent');
+    if (nameEl && hit) {
+      // Preserve the inline domain chip if present (flat-view only)
+      const domChip = nameEl.querySelector('.comp-dom-chip');
+      const chipHtml = domChip ? domChip.outerHTML : '';
+      const baseName = (allComps.find(c => c.id === compId)?.name || '').toString();
+      nameEl.innerHTML = highlightTerm(escHtml(baseName), term) + chipHtml;
+    }
+    if (intentEl && hit) {
+      const baseIntent = (allComps.find(c => c.id === compId)?.intent || '').toString();
+      intentEl.innerHTML = highlightTerm(escHtml(baseIntent), term);
+    }
+  });
+
+  // Hide dom-cards with no surviving comp-cards; force-open ones that have hits
+  document.querySelectorAll('.dom-card').forEach(dc => {
+    const domId = dc.id.replace(/^dom-/, '');
+    const compsInDom = allComps.filter(c => c.domainId === domId);
+    const anyHit = compsInDom.some(c => matchedIds.has(c.id));
+    dc.classList.toggle('is-search-hidden', !anyHit);
+    dc.classList.toggle('is-search-open', anyHit);
+  });
+
+  if (count) {
+    count.textContent = `${visibleCount} of ${allComps.length} match`;
+    count.hidden = false;
+  }
+};
+
+window.clearCompSearch = function() {
+  const input = document.getElementById('compSearchInput');
+  if (input) input.value = '';
+  window.applyCompSearch();
+  input?.focus();
+};
+
+// Lightweight HTML-escape used during search re-render (esc() in module scope
+// is closure-private; we need a copy here so the search code stays standalone).
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// Fix the legacy "24 skills" label to reflect the actual framework size on load.
+document.addEventListener('authReady', () => {
+  const label = document.getElementById('viewToggleLabel');
+  const total = (FW?.competencies || []).length;
+  if (label && total && /Show all \d+ skills flat/.test(label.textContent)) {
+    label.textContent = `📋 Show all ${total} skills flat`;
+  }
+});
 </script>
 <script src="cambridge-crossref.js" defer></script>
 </body>
