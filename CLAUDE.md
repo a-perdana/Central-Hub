@@ -312,8 +312,15 @@ CH owns two roles in the 3-track system:
 2. **Author of CH Specialist track** via the 4 `specialist-*.html` pages
 
 **CH-specific:**
-- The Specialist track is **hybrid by design** — coaching-observer (cof / tpd) + subject-deepening (csm / cqa) + network strategy (nls / xen). 9/27 CTS covered (intentional — Specialists work *with* teachers, not *as* teachers).
-- Per-(comp, level) content **auto-generated** by `scripts/competency/generate-and-seed-specialists-content.js` from framework metadata + Cambridge verbatim text. Each doc carries `generated: true` so a future hand-rewrite pass can identify what to overwrite.
+- The Specialist track is **hybrid by design** — coaching-observer (cof / tpd) + subject-deepening (csm / cqa) + network strategy (nls / xen). v2 refresh (2026-05-19) widened to **29 competencies** (added csm-5 AS/A-Level, cof-5 NEA Moderation, tpd-5 Subject CoP, nls-5 Charter NN1+NN2 Boundary, xen-5 Cambridge AI & Coursework Authenticity). 11/27 CTS covered (intentional — Specialists work *with* teachers, not *as* teachers).
+- **v2 schema (2026-05-19)** — every competency now carries:
+  - `cambridgeStandardRefs[]` (CTS chips, mor)
+  - `permendiknasRefs[]` (yellow)
+  - `eduversalStandardRefs[]` (ES madde chips, cyan — validated against `docs/research/eduversal/academic-standards/manifest.json`)
+  - `aicfRefs[]` (AI Competency Framework chips, orange — **canonical refId format `teacher.{foundation|practitioner|leader}.{domainA-E}` or `unesco_aicft.{acquire|deepen|create}`** — wired by `cambridge-crossref.js` to popovers)
+  - `pedagogyRefs[]` (📖 slate chips — Rosenshine / EEF / Kraft 2018 / Wenger / Schoenfeld / Driver / Wiliam / Lesson Study free-text bibliographic anchors)
+- **Hand-authored v2 content** in `docs/competency/specialist-content-backfill-v2-part{1,2,3}.json` (89 entries × 29 competencies). Seeder: `scripts/competency/seed-specialist-content-v2.js`. Source field `hand_authored_v2` distinguishes from legacy v1. Legacy v1 backfills + seeders archived under `docs/competency/legacy/` + `scripts/competency/legacy/` (see README in each).
+- **Auditable quality**: `node scripts/competency/audit-specialist-content.js` runs against live Firestore and reports Indonesia density + freshness density (post-2007 regulation + named modern sources) + pedagogy density per track. v2 targets: freshness ≥ 0.50/entry, pedagogy ≥ 0.30/entry, Indonesia ≥ 2.0/entry. Specialist track currently passes all 3 with margin (6.00 / 1.00 / 1.00).
 - `kpi-admin.html` "Add Teacher KPI" modal has a "Cambridge Teacher Standards Tags" input. Refs validated against `competency_framework/teachers.cambridgeStandards` on save.
 - `schools.html` "Edit School" modal has "Enabled Pilots" checkboxes writing to `partner_schools.enabled_systems[]`. **Caveat:** 2 unfixed callsites still write to legacy `'schools'` collection (notes-update line ~542 + delete line ~981) — needs follow-up.
 - Storage rule for `competency_evidence/{platform}/{uid}/{filename}` accepts all 3 platforms (≤25 MB).
