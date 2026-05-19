@@ -965,10 +965,13 @@ service cloud.firestore {
     // -- announcements ---------------------------------------
     match /announcements/{annId} {
       allow read:   if isAuthorized();
-      allow create, delete: if isAdmin();
-      // Admin can update freely; any authorised user can bump commentCount only
-      // (so non-admin commenters can keep the count in sync after addDoc).
-      allow update: if isAdmin()
+      // central_admin + CH coordinator can create; delete stays admin-only.
+      allow create: if isAdmin() || isCHCoordinator();
+      allow delete: if isAdmin();
+      // Admin + coordinator can update freely; any authorised user can bump
+      // commentCount only (so non-admin commenters can keep the count in sync
+      // after addDoc).
+      allow update: if isAdmin() || isCHCoordinator()
                        || (isAuthorized()
                            && request.resource.data.diff(resource.data).affectedKeys()
                                 .hasOnly(['commentCount']));
@@ -2334,20 +2337,27 @@ service cloud.firestore {
     match /topics/{topicId} {
       allow read:   if isAuthorized();
       allow create: if isAuthorized();
-      // Author / admin can do full updates; any authorised user can bump replyCount only
-      // (so non-author repliers keep the count in sync after addDoc to /replies).
+      // Author / admin / CH coordinator can do full updates; any authorised user
+      // can bump replyCount only (so non-author repliers keep the count in sync
+      // after addDoc to /replies).
       allow update: if isAuthorized() && (
                        resource.data.authorUid == request.auth.uid
                     || isAdmin()
+                    || isCHCoordinator()
                     || request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['replyCount']));
+      // Delete stays restricted to author + admin (coordinator excluded).
       allow delete: if isAuthorized() && (resource.data.authorUid == request.auth.uid || isAdmin());
 
       match /replies/{replyId} {
         allow read:   if isAuthorized();
         allow create: if isAuthorized();
-        allow update, delete: if isAuthorized() &&
-                                 (resource.data.authorUid == request.auth.uid || isAdmin());
+        // Author can edit/delete own; admin can do either; coordinator can edit
+        // but not delete (mirrors topic-level rule).
+        allow update: if isAuthorized() &&
+                         (resource.data.authorUid == request.auth.uid || isAdmin() || isCHCoordinator());
+        allow delete: if isAuthorized() &&
+                         (resource.data.authorUid == request.auth.uid || isAdmin());
       }
     }
 
