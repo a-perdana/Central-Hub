@@ -395,6 +395,42 @@
   .comp-head { padding: 14px 16px; gap: 10px; }
   .cmod-overlay { padding: 30px 12px; }
   .cmod-body { max-height: calc(100vh - 180px); }
+  /* Toolbar wraps to 2 rows: search takes full width, then actions row */
+  .comp-search-wrap { flex: 1 1 100%; min-width: 0; }
+  .view-toggle-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+  .comp-search-count { order: 99; flex: 1 1 auto; text-align: center; }
+  /* Sources block: chevron + icon shrink */
+  .src-group-head { gap: 10px; }
+  .src-group-icon { font-size: 20px; }
+  .src-group-title { font-size: 14.5px; }
+  .src-group-tag { font-size: 11.5px; }
+}
+
+/* Very narrow (≤ 360px — iPhone SE 1st gen, oldest Android) */
+@media (max-width: 360px) {
+  .hero { padding: 22px 16px 20px; }
+  .hero-title { font-size: 1.15rem; }
+  .hero-sub { font-size: 0.78rem; }
+  .page-wrap { padding: 18px 12px 50px; }
+  /* Tighten toolbar buttons so 2 fit side-by-side */
+  .view-toggle-btn { padding: 6px 10px; font-size: 11px; }
+  .comp-search-input { font-size: 12.5px; padding: 7px 32px 7px 12px; }
+  /* Chip rows wrap aggressively */
+  .comp-tags .tag, .comp-tags .tag-ped { font-size: 9.5px; padding: 2px 5px; }
+  .tag-ped { max-width: 140px; }
+  /* Sources block tighter padding */
+  .src-block { padding: 22px 14px 18px; }
+  .src-title { font-size: 1.2rem; }
+  .src-toolbar-btn { padding: 6px 10px; font-size: 11px; }
+  /* Modal padding minimal */
+  .cmod-overlay { padding: 20px 8px; }
+  .cmod-head { padding: 16px 18px 14px; }
+  .cmod-body { padding: 18px 18px 16px; }
+  .cmod-title { font-size: 15px; }
+  /* Domain card preview chip list wraps cleanly */
+  .dom-card-head { padding: 14px 16px; gap: 12px; }
+  .dom-card-name { font-size: 14px; }
+  .dom-skill-chip { font-size: 10px; padding: 3px 6px; }
 }
 
 /* ─── Sources & Further Reading section (v2 refresh, 2026-05-19) ─────── */
@@ -897,15 +933,15 @@
 
 </div>
 
-<!-- CONTENT MODAL -->
-<div class="cmod-overlay" id="cmodOverlay" onclick="if(event.target===this)window.closeCmod()">
-  <div class="cmod">
+<!-- CONTENT MODAL — role=dialog, aria-modal=true, ESC closes, focus trap (see toggle script) -->
+<div class="cmod-overlay" id="cmodOverlay" role="dialog" aria-modal="true" aria-labelledby="cmodTitle" aria-describedby="cmodBody" onclick="if(event.target===this)window.closeCmod()">
+  <div class="cmod" tabindex="-1">
     <div class="cmod-head">
       <div class="cmod-head-text">
         <div class="cmod-eyebrow" id="cmodEyebrow">Loading…</div>
         <div class="cmod-title" id="cmodTitle">—</div>
       </div>
-      <button class="cmod-close" onclick="window.closeCmod()" aria-label="Close">✕</button>
+      <button class="cmod-close" onclick="window.closeCmod()" aria-label="Close (ESC)">✕</button>
     </div>
     <div class="cmod-body" id="cmodBody">
       <div class="cmod-empty">Loading…</div>
@@ -1033,6 +1069,12 @@ window.openLevelContent = async function(compId, lvl) {
     `/specialist-portfolio?comp=${encodeURIComponent(compId)}&level=${encodeURIComponent(lvl)}`;
   document.getElementById('cmodOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  // ── Accessibility: remember the element we came from, move focus inside.
+  _cmodPreviouslyFocused = document.activeElement;
+  setTimeout(() => {
+    const closeBtn = document.querySelector('#cmodOverlay .cmod-close');
+    if (closeBtn) closeBtn.focus();
+  }, 60);
 
   const content = await loadContent(compId, lvl);
   const body = document.getElementById('cmodBody');
@@ -1142,7 +1184,44 @@ function highlightTextNodes(root, term) {
 window.closeCmod = function() {
   document.getElementById('cmodOverlay').classList.remove('open');
   document.body.style.overflow = '';
+  // Restore focus to the element that opened the modal (typically the level chip).
+  if (_cmodPreviouslyFocused && typeof _cmodPreviouslyFocused.focus === 'function') {
+    try { _cmodPreviouslyFocused.focus(); } catch (_) {}
+  }
+  _cmodPreviouslyFocused = null;
 };
+
+// ── Modal accessibility: tracks the element that opened the modal so focus
+// returns there on close; ESC closes; Tab cycles inside the modal.
+let _cmodPreviouslyFocused = null;
+function _cmodIsOpen() {
+  return document.getElementById('cmodOverlay')?.classList.contains('open');
+}
+document.addEventListener('keydown', (e) => {
+  if (!_cmodIsOpen()) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    window.closeCmod();
+    return;
+  }
+  if (e.key === 'Tab') {
+    // Simple focus trap: collect focusable elements inside the modal,
+    // wrap focus at the boundaries.
+    const modal = document.getElementById('cmodOverlay');
+    const focusable = modal.querySelectorAll(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last  = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && active === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
+});
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 // Minimal markdown-ish: **bold** and *italic*.
@@ -1174,7 +1253,7 @@ function compCardHtml(c, { showDomChip = false } = {}) {
   const lvls = (c.levels || []).map(l => {
     const cls = `lvl-chip has-content${earnedLvl === l ? ' earned' : ''}`;
     const safeId = c.id.replace(/'/g, "\\'");
-    return `<span class="${cls}" onclick="event.stopPropagation();window.openLevelContent('${safeId}','${l}')" title="Click to read at this level">${LEVEL_LABEL[l] || l}${earnedLvl === l ? ' ✓' : ''}</span>`;
+    return `<span class="${cls}" role="button" tabindex="0" onclick="event.stopPropagation();window.openLevelContent('${safeId}','${l}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();window.openLevelContent('${safeId}','${l}');}" title="Click or press Enter to read at this level">${LEVEL_LABEL[l] || l}${earnedLvl === l ? ' ✓' : ''}</span>`;
   }).join('');
   const refs = Array.isArray(c.cambridgeStandardRefs) ? c.cambridgeStandardRefs : [];
   const perms = Array.isArray(c.permendiknasRefs) ? c.permendiknasRefs : [];

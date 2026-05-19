@@ -139,6 +139,36 @@
   .submit-btn { width: 100%; justify-content: center; }
   .drop-zone { padding: 22px 16px; }
 }
+
+/* ── Competency anchor summary (between Competency + Level selects) ── */
+.ps-summary {
+  margin: -8px 0 18px 0;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #fafafb 0%, #f4f4f7 100%);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.ps-summary-head { margin-bottom: 10px; }
+.ps-summary-eyebrow {
+  display: block;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent-dk); margin-bottom: 4px;
+}
+.ps-summary-intent {
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.55; font-style: italic;
+}
+.ps-summary-chips {
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+.ps-pill {
+  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600;
+  padding: 3px 8px; border-radius: 5px; line-height: 1.4;
+}
+.ps-cts  { background: #ede9fe; color: #5b21b6; }
+.ps-perm { background: #fef3c7; color: #92400e; }
+.ps-es   { background: #cffafe; color: #0e7490; }
+.ps-aicf { background: #ffedd5; color: #c2410c; }
+.ps-ped  { font-family: 'DM Sans', sans-serif; background: #e2e8f0; color: #475569; font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 <script type="module" src="auth-guard.js"></script>
 </head>
@@ -3285,6 +3315,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       </select>
     </div>
 
+    <!-- Summary of the selected competency's anchors (CTS / ES / AICF / pedagogy). Click any chip to see verbatim source. -->
+    <div id="compSummary" class="ps-summary" style="display:none;"></div>
+
     <div class="form-row">
       <label class="form-label">Level you are claiming</label>
       <select class="form-select" id="levelSelect">
@@ -3377,7 +3410,13 @@ async function loadFramework() {
       name: c.name,
       domainId: c.domainId,
       domain: DOMAINS[c.domainId]?.name || '',
+      intent: c.intent || '',
       levels: Array.isArray(c.levels) ? c.levels : ['awareness','practitioner','advanced','lead'],
+      cambridgeStandardRefs: Array.isArray(c.cambridgeStandardRefs) ? c.cambridgeStandardRefs : [],
+      permendiknasRefs:      Array.isArray(c.permendiknasRefs)      ? c.permendiknasRefs      : [],
+      eduversalStandardRefs: Array.isArray(c.eduversalStandardRefs) ? c.eduversalStandardRefs : [],
+      aicfRefs:              Array.isArray(c.aicfRefs)              ? c.aicfRefs              : [],
+      pedagogyRefs:          Array.isArray(c.pedagogyRefs)          ? c.pedagogyRefs          : [],
     };
   }
 }
@@ -3401,10 +3440,35 @@ function populateCompSelect() {
   sel.addEventListener('change', () => {
     const meta = COMP_META[sel.value];
     const lvlSel = document.getElementById('levelSelect');
-    if (!meta) { lvlSel.innerHTML = '<option value="">— select competency first —</option>'; return; }
+    if (!meta) { lvlSel.innerHTML = '<option value="">— select competency first —</option>'; renderCompSummary(null); return; }
     lvlSel.innerHTML = '<option value="">— select level —</option>' +
       meta.levels.map(l => `<option value="${l}">${LEVEL_LABEL[l] || l}</option>`).join('');
+    renderCompSummary(meta);
   });
+}
+
+// Render a chip summary of the selected competency so the Specialist sees
+// what Cambridge / ES / AICF / pedagogy anchors the evidence will count against.
+function renderCompSummary(meta) {
+  const box = document.getElementById('compSummary');
+  if (!box) return;
+  if (!meta) { box.innerHTML = ''; box.style.display = 'none'; return; }
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const chips = [
+    ...meta.cambridgeStandardRefs.map(r => `<span class="ps-pill ps-cts" data-cts-ref="${r}" title="Cambridge Teacher Standards 2023 — ${r}">CTS ${r}</span>`),
+    ...meta.permendiknasRefs.map(p     => `<span class="ps-pill ps-perm" title="Permendiknas No.16/2007 pillar">${esc(p)}</span>`),
+    ...meta.eduversalStandardRefs.map(e => `<span class="ps-pill ps-es"  data-es-ref="${esc(e)}" title="Eduversal Academic Standards madde ${esc(e)}">ES ${esc(e)}</span>`),
+    ...meta.aicfRefs.map(a             => `<span class="ps-pill ps-aicf" data-aicf-ref="${esc(a)}" title="AICF block ${esc(a)}">AICF ${esc(a)}</span>`),
+    ...meta.pedagogyRefs.map(p         => `<span class="ps-pill ps-ped"  title="${esc(p)}">📖 ${esc(p)}</span>`),
+  ].join(' ');
+  box.innerHTML = `
+    <div class="ps-summary-head">
+      <span class="ps-summary-eyebrow">Anchors for this competency</span>
+      <span class="ps-summary-intent">${esc(meta.intent)}</span>
+    </div>
+    <div class="ps-summary-chips">${chips || '<em style="color:#888;font-size:12px;">No anchors recorded.</em>'}</div>
+  `;
+  box.style.display = 'block';
 }
 
 function prefillFromUrl() {
