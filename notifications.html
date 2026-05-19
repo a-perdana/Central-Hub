@@ -125,8 +125,9 @@
     .ni-doc  { background: #f0fdf4; color: #16a34a; }
     .ni-msg  { background: #faf5ff; color: #7c3aed; }
     .ni-visit{ background: #ccfbf1; color: #0f766e; }
-    .ni-kpi  { background: #fef3c7; color: #d97706; }
     .ni-survey{ background: #ede9fe; color: #7c3aed; }
+    .ni-feedback{ background: #fff7ed; color: #c2410c; }
+    .ni-alarm{ background: #fee2e2; color: #b91c1c; }
 
     .notif-body { flex: 1; min-width: 0; }
     .notif-title {
@@ -183,7 +184,7 @@
     <div class="hero-text">
       <p class="hero-eyebrow">Platform Activity · CentralHub</p>
       <h1 class="hero-title">Notifications</h1>
-      <p class="hero-desc">All platform activity in one place — announcements, new documents, message board posts, school visits, KPI updates, and survey results.</p>
+      <p class="hero-desc">All platform activity in one place — announcements, new documents, message board posts, school visits, and survey results. Admins additionally see feedback submissions and induction alarms. Read state syncs across devices.</p>
     </div>
   </div>
 </section>
@@ -204,6 +205,8 @@
     <button class="ftab"        data-filter="msg"         role="tab" aria-selected="false">Messages <span class="ftab-count" id="cnt-msg">—</span></button>
     <button class="ftab"        data-filter="visit"       role="tab" aria-selected="false">Visits <span class="ftab-count" id="cnt-visit">—</span></button>
     <button class="ftab"        data-filter="survey"      role="tab" aria-selected="false">Surveys <span class="ftab-count" id="cnt-survey">—</span></button>
+    <button class="ftab"        data-filter="feedback"    role="tab" aria-selected="false" data-admin-only="1" hidden>Feedback <span class="ftab-count" id="cnt-feedback">—</span></button>
+    <button class="ftab"        data-filter="alarm"       role="tab" aria-selected="false" data-admin-only="1" hidden>Induction Alarms <span class="ftab-count" id="cnt-alarm">—</span></button>
   </div>
 
   <div class="notif-toolbar">
@@ -237,33 +240,23 @@ import {
    STATE
    ================================================================ */
 let allItems = [];
-let readSet  = new Set();   // IDs the current user has "read"
+let lastReadAt = null;   // Firestore Timestamp — users.lastReadNotificationsAt
 let currentFilter = 'all';
-
-// Read set is persisted in localStorage per user uid
-function readKey(uid) { return `ch_notif_read_${uid}`; }
-function loadReadSet(uid) {
-  try { return new Set(JSON.parse(localStorage.getItem(readKey(uid)) || '[]')); }
-  catch { return new Set(); }
-}
-function saveReadSet(uid) {
-  try { localStorage.setItem(readKey(uid), JSON.stringify([...readSet])); }
-  catch {}
-}
 
 /* ================================================================
    ICONS
    ================================================================ */
 const ICONS = {
-  ann:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3z"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg>`,
-  doc:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
-  msg:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
-  visit: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
-  kpi:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
-  survey:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+  ann:      `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3z"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg>`,
+  doc:      `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  msg:      `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  visit:    `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+  survey:   `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+  feedback: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+  alarm:    `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></svg>`,
 };
-const LABELS = { ann:'Announcement', doc:'Document', msg:'Message', visit:'Visit', kpi:'KPI Update', survey:'Survey' };
-const HREFS  = { ann:'announcements', doc:'documents', msg:'messageboard', visit:'school-visits', kpi:'kpi-admin', survey:'surveys' };
+const LABELS = { ann:'Announcement', doc:'Document', msg:'Message', visit:'Visit', survey:'Survey', feedback:'Feedback', alarm:'Induction Alarm' };
+const HREFS  = { ann:'announcements', doc:'documents', msg:'messageboard', visit:'school-visits', survey:'surveys', feedback:'feedback-management', alarm:'induction-admin' };
 
 /* ================================================================
    AUTH READY
@@ -271,9 +264,19 @@ const HREFS  = { ann:'announcements', doc:'documents', msg:'messageboard', visit
 document.addEventListener('authReady', async ({ detail: { user } }) => {
   const db = window.db;
   const uid = user.uid;
-  readSet = loadReadSet(uid);
+  const profile = window.userProfile || {};
+  const isAdmin = profile.role_centralhub === 'central_admin';
+  const isDirector = Array.isArray(profile.ch_sub_roles) && profile.ch_sub_roles.includes('director');
 
-  await loadFeed(db);
+  // Capture lastRead BEFORE bumping it — used to mark current items as unread
+  lastReadAt = profile.lastReadNotificationsAt || null;
+
+  // Show admin-only filter tabs
+  if (isAdmin) {
+    document.querySelectorAll('.ftab[data-admin-only]').forEach(b => b.hidden = false);
+  }
+
+  await loadFeed(db, { isAdmin, isDirector });
 
   document.querySelectorAll('.ftab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -284,33 +287,52 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     });
   });
 
-  document.getElementById('btnMarkAll').addEventListener('click', () => {
-    allItems.forEach(item => readSet.add(item.id));
-    saveReadSet(uid);
-    renderFeed();
+  document.getElementById('btnMarkAll').addEventListener('click', async () => {
+    try {
+      await updateDoc(fsDoc(db, 'users', uid), { lastReadNotificationsAt: serverTimestamp() });
+      // Locally treat everything as read until next reload
+      lastReadAt = { toMillis: () => Date.now() };
+      renderFeed();
+    } catch (err) {
+      console.error('Mark-all-read failed:', err);
+    }
   });
 });
 
 /* ================================================================
    LOAD FEED
    ================================================================ */
-async function loadFeed(db) {
+async function loadFeed(db, { isAdmin, isDirector }) {
   const LIMIT = 50;
   try {
-    const [annSnap, docSnap, msgSnap, visitSnap, surveySnap] = await Promise.all([
+    const baseQueries = [
       getDocs(query(collection(db, 'announcements'),     orderBy('createdAt', 'desc'), limit(LIMIT))),
       getDocs(query(collection(db, 'central_documents'), orderBy('createdAt', 'desc'), limit(LIMIT))),
       getDocs(query(collection(db, 'topics'),            orderBy('createdAt', 'desc'), limit(LIMIT))),
       getDocs(query(collection(db, 'school_visits'),     orderBy('createdAt', 'desc'), limit(LIMIT))),
       getDocs(query(collection(db, 'surveys'),           orderBy('createdAt', 'desc'), limit(LIMIT))),
-    ]);
+    ];
+    // feedbacks + induction_alarms are admin-only (rules enforce; we just skip the query for non-admins)
+    const adminQueries = isAdmin ? [
+      getDocs(query(collection(db, 'feedbacks'),        orderBy('createdAt', 'desc'), limit(LIMIT))),
+      getDocs(query(collection(db, 'induction_alarms'), orderBy('createdAt', 'desc'), limit(LIMIT))),
+    ] : [];
+
+    const settled = await Promise.allSettled([...baseQueries, ...adminQueries]);
+    const [annRes, docRes, msgRes, visitRes, surveyRes, fbRes, alarmRes] = settled;
+
+    const safe = (res, type) => (res?.status === 'fulfilled')
+      ? res.value.docs.map(d => ({ id: d.id, type, data: d.data() }))
+      : [];
 
     allItems = [
-      ...annSnap.docs.map(d    => ({ id: d.id, type: 'ann',    data: d.data() })),
-      ...docSnap.docs.map(d    => ({ id: d.id, type: 'doc',    data: d.data() })),
-      ...msgSnap.docs.map(d    => ({ id: d.id, type: 'msg',    data: d.data() })),
-      ...visitSnap.docs.map(d  => ({ id: d.id, type: 'visit',  data: d.data() })),
-      ...surveySnap.docs.map(d => ({ id: d.id, type: 'survey', data: d.data() })),
+      ...safe(annRes,    'ann'),
+      ...safe(docRes,    'doc'),
+      ...safe(msgRes,    'msg'),
+      ...safe(visitRes,  'visit'),
+      ...safe(surveyRes, 'survey'),
+      ...safe(fbRes,     'feedback'),
+      ...safe(alarmRes,  'alarm'),
     ].sort((a, b) => {
       const ta = a.data.createdAt?.toMillis?.() || 0;
       const tb = b.data.createdAt?.toMillis?.() || 0;
@@ -318,7 +340,7 @@ async function loadFeed(db) {
     });
 
     // Update tab counts
-    const counts = { all: allItems.length, ann:0, doc:0, msg:0, visit:0, survey:0 };
+    const counts = { all: allItems.length, ann:0, doc:0, msg:0, visit:0, survey:0, feedback:0, alarm:0 };
     allItems.forEach(i => { if (counts[i.type] !== undefined) counts[i.type]++; });
     Object.entries(counts).forEach(([k, v]) => {
       const el = document.getElementById(`cnt-${k}`);
@@ -335,6 +357,12 @@ async function loadFeed(db) {
         <p class="notif-empty-desc">Check your connection and try refreshing.</p>
       </div>`;
   }
+}
+
+function isUnread(item) {
+  const ts = item.data.createdAt?.toMillis?.() || 0;
+  const cutoff = lastReadAt?.toMillis?.() || 0;
+  return ts > cutoff;
 }
 
 /* ================================================================
@@ -375,13 +403,12 @@ function esc(s) {
 
 function renderFeed() {
   const feed = document.getElementById('notifFeed');
-  const uid  = window.currentUser?.uid;
 
   const filtered = currentFilter === 'all'
     ? allItems
     : allItems.filter(i => i.type === currentFilter);
 
-  const unreadCount = filtered.filter(i => !readSet.has(i.id)).length;
+  const unreadCount = filtered.filter(isUnread).length;
   document.getElementById('feedLabel').textContent =
     `${filtered.length} notification${filtered.length !== 1 ? 's' : ''}` +
     (unreadCount > 0 ? ` · ${unreadCount} unread` : '');
@@ -413,13 +440,12 @@ function renderFeed() {
   feed.innerHTML = groups.map(({ day, items }) => `
     <div class="date-divider">${esc(day)}</div>
     ${items.map(item => {
-      const unread = !readSet.has(item.id);
+      const unread = isUnread(item);
       const title = getTitle(item);
       const author = item.data.createdBy || item.data.authorName || '';
       const ago    = timeAgo(item.data.createdAt);
       return `<a class="notif-item ${unread ? 'unread' : ''}"
           href="${HREFS[item.type] || 'index'}"
-          onclick="markRead('${esc(item.id)}','${esc(uid || '')}')"
           aria-label="${esc(LABELS[item.type])}: ${esc(title)}">
         <div class="notif-dot" aria-hidden="true"></div>
         <div class="notif-icon-wrap ni-${item.type}" aria-hidden="true">${ICONS[item.type] || ''}</div>
@@ -434,13 +460,6 @@ function renderFeed() {
     }).join('')}
   `).join('');
 }
-
-window.markRead = function(id, uid) {
-  readSet.add(id);
-  saveReadSet(uid);
-  // Update unread count label in next tick after navigation link fires
-  setTimeout(renderFeed, 0);
-};
 </script>
 
 </body>

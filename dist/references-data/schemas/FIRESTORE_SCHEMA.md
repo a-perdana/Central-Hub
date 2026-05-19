@@ -66,7 +66,7 @@ The catalogue below groups collections by the business domain they serve. Within
 
 #### `users/{uid}`
 **PK:** `uid` (Firebase Auth UID)
-**Fields:** `email`, `displayName`, `photoURL`, `createdAt`, `lastLoginAt`, `schoolId →partner_schools.id`, `school` (denormalised display name), `position`, plus per-platform fields below.
+**Fields:** `email`, `displayName`, `photoURL`, `createdAt`, `lastLoginAt`, `lastReadNotificationsAt` (CH only — cutoff for navbar bell + `/notifications` "since you last read"), `schoolId →partner_schools.id`, `school` (denormalised display name), `position`, plus per-platform fields below.
 
 | Per-platform field | Values | Set by |
 |---|---|---|
