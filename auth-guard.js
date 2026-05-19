@@ -313,7 +313,16 @@ async function getAllPageAccessConfigs(database) {
     const snap = await getDocs(collection(database, 'page_access_config'));
     snap.forEach(d => {
       const data = d.data() || {};
-      if (data.platform && data.platform !== 'centralhub') return;
+      // Shared slugs (handbook, my-induction, observation-entry, references,
+      // school-handbook-*) carry platforms:[…] with this platform listed;
+      // per-hub `platform` singular may point at another hub but the slug
+      // still applies here via the platforms[] union. Honour both.
+      const platforms = Array.isArray(data.platforms) ? data.platforms : [];
+      if (platforms.length) {
+        if (!platforms.includes('centralhub')) return;
+      } else if (data.platform && data.platform !== 'centralhub') {
+        return;
+      }
       map.set(d.id, data);
     });
     sessionStorage.setItem('pac:__all__:centralhub', JSON.stringify({
@@ -400,6 +409,27 @@ function applyPageAccessGating(configs, userSubRoles) {
     );
     if (allHidden) col.setAttribute('data-pa-hidden', '1');
     else            col.removeAttribute('data-pa-hidden');
+  });
+
+  // Empty INLINE desktop section headers — multi-section .ch-dd-col panels
+  // carry secondary .ch-dd-col-header divs as siblings of the anchors they
+  // group (PD column with "Standards" + "Frameworks" sub-sections is the
+  // canonical example). Walk forward from each header until the next
+  // header; if every interactive sibling is hidden, hide the header.
+  document.querySelectorAll('.ch-dd-col-header').forEach(header => {
+    let allHidden = true;
+    let any = false;
+    let n = header.nextElementSibling;
+    while (n && !n.classList.contains('ch-dd-col-header')) {
+      if (n.matches?.('[data-nav-key], [data-nav-page]')) {
+        any = true;
+        const hidden = n.getAttribute('data-pa-hidden') === '1' || n.getAttribute('data-ch-hidden') === '1';
+        if (!hidden) { allHidden = false; break; }
+      }
+      n = n.nextElementSibling;
+    }
+    if (any && allHidden) header.setAttribute('data-pa-hidden', '1');
+    else                  header.removeAttribute('data-pa-hidden');
   });
 }
 
