@@ -5735,12 +5735,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             showError('Could not save note. Please try again.');
           } finally {
             endWrite();
-            // Hold the dirty flag a hair longer than the snapshot
-            // round-trip so the listener can echo our own write
-            // without re-rendering the card we're typing in.
-            setTimeout(() => dirtyNotes.delete(noteId), 600);
+            // Hold the dirty flag well past the snapshot round-trip so
+            // the listener can echo our own write without re-rendering
+            // the card we're typing in. Past incident: short window
+            // (600ms) let snapshot land mid-typing, full re-render
+            // yanked the caret to position 0.
+            setTimeout(() => {
+              dirtyNotes.delete(noteId);
+              flushPendingRender();
+            }, 2500);
           }
-        }, 500));
+        }, 2000));
       }
 
       // Immediate (non-debounced) save — for toggles where the click IS the intent.
@@ -6301,12 +6306,32 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
       }, 6000);
 
+      // If the user is actively typing in a card on the current tab,
+      // defer the re-render until they're done — otherwise even the
+      // detach/reattach dance can lose the caret on slower devices.
+      function isTypingInCurrentTab() {
+        if (!dirtyNotes.size) return false;
+        const focused = document.activeElement;
+        const focusedId = focused?.closest?.('.note-card')?.dataset?.id;
+        return focusedId && dirtyNotes.has(focusedId);
+      }
+      let pendingMineRender = false;
+      let pendingTeamRender = false;
+      function flushPendingRender() {
+        if (isTypingInCurrentTab()) return;
+        if (activeTab === 'mine' && pendingMineRender) { pendingMineRender = false; renderActiveTab(); }
+        else if (activeTab === 'team' && pendingTeamRender) { pendingTeamRender = false; renderActiveTab(); }
+      }
+
       onSnapshot(myQuery, (snap) => {
         firstMineSnap = false;
         if (activeTab === 'mine') clearTimeout(stuckTimer);
         mineCache = snap.docs.map(d => ({ id: d.id, data: d.data() }));
         updateCounts();
-        if (activeTab === 'mine') renderActiveTab();
+        if (activeTab === 'mine') {
+          if (isTypingInCurrentTab()) { pendingMineRender = true; }
+          else renderActiveTab();
+        }
       }, (err) => {
         console.warn('[notes] my-notes subscription failed', err);
         const isIndex = /index|requires an index/i.test(err?.message || '');
@@ -6325,7 +6350,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         if (activeTab === 'team') clearTimeout(stuckTimer);
         teamCache = snap.docs.map(d => ({ id: d.id, data: d.data() }));
         updateCounts();
-        if (activeTab === 'team') renderActiveTab();
+        if (activeTab === 'team') {
+          if (isTypingInCurrentTab()) { pendingTeamRender = true; }
+          else renderActiveTab();
+        }
       }, (err) => {
         console.warn('[notes] team-notes subscription failed', err);
         if (activeTab === 'team') {
