@@ -204,6 +204,38 @@ service firebase.storage {
              .data.role_centralhub == 'central_admin';
     }
 
+    // Department Office artifact uploads (2026-05-19) — per-subject
+    // living documents (Annual Plan, DTP Report, Department Handbook,
+    // Subject Policy) attached to department_artifacts.fileUrl.
+    // Path: specialist_artifacts/{subjectId}/{timestamp}_{filename}
+    //   - subjectId: one of 'math' | 'biology' | 'chemistry' | 'physics'
+    //                | 'science' | 'english' | 'bahasa' | 'religion'
+    // Read open to any signed-in user with dept-office membership
+    // (central_admin OR ch_sub_roles ∈ {director, coordinator}).
+    // Write/delete same boundary. ≤25 MB, MIME limited to PDF / Word /
+    // image (PDF is the typical artifact format, Word for collaborative
+    // editing, image for occasional reference cards).
+    match /specialist_artifacts/{subjectId}/{filename} {
+      function isDeptOfficeMember() {
+        let u = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        return u.role_centralhub == 'central_admin'
+            || (u.role_centralhub == 'central_user'
+                && u.ch_sub_roles is list
+                && u.ch_sub_roles.hasAny(['director','coordinator']));
+      }
+      allow read: if request.auth != null && isDeptOfficeMember();
+      allow write: if request.auth != null
+        && isDeptOfficeMember()
+        && request.resource.size <= 25 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*')
+            || request.resource.contentType.matches('application/msword')
+            || request.resource.contentType.matches('image/.*'));
+      allow delete: if request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+             .data.role_centralhub == 'central_admin';
+    }
+
     // Mail-composer image embeds. Quill's "image" toolbar button uploads
     // here instead of inlining base64 — Gmail silently drops data:image
     // URIs in newsletters, but external <img src=https://...> renders

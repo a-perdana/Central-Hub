@@ -443,6 +443,7 @@ const htmlFiles = [
   // meeting + decision + artifact + directory cluster. Replaces the
   // long-running Heads-of-Departments Google Doc workflow.
   "coordinators-meetings.html",
+  "department-artifacts.html",
 ];
 
 htmlFiles.forEach((file) => {

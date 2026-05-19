@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Department Artifacts — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .main-content { padding: 24px 32px; width: min(100%, 1180px); margin: 0 auto; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .main-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .main-header .subtitle { font-size: 0.86rem; color: var(--ink-3); margin-top: 4px; }
+
+    /* === Filter bar === */
+    .da-filter-bar { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 18px; background: var(--white); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 18px; align-items: center; }
+    .da-filter { padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); cursor: pointer; }
+    .da-filter:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .da-btn-add { margin-left: auto; padding: 8px 16px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .12s; }
+    .da-btn-add:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* === Subject grid === */
+    .subjects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .subject-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow-sm); transition: box-shadow .15s; }
+    .subject-card:hover { box-shadow: var(--shadow); }
+    .subject-card h3 { font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .subject-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.78rem; color: #fff; flex-shrink: 0; }
+    .subject-icon.math { background: linear-gradient(135deg,#3b82f6,#1d4ed8); }
+    .subject-icon.biology { background: linear-gradient(135deg,#10b981,#047857); }
+    .subject-icon.chemistry { background: linear-gradient(135deg,#f59e0b,#b45309); }
+    .subject-icon.physics { background: linear-gradient(135deg,#8b5cf6,#5b21b6); }
+    .subject-icon.science { background: linear-gradient(135deg,#06b6d4,#0e7490); }
+    .subject-icon.english { background: linear-gradient(135deg,#ec4899,#9d174d); }
+    .subject-icon.bahasa { background: linear-gradient(135deg,#f43f5e,#9f1239); }
+    .subject-icon.religion { background: linear-gradient(135deg,#6366f1,#3730a3); }
+    .artifact-row-list { display: flex; flex-direction: column; gap: 8px; }
+    .artifact-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--border); border-radius: 7px; font-size: 0.86rem; transition: background .12s; cursor: pointer; }
+    .artifact-row:hover { background: #faf8ff; border-color: #c4b5fd; }
+    .artifact-row.empty { opacity: 0.45; font-style: italic; cursor: pointer; }
+    .artifact-row.empty:hover { opacity: 0.75; background: var(--paper-2); }
+    .artifact-row-icon { width: 28px; height: 28px; border-radius: 6px; background: var(--white); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--ink-3); flex-shrink: 0; }
+    .artifact-row-icon.has-doc { color: var(--accent); border-color: #c4b5fd; }
+    .artifact-row-main { flex: 1; min-width: 0; }
+    .artifact-row-type { font-weight: 600; color: var(--ink); font-size: 0.86rem; }
+    .artifact-row-meta { font-size: 0.74rem; color: var(--ink-3); margin-top: 2px; }
+    .artifact-row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+    .artifact-row:hover .artifact-row-actions { opacity: 1; }
+    .ar-icon-btn { width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .ar-icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .ar-icon-btn.danger:hover { color: #dc2626; border-color: #fecdd3; background: #fff1f2; }
+
+    .version-pill { padding: 1px 6px; border-radius: 9px; font-size: 0.66rem; font-weight: 600; background: var(--paper-2); color: var(--ink-3); }
+    .status-pill { padding: 1px 7px; border-radius: 9px; font-size: 0.66rem; font-weight: 600; }
+    .status-pill.draft { background: #fef3c7; color: #92400e; }
+    .status-pill.current { background: #d1fae5; color: #065f46; }
+    .status-pill.archived { background: #e5e7eb; color: #4b5563; }
+
+    /* === Modal === */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--white); border-radius: 12px; width: 100%; max-width: 520px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
+    .modal-head { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-head h3 { font-family: 'Lora', serif; font-size: 1.1rem; font-weight: 600; color: var(--ink); }
+    .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 8px; background: var(--paper); }
+    .modal-foot-left { display: flex; gap: 8px; }
+    .modal-foot-right { display: flex; gap: 8px; }
+
+    .source-radio-row { display: flex; gap: 10px; margin-bottom: 8px; }
+    .source-radio { flex: 1; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; cursor: pointer; text-align: center; font-size: 0.84rem; color: var(--ink-2); user-select: none; }
+    .source-radio.active { border-color: var(--accent); color: var(--accent); background: #faf8ff; font-weight: 600; }
+    .upload-zone { padding: 16px; border: 2px dashed var(--border); border-radius: 8px; text-align: center; cursor: pointer; transition: all .15s; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: #faf8ff; }
+    .upload-zone-label { font-size: 0.86rem; color: var(--ink-2); }
+    .upload-zone-hint { font-size: 0.74rem; color: var(--ink-3); margin-top: 4px; }
+    .upload-progress { margin-top: 8px; height: 6px; background: var(--paper-2); border-radius: 3px; overflow: hidden; }
+    .upload-progress-bar { height: 100%; background: linear-gradient(90deg,#7c3aed,#0891b2); width: 0%; transition: width .25s; }
+    .file-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--paper-2); border-radius: 5px; font-size: 0.78rem; color: var(--ink-2); margin-top: 6px; word-break: break-all; }
+    .file-pill .pill-x { background: none; border: none; color: var(--ink-3); cursor: pointer; font-weight: bold; padding: 0 2px; }
+
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 0.86rem; font-weight: 500; z-index: 9999; opacity: 0; transition: all .25s; pointer-events: none; max-width: 460px; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* === Detail drawer === */
+    .detail-drawer { display: none; position: fixed; top: 64px; right: 0; bottom: 0; width: 420px; max-width: 100vw; background: var(--white); border-left: 1px solid var(--border); z-index: 100; box-shadow: -8px 0 24px rgba(15,23,42,0.08); flex-direction: column; }
+    .detail-drawer.open { display: flex; }
+    .dd-head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .dd-head h3 { font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; }
+    .dd-close { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; }
+    .dd-close:hover { color: #dc2626; border-color: #fecdd3; }
+    .dd-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+    .dd-field { margin-bottom: 14px; }
+    .dd-field label { font-size: 0.74rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 5px; }
+    .dd-field .form-input, .dd-field .form-select, .dd-field .form-textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: var(--ink); background: var(--paper); }
+    .dd-field .form-input:focus, .dd-field .form-select:focus, .dd-field .form-textarea:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .dd-field .form-textarea { min-height: 72px; resize: vertical; }
+    .dd-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px dashed var(--border); margin-top: 14px; }
+    .dd-action-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--white); cursor: pointer; font-size: 0.82rem; font-family: 'DM Sans', sans-serif; color: var(--ink-2); }
+    .dd-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .dd-action-btn.danger:hover { border-color: #dc2626; color: #dc2626; background: #fff1f2; }
+    .dd-history { font-size: 0.78rem; color: var(--ink-3); margin-top: 8px; }
+    .dd-history a { color: var(--accent); text-decoration: none; }
+    .dd-history a:hover { text-decoration: underline; }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--ink-3); background: var(--white); border: 1px dashed var(--border); border-radius: 10px; }
+    .empty-state h3 { font-family: 'Lora', serif; color: var(--ink); margin-bottom: 6px; font-size: 1.05rem; }
+  </style>
+</head>
+<body>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <main class="main-content" id="mainRoot" style="display:none">
+    <div class="main-header">
+      <div>
+        <h1>Department Artifacts</h1>
+        <div class="subtitle">Annual Plan · DTP Report · Department Handbook · Subject Policy — versioned per subject.</div>
+      </div>
+      <button class="da-btn-add" id="btnAddArtifact">+ Add artifact</button>
+    </div>
+
+    <div class="da-filter-bar">
+      <select class="da-filter" id="filterSubject">
+        <option value="">All subjects</option>
+      </select>
+      <select class="da-filter" id="filterType">
+        <option value="">All types</option>
+        <option value="annual_plan">Annual Plan</option>
+        <option value="dtp_report">DTP Report</option>
+        <option value="department_handbook">Department Handbook</option>
+        <option value="subject_policy">Subject Policy</option>
+        <option value="other">Other</option>
+      </select>
+      <select class="da-filter" id="filterYear">
+        <option value="">All years</option>
+        <option value="2024-2025">2024-2025</option>
+        <option value="2025-2026">2025-2026</option>
+        <option value="2026-2027">2026-2027</option>
+      </select>
+      <select class="da-filter" id="filterStatus">
+        <option value="">All status</option>
+        <option value="draft">Draft</option>
+        <option value="current">Current</option>
+        <option value="archived">Archived</option>
+      </select>
+    </div>
+
+    <div class="subjects-grid" id="subjectsGrid"></div>
+  </main>
+
+  <!-- Add / Edit modal -->
+  <div class="modal-overlay" id="modalArtifact">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle">Add artifact</h3>
+        <button class="dd-close" id="modalClose">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Subject</label>
+          <select class="form-select" id="artSubject"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="artType">
+            <option value="annual_plan">Annual Plan</option>
+            <option value="dtp_report">DTP Report</option>
+            <option value="department_handbook">Department Handbook</option>
+            <option value="subject_policy">Subject Policy</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input type="text" class="form-input" id="artTitle" placeholder="e.g. English Annual Plan 2025-2026">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Academic year</label>
+          <select class="form-select" id="artYear">
+            <option value="2024-2025">2024-2025</option>
+            <option value="2025-2026">2025-2026</option>
+            <option value="2026-2027">2026-2027</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Source</label>
+          <div class="source-radio-row">
+            <div class="source-radio active" data-source="upload">📎 Upload file</div>
+            <div class="source-radio" data-source="link">🔗 External link</div>
+          </div>
+
+          <div id="sourceUploadPanel">
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" id="fileInput" accept=".pdf,.doc,.docx,image/*" style="display:none">
+              <div class="upload-zone-label">Click or drop a file here</div>
+              <div class="upload-zone-hint">PDF / Word / image · up to 25 MB</div>
+              <div id="filePill"></div>
+              <div class="upload-progress" id="uploadProgress" style="display:none"><div class="upload-progress-bar" id="uploadProgressBar"></div></div>
+            </div>
+          </div>
+
+          <div id="sourceLinkPanel" style="display:none">
+            <input type="url" class="form-input" id="artExternalUrl" placeholder="https://docs.google.com/...">
+            <div class="form-hint">Paste a Google Doc, Drive, Notion or any external URL.</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Description (optional)</label>
+          <textarea class="form-textarea" id="artDescription" rows="2" placeholder="Brief context — what's inside this version."></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <div class="modal-foot-left"></div>
+        <div class="modal-foot-right">
+          <button class="btn-cancel" id="modalCancel">Cancel</button>
+          <button class="btn-save" id="modalSave">Save artifact</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail drawer (versions + edit) -->
+  <div class="detail-drawer" id="detailDrawer">
+    <div class="dd-head">
+      <h3 id="detailTitle">Artifact</h3>
+      <button class="dd-close" id="detailClose">×</button>
+    </div>
+    <div class="dd-body" id="detailBody"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  collection, query, where, orderBy, onSnapshot,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, limit
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import {
+  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+
+const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion'];
+const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion' };
+const ARTIFACT_TYPES = ['annual_plan','dtp_report','department_handbook','subject_policy','other'];
+const ARTIFACT_TYPE_LABELS = { annual_plan:'Annual Plan', dtp_report:'DTP Report', department_handbook:'Department Handbook', subject_policy:'Subject Policy', other:'Other' };
+
+let db, storage, currentUser, userProfile;
+let isAdmin = false, isDirector = false;
+let allArtifacts = [];
+let editingArtifactId = null;
+let pendingFile = null;
+let pendingFilePath = null;
+let pendingFileUrl = null;
+
+const $ = (id) => document.getElementById(id);
+const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
+document.addEventListener('authReady', async () => {
+  currentUser = window.currentUser;
+  userProfile = window.userProfile || {};
+  db = window.db;
+  storage = getStorage(window.firebaseApp);
+
+  isAdmin = userProfile.role_centralhub === 'central_admin';
+  const subRoles = Array.isArray(userProfile.ch_sub_roles) ? userProfile.ch_sub_roles : [];
+  isDirector = isAdmin || subRoles.includes('director');
+  const isCoord = subRoles.includes('coordinator');
+
+  if (!isAdmin && !isDirector && !isCoord) {
+    location.href = '/?denied=department-artifacts';
+    return;
+  }
+
+  $('mainRoot').style.display = 'block';
+  populateSubjectFilter();
+  populateModalSubjects();
+  wireUI();
+  subscribeArtifacts();
+});
+
+function populateSubjectFilter() {
+  const sel = $('filterSubject');
+  sel.innerHTML = '<option value="">All subjects</option>' +
+    CH_SUBJECTS.map(s => `<option value="${s}">${SUBJECT_LABELS[s]}</option>`).join('');
+}
+
+function populateModalSubjects() {
+  const sel = $('artSubject');
+  sel.innerHTML = CH_SUBJECTS.map(s => `<option value="${s}">${SUBJECT_LABELS[s]}</option>`).join('');
+}
+
+function wireUI() {
+  $('btnAddArtifact').addEventListener('click', () => openModal(null));
+  $('modalClose').addEventListener('click', closeModal);
+  $('modalCancel').addEventListener('click', closeModal);
+  $('modalSave').addEventListener('click', saveArtifact);
+
+  $('filterSubject').addEventListener('change', renderGrid);
+  $('filterType').addEventListener('change', renderGrid);
+  $('filterYear').addEventListener('change', renderGrid);
+  $('filterStatus').addEventListener('change', renderGrid);
+
+  $('detailClose').addEventListener('click', () => $('detailDrawer').classList.remove('open'));
+
+  // Source toggle
+  document.querySelectorAll('.source-radio').forEach(r => {
+    r.addEventListener('click', () => {
+      document.querySelectorAll('.source-radio').forEach(x => x.classList.remove('active'));
+      r.classList.add('active');
+      const src = r.dataset.source;
+      $('sourceUploadPanel').style.display = src === 'upload' ? 'block' : 'none';
+      $('sourceLinkPanel').style.display = src === 'link' ? 'block' : 'none';
+    });
+  });
+
+  // Upload zone
+  const zone = $('uploadZone');
+  zone.addEventListener('click', () => $('fileInput').click());
+  $('fileInput').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleFile(f);
+  });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+}
+
+/* ───── Subscribe to artifacts ──────────────────────────────────── */
+function subscribeArtifacts() {
+  const q = query(
+    collection(db, 'department_artifacts'),
+    orderBy('updatedAt', 'desc'),
+    limit(500)
+  );
+  onSnapshot(q, (snap) => {
+    allArtifacts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderGrid();
+  }, (err) => {
+    console.error('[subscribeArtifacts]', err);
+    $('subjectsGrid').innerHTML = `<div class="empty-state"><h3>Could not load</h3><p>${escHtml(err.code || err.message)}</p></div>`;
+  });
+}
+
+/* ───── Grid render ─────────────────────────────────────────────── */
+function renderGrid() {
+  const subF = $('filterSubject').value;
+  const typeF = $('filterType').value;
+  const yearF = $('filterYear').value;
+  const statusF = $('filterStatus').value;
+
+  // Apply filters
+  const filtered = allArtifacts.filter(a => {
+    if (subF && a.subjectId !== subF) return false;
+    if (typeF && a.artifactType !== typeF) return false;
+    if (yearF && a.academicYear !== yearF) return false;
+    if (statusF && (a.status || 'draft') !== statusF) return false;
+    return true;
+  });
+
+  const grid = $('subjectsGrid');
+  const subjects = subF ? [subF] : CH_SUBJECTS;
+
+  if (!filtered.length && subF) {
+    grid.innerHTML = `<div class="empty-state"><h3>No artifacts yet</h3><p>Click <strong>+ Add artifact</strong> to start the ${SUBJECT_LABELS[subF]} department's record.</p></div>`;
+    return;
+  }
+
+  grid.innerHTML = subjects.map(subjectId => {
+    const subjArtifacts = filtered.filter(a => a.subjectId === subjectId);
+    const rows = ARTIFACT_TYPES.filter(t => t !== 'other').map(t => {
+      const matching = subjArtifacts.filter(a => a.artifactType === t);
+      const current = matching.find(a => (a.status || 'draft') === 'current') || matching[0];
+      if (!current) {
+        return `
+          <div class="artifact-row empty" data-add-subject="${subjectId}" data-add-type="${t}">
+            <div class="artifact-row-icon">+</div>
+            <div class="artifact-row-main">
+              <div class="artifact-row-type">${ARTIFACT_TYPE_LABELS[t]}</div>
+              <div class="artifact-row-meta">Not yet set</div>
+            </div>
+          </div>
+        `;
+      }
+      const status = current.status || 'draft';
+      const hasFile = !!(current.fileUrl || current.externalUrl);
+      return `
+        <div class="artifact-row" data-id="${current.id}">
+          <div class="artifact-row-icon ${hasFile ? 'has-doc' : ''}">
+            ${hasFile ? (current.fileUrl ? '📄' : '🔗') : '○'}
+          </div>
+          <div class="artifact-row-main">
+            <div class="artifact-row-type">${ARTIFACT_TYPE_LABELS[t]}</div>
+            <div class="artifact-row-meta">
+              <span class="status-pill ${status}">${status}</span>
+              ${current.version ? `<span class="version-pill">v${current.version}</span>` : ''}
+              · ${escHtml(current.academicYear || '')} · ${fmtDate(current.updatedAt)}
+            </div>
+          </div>
+          <div class="artifact-row-actions">
+            ${(current.fileUrl || current.externalUrl) ? `<a class="ar-icon-btn" href="${escHtml(current.fileUrl || current.externalUrl)}" target="_blank" rel="noopener" title="Open" onclick="event.stopPropagation()">↗</a>` : ''}
+            <button class="ar-icon-btn" data-edit="${current.id}" title="Edit">✎</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="subject-card">
+        <h3><span class="subject-icon ${subjectId}">${SUBJECT_LABELS[subjectId].slice(0,2)}</span>${SUBJECT_LABELS[subjectId]}</h3>
+        <div class="artifact-row-list">${rows}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire row clicks
+  document.querySelectorAll('.artifact-row[data-id]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('a, button')) return;
+      openDetail(row.dataset.id);
+    });
+  });
+  document.querySelectorAll('.ar-icon-btn[data-edit]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openModal(btn.dataset.edit);
+    });
+  });
+  document.querySelectorAll('.artifact-row.empty[data-add-subject]').forEach(row => {
+    row.addEventListener('click', () => {
+      $('artSubject').value = row.dataset.addSubject;
+      $('artType').value = row.dataset.addType;
+      openModal(null, { subjectId: row.dataset.addSubject, artifactType: row.dataset.addType });
+    });
+  });
+}
+
+/* ───── Modal: add / edit ───────────────────────────────────────── */
+function openModal(artifactId, prefill = {}) {
+  editingArtifactId = artifactId;
+  pendingFile = null;
+  pendingFilePath = null;
+  pendingFileUrl = null;
+  $('filePill').innerHTML = '';
+  $('uploadProgress').style.display = 'none';
+  $('uploadProgressBar').style.width = '0%';
+
+  if (artifactId) {
+    const a = allArtifacts.find(x => x.id === artifactId);
+    if (!a) { showToast('Artifact not found.'); return; }
+    $('modalTitle').textContent = 'Edit artifact';
+    $('artSubject').value = a.subjectId;
+    $('artType').value = a.artifactType;
+    $('artTitle').value = a.title || '';
+    $('artYear').value = a.academicYear || '2025-2026';
+    $('artDescription').value = a.description || '';
+    if (a.fileUrl) {
+      setSource('upload');
+      pendingFileUrl = a.fileUrl;
+      pendingFilePath = a.filePath || null;
+      $('filePill').innerHTML = `<span class="file-pill">📎 Existing file <button class="pill-x" id="clearFileBtn">×</button></span>`;
+      setTimeout(() => {
+        const x = $('clearFileBtn');
+        if (x) x.addEventListener('click', () => { pendingFileUrl = null; pendingFilePath = null; $('filePill').innerHTML = ''; });
+      }, 50);
+    } else if (a.externalUrl) {
+      setSource('link');
+      $('artExternalUrl').value = a.externalUrl;
+    } else {
+      setSource('upload');
+    }
+  } else {
+    $('modalTitle').textContent = 'Add artifact';
+    $('artSubject').value = prefill.subjectId || CH_SUBJECTS[0];
+    $('artType').value = prefill.artifactType || 'annual_plan';
+    $('artTitle').value = '';
+    $('artYear').value = '2025-2026';
+    $('artDescription').value = '';
+    $('artExternalUrl').value = '';
+    setSource('upload');
+  }
+  $('modalArtifact').classList.add('open');
+}
+
+function setSource(src) {
+  document.querySelectorAll('.source-radio').forEach(r => {
+    r.classList.toggle('active', r.dataset.source === src);
+  });
+  $('sourceUploadPanel').style.display = src === 'upload' ? 'block' : 'none';
+  $('sourceLinkPanel').style.display = src === 'link' ? 'block' : 'none';
+}
+
+function closeModal() {
+  $('modalArtifact').classList.remove('open');
+  editingArtifactId = null;
+  pendingFile = null;
+  pendingFilePath = null;
+  pendingFileUrl = null;
+}
+
+function handleFile(f) {
+  if (f.size > 25 * 1024 * 1024) {
+    showToast('File too large (max 25 MB).');
+    return;
+  }
+  pendingFile = f;
+  $('filePill').innerHTML = `<span class="file-pill">📎 ${escHtml(f.name)} (${(f.size/1024/1024).toFixed(2)} MB) <button class="pill-x" id="clearFileBtn">×</button></span>`;
+  setTimeout(() => {
+    const x = $('clearFileBtn');
+    if (x) x.addEventListener('click', () => { pendingFile = null; $('filePill').innerHTML = ''; $('fileInput').value = ''; });
+  }, 50);
+}
+
+async function uploadPendingFile(subjectId) {
+  if (!pendingFile) return { url: pendingFileUrl, path: pendingFilePath };
+  const ts = Date.now();
+  const safeName = pendingFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `specialist_artifacts/${subjectId}/${ts}_${safeName}`;
+  const ref = storageRef(storage, path);
+  $('uploadProgress').style.display = 'block';
+
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(ref, pendingFile);
+    task.on('state_changed', (snap) => {
+      const pct = (snap.bytesTransferred / snap.totalBytes) * 100;
+      $('uploadProgressBar').style.width = `${pct}%`;
+    }, (err) => {
+      console.error('[upload]', err);
+      reject(err);
+    }, async () => {
+      const url = await getDownloadURL(task.snapshot.ref);
+      resolve({ url, path });
+    });
+  });
+}
+
+async function saveArtifact() {
+  const subjectId = $('artSubject').value;
+  const artifactType = $('artType').value;
+  const title = $('artTitle').value.trim();
+  const academicYear = $('artYear').value;
+  const description = $('artDescription').value.trim();
+  const activeSource = document.querySelector('.source-radio.active').dataset.source;
+
+  if (!title) { showToast('Title required.'); return; }
+
+  let fileUrl = null, filePath = null, externalUrl = null;
+  try {
+    if (activeSource === 'upload') {
+      const r = await uploadPendingFile(subjectId);
+      fileUrl = r.url || null;
+      filePath = r.path || null;
+      if (!fileUrl) { showToast('Upload a file or switch to External link.'); return; }
+    } else {
+      externalUrl = $('artExternalUrl').value.trim();
+      if (!externalUrl || !/^https?:\/\//i.test(externalUrl)) {
+        showToast('Enter a valid https URL.');
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('[saveArtifact:upload]', err);
+    showToast(`Upload failed: ${err.code || err.message}`);
+    return;
+  }
+
+  const payload = {
+    subjectId,
+    artifactType,
+    title,
+    academicYear,
+    description,
+    fileUrl,
+    filePath,
+    externalUrl,
+    status: 'current',
+    ownerUid: currentUser.uid,
+    lastEditedBy: currentUser.uid,
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    if (editingArtifactId) {
+      // Bump version when source changed
+      const existing = allArtifacts.find(a => a.id === editingArtifactId);
+      if (existing && (existing.fileUrl !== fileUrl || existing.externalUrl !== externalUrl)) {
+        payload.version = (existing.version || 1) + 1;
+      }
+      await updateDoc(doc(db, 'department_artifacts', editingArtifactId), payload);
+      showToast('Artifact updated.');
+    } else {
+      // Auto-supersede any existing current artifact for this (subject, type, year) tuple.
+      const sameKey = allArtifacts.filter(a =>
+        a.subjectId === subjectId
+        && a.artifactType === artifactType
+        && a.academicYear === academicYear
+        && (a.status || 'draft') === 'current'
+      );
+      for (const old of sameKey) {
+        await updateDoc(doc(db, 'department_artifacts', old.id), {
+          status: 'archived',
+          updatedAt: serverTimestamp(),
+        });
+      }
+      payload.version = 1;
+      payload.createdBy = currentUser.uid;
+      payload.createdAt = serverTimestamp();
+      if (sameKey.length) payload.previousVersionId = sameKey[0].id;
+      await addDoc(collection(db, 'department_artifacts'), payload);
+      showToast('Artifact added.');
+    }
+    closeModal();
+  } catch (err) {
+    console.error('[saveArtifact]', err);
+    showToast(`Save failed: ${err.code || err.message}`);
+  }
+}
+
+/* ───── Detail drawer ───────────────────────────────────────────── */
+async function openDetail(artifactId) {
+  const a = allArtifacts.find(x => x.id === artifactId);
+  if (!a) { showToast('Artifact not found.'); return; }
+  $('detailTitle').textContent = a.title || 'Artifact';
+
+  // Find version history by walking previousVersionId chain
+  const history = [];
+  let cursor = a;
+  let safety = 10;
+  while (cursor && safety-- > 0) {
+    history.push(cursor);
+    if (!cursor.previousVersionId) break;
+    cursor = allArtifacts.find(x => x.id === cursor.previousVersionId);
+    if (!cursor) {
+      try {
+        const snap = await getDoc(doc(db, 'department_artifacts', history[history.length-1].previousVersionId));
+        if (snap.exists()) cursor = { id: snap.id, ...snap.data() };
+      } catch (_) { /* ignore */ }
+    }
+  }
+
+  const body = $('detailBody');
+  body.innerHTML = `
+    <div class="dd-field"><label>Subject</label><div>${SUBJECT_LABELS[a.subjectId] || a.subjectId}</div></div>
+    <div class="dd-field"><label>Type</label><div>${ARTIFACT_TYPE_LABELS[a.artifactType] || a.artifactType}</div></div>
+    <div class="dd-field"><label>Academic year</label><div>${escHtml(a.academicYear || '—')}</div></div>
+    <div class="dd-field"><label>Status</label><div><span class="status-pill ${a.status || 'draft'}">${a.status || 'draft'}</span> · v${a.version || 1}</div></div>
+    <div class="dd-field"><label>Description</label><div>${escHtml(a.description || '—')}</div></div>
+    <div class="dd-field"><label>Source</label><div>
+      ${a.fileUrl ? `<a href="${escHtml(a.fileUrl)}" target="_blank" rel="noopener">📄 Open file ↗</a>` : ''}
+      ${a.externalUrl ? `<a href="${escHtml(a.externalUrl)}" target="_blank" rel="noopener">🔗 Open external link ↗</a>` : ''}
+      ${(!a.fileUrl && !a.externalUrl) ? '—' : ''}
+    </div></div>
+    <div class="dd-field"><label>Last edited</label><div>${fmtDate(a.updatedAt)}</div></div>
+
+    <div class="dd-actions">
+      <button class="dd-action-btn" id="ddEdit">✎ Edit</button>
+      <button class="dd-action-btn" id="ddArchive">${(a.status || 'draft') === 'archived' ? 'Restore to current' : 'Archive'}</button>
+      ${isAdmin ? `<button class="dd-action-btn danger" id="ddDelete" data-confirming="false">Delete</button>` : ''}
+    </div>
+
+    ${history.length > 1 ? `
+      <div class="dd-field" style="margin-top:18px;">
+        <label>Version history</label>
+        <div class="dd-history">
+          ${history.map((h, i) => `
+            <div>v${h.version || (history.length - i)} · ${fmtDate(h.updatedAt)} · <span class="status-pill ${h.status || 'draft'}">${h.status || 'draft'}</span>
+            ${h.fileUrl ? ` · <a href="${escHtml(h.fileUrl)}" target="_blank" rel="noopener">file ↗</a>` : ''}
+            ${h.externalUrl ? ` · <a href="${escHtml(h.externalUrl)}" target="_blank" rel="noopener">link ↗</a>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+  `;
+
+  $('ddEdit').addEventListener('click', () => { $('detailDrawer').classList.remove('open'); openModal(artifactId); });
+  $('ddArchive').addEventListener('click', () => toggleArchive(artifactId));
+  if (isAdmin) {
+    const delBtn = $('ddDelete');
+    delBtn.addEventListener('click', () => confirmDelete(artifactId, delBtn));
+  }
+
+  $('detailDrawer').classList.add('open');
+}
+
+async function toggleArchive(artifactId) {
+  const a = allArtifacts.find(x => x.id === artifactId);
+  if (!a) return;
+  const nextStatus = (a.status || 'draft') === 'archived' ? 'current' : 'archived';
+  try {
+    await updateDoc(doc(db, 'department_artifacts', artifactId), {
+      status: nextStatus,
+      updatedAt: serverTimestamp(),
+      lastEditedBy: currentUser.uid,
+    });
+    showToast(nextStatus === 'archived' ? 'Archived.' : 'Restored to current.');
+    $('detailDrawer').classList.remove('open');
+  } catch (err) {
+    console.error('[toggleArchive]', err);
+    showToast(`Update failed: ${err.code || err.message}`);
+  }
+}
+
+async function confirmDelete(artifactId, btn) {
+  if (btn.dataset.confirming === 'true') {
+    btn.dataset.confirming = 'false';
+    btn.textContent = 'Delete';
+    try {
+      const a = allArtifacts.find(x => x.id === artifactId);
+      // Best-effort storage cleanup
+      if (a && a.filePath) {
+        try { await deleteObject(storageRef(storage, a.filePath)); } catch (_) { /* tolerate missing file */ }
+      }
+      await deleteDoc(doc(db, 'department_artifacts', artifactId));
+      $('detailDrawer').classList.remove('open');
+      showToast('Artifact deleted.');
+    } catch (err) {
+      console.error('[deleteArtifact]', err);
+      showToast(`Delete failed: ${err.code || err.message}`);
+    }
+    return;
+  }
+  btn.dataset.confirming = 'true';
+  btn.textContent = 'Confirm delete';
+  setTimeout(() => {
+    if (btn.dataset.confirming === 'true') {
+      btn.dataset.confirming = 'false';
+      btn.textContent = 'Delete';
+    }
+  }, 3000);
+}
+</script>
+</body>
+</html>
