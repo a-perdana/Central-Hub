@@ -51,17 +51,46 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       box-shadow: var(--shadow-sm);
-      padding: 17px 18px;
-      transition: box-shadow 0.2s ease;
+      padding: 16px 18px;
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
     }
-    .survey-card:hover { box-shadow: var(--shadow); }
+    .survey-card:hover { box-shadow: var(--shadow); border-color: #cbd5e1; }
+    .survey-card.is-expanded { border-color: #7dd3fc; }
     .survey-head {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 9px;
+      gap: 14px;
+      cursor: pointer;
+      user-select: none;
+      outline: none;
     }
+    .survey-head:focus-visible { box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.18); border-radius: 8px; }
+    .survey-head__main {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .survey-head__cta {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+    }
+    .survey-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #0e7490;
+      padding: 6px 11px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      transition: background 0.15s;
+    }
+    .survey-head:hover .survey-toggle-btn { background: #bae6fd; }
     .survey-title {
       font-size: 1.02rem;
       font-weight: 700;
@@ -85,12 +114,38 @@
     .badge-open { background: #dcfce7; color: #166534; }
     .badge-closed { background: #fee2e2; color: #991b1b; }
     .badge-status { background: #e0f2fe; color: #0e7490; }
+    .badge-responded { background: #ede9fe; color: #5b21b6; }
+
+    /* Collapsed-card summary row — questions count + last-saved hint */
+    .survey-summary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      font-size: 0.82rem;
+      color: var(--ink-3);
+    }
+    .survey-summary__count {
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .survey-summary__dot {
+      color: var(--ink-3);
+    }
+    .survey-summary__note {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .survey-body {
       color: var(--ink-2);
       font-size: 0.89rem;
       line-height: 1.62;
-      margin-bottom: 12px;
+      margin: 14px 0 12px;
       word-break: break-word;
     }
     .questions-wrap {
@@ -137,10 +192,16 @@
     .chip-off { background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb; }
 
     .survey-meta {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--ink-3);
-      border-top: 1px dashed #ece9e3;
+      margin-top: 12px;
       padding-top: 10px;
+      border-top: 1px dashed #ece9e3;
+    }
+    .survey-card:not(.is-expanded) .survey-meta {
+      border-top: none;
+      padding-top: 0;
+      margin-top: 8px;
     }
     .response-wrap {
       border-top: 1px solid #bae6fd;
@@ -222,11 +283,29 @@
     .empty {
       background: #fff;
       border: 1px dashed var(--border);
-      border-radius: 11px;
-      padding: 34px 16px;
+      border-radius: 12px;
+      padding: 44px 20px;
       text-align: center;
       color: var(--ink-3);
-      font-size: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .empty > svg {
+      color: var(--ink-3);
+      opacity: 0.55;
+    }
+    .empty-title {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: var(--ink-2);
+    }
+    .empty-desc {
+      font-size: 0.85rem;
+      color: var(--ink-3);
+      max-width: 440px;
+      line-height: 1.55;
     }
     .loading-line {
       height: 12px;
@@ -3450,7 +3529,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="page-hero__text">
       <p class="page-hero__eyebrow">Communications · CentralHub</p>
       <h1 class="page-hero__title">Surveys</h1>
-      <p class="page-hero__desc">Surveys published to CentralHub appear here. Submit your response to open surveys below — only surveys shared to CentralHub are listed.</p>
+      <p class="page-hero__desc">Surveys shared to CentralHub appear here. Open the ones awaiting your response — only surveys you've been invited to are listed.</p>
+    </div>
+    <div class="page-hero__kpis" id="heroKpis">
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiAwaiting">–</div>
+        <div class="page-hero__kpi-lbl">Awaiting you</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiResponded">–</div>
+        <div class="page-hero__kpi-lbl">Responded</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiTotal">–</div>
+        <div class="page-hero__kpi-lbl">Total shared</div>
+      </div>
     </div>
   </div>
 </header>
@@ -3463,9 +3556,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <input class="search-input" id="searchInput" type="text" placeholder="Search surveys, descriptions, or questions…" aria-label="Search surveys">
     </div>
     <select class="sv-toolbar-select" id="statusFilter" aria-label="Status filter">
-      <option value="all">All</option>
-      <option value="open">Open</option>
+      <option value="awaiting">Awaiting your response</option>
+      <option value="responded">Responded</option>
+      <option value="open">Open (all)</option>
       <option value="closed">Closed</option>
+      <option value="all">All surveys</option>
     </select>
   </div>
 </div>
@@ -3474,8 +3569,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <section id="surveyList" class="survey-list" aria-live="polite">
       <article class="survey-card" aria-hidden="true">
         <div class="loading-line" style="width: 52%; margin-bottom: 10px;"></div>
-        <div class="loading-line" style="width: 100%; margin-bottom: 8px;"></div>
-        <div class="loading-line" style="width: 78%;"></div>
+        <div class="loading-line" style="width: 30%;"></div>
+      </article>
+      <article class="survey-card" aria-hidden="true">
+        <div class="loading-line" style="width: 66%; margin-bottom: 10px;"></div>
+        <div class="loading-line" style="width: 38%;"></div>
+      </article>
+      <article class="survey-card" aria-hidden="true">
+        <div class="loading-line" style="width: 44%; margin-bottom: 10px;"></div>
+        <div class="loading-line" style="width: 34%;"></div>
       </article>
     </section>
   </main>
@@ -3498,7 +3600,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     let responseUiState = {};
     let savingSurveyId = null;
     let searchText = "";
-    let statusFilter = "all";
+    let statusFilter = "awaiting";
+    let expandedSurveyIds = new Set();
     let controlsBound = false;
 
     document.addEventListener("authReady", async ({ detail: { user } }) => {
@@ -3522,7 +3625,31 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         renderSurveys();
       });
 
+      document.getElementById("surveyList").addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const toggle = e.target.closest(".survey-toggle");
+        if (!toggle) return;
+        e.preventDefault();
+        const surveyId = toggle.dataset.surveyId;
+        if (!surveyId) return;
+        if (expandedSurveyIds.has(surveyId)) expandedSurveyIds.delete(surveyId);
+        else expandedSurveyIds.add(surveyId);
+        renderSurveys();
+      });
+
       document.getElementById("surveyList").addEventListener("click", async (e) => {
+        // Expand / collapse toggle — click on .survey-toggle anywhere on the head.
+        const toggle = e.target.closest(".survey-toggle");
+        if (toggle) {
+          const surveyId = toggle.dataset.surveyId;
+          if (!surveyId) return;
+          if (expandedSurveyIds.has(surveyId)) expandedSurveyIds.delete(surveyId);
+          else expandedSurveyIds.add(surveyId);
+          renderSurveys();
+          return;
+        }
+
+        // Submit / Update response.
         const btn = e.target.closest(".response-btn");
         if (!btn) return;
 
@@ -3633,13 +3760,35 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
     }
 
+    function updateKpis() {
+      let total = 0, responded = 0, awaiting = 0;
+      allSurveys.forEach((s) => {
+        const status = normalizeStatus(s.status);
+        const isOpen = status === "published" && s.allowResponses !== false;
+        const questions = getQuestions(s.questionsRaw, s.questions);
+        if (!questions.length) return;
+        total++;
+        const hasResp = !!myResponses[s.id];
+        if (hasResp) responded++;
+        else if (isOpen) awaiting++;
+      });
+      document.getElementById("kpiAwaiting").textContent = awaiting;
+      document.getElementById("kpiResponded").textContent = responded;
+      document.getElementById("kpiTotal").textContent = total;
+    }
+
     function renderSurveys() {
+      updateKpis();
       const listEl = document.getElementById("surveyList");
       const filtered = allSurveys.filter((s) => {
         const status = normalizeStatus(s.status);
         const isOpen = status === "published" && s.allowResponses !== false;
+        const hasResp = !!myResponses[s.id];
+
         if (statusFilter === "open" && !isOpen) return false;
         if (statusFilter === "closed" && isOpen) return false;
+        if (statusFilter === "awaiting" && (hasResp || !isOpen)) return false;
+        if (statusFilter === "responded" && !hasResp) return false;
         if (!searchText) return true;
         const qTexts = getQuestions(s.questionsRaw, s.questions).map((q) => q.text).join(" ");
         const haystack = [s.title || "", stripHtml(s.body || ""), s.questionsRaw || "", qTexts].join(" ").toLowerCase();
@@ -3647,41 +3796,39 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       });
 
       if (!filtered.length) {
-        listEl.innerHTML = '<div class="empty">No shared surveys found.</div>';
+        const emptyMsg = emptyStateFor(statusFilter, !!searchText);
+        listEl.innerHTML = `<div class="empty">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="9" y1="14" x2="15" y2="14"/>
+            <line x1="9" y1="18" x2="13" y2="18"/>
+          </svg>
+          <div class="empty-title">${esc(emptyMsg.title)}</div>
+          <div class="empty-desc">${esc(emptyMsg.desc)}</div>
+        </div>`;
         return;
       }
 
       listEl.innerHTML = filtered.map((s) => {
         const status = normalizeStatus(s.status);
         const isOpen = status === "published" && s.allowResponses !== false;
-        const statusLabel = status === "closed" ? "Closed" : "Published";
-        const badges = `
-          <span class="badge ${isOpen ? "badge-open" : "badge-closed"}">${isOpen ? "Open for Response" : "Closed"}</span>
-          <span class="badge badge-status">${statusLabel}</span>
-        `;
-
         const questions = getQuestions(s.questionsRaw, s.questions);
+        const response = myResponses[s.id] || null;
+        const isExpanded = expandedSurveyIds.has(s.id);
 
-        const questionsHtml = questions.length ? `<div class="questions-wrap">
-          <div class="questions-title">Questions (${questions.length})</div>
-          <ol class="questions-list">${questions.map((q) => {
-            let chip = "";
-            if (q.type === "multiple_choice") chip = `<span class="q-type-chip q-type-chip-mc">Multiple Choice</span>`;
-            else if (q.type === "rating") chip = `<span class="q-type-chip q-type-chip-rating">Rating 1–${q.scale || 5}</span>`;
-            else if (q.type === "likert") chip = `<span class="q-type-chip q-type-chip-likert">Likert</span>`;
-            return `<li>${esc(q.text)}${chip}</li>`;
-          }).join("")}</ol>
-        </div>` : "";
+        const stateBadge = response
+          ? `<span class="badge badge-responded">✓ Responded</span>`
+          : (isOpen ? `<span class="badge badge-open">Open · awaiting you</span>` : `<span class="badge badge-closed">Closed</span>`);
 
         const plats = Array.isArray(s.platforms) ? s.platforms : [];
-        const chip = (enabled, cls, label) => `<span class="chip ${enabled ? cls : "chip-off"}">${label}</span>`;
-        const platformChips = `
-          ${chip(plats.includes("centralhub"), "chip-on-central", "CentralHub")}
-          ${chip(plats.includes("academichub"), "chip-on-academic", "Academic Hub")}
-          ${chip(plats.includes("teachershub"), "chip-on-teachers", "Teachers Hub")}
-        `;
+        const chip = (enabled, cls, label) => enabled ? `<span class="chip ${cls}">${label}</span>` : "";
+        const platformChips = [
+          chip(plats.includes("centralhub"), "chip-on-central", "CentralHub"),
+          chip(plats.includes("academichub"), "chip-on-academic", "Academic Hub"),
+          chip(plats.includes("teachershub"), "chip-on-teachers", "Teachers Hub"),
+        ].filter(Boolean).join("");
 
-        const response = myResponses[s.id] || null;
         const savedAnswers = normalizeAnswers(response?.answers, questions.length);
         const responseUi = responseUiState[s.id];
         const noteClass = responseUi ? (responseUi.isError ? "response-note err" : "response-note ok") : "response-note";
@@ -3690,7 +3837,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           : (isOpen ? "You have not submitted a response yet." : "This survey is closed for responses.");
 
         let lastGroup = null;
-        const responseInputs = questions.map((q, idx) => {
+        const responseInputs = !isExpanded ? "" : questions.map((q, idx) => {
           let sectionHdr = "";
           if (q.group && q.group !== lastGroup) {
             lastGroup = q.group;
@@ -3751,7 +3898,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           </div>`;
         }).join("");
 
-        const responseSection = questions.length ? `
+        const responseSection = isExpanded && questions.length ? `
           <div class="response-wrap">
             <div class="response-title">Your Response</div>
             ${responseInputs}
@@ -3764,20 +3911,57 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           </div>
         ` : "";
 
+        const qCount = questions.length;
+        const ctaLabel = isExpanded
+          ? "Hide"
+          : (response ? "Edit response" : (isOpen ? "Respond" : "View"));
+
+        const collapsedSummary = !isExpanded ? `
+          <div class="survey-summary">
+            <span class="survey-summary__count">${qCount} question${qCount === 1 ? "" : "s"}</span>
+            <span class="survey-summary__dot">·</span>
+            <span class="survey-summary__note">${esc(defaultNote)}</span>
+          </div>
+        ` : "";
+
+        const expandedBody = isExpanded ? `
+          <div class="survey-body">${renderBody(s.body || "")}</div>
+          ${platformChips ? `<div class="platforms">${platformChips}</div>` : ""}
+          ${responseSection}
+        ` : "";
+
         return `
-          <article class="survey-card">
-            <div class="survey-head">
-              <h2 class="survey-title">${esc(s.title || "Untitled Survey")}</h2>
-              <div class="badge-row">${badges}</div>
+          <article class="survey-card ${isExpanded ? "is-expanded" : ""}">
+            <div class="survey-head survey-toggle" data-survey-id="${s.id}" role="button" tabindex="0" aria-expanded="${isExpanded}">
+              <div class="survey-head__main">
+                <h2 class="survey-title">${esc(s.title || "Untitled Survey")}</h2>
+                <div class="badge-row">${stateBadge}</div>
+              </div>
+              <div class="survey-head__cta">
+                <span class="survey-toggle-btn">${ctaLabel}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="${isExpanded ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}"/>
+                  </svg>
+                </span>
+              </div>
             </div>
-            <div class="survey-body">${renderBody(s.body || "")}</div>
-            ${questionsHtml}
-            <div class="platforms">${platformChips}</div>
-            ${responseSection}
+            ${collapsedSummary}
+            ${expandedBody}
             <div class="survey-meta">${esc(s.author || "Admin")} &middot; ${formatDate(s.createdAt)}</div>
           </article>
         `;
       }).join("");
+    }
+
+    function emptyStateFor(filterKey, hasSearch) {
+      if (hasSearch) return { title: "No matching surveys", desc: "Try a different search term or clear the search box." };
+      switch (filterKey) {
+        case "awaiting": return { title: "All caught up", desc: "You have responded to every open survey shared with CentralHub. Switch to 'Responded' or 'All surveys' to review past submissions." };
+        case "responded": return { title: "No responses yet", desc: "You haven't submitted any survey responses yet. Switch to 'Awaiting your response' to see what's open." };
+        case "open": return { title: "No open surveys", desc: "No surveys are currently open for response on CentralHub." };
+        case "closed": return { title: "No closed surveys", desc: "No surveys have been closed yet." };
+        default: return { title: "No surveys shared yet", desc: "When HQ publishes a survey to CentralHub it will appear here." };
+      }
     }
 
     function buildResponseDocId(surveyId, uid) {
