@@ -373,6 +373,18 @@
 .cmod-cta-primary:hover { background: var(--accent-dk); }
 .cmod-cta-secondary { background: var(--paper); color: var(--ink-2); border: 1px solid var(--border); }
 .cmod-empty { padding: 40px 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
+.cmod-search-chip {
+  display: inline-flex; align-items: center;
+  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 5px;
+  background: #fef08a; color: #713f12;
+  text-transform: none; letter-spacing: 0;
+}
+/* Modal-scoped <mark> styling (matches card-level search-hit) */
+.cmod-body mark.search-hit {
+  background: #fef08a; color: #713f12;
+  padding: 0 2px; border-radius: 3px;
+}
 
 @media (max-width: 720px) {
   .hero { padding: 28px 22px 26px; }
@@ -1058,7 +1070,72 @@ window.openLevelContent = async function(compId, lvl) {
       </div>` : '';
 
   body.innerHTML = readingHtml + ktHtml + saHtml + actHtml;
+
+  // ── If a keyword search is active, propagate the highlight into the
+  // modal content so users see exactly where the match lives inside the
+  // reading / takeaways / self-assessment / activity.
+  applyHighlightToModalIfSearchActive();
 };
+
+// Wraps occurrences of the active search term inside the open modal body
+// with <mark class="search-hit">. Skips text nodes that are inside existing
+// <mark> elements so re-running is idempotent. Walks only text nodes — never
+// touches structural HTML or attribute values.
+function applyHighlightToModalIfSearchActive() {
+  const input = document.getElementById('compSearchInput');
+  const term = (input?.value || '').trim();
+  if (!term) return;
+  const body = document.getElementById('cmodBody');
+  if (!body) return;
+  highlightTextNodes(body, term);
+  // Surface a small chip in the modal header so users know the highlight is
+  // tied to the active search — and can clear it from here.
+  const eyebrow = document.getElementById('cmodEyebrow');
+  if (eyebrow && !document.getElementById('cmodSearchChip')) {
+    const chip = document.createElement('span');
+    chip.id = 'cmodSearchChip';
+    chip.className = 'cmod-search-chip';
+    chip.title = 'Search active — matches highlighted below';
+    chip.textContent = `🔎 "${term}"`;
+    eyebrow.appendChild(document.createTextNode(' · '));
+    eyebrow.appendChild(chip);
+  }
+}
+
+function highlightTextNodes(root, term) {
+  if (!term) return;
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(' + escaped + ')', 'gi');
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      // Skip text already wrapped in <mark>, and skip nodes with no match.
+      if (node.parentNode && node.parentNode.tagName === 'MARK') return NodeFilter.FILTER_REJECT;
+      return re.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  // Reset lastIndex because .test() advances state for global flags.
+  re.lastIndex = 0;
+  const targets = [];
+  let n;
+  while ((n = walker.nextNode())) targets.push(n);
+  for (const tn of targets) {
+    const frag = document.createDocumentFragment();
+    let lastIdx = 0;
+    const text = tn.nodeValue;
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hit';
+      mark.textContent = m[0];
+      frag.appendChild(mark);
+      lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+    tn.parentNode.replaceChild(frag, tn);
+  }
+}
 
 window.closeCmod = function() {
   document.getElementById('cmodOverlay').classList.remove('open');
