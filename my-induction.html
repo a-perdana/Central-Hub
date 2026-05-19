@@ -11,21 +11,21 @@
   <link rel="stylesheet" href="shared-styles.css">
   <!-- SHARED_NAVBAR -->
   <style>
+    /* My Induction belongs to My Work family — dark accent.
+       Hero markup uses canonical <header class="page-hero" data-accent="dark">.
+       Canonical hero CSS lives in shared-styles.css; see
+       docs/architecture/DESIGN_SYSTEM.md "Page families".
+       Page-local extras kept here: .window-pill in the hero KPI slot. */
     :root { --accent: #6c5ce7; --accent-dk: #4e3db8; --accent-2: #ddd6fe; }
 
-    .welcome-hero {
-      background: linear-gradient(135deg, #1a1530 0%, #2d2354 55%, #0a0815 100%);
-      color: #fff; padding: 30px 28px; border-radius: 16px;
-      margin-bottom: 24px; position: relative; overflow: hidden;
-      display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    .window-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 999px;
+      font-size: 13px; font-weight: 500; color: #fff;
+      border: 1px solid rgba(255,255,255,0.18);
     }
-    .welcome-hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 80% 20%, rgba(108,92,231,0.22) 0%, transparent 55%); }
-    .welcome-hero > * { position: relative; z-index: 1; }
-    .welcome-eyebrow { font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.5); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
-    .welcome-title { font-family: 'Lora', serif; font-size: 1.75rem; font-weight: 600; margin-bottom: 4px; }
-    .welcome-meta { font-size: 13px; color: rgba(255,255,255,0.65); }
-    .window-pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; }
     .window-pill .day-num { font-weight: 700; }
+    .page-hero__desc a { color: rgba(255,255,255,0.92); text-decoration: underline; }
 
     .page-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 40px 80px; }
     @media (max-width: 720px) { .page-wrap { padding: 20px 20px 60px; } }
@@ -153,6 +153,19 @@
 </head>
 <body>
 
+<header class="page-hero" data-accent="dark" id="myInductionHero" hidden>
+  <div class="page-hero__inner">
+    <div class="page-hero__text">
+      <p class="page-hero__eyebrow">CentralHub · Subject Specialist Induction · Year 1</p>
+      <h1 class="page-hero__title" id="heroTitle">Welcome</h1>
+      <p class="page-hero__desc" id="heroMeta">&nbsp;</p>
+    </div>
+    <aside class="page-hero__kpis">
+      <div class="window-pill" id="heroWindowPill" hidden></div>
+    </aside>
+  </div>
+</header>
+
 <div class="page-wrap" id="pageWrap">
   <!-- New-user intro banner (auto-dismisses via localStorage) -->
   <div class="page-intro" id="pageIntro" data-intro-key="my-induction">
@@ -270,19 +283,22 @@ function render() {
   const total = allTasks.length;
   const stageLabel = currentWindow?.label || 'Pre-arrival';
 
-  document.getElementById('mainContent').innerHTML = `
-    <div class="welcome-hero">
-      <div>
-        <p class="welcome-eyebrow">CentralHub · Subject Specialist Induction · Year 1</p>
-        <h1 class="welcome-title">Welcome, ${escapeHtml(window.userProfile?.displayName || 'colleague')}</h1>
-        <div class="welcome-meta">
-          ${escapeHtml(program?.title || 'Network → Apprenticeship → Solo → Strategic')} · ${completed} / ${total} tasks completed
-          ${program?.id || assignment.programId ? ` · <a href="handbook?id=${encodeURIComponent(program?.id || assignment.programId)}" style="color:rgba(255,255,255,0.85);text-decoration:underline;">View full handbook</a>` : ''}
-        </div>
-      </div>
-      <div class="window-pill"><span class="day-num">Day ${dayOfInduction}</span> of ${totalDays} · ${escapeHtml(stageLabel)}</div>
-    </div>
+  // Populate the static hero (lives in body above page-wrap, hidden until here).
+  const heroEl = document.getElementById('myInductionHero');
+  document.getElementById('heroTitle').textContent =
+    `Welcome, ${window.userProfile?.displayName || 'colleague'}`;
+  const programTitle = program?.title || 'Network → Apprenticeship → Solo → Strategic';
+  const handbookLink = (program?.id || assignment.programId)
+    ? ` · <a href="handbook?id=${encodeURIComponent(program?.id || assignment.programId)}">View full handbook</a>`
+    : '';
+  document.getElementById('heroMeta').innerHTML =
+    `${escapeHtml(programTitle)} · ${completed} / ${total} tasks completed${handbookLink}`;
+  const pill = document.getElementById('heroWindowPill');
+  pill.innerHTML = `<span class="day-num">Day ${dayOfInduction}</span> of ${totalDays} · ${escapeHtml(stageLabel)}`;
+  pill.hidden = false;
+  heroEl.hidden = false;
 
+  document.getElementById('mainContent').innerHTML = `
     <div class="charter-banner">
       <strong>Know the network before coaching it.</strong> The most damaging combination in subject specialist work is wrong advice given with confidence. Your first 30 days are deliberately Network Sense-Making — read the school landscape before opening your mouth on coaching.
     </div>
