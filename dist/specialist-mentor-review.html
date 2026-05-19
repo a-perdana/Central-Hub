@@ -3,87 +3,109 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Staff — CentralHub</title>
+  <title>Specialist Mentor Review — CentralHub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
   <style>
-    /* PAGE */
-    .page-content { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
-
-    /* TOOLBAR — two-row layout
-       Row 1: search input (grows) + Add button (admin only).
-       Row 2: 5-column filter grid (school, role, status, level, linked).
-       Row 3 (in code): result count.
-       Override the shared .toolbar .filter-select width:100% so multiple
-       selects share a row. */
-    .toolbar {
-      display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
-    }
-    .toolbar .toolbar-search { flex: 1; min-width: 220px; }
-
-    .filter-grid {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .filter-grid .filter-select {
-      width: 100%;
-      padding: 8px 12px;
-      background: var(--white);
-      box-shadow: var(--shadow-sm);
-      font-size: 0.84rem;
+    :root {
+      --queue-w: 380px;
+      --state-draft: #fef3c7;
+      --state-draft-ink: #92400e;
+      --state-submitted: #dbeafe;
+      --state-submitted-ink: #1e40af;
+      --state-reviewed: #d1fae5;
+      --state-reviewed-ink: #065f46;
+      --state-finalized: #e5e7eb;
+      --state-finalized-ink: #374151;
     }
 
-    .staff-count { font-size: 0.85rem; color: var(--ink-3); margin-bottom: 14px; display: block; }
-    .btn-add { display: none; flex-shrink: 0; }
+    .review-layout { display: grid; grid-template-columns: var(--queue-w) 1fr; min-height: calc(100vh - 64px); }
+    @media (max-width: 1024px) { .review-layout { grid-template-columns: 1fr; } }
 
-    /* Staff table overrides */
-    th { cursor: pointer; user-select: none; }
-    .staff-name-cell { display: flex; align-items: center; gap: 10px; }
-    .staff-name { font-weight: 500; }
-    .staff-email { font-size: 0.78rem; color: var(--ink-3); font-family: 'DM Mono', monospace; }
-    .td-actions { display: flex; gap: 6px; }
+    /* === Queue sidebar === */
+    .queue-sidebar { background: var(--white); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+    .queue-head { padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+    .queue-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .queue-title { font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink); }
+    .queue-count-pill { padding: 2px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: #ede9fe; color: #6d28d9; }
+    .queue-tabs { display: flex; gap: 4px; }
+    .queue-tab { flex: 1; padding: 6px 10px; border: 1px solid var(--border); background: var(--paper); border-radius: 6px; font-size: 0.78rem; font-weight: 500; color: var(--ink-2); cursor: pointer; transition: all .15s; font-family: 'DM Sans', sans-serif; }
+    .queue-tab.active { background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border-color: transparent; }
+    .queue-tab:hover:not(.active) { background: var(--white); border-color: var(--accent); }
+    .queue-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+    .queue-empty { padding: 36px 22px; text-align: center; color: var(--ink-3); font-size: 0.86rem; }
+    .queue-item { padding: 11px 18px; border-left: 3px solid transparent; cursor: pointer; transition: background .12s; }
+    .queue-item:hover { background: var(--paper); }
+    .queue-item.active { background: #faf8ff; border-left-color: var(--accent); }
+    .queue-item-row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+    .queue-item-school { font-size: 0.88rem; font-weight: 600; color: var(--ink); line-height: 1.3; }
+    .queue-item-date { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--ink-3); }
+    .queue-item-row2 { font-size: 0.74rem; color: var(--ink-3); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .queue-item-pill { padding: 1px 7px; border-radius: 10px; font-size: 0.66rem; font-weight: 600; }
+    .queue-item-pill.W2 { background: #ede9fe; color: #6d28d9; }
+    .queue-item-pill.W3 { background: #cffafe; color: #0e7490; }
+    .queue-item-pill.W4 { background: #fef3c7; color: #92400e; }
 
-    /* Staff badges */
-    .badge-violet { background: #ede9fe; color: #5b21b6; }
+    /* === Detail panel === */
+    .detail-panel { display: flex; flex-direction: column; min-width: 0; padding: 0; overflow-y: auto; }
+    .detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 40px; text-align: center; color: var(--ink-3); min-height: 60vh; }
+    .detail-empty .empty-icon { width: 60px; height: 60px; border-radius: 14px; background: var(--paper-2); display: flex; align-items: center; justify-content: center; color: var(--ink-3); margin-bottom: 16px; }
+    .detail-empty h2 { font-family: 'Lora', serif; font-size: 1.15rem; color: var(--ink); margin-bottom: 6px; }
+    .detail-empty p { font-size: 0.88rem; line-height: 1.5; max-width: 380px; }
 
-    /* Level mini-chips: small inline tag for SMP/SMA/SD/KG/PG */
-    .level-chip-row { display: flex; gap: 4px; flex-wrap: wrap; }
-    .level-chip {
-      display: inline-flex; align-items: center; padding: 2px 7px;
-      font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em;
-      background: #f1f5f9; color: var(--ink-2);
-      border-radius: 4px; line-height: 1.4;
-    }
+    .detail-wrap { max-width: 800px; margin: 0; padding: 24px 32px; }
+    .detail-head { margin-bottom: 18px; }
+    .detail-pills { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .detail-title { font-family: 'Lora', serif; font-size: 1.4rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+    .detail-sub { font-size: 0.84rem; color: var(--ink-3); }
+    .pill-window { padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .pill-window.W2 { background: #ede9fe; color: #6d28d9; }
+    .pill-window.W3 { background: #cffafe; color: #0e7490; }
+    .pill-window.W4 { background: #fef3c7; color: #92400e; }
+    .pill-state { padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; }
+    .pill-state.draft { background: var(--state-draft); color: var(--state-draft-ink); }
+    .pill-state.submitted { background: var(--state-submitted); color: var(--state-submitted-ink); }
+    .pill-state.mentor_reviewed { background: var(--state-reviewed); color: var(--state-reviewed-ink); }
+    .pill-state.finalized { background: var(--state-finalized); color: var(--state-finalized-ink); }
 
-    /* Linked / Not-yet badges */
-    .badge-linked  { background: #dcfce7; color: #166534; }
-    .badge-invited { background: #fef3c7; color: #92400e; }
+    .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px; padding: 16px 18px; background: var(--paper); border-radius: 10px; margin-bottom: 20px; }
+    @media (max-width: 720px) { .meta-grid { grid-template-columns: 1fr 1fr; } }
+    .meta-grid .label { font-size: 0.7rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+    .meta-grid .value { font-size: 0.88rem; color: var(--ink); font-weight: 500; }
 
-    /* RESPONSIVE */
-    @media (max-width: 900px) {
-      .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 768px) {
-      .page-content { padding: 20px 16px; }
-      table { font-size: 0.82rem; }
-      th, td { padding: 10px 10px; }
-      .staff-email { display: none; }
-    }
-    @media (max-width: 480px) {
-      .toolbar { flex-direction: column; align-items: stretch; }
-      .toolbar-search { min-width: 0; }
-      .filter-grid { grid-template-columns: 1fr; }
-    }
+    .section { margin-bottom: 22px; }
+    .section-divider { font-size: 0.78rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+    .section-body { font-size: 0.9rem; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+    .section-body.empty { color: var(--ink-3); font-style: italic; }
+
+    .review-card { background: var(--paper); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-top: 24px; }
+    .review-card h3 { font-family: 'Lora', serif; font-size: 1.02rem; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
+    .review-card .form-textarea { width: 100%; min-height: 80px; }
+    .review-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    .btn-approve { padding: 8px 16px; background: linear-gradient(135deg,#10b981,#065f46); color: #fff; border: none; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .12s; }
+    .btn-approve:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-return { padding: 8px 16px; background: var(--white); color: #b45309; border: 1px solid #fbbf24; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .btn-return:hover { background: #fef3c7; }
+    .review-error { color: #dc2626; font-size: 0.84rem; margin-top: 8px; display: none; }
+
+    .nn2-banner { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 8px; margin-bottom: 18px; }
+    .nn2-banner .nn2-icon { flex-shrink: 0; color: #9d174d; margin-top: 1px; }
+    .nn2-banner .nn2-text { font-size: 0.8rem; line-height: 1.5; color: #831843; }
+    .nn2-banner .nn2-text strong { color: #9d174d; font-weight: 600; }
+
+    .prior-review { background: #ecfdf5; border-left: 3px solid #10b981; padding: 10px 14px; border-radius: 0 8px 8px 0; margin-top: 12px; }
+    .prior-review .label { font-size: 0.72rem; font-weight: 600; color: #065f46; margin-bottom: 4px; }
+    .prior-review .body { font-size: 0.85rem; color: #064e3b; line-height: 1.5; white-space: pre-wrap; }
+    .prior-review .footer { font-size: 0.72rem; color: #065f46; margin-top: 6px; }
   </style>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
 </head>
 <body>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
 
-<style>
+  <style>
   .btn-my-tasks {
     font-family: 'DM Sans', sans-serif;
     font-size: 0.82rem;
@@ -3189,426 +3211,333 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 </script>
 
 
-<div class="page-content">
-  <!-- TOOLBAR — Row 1: search + add button -->
-  <div class="toolbar">
-    <div class="toolbar-search">
-      <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-input" id="searchInput" type="search" placeholder="Search by name, email, school…" aria-label="Search staff">
-    </div>
-    <button class="btn-add" id="addStaffBtn" aria-label="Add staff member">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Add Staff
-    </button>
+  <div class="review-layout">
+    <aside class="queue-sidebar">
+      <div class="queue-head">
+        <div class="queue-title-row">
+          <span class="queue-title">Walkthrough Queue</span>
+          <span class="queue-count-pill" id="queueCount">0</span>
+        </div>
+        <div class="queue-tabs">
+          <button class="queue-tab active" data-state="submitted">To review</button>
+          <button class="queue-tab"        data-state="mentor_reviewed">Reviewed</button>
+          <button class="queue-tab"        data-state="all">All</button>
+        </div>
+      </div>
+      <div class="queue-list" id="queueList">
+        <div class="queue-empty">Loading…</div>
+      </div>
+    </aside>
+
+    <main class="detail-panel" id="detailPanel">
+      <div class="detail-empty" id="detailEmpty">
+        <div class="empty-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        </div>
+        <h2>Pick a walkthrough on the left</h2>
+        <p>You'll see the specialist's notes, leave a review comment, and approve to mark <em>Mentor reviewed</em> — or return to <em>Draft</em> for revision.</p>
+      </div>
+    </main>
   </div>
 
-  <!-- TOOLBAR — Row 2: 5-column filter grid -->
-  <div class="filter-grid">
-    <select class="filter-select" id="schoolFilter" aria-label="Filter by school"><option value="">All schools</option></select>
-    <select class="filter-select" id="roleFilter" aria-label="Filter by role">
-      <option value="">All roles</option>
-      <option value="teacher">Teacher</option>
-      <option value="admin">Admin</option>
-      <option value="staff">Staff</option>
-      <option value="coordinator">Coordinator</option>
-    </select>
-    <select class="filter-select" id="statusFilter" aria-label="Filter by status">
-      <option value="">All statuses</option>
-      <option value="active">Active</option>
-      <option value="pending">Pending</option>
-      <option value="inactive">Inactive</option>
-    </select>
-    <select class="filter-select" id="levelFilter" aria-label="Filter by level">
-      <option value="">All levels</option>
-      <option value="PG">PG</option>
-      <option value="KG">KG</option>
-      <option value="SD">SD</option>
-      <option value="SMP">SMP</option>
-      <option value="SMA">SMA</option>
-    </select>
-    <select class="filter-select" id="linkedFilter" aria-label="Filter by linked status">
-      <option value="">All link states</option>
-      <option value="linked">Linked</option>
-      <option value="invited">Not yet linked</option>
-    </select>
-  </div>
+  <script type="module">
+    import {
+      collection, query, where, orderBy, onSnapshot,
+      updateDoc, doc, getDocs, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  <!-- Result count line -->
-  <span class="staff-count" id="staffCount"></span>
+    /* ───── State ───────────────────────────────────────────────────── */
+    let db, currentUser, userProfile;
+    let allWalkthroughs = [];
+    let currentTab = 'submitted';
+    let selectedId = null;
+    let isDirector = false;
+    let isAdmin = false;
 
-  <!-- TABLE -->
-  <div class="table-wrap">
-    <table aria-label="Staff directory">
-      <thead>
-        <tr>
-          <th data-sort="name">Name ↕</th>
-          <th data-sort="role">Role ↕</th>
-          <th data-sort="school">School ↕</th>
-          <th>Department</th>
-          <th>Levels</th>
-          <th data-sort="status">Status ↕</th>
-          <th>Linked</th>
-          <th id="actionsHeader" style="display:none">Actions</th>
-        </tr>
-      </thead>
-      <tbody id="staffBody">
-        <tr><td colspan="8" style="padding:48px;text-align:center;color:var(--ink-3)">
-          <span class="skel" style="height:16px;width:60%;display:block;margin:auto"></span>
-        </td></tr>
-      </tbody>
-    </table>
-    <div class="pagination" id="staffPagination"></div>
-  </div>
-
-</div>
-
-<!-- ADD / EDIT DRAWER -->
-<div class="drawer-overlay" id="drawerOverlay" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
-  <div class="drawer">
-    <div class="drawer-head">
-      <h3 id="drawerTitle">Add Staff Member</h3>
-      <button class="drawer-close" id="drawerClose" aria-label="Close">&#215;</button>
-    </div>
-    <div class="drawer-body">
-      <div class="drawer-error" id="drawerError" role="alert"></div>
-      <div class="form-group">
-        <label class="form-label" for="fieldName">Full Name *</label>
-        <input class="form-input" id="fieldName" placeholder="e.g. Budi Santoso">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="fieldEmail">Email *</label>
-        <input class="form-input" type="email" id="fieldEmail" placeholder="budi@eduversal.org">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="fieldSchool">School *</label>
-        <select class="form-select" id="fieldSchool">
-          <option value="">Select school…</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="fieldRole">Role *</label>
-        <select class="form-select" id="fieldRole">
-          <option value="teacher">Teacher</option>
-          <option value="admin">Admin</option>
-          <option value="staff">Staff</option>
-          <option value="coordinator">Coordinator</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="fieldDept">Department</label>
-        <input class="form-input" id="fieldDept" placeholder="e.g. Mathematics, Science…">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="fieldStatus">Status</label>
-        <select class="form-select" id="fieldStatus">
-          <option value="active">Active</option>
-          <option value="pending">Pending</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
-    </div>
-    <div class="drawer-footer">
-      <button class="btn-cancel" id="cancelBtn">Cancel</button>
-      <button class="btn-save"   id="saveBtn">Save</button>
-    </div>
-  </div>
-</div>
-
-<script src="firebase-config.js"></script>
-<script type="module" src="auth-guard.js"></script>
-<script type="module">
-  import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc as fsDoc, query, orderBy, serverTimestamp }
-    from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-  let db;
-  let allStaff    = [];
-  let allSchools  = [];
-  let isAdmin     = false;
-  let editingId   = null;
-  let sortKey     = 'name';
-  let sortAsc     = true;
-  let staffPage   = 1;
-  const STAFF_PAGE_SIZE = 25;
-
-  const ROLE_BADGE = {
-    teacher:     '<span class="badge badge-teal">Teacher</span>',
-    admin:       '<span class="badge badge-violet">Admin</span>',
-    staff:       '<span class="badge badge-amber">Staff</span>',
-    coordinator: '<span class="badge badge-green">Coordinator</span>',
-  };
-  const STATUS_BADGE = {
-    active:   '<span class="badge badge-teal">Active</span>',
-    pending:  '<span class="badge badge-amber">Pending</span>',
-    inactive: '<span class="badge badge-red">Inactive</span>',
-  };
-
-  document.addEventListener('authReady', async ({ detail: { profile } }) => {
-    db = window.db;
-    isAdmin = profile.role === 'central_admin';
-    if (isAdmin) {
-      document.getElementById('addStaffBtn').style.display = 'flex';
-      document.getElementById('actionsHeader').style.display = '';
-    }
-    await Promise.all([loadSchools(), loadStaff()]);
-    bindEvents();
-  });
-
-  async function loadSchools() {
-    const snap = await getDocs(query(collection(db, 'partner_schools'), orderBy('name')));
-    allSchools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Filter options keep `name` as value (so existing free-text staff docs
-    // still match in applyFilters). Drawer options use `id` as value so we
-    // can write a real `schoolId` FK on save.
-    const filterOptions = allSchools.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
-    const drawerOptions = allSchools.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-    document.getElementById('schoolFilter').insertAdjacentHTML('beforeend', filterOptions);
-    document.getElementById('fieldSchool').insertAdjacentHTML('beforeend', drawerOptions);
-  }
-
-  async function loadStaff() {
-    try {
-      // @lint-allow-unbounded — auto-annotated; revisit if collection grows large
-      const snap = await getDocs(collection(db, 'staff'));
-      allStaff = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      applyFilters();
-    } catch(e) {
-      document.getElementById('staffBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--ink-3)">Could not load staff data.</td></tr>';
-    }
-  }
-
-  function bindEvents() {
-    // Filter changes always reset to page 1 — otherwise narrowing the
-    // result set leaves the user on a now-empty page.
-    ['searchInput','schoolFilter','roleFilter','statusFilter','levelFilter','linkedFilter'].forEach(id =>
-      document.getElementById(id).addEventListener('input', () => { staffPage = 1; applyFilters(); }));
-    document.querySelectorAll('th[data-sort]').forEach(th =>
-      th.addEventListener('click', () => {
-        const k = th.dataset.sort;
-        sortAsc = sortKey === k ? !sortAsc : true;
-        sortKey = k;
-        document.querySelectorAll('th[data-sort]').forEach(t => t.classList.remove('sorted'));
-        th.classList.add('sorted');
-        applyFilters();
-      })
-    );
-    document.getElementById('addStaffBtn').addEventListener('click', openAddDrawer);
-    document.getElementById('drawerClose').addEventListener('click', closeDrawer);
-    document.getElementById('cancelBtn').addEventListener('click', closeDrawer);
-    document.getElementById('drawerOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeDrawer(); });
-    document.getElementById('saveBtn').addEventListener('click', saveStaff);
-  }
-
-  function applyFilters() {
-    const q   = document.getElementById('searchInput').value.toLowerCase();
-    const sc  = document.getElementById('schoolFilter').value;
-    const ro  = document.getElementById('roleFilter').value;
-    const st  = document.getElementById('statusFilter').value;
-    const lv  = document.getElementById('levelFilter').value;
-    const lk  = document.getElementById('linkedFilter').value;
-    let list = allStaff.filter(s =>
-      (!q  || s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.school?.toLowerCase().includes(q)) &&
-      (!sc || s.school === sc) &&
-      (!ro || s.role   === ro) &&
-      (!st || s.status === st) &&
-      (!lv || (Array.isArray(s.levels) && s.levels.includes(lv))) &&
-      (!lk
-        || (lk === 'linked'  && !!s.userId)
-        || (lk === 'invited' && !s.userId))
-    ).sort((a, b) => {
-      const va = (a[sortKey] || '').toLowerCase();
-      const vb = (b[sortKey] || '').toLowerCase();
-      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-    });
-
-    // Clamp page if filter shrunk the result set (e.g. user was on
-    // page 12 then typed a query that returns 30 rows).
-    const totalPages = Math.max(1, Math.ceil(list.length / STAFF_PAGE_SIZE));
-    if (staffPage > totalPages) staffPage = totalPages;
-
-    const start = (staffPage - 1) * STAFF_PAGE_SIZE;
-    const pageRows = list.slice(start, start + STAFF_PAGE_SIZE);
-
-    const countEl = document.getElementById('staffCount');
-    if (list.length === 0) {
-      countEl.textContent = '0 members';
-    } else {
-      const rangeEnd = Math.min(start + STAFF_PAGE_SIZE, list.length);
-      countEl.textContent = `Showing ${start + 1}–${rangeEnd} of ${list.length}`;
-    }
-
-    renderTable(pageRows);
-    renderPagination(list.length, totalPages);
-  }
-
-  function renderPagination(total, totalPages) {
-    const el = document.getElementById('staffPagination');
-    if (total <= STAFF_PAGE_SIZE) { el.innerHTML = ''; return; }
-
-    // Build a windowed page list — first, last, and a slice around the
-    // current page — so 463 rows / 25 (=19 pages) doesn't render 19
-    // buttons in a row on small screens.
-    const pages = new Set([1, totalPages]);
-    for (let p = staffPage - 2; p <= staffPage + 2; p++) {
-      if (p > 1 && p < totalPages) pages.add(p);
-    }
-    const sorted = [...pages].sort((a, b) => a - b);
-
-    let html = '';
-    html += `<button class="page-btn" ${staffPage === 1 ? 'disabled' : ''} data-page="${staffPage - 1}">‹ Prev</button>`;
-    let prev = 0;
-    for (const p of sorted) {
-      if (prev && p > prev + 1) html += `<span class="page-btn" style="border:none;background:transparent;cursor:default">…</span>`;
-      const cls = p === staffPage ? 'page-btn active' : 'page-btn';
-      html += `<button class="${cls}" data-page="${p}">${p}</button>`;
-      prev = p;
-    }
-    html += `<button class="page-btn" ${staffPage === totalPages ? 'disabled' : ''} data-page="${staffPage + 1}">Next ›</button>`;
-    el.innerHTML = html;
-
-    el.querySelectorAll('button[data-page]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const target = Number(btn.dataset.page);
-        if (target >= 1 && target <= totalPages && target !== staffPage) {
-          staffPage = target;
-          applyFilters();
-          // Scroll the table-wrap (not the page) so the user sees the new
-          // top row after clicking a page button.
-          document.querySelector('.table-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      });
-    });
-  }
-
-  function renderTable(list) {
-    const body = document.getElementById('staffBody');
-    if (!list.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="8">No staff members match your filters.</td></tr>';
-      return;
-    }
-    body.innerHTML = list.map(s => {
-      const initials = s.name ? s.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase() : '??';
-      const actions  = isAdmin ? `
-        <td><div class="td-actions">
-          <button class="btn-action" onclick="editStaff('${s.id}')">Edit</button>
-          <button class="btn-action btn-action-del" onclick="deleteStaff('${s.id}')">Delete</button>
-        </div></td>` : '';
-      const levelsHtml = Array.isArray(s.levels) && s.levels.length
-        ? `<div class="level-chip-row">${s.levels.map(l => `<span class="level-chip">${esc(l)}</span>`).join('')}</div>`
-        : '<span style="color:var(--ink-3)">—</span>';
-      const linkedHtml = s.userId
-        ? '<span class="badge badge-linked">Linked</span>'
-        : '<span class="badge badge-invited">Not yet</span>';
-      return `
-        <tr>
-          <td>
-            <div class="staff-name-cell">
-              <div class="staff-avatar" aria-hidden="true">${initials}</div>
-              <div>
-                <p class="staff-name">${esc(s.name||'—')}</p>
-                <p class="staff-email">${esc(s.email||'')}</p>
-              </div>
-            </div>
-          </td>
-          <td>${ROLE_BADGE[s.role] || esc(s.role||'—')}</td>
-          <td>${esc(s.school||'—')}</td>
-          <td>${esc(s.department||'—')}</td>
-          <td>${levelsHtml}</td>
-          <td>${STATUS_BADGE[s.status] || esc(s.status||'—')}</td>
-          <td>${linkedHtml}</td>
-          ${actions}
-        </tr>`;
-    }).join('');
-  }
-
-  // ===== Delete =====
-  async function deleteStaff(id) {
-    if (!confirm('Remove this staff member? This cannot be undone.')) return;
-    await deleteDoc(fsDoc(db, 'staff', id));
-    allStaff = allStaff.filter(s => s.id !== id);
-    applyFilters();
-  }
-
-  // ===== Drawer =====
-  function openAddDrawer() {
-    editingId = null;
-    document.getElementById('drawerTitle').textContent = 'Add Staff Member';
-    ['fieldName','fieldEmail','fieldDept'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('fieldSchool').value = '';
-    document.getElementById('fieldRole').value   = 'teacher';
-    document.getElementById('fieldStatus').value = 'active';
-    hideErr();
-    document.getElementById('drawerOverlay').classList.add('open');
-    document.getElementById('fieldName').focus();
-  }
-
-  function editStaff(id) {
-    const s = allStaff.find(x => x.id === id);
-    if (!s) return;
-    editingId = id;
-    document.getElementById('drawerTitle').textContent  = 'Edit Staff Member';
-    document.getElementById('fieldName').value   = s.name       || '';
-    document.getElementById('fieldEmail').value  = s.email      || '';
-    // Prefer the FK schoolId; fall back to a name lookup for legacy docs
-    // that only have the free-text `school` field.
-    const editingSchoolId = s.schoolId
-      || (allSchools.find(x => x.name === s.school)?.id || '');
-    document.getElementById('fieldSchool').value = editingSchoolId;
-    document.getElementById('fieldRole').value   = s.role       || 'teacher';
-    document.getElementById('fieldDept').value   = s.department || '';
-    document.getElementById('fieldStatus').value = s.status     || 'active';
-    hideErr();
-    document.getElementById('drawerOverlay').classList.add('open');
-  }
-
-  function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('open'); }
-  function showErr(m)    { const e=document.getElementById('drawerError'); e.textContent=m; e.classList.add('visible'); }
-  function hideErr()     { document.getElementById('drawerError').classList.remove('visible'); }
-
-  async function saveStaff() {
-    const name     = document.getElementById('fieldName').value.trim();
-    const email    = document.getElementById('fieldEmail').value.trim();
-    const schoolId = document.getElementById('fieldSchool').value;
-    if (!name || !email || !schoolId) { showErr('Name, email, and school are required.'); return; }
-
-    // schoolId is the canonical FK; school is the denormalised display name
-    // so list/filter/search code that doesn't join can still render it.
-    const schoolDoc = allSchools.find(s => s.id === schoolId);
-    const schoolName = schoolDoc?.name || '';
-
-    const data = {
-      name, email,
-      schoolId,
-      school: schoolName,
-      role:       document.getElementById('fieldRole').value,
-      department: document.getElementById('fieldDept').value.trim(),
-      status:     document.getElementById('fieldStatus').value,
+    const SUBJECT_LABELS = {
+      math: 'Math', english: 'English', bahasa: 'Bahasa',
+      biology: 'Biology', chemistry: 'Chemistry', physics: 'Physics',
+      science: 'Science (Checkpoint)', religion: 'Religion'
     };
-    const btn = document.getElementById('saveBtn');
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      if (editingId) {
-        await updateDoc(fsDoc(db, 'staff', editingId), data);
-      } else {
-        data.createdAt = serverTimestamp();
-        const ref = await addDoc(collection(db, 'staff'), data);
-        data.id = ref.id;
-      }
-      closeDrawer();
-      await loadStaff();
-    } catch(e) {
-      showErr(e.message);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Save';
+    const WINDOW_LABELS = {
+      W2_apprenticeship: 'Window 2 — Coaching Apprenticeship',
+      W3_solo:           'Window 3 — Solo Practice',
+      W4_initiative:     'Window 4 — Strategic Contribution'
+    };
+    const WALK_LABELS = {
+      observe_mentor:      'Observe mentor coaching',
+      co_led:              'Co-led coaching session',
+      solo_mentor_present: 'Solo (mentor present)',
+      solo_with_review:    'Solo + mentor write-up review',
+      solo:                'Solo walkthrough',
+      initiative_pilot:    'Initiative pilot session'
+    };
+    const STATE_LABELS = {
+      draft:           'Draft',
+      submitted:       'Submitted',
+      mentor_reviewed: 'Mentor reviewed',
+      finalized:       'Finalized'
+    };
+
+    /* ───── Helpers ─────────────────────────────────────────────────── */
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     }
-  }
+    function fmtTs(ts) {
+      if (!ts) return '—';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
 
-  function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
+    /* ───── partner_schools cache ────────────────────────────────── */
+    const schoolNames = new Map();
+    async function loadSchoolNames() {
+      const snap = await getDocs(collection(db, 'partner_schools'));
+      snap.forEach(d => schoolNames.set(d.id, d.data()?.name || d.id));
+    }
+    const schoolName = id => schoolNames.get(id) || id;
 
-  window.editStaff   = editStaff;
-  window.deleteStaff = deleteStaff;
-</script>
+    /* ───── Boot ────────────────────────────────────────────────────── */
+    document.addEventListener('authReady', async () => {
+      currentUser = window.currentUser;
+      userProfile = window.userProfile || {};
+      db = window.db;
+
+      isAdmin = userProfile.role_centralhub === 'central_admin';
+      const subRoles = Array.isArray(userProfile.ch_sub_roles) ? userProfile.ch_sub_roles : [];
+      isDirector = isAdmin || subRoles.includes('director');
+
+      if (!isDirector) {
+        $('detailPanel').innerHTML = `
+          <div class="detail-empty">
+            <div class="empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+            <h2>Director-only</h2>
+            <p>Mentor review is restricted to HQ Directors. If you're a specialist looking for your own log, open <a href="my-school-visits">/my-school-visits</a>.</p>
+          </div>`;
+        $('queueList').innerHTML = '<div class="queue-empty">—</div>';
+        return;
+      }
+
+      await loadSchoolNames();
+      wireUI();
+      subscribeQueue();
+    });
+
+    function wireUI() {
+      document.querySelectorAll('.queue-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.queue-tab').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentTab = btn.dataset.state;
+          renderQueue();
+        });
+      });
+    }
+
+    /* ───── Subscribe to walkthroughs ────────────────────────────── */
+    function subscribeQueue() {
+      // All specialist walkthroughs across the network. Director sees
+      // cross-subject; admin sees same. Ordered by visitDate desc.
+      const q = query(
+        collection(db, 'school_visits'),
+        where('visitType', '==', 'specialist_walkthrough'),
+        orderBy('visitDate', 'desc')
+      );
+      onSnapshot(q, snap => {
+        allWalkthroughs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderQueue();
+        // Refresh detail if still selected
+        if (selectedId) {
+          const stillThere = allWalkthroughs.find(w => w.id === selectedId);
+          if (stillThere) renderDetail(stillThere);
+        }
+      }, err => {
+        console.error('[mentor-review] subscribe failed:', err);
+        $('queueList').innerHTML = `<div class="queue-empty">Could not load. ${esc(err.code || 'error')}</div>`;
+      });
+    }
+
+    function renderQueue() {
+      const filtered = allWalkthroughs.filter(w => {
+        if (currentTab === 'all') return true;
+        return (w.notesState || 'draft') === currentTab;
+      });
+
+      $('queueCount').textContent = filtered.length;
+
+      const list = $('queueList');
+      if (!filtered.length) {
+        const msg = currentTab === 'submitted'
+          ? 'No walkthroughs are awaiting review. When a specialist submits, it appears here.'
+          : 'Nothing here.';
+        list.innerHTML = `<div class="queue-empty">${esc(msg)}</div>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(w => {
+        const wKey = (w.windowPhase || '').split('_')[0]; // W2 / W3 / W4
+        const isSel = w.id === selectedId;
+        return `
+          <div class="queue-item ${isSel ? 'active' : ''}" data-id="${esc(w.id)}">
+            <div class="queue-item-row1">
+              <span class="queue-item-school">${esc(schoolName(w.schoolId))}</span>
+              <span class="queue-item-date">${esc(fmtDate(w.visitDate))}</span>
+            </div>
+            <div class="queue-item-row2">
+              <span class="queue-item-pill ${esc(wKey)}">${esc(wKey)}</span>
+              <span>${esc(w.visitedBy || '—')}</span>
+              <span>· ${esc(SUBJECT_LABELS[w.subjectArea] || w.subjectArea || '')}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      list.querySelectorAll('.queue-item').forEach(el => {
+        el.addEventListener('click', () => {
+          selectedId = el.dataset.id;
+          renderQueue();
+          const w = allWalkthroughs.find(x => x.id === selectedId);
+          if (w) renderDetail(w);
+        });
+      });
+    }
+
+    /* ───── Detail panel ────────────────────────────────────────── */
+    function renderDetail(w) {
+      const wKey = (w.windowPhase || '').split('_')[0];
+      const state = w.notesState || 'draft';
+      const canTakeAction = state === 'submitted' || state === 'mentor_reviewed';
+
+      const priorReview = w.mentorReviewNote ? `
+        <div class="prior-review">
+          <div class="label">Mentor review note</div>
+          <div class="body">${esc(w.mentorReviewNote)}</div>
+          <div class="footer">By ${esc(w.mentorReviewBy || 'mentor')} · ${esc(fmtTs(w.mentorReviewAt))}</div>
+        </div>
+      ` : '';
+
+      const reviewCard = canTakeAction ? `
+        <div class="review-card">
+          <h3>Your review</h3>
+          <div class="nn2-banner">
+            <svg class="nn2-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div class="nn2-text"><strong>Charter NN2.</strong> Your review note is shared with the specialist on <a href="my-school-visits">/my-school-visits</a> and stays inside the mentor↔specialist↔HQ Director chain. Do not paste this content elsewhere.</div>
+          </div>
+          <label class="form-label" for="reviewNote" style="margin-bottom:4px">Coaching feedback (visible to the specialist)</label>
+          <textarea id="reviewNote" class="form-textarea" placeholder="What landed well in this walkthrough? What would you like them to refine next time?">${esc(w.mentorReviewNote || '')}</textarea>
+          <div class="review-actions">
+            <button class="btn-approve" id="btnApprove">${state === 'mentor_reviewed' ? 'Save updated review' : 'Approve — mark Mentor reviewed'}</button>
+            <button class="btn-return" id="btnReturn">Return to Draft (revision needed)</button>
+          </div>
+          <div class="review-error" id="reviewError"></div>
+        </div>
+      ` : `
+        <div class="review-card" style="opacity:0.7">
+          <h3>No action available</h3>
+          <p style="font-size:0.85rem;color:var(--ink-3)">Walkthrough is in state <strong>${esc(STATE_LABELS[state] || state)}</strong> — specialist must submit (or you must already be in <em>Mentor reviewed</em>) for you to act here.</p>
+        </div>
+      `;
+
+      $('detailPanel').innerHTML = `
+        <div class="detail-wrap">
+          <div class="detail-head">
+            <div class="detail-pills">
+              <span class="pill-window ${esc(wKey)}">${esc(wKey)}</span>
+              <span class="pill-state ${esc(state)}">${esc(STATE_LABELS[state] || state)}</span>
+            </div>
+            <h1 class="detail-title">${esc(schoolName(w.schoolId))}</h1>
+            <div class="detail-sub">${esc(fmtDate(w.visitDate))} · ${esc(WINDOW_LABELS[w.windowPhase] || w.windowPhase || '—')} · ${esc(WALK_LABELS[w.walkthroughType] || w.walkthroughType || '—')}</div>
+          </div>
+
+          <div class="meta-grid">
+            <div><div class="label">Specialist</div><div class="value">${esc(w.visitedBy || '—')}</div></div>
+            <div><div class="label">Subject</div><div class="value">${esc(SUBJECT_LABELS[w.subjectArea] || w.subjectArea || '—')}</div></div>
+            <div><div class="label">Mentor present</div><div class="value">${w.mentorPresent ? 'Yes' : 'No'}</div></div>
+          </div>
+
+          <div class="section">
+            <div class="section-divider">Observations</div>
+            <div class="section-body ${w.observations ? '' : 'empty'}">${w.observations ? esc(w.observations) : '— specialist did not record observations —'}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-divider">Glow — strengths</div>
+            <div class="section-body ${w.strengths ? '' : 'empty'}">${w.strengths ? esc(w.strengths) : '—'}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-divider">Grow — areas</div>
+            <div class="section-body ${w.areasImprovement ? '' : 'empty'}">${w.areasImprovement ? esc(w.areasImprovement) : '—'}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-divider">Go — next step for the teacher</div>
+            <div class="section-body ${w.actionItemsText ? '' : 'empty'}">${w.actionItemsText ? esc(w.actionItemsText) : '—'}</div>
+          </div>
+
+          ${priorReview}
+          ${reviewCard}
+        </div>
+      `;
+
+      if (canTakeAction) {
+        $('btnApprove').addEventListener('click', () => act('mentor_reviewed'));
+        $('btnReturn').addEventListener('click', () => act('draft'));
+      }
+    }
+
+    let actionArmedAt = 0;
+    let actionArmedFor = null;
+    async function act(targetState) {
+      const errEl = $('reviewError');
+      errEl.style.display = 'none';
+
+      const note = $('reviewNote')?.value.trim() || '';
+
+      // Double-click confirm pattern (CLAUDE.md Common Mistake #3).
+      const btn = targetState === 'mentor_reviewed' ? $('btnApprove') : $('btnReturn');
+      const now = Date.now();
+      if (actionArmedFor !== targetState || now - actionArmedAt > 3000) {
+        actionArmedAt = now;
+        actionArmedFor = targetState;
+        const original = btn.textContent;
+        btn.textContent = 'Click again to confirm';
+        btn.dataset.confirming = '1';
+        setTimeout(() => {
+          if (btn.dataset.confirming === '1') {
+            btn.textContent = original;
+            delete btn.dataset.confirming;
+            if (actionArmedFor === targetState) { actionArmedAt = 0; actionArmedFor = null; }
+          }
+        }, 3000);
+        return;
+      }
+      actionArmedAt = 0; actionArmedFor = null;
+
+      const patch = {
+        notesState:      targetState,
+        mentorReviewNote: note || null,
+        mentorReviewBy:   userProfile.displayName || currentUser.email || '',
+        mentorReviewUid:  currentUser.uid,
+        mentorReviewAt:   serverTimestamp(),
+        updatedAt:        serverTimestamp()
+      };
+
+      try {
+        await updateDoc(doc(db, 'school_visits', selectedId), patch);
+      } catch (err) {
+        console.error('[mentor-review] update failed:', err);
+        errEl.textContent = 'Failed to save. ' + (err.message || err.code || 'unknown error');
+        errEl.style.display = '';
+      }
+    }
+  </script>
 <script src="cambridge-crossref.js" defer></script>
 </body>
 </html>

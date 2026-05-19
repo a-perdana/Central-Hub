@@ -452,6 +452,11 @@ const htmlFiles = [
   // Shares school_visits collection with /school-visits (Operations) via
   // visitType: 'specialist_walkthrough' discriminator.
   "my-school-visits.html",
+  // Mentor review queue (2026-05-19) — Department Office > Workspace. Director-
+  // only. HQ Director sees submitted specialist walkthroughs, leaves NN2-
+  // confidential coaching feedback, flips notesState 'submitted' →
+  // 'mentor_reviewed' (or back to 'draft' for revision).
+  "specialist-mentor-review.html",
 ];
 
 htmlFiles.forEach((file) => {
