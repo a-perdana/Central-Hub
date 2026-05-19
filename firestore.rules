@@ -2720,5 +2720,110 @@ service cloud.firestore {
       // No client writes — Cloud Function only.
       allow create, update, delete: if false;
     }
+
+    // ─────────────────────────────────────────────────────────
+    // DEPARTMENT OFFICE (2026-05-19)
+    //
+    // HQ Director + Subject Coordinator workspace replacing the
+    // long-running Google Docs "Heads of Departments — Meeting
+    // Records" workflow. Four collections, all HQ-internal:
+    //
+    //   - coordinators_meetings            Weekly + ad-hoc minutes
+    //   - coordinators_meeting_items       Per-meeting agenda items
+    //   - department_artifacts             Per-subject living docs
+    //                                      (Annual Plan / DTP /
+    //                                      Department Handbook /
+    //                                      Subject Policy)
+    //   - coordinators_decisions           Binding policy / decision
+    //                                      register (red-text from
+    //                                      minutes promoted here)
+    //   - coordinators_directory_entries   Subject Coordinators +
+    //                                      per-school Subject Leaders
+    //                                      + per-grade Grade Coords
+    //
+    // Audience: central_admin + ch_sub_roles ∈ {director, coordinator}.
+    // No school-side reads. No student-side reads ever.
+    //
+    // Coordinators see all docs (cross-subject visibility is the
+    // point of the workspace); client-side filtering by ch_subjects[]
+    // is a UX nicety only. Director + admin bypass any filter.
+    //
+    // Activity bridge: meeting agenda items may set
+    //   activityTaskId: '<activity_tasks/{id}>'
+    // pointing at an /activities task spawned from the agenda. The
+    // task itself lives under the existing activity_projects /
+    // activity_tasks rules — these collections never duplicate it.
+    // ─────────────────────────────────────────────────────────
+
+    // Helper: HQ Director or Subject Coordinator OR central_admin.
+    // Mirrors isAICFReviewer() but named for the dept-office scope so
+    // future tightening (e.g. coordinator-only on a particular sub-
+    // path) does not entangle the AI-Maturity reviewer logic.
+    function isDeptOfficeMember() {
+      return isAdmin() || isCHCoordinator()
+          || (isCentralUser() &&
+              'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ch_sub_roles', []));
+    }
+
+    match /coordinators_meetings/{meetingId} {
+      allow get, list:        if isDeptOfficeMember();
+      // Create: any dept-office member; createdBy must pin to the
+      // caller so future audit / "edited-by" UI is honest.
+      allow create:           if isDeptOfficeMember()
+                                 && request.resource.data.createdBy == request.auth.uid;
+      // Update: any dept-office member can amend any meeting
+      // (collaborative editing, mirroring the G-Docs pattern); admin
+      // can additionally rewrite createdBy if needed for a clean-up.
+      allow update:           if isDeptOfficeMember();
+      // Delete: admin only — minutes are an audit trail.
+      allow delete:           if isAdmin();
+    }
+
+    // Per-meeting agenda items live as a TOP-LEVEL collection rather
+    // than a sub-collection so we can query agenda_items across all
+    // meetings (e.g. "find every item tagged decision in the last 90
+    // days" for the decisions-register feeder query). FK to parent
+    // meeting is the `meetingId` field.
+    match /coordinators_meeting_items/{itemId} {
+      allow get, list:        if isDeptOfficeMember();
+      allow create, update:   if isDeptOfficeMember();
+      allow delete:           if isAdmin() || (isDeptOfficeMember()
+                                 && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /department_artifacts/{artifactId} {
+      allow get, list:        if isDeptOfficeMember();
+      allow create, update:   if isDeptOfficeMember();
+      allow delete:           if isAdmin();
+    }
+
+    // Binding decisions / policies surfaced from minutes (and
+    // sometimes authored directly). status field gates UI display
+    // (active / superseded / draft). Source-meeting back-link via
+    // sourceMeetingId + sourceItemId is optional — admin-authored
+    // policies (e.g. dress code) may have no source meeting.
+    match /coordinators_decisions/{decisionId} {
+      allow get, list:        if isDeptOfficeMember();
+      allow create, update:   if isDeptOfficeMember();
+      // Decisions are intentionally immutable from the UI once
+      // marked status:'active'; supersede by writing a new decision
+      // pointing at this one via supersedesDecisionId. Admin can
+      // still hard-delete for typo / draft cleanup.
+      allow delete:           if isAdmin();
+    }
+
+    // Coordinators Directory — Eduversal Subject Coordinators (CH)
+    // plus per-school Subject Leaders + per-grade Grade Coordinators.
+    // entryKind discriminates: 'hq_coordinator' | 'school_subject_leader' | 'grade_coordinator'.
+    // Read-open to dept-office members; admin-only write keeps the
+    // directory canonical (coordinators don't self-promote a school
+    // teacher into "Subject Leader" — directors / admin curate).
+    match /coordinators_directory_entries/{entryId} {
+      allow get, list:        if isDeptOfficeMember();
+      allow create, update, delete:
+                              if isAdmin() ||
+                                 (isCentralUser() &&
+                                  'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ch_sub_roles', []));
+    }
   }
 }
