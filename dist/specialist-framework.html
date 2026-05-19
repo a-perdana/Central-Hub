@@ -53,6 +53,12 @@
 }
 .sf-chip:hover { background: var(--accent-2); color: var(--accent-dk); border-color: var(--accent-2); }
 .sf-chip.is-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sf-chip[data-color="dom-purple"].is-active { background: #7c3aed; border-color: #7c3aed; }
+.sf-chip[data-color="dom-blue"].is-active   { background: #0891b2; border-color: #0891b2; }
+.sf-chip[data-color="dom-green"].is-active  { background: #059669; border-color: #059669; }
+.sf-chip[data-color="dom-amber"].is-active  { background: #d97706; border-color: #d97706; }
+.sf-chip[data-color="dom-rose"].is-active   { background: #e11d48; border-color: #e11d48; }
+.sf-chip[data-color="dom-teal"].is-active   { background: #0d9488; border-color: #0d9488; }
 .sf-count { font-size: 11px; color: var(--ink-3); margin-left: auto; flex-shrink: 0; }
 
 /* Hidden states driven by filter JS */
@@ -72,20 +78,47 @@
   margin-bottom: 40px;
 }
 .domain-card {
+  --dc: #6c5ce7;        /* domain accent (default = brand mor) */
+  --dc-soft: #ede9fe;   /* domain tint for icon bg + header wash */
+  --dc-text: #5b21b6;   /* readable text on tint */
   background: var(--white); border: 1px solid var(--border); border-radius: 16px;
-  overflow: hidden; box-shadow: var(--shadow-sm); transition: box-shadow .2s ease, transform .2s ease;
+  overflow: hidden; box-shadow: var(--shadow-sm);
+  transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+  position: relative;
 }
-.domain-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
-.domain-card-header { padding: 20px 20px 14px; display: flex; align-items: flex-start; gap: 14px; }
+/* Saturated 4px left stripe — the "vurucu" colour cue */
+.domain-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--dc);
+}
+.domain-card:hover {
+  box-shadow: var(--shadow); transform: translateY(-2px); border-color: var(--dc);
+}
+.domain-card-header {
+  padding: 20px 20px 14px; display: flex; align-items: flex-start; gap: 14px;
+  background: linear-gradient(180deg, var(--dc-soft) 0%, transparent 100%);
+}
 .domain-icon {
   width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 20px;
-  background: var(--accent-2);
+  background: var(--white); color: var(--dc-text);
+  box-shadow: 0 0 0 1px var(--dc-soft), 0 2px 4px rgba(0,0,0,.05);
 }
 .domain-info { flex: 1; min-width: 0; }
-.domain-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+.domain-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dc-text); margin-bottom: 3px;
+}
 .domain-name { font-size: 16px; font-weight: 700; color: var(--ink); line-height: 1.3; margin-bottom: 4px; }
 .domain-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; padding: 0 20px 14px; border-bottom: 1px solid var(--border); }
+
+/* 6 domain palettes — keyed off Firestore color slug (dom-purple / dom-blue / ...) */
+.domain-card[data-color="dom-purple"] { --dc: #7c3aed; --dc-soft: #ede9fe; --dc-text: #5b21b6; }
+.domain-card[data-color="dom-blue"]   { --dc: #0891b2; --dc-soft: #cffafe; --dc-text: #0e7490; }
+.domain-card[data-color="dom-green"]  { --dc: #059669; --dc-soft: #d1fae5; --dc-text: #047857; }
+.domain-card[data-color="dom-amber"]  { --dc: #d97706; --dc-soft: #fef3c7; --dc-text: #92400e; }
+.domain-card[data-color="dom-rose"]   { --dc: #e11d48; --dc-soft: #ffe4e6; --dc-text: #be123c; }
+.domain-card[data-color="dom-teal"]   { --dc: #0d9488; --dc-soft: #ccfbf1; --dc-text: #0f766e; }
 .domain-comps { padding: 6px 20px 14px; }
 .comp-row {
   display: flex; flex-direction: column; gap: 6px;
@@ -3416,7 +3449,7 @@ function renderFilters(fw) {
   const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   chipsEl.innerHTML =
     `<button type="button" class="sf-chip is-active" data-domain="all">All</button>` +
-    domains.map(d => `<button type="button" class="sf-chip" data-domain="${esc(d.id)}">${esc(d.icon || '')} ${esc(d.name)}</button>`).join('');
+    domains.map(d => `<button type="button" class="sf-chip" data-domain="${esc(d.id)}" data-color="${esc(d.color || '')}">${esc(d.icon || '')} ${esc(d.name)}</button>`).join('');
   chipsEl.addEventListener('click', e => {
     const btn = e.target.closest('.sf-chip');
     if (!btn) return;
@@ -3488,8 +3521,9 @@ function renderDomains(fw) {
   }
   grid.innerHTML = (fw.domains || []).map(d => {
     const comps = compsByDomain[d.id] || [];
+    const color = d.color || 'dom-purple';
     return `
-      <div class="domain-card">
+      <div class="domain-card" data-color="${color}" data-domain-id="${d.id}">
         <div class="domain-card-header">
           <div class="domain-icon">${d.icon || '•'}</div>
           <div class="domain-info">
