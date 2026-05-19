@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decisions &amp; Policies — CentralHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .main-content { padding: 24px 32px; width: min(100%, 1080px); margin: 0 auto; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .main-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .main-header .subtitle { font-size: 0.86rem; color: var(--ink-3); margin-top: 4px; }
+
+    .dr-filter-bar { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 18px; background: var(--white); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; align-items: center; }
+    .dr-filter { padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; color: var(--ink); background: var(--paper); cursor: pointer; }
+    .dr-filter:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .dr-search-wrap { position: relative; flex: 1; min-width: 200px; }
+    .dr-search { width: 100%; padding: 7px 12px 7px 32px; border: 1px solid var(--border); border-radius: 7px; font-size: 0.84rem; color: var(--ink); background: var(--paper); }
+    .dr-search:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .dr-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+    .dr-btn-add { padding: 8px 16px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .12s; }
+    .dr-btn-add:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* === Status tabs === */
+    .dr-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+    .dr-tab { padding: 9px 14px; background: none; border: none; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; transition: all .12s; font-weight: 500; }
+    .dr-tab:hover { color: var(--ink-2); }
+    .dr-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .dr-tab-count { background: var(--paper-2); padding: 1px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 5px; color: var(--ink-3); }
+    .dr-tab.active .dr-tab-count { background: #ede9fe; color: var(--accent); }
+
+    /* === Decision cards === */
+    .dr-list { display: flex; flex-direction: column; gap: 12px; }
+    .decision-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; box-shadow: var(--shadow-sm); transition: box-shadow .15s; }
+    .decision-card:hover { box-shadow: var(--shadow); }
+    .decision-card.superseded { opacity: 0.7; border-style: dashed; }
+    .decision-card.draft { border-left: 4px solid #f59e0b; }
+    .decision-card.active { border-left: 4px solid #10b981; }
+    .dc-row1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .dc-title { font-family: 'Lora', serif; font-size: 1.08rem; font-weight: 600; color: var(--ink); flex: 1; min-width: 200px; }
+    .dc-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill { padding: 2px 9px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+    .pill.status-active { background: #d1fae5; color: #065f46; }
+    .pill.status-draft { background: #fef3c7; color: #92400e; }
+    .pill.status-superseded { background: #e5e7eb; color: #4b5563; }
+    .pill.cat { background: #ede9fe; color: #5b21b6; }
+    .pill.scope-network_wide { background: #cffafe; color: #164e63; }
+    .pill.scope-per_subject { background: #fce7f3; color: #831843; }
+    .pill.scope-per_school { background: #fef3c7; color: #92400e; }
+    .dc-body { font-size: 0.88rem; line-height: 1.6; color: var(--ink-2); margin-bottom: 12px; white-space: pre-wrap; }
+    .dc-meta { display: flex; gap: 14px; font-size: 0.78rem; color: var(--ink-3); flex-wrap: wrap; align-items: center; }
+    .dc-meta a { color: var(--accent); text-decoration: none; }
+    .dc-meta a:hover { text-decoration: underline; }
+    .dc-actions { display: flex; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .dc-btn { padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 500; border: 1px solid var(--border); background: var(--white); cursor: pointer; color: var(--ink-2); font-family: 'DM Sans', sans-serif; }
+    .dc-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .dc-btn.danger:hover { border-color: #dc2626; color: #dc2626; background: #fff1f2; }
+
+    .dc-supersede-chain { margin-top: 8px; font-size: 0.78rem; color: var(--ink-3); }
+    .dc-supersede-chain strong { color: var(--ink-2); }
+
+    /* === Modal === */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--white); border-radius: 12px; width: 100%; max-width: 560px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
+    .modal-head { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-head h3 { font-family: 'Lora', serif; font-size: 1.1rem; font-weight: 600; color: var(--ink); }
+    .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; background: var(--paper); }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--ink-3); background: var(--white); border: 1px dashed var(--border); border-radius: 10px; }
+    .empty-state h3 { font-family: 'Lora', serif; color: var(--ink); margin-bottom: 6px; font-size: 1.05rem; }
+
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 0.86rem; font-weight: 500; z-index: 9999; opacity: 0; transition: all .25s; pointer-events: none; max-width: 460px; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    @media print {
+      .navbar, .dr-filter-bar, .dr-tabs, .dc-actions, .dr-btn-add { display: none !important; }
+      .decision-card { box-shadow: none; page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <main class="main-content" id="mainRoot" style="display:none">
+    <div class="main-header">
+      <div>
+        <h1>Decisions &amp; Policies</h1>
+        <div class="subtitle">Network-wide rules surfaced from coordinator meetings — or authored directly. Auditable across academic years.</div>
+      </div>
+      <button class="dr-btn-add" id="btnAddDecision">+ New decision</button>
+    </div>
+
+    <div class="dr-filter-bar">
+      <div class="dr-search-wrap">
+        <svg class="dr-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="dr-search" id="filterSearch" placeholder="Search title or body…">
+      </div>
+      <select class="dr-filter" id="filterCategory">
+        <option value="">All categories</option>
+        <option value="pedagogy">Pedagogy</option>
+        <option value="appraisal">Appraisal</option>
+        <option value="communications">Communications</option>
+        <option value="conduct">Conduct</option>
+        <option value="safeguarding">Safeguarding</option>
+        <option value="admin">Admin</option>
+        <option value="other">Other</option>
+      </select>
+      <select class="dr-filter" id="filterScope">
+        <option value="">All scopes</option>
+        <option value="network_wide">Network-wide</option>
+        <option value="per_subject">Per subject</option>
+        <option value="per_school">Per school</option>
+      </select>
+      <select class="dr-filter" id="filterSubject">
+        <option value="">All subjects</option>
+      </select>
+    </div>
+
+    <div class="dr-tabs">
+      <button class="dr-tab active" data-tab="active">Active <span class="dr-tab-count" id="cntActive">0</span></button>
+      <button class="dr-tab" data-tab="draft">Drafts <span class="dr-tab-count" id="cntDraft">0</span></button>
+      <button class="dr-tab" data-tab="superseded">Superseded <span class="dr-tab-count" id="cntSuperseded">0</span></button>
+      <button class="dr-tab" data-tab="all">All <span class="dr-tab-count" id="cntAll">0</span></button>
+    </div>
+
+    <div class="dr-list" id="decisionsList"></div>
+  </main>
+
+  <!-- Add / Edit modal -->
+  <div class="modal-overlay" id="modalDecision">
+    <div class="modal">
+      <div class="modal-head"><h3 id="modalTitle">New decision</h3></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input type="text" class="form-input" id="dTitle" placeholder="e.g. Observation feedback rooms must have a third person present">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Body</label>
+          <textarea class="form-textarea" id="dBody" rows="5" placeholder="Full text — explain the rule, why it exists, who it binds."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-select" id="dCategory">
+            <option value="pedagogy">Pedagogy</option>
+            <option value="appraisal">Appraisal</option>
+            <option value="communications">Communications</option>
+            <option value="conduct">Conduct</option>
+            <option value="safeguarding">Safeguarding</option>
+            <option value="admin">Admin</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scope</label>
+          <select class="form-select" id="dScope">
+            <option value="network_wide">Network-wide (all partner schools)</option>
+            <option value="per_subject">Per subject</option>
+            <option value="per_school">Per school</option>
+          </select>
+        </div>
+        <div class="form-group" id="dSubjectGroup" style="display:none">
+          <label class="form-label">Subjects (per-subject scope)</label>
+          <div id="dSubjectChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+        </div>
+        <div class="form-group" id="dSchoolGroup" style="display:none">
+          <label class="form-label">Schools (per-school scope)</label>
+          <div id="dSchoolChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Effective from</label>
+          <input type="date" class="form-input" id="dEffectiveFrom">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Effective until (optional)</label>
+          <input type="date" class="form-input" id="dEffectiveUntil">
+          <div class="form-hint">Leave blank for open-ended.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="dStatus">
+            <option value="draft">Draft (not yet enforced)</option>
+            <option value="active" selected>Active (binding)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" id="modalCancel">Cancel</button>
+        <button class="btn-save" id="modalSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  collection, query, where, orderBy, onSnapshot,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, limit
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion'];
+const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion' };
+const CATEGORY_LABELS = { pedagogy:'Pedagogy', appraisal:'Appraisal', communications:'Communications', conduct:'Conduct', safeguarding:'Safeguarding', admin:'Admin', other:'Other' };
+const SCOPE_LABELS = { network_wide:'Network-wide', per_subject:'Per subject', per_school:'Per school' };
+
+let db, currentUser, userProfile;
+let isAdmin = false, isDirector = false;
+let allDecisions = [];
+let allSchools = [];
+let activeTab = 'active';
+let editingId = null;
+
+const $ = (id) => document.getElementById(id);
+const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
+document.addEventListener('authReady', async () => {
+  currentUser = window.currentUser;
+  userProfile = window.userProfile || {};
+  db = window.db;
+
+  isAdmin = userProfile.role_centralhub === 'central_admin';
+  const subRoles = Array.isArray(userProfile.ch_sub_roles) ? userProfile.ch_sub_roles : [];
+  isDirector = isAdmin || subRoles.includes('director');
+  const isCoord = subRoles.includes('coordinator');
+
+  if (!isAdmin && !isDirector && !isCoord) {
+    location.href = '/?denied=decisions-register';
+    return;
+  }
+
+  $('mainRoot').style.display = 'block';
+  populateSubjectFilter();
+  await prefetchSchools();
+  wireUI();
+  subscribeDecisions();
+});
+
+async function prefetchSchools() {
+  try {
+    const snap = await getDocs(query(collection(db, 'partner_schools'), limit(50)));
+    allSchools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('[prefetchSchools]', err);
+    allSchools = [];
+  }
+}
+
+function populateSubjectFilter() {
+  const sel = $('filterSubject');
+  sel.innerHTML = '<option value="">All subjects</option>' +
+    CH_SUBJECTS.map(s => `<option value="${s}">${SUBJECT_LABELS[s]}</option>`).join('');
+}
+
+function wireUI() {
+  $('btnAddDecision').addEventListener('click', () => openModal(null));
+  $('modalCancel').addEventListener('click', closeModal);
+  $('modalSave').addEventListener('click', saveDecision);
+
+  document.querySelectorAll('.dr-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.dr-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      activeTab = t.dataset.tab;
+      renderList();
+    });
+  });
+
+  ['filterSearch','filterCategory','filterScope','filterSubject'].forEach(id => {
+    $(id).addEventListener(id === 'filterSearch' ? 'input' : 'change', renderList);
+  });
+
+  $('dScope').addEventListener('change', () => {
+    const scope = $('dScope').value;
+    $('dSubjectGroup').style.display = scope === 'per_subject' ? 'block' : 'none';
+    $('dSchoolGroup').style.display = scope === 'per_school' ? 'block' : 'none';
+  });
+}
+
+function subscribeDecisions() {
+  const q = query(
+    collection(db, 'coordinators_decisions'),
+    orderBy('effectiveFrom', 'desc'),
+    limit(500)
+  );
+  onSnapshot(q, (snap) => {
+    allDecisions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderList();
+  }, (err) => {
+    console.error('[subscribeDecisions]', err);
+    $('decisionsList').innerHTML = `<div class="empty-state"><h3>Could not load</h3><p>${escHtml(err.code || err.message)}</p></div>`;
+  });
+}
+
+function renderList() {
+  const search = ($('filterSearch').value || '').trim().toLowerCase();
+  const catF = $('filterCategory').value;
+  const scopeF = $('filterScope').value;
+  const subF = $('filterSubject').value;
+
+  // Counters per status
+  const counts = { active: 0, draft: 0, superseded: 0, all: allDecisions.length };
+  for (const d of allDecisions) {
+    const s = d.status || 'draft';
+    if (counts.hasOwnProperty(s)) counts[s] += 1;
+  }
+  $('cntActive').textContent = counts.active;
+  $('cntDraft').textContent = counts.draft;
+  $('cntSuperseded').textContent = counts.superseded;
+  $('cntAll').textContent = counts.all;
+
+  const filtered = allDecisions.filter(d => {
+    if (activeTab !== 'all' && (d.status || 'draft') !== activeTab) return false;
+    if (catF && d.category !== catF) return false;
+    if (scopeF && d.scope !== scopeF) return false;
+    if (subF) {
+      if (!Array.isArray(d.subjectIds) || !d.subjectIds.includes(subF)) return false;
+    }
+    if (search) {
+      const hay = `${d.title || ''} ${d.body || ''}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const wrap = $('decisionsList');
+  if (!filtered.length) {
+    wrap.innerHTML = `<div class="empty-state"><h3>No decisions match</h3><p>Try clearing filters, or hit <strong>+ New decision</strong> to author one directly.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = filtered.map(renderCard).join('');
+
+  wrap.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openModal(b.dataset.edit)));
+  wrap.querySelectorAll('[data-supersede]').forEach(b => b.addEventListener('click', () => openSupersedeModal(b.dataset.supersede)));
+  wrap.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', () => confirmDelete(b.dataset.delete, b)));
+  wrap.querySelectorAll('[data-promote-draft]').forEach(b => b.addEventListener('click', () => promoteDraft(b.dataset.promoteDraft)));
+}
+
+function renderCard(d) {
+  const status = d.status || 'draft';
+  const subjects = Array.isArray(d.subjectIds) ? d.subjectIds : [];
+  const schools = Array.isArray(d.schoolIds) ? d.schoolIds : [];
+  const sourceMeetingLink = d.sourceMeetingId
+    ? `<span>From meeting: <a href="coordinators-meetings" target="_blank" rel="noopener">${escHtml(d.sourceMeetingId.slice(0, 8))} ↗</a></span>`
+    : '<span style="color:var(--ink-3);font-style:italic">Authored directly</span>';
+
+  // Find supersession chain
+  let supersedeChain = '';
+  if (d.supersededByDecisionId) {
+    const next = allDecisions.find(x => x.id === d.supersededByDecisionId);
+    if (next) {
+      supersedeChain = `<div class="dc-supersede-chain"><strong>Superseded by:</strong> ${escHtml(next.title || 'Untitled')}</div>`;
+    }
+  }
+  const supersedesPrev = allDecisions.find(x => x.supersededByDecisionId === d.id);
+  if (supersedesPrev) {
+    supersedeChain += `<div class="dc-supersede-chain"><strong>Supersedes:</strong> ${escHtml(supersedesPrev.title || 'Untitled')}</div>`;
+  }
+
+  const subjectChips = subjects.length
+    ? subjects.map(s => `<span class="pill cat">${SUBJECT_LABELS[s] || s}</span>`).join('')
+    : '';
+  const schoolChips = schools.length
+    ? schools.map(s => {
+        const sch = allSchools.find(x => x.id === s);
+        return `<span class="pill cat">${escHtml(sch?.name || s)}</span>`;
+      }).join('')
+    : '';
+
+  let actions = '';
+  if (status === 'active') {
+    actions = `
+      <button class="dc-btn" data-edit="${d.id}">✎ Edit</button>
+      <button class="dc-btn" data-supersede="${d.id}">↗ Supersede with new</button>
+      ${isAdmin ? `<button class="dc-btn danger" data-delete="${d.id}" data-confirming="false">Delete</button>` : ''}
+    `;
+  } else if (status === 'draft') {
+    actions = `
+      <button class="dc-btn" data-edit="${d.id}">✎ Edit</button>
+      <button class="dc-btn" data-promote-draft="${d.id}">Activate (publish)</button>
+      ${isAdmin ? `<button class="dc-btn danger" data-delete="${d.id}" data-confirming="false">Delete</button>` : ''}
+    `;
+  } else if (status === 'superseded') {
+    actions = `
+      <button class="dc-btn" data-edit="${d.id}">View</button>
+      ${isAdmin ? `<button class="dc-btn danger" data-delete="${d.id}" data-confirming="false">Delete</button>` : ''}
+    `;
+  }
+
+  return `
+    <div class="decision-card ${status}">
+      <div class="dc-row1">
+        <div class="dc-title">${escHtml(d.title || 'Untitled decision')}</div>
+        <div class="dc-pills">
+          <span class="pill status-${status}">${status}</span>
+          ${d.category ? `<span class="pill cat">${CATEGORY_LABELS[d.category] || d.category}</span>` : ''}
+          ${d.scope ? `<span class="pill scope-${d.scope}">${SCOPE_LABELS[d.scope] || d.scope}</span>` : ''}
+        </div>
+      </div>
+      <div class="dc-body">${escHtml(d.body || '')}</div>
+      ${(subjectChips || schoolChips) ? `<div class="dc-pills" style="margin-bottom:10px;">${subjectChips}${schoolChips}</div>` : ''}
+      <div class="dc-meta">
+        <span>Effective: ${fmtDate(d.effectiveFrom)}${d.effectiveUntil ? ' → ' + fmtDate(d.effectiveUntil) : ''}</span>
+        ${sourceMeetingLink}
+      </div>
+      ${supersedeChain}
+      <div class="dc-actions">${actions}</div>
+    </div>
+  `;
+}
+
+/* ───── Modal ───────────────────────────────────────────────────── */
+function openModal(decisionId) {
+  editingId = decisionId;
+  if (decisionId) {
+    const d = allDecisions.find(x => x.id === decisionId);
+    if (!d) { showToast('Not found.'); return; }
+    $('modalTitle').textContent = 'Edit decision';
+    $('dTitle').value = d.title || '';
+    $('dBody').value = d.body || '';
+    $('dCategory').value = d.category || 'pedagogy';
+    $('dScope').value = d.scope || 'network_wide';
+    $('dEffectiveFrom').value = toDateInput(d.effectiveFrom);
+    $('dEffectiveUntil').value = toDateInput(d.effectiveUntil);
+    $('dStatus').value = d.status || 'draft';
+    paintScopeWidgets(d.subjectIds || [], d.schoolIds || []);
+  } else {
+    $('modalTitle').textContent = 'New decision';
+    $('dTitle').value = '';
+    $('dBody').value = '';
+    $('dCategory').value = 'pedagogy';
+    $('dScope').value = 'network_wide';
+    const today = new Date();
+    $('dEffectiveFrom').value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    $('dEffectiveUntil').value = '';
+    $('dStatus').value = 'active';
+    paintScopeWidgets([], []);
+  }
+  $('modalDecision').classList.add('open');
+}
+
+function toDateInput(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function paintScopeWidgets(selectedSubjects, selectedSchools) {
+  $('dSubjectChips').innerHTML = CH_SUBJECTS.map(s => `
+    <label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border);border-radius:16px;cursor:pointer;font-size:0.78rem;background:var(--paper);">
+      <input type="checkbox" data-subject="${s}" ${selectedSubjects.includes(s) ? 'checked' : ''} style="accent-color:var(--accent)">
+      ${SUBJECT_LABELS[s]}
+    </label>
+  `).join('');
+
+  $('dSchoolChips').innerHTML = allSchools.map(s => `
+    <label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border);border-radius:16px;cursor:pointer;font-size:0.78rem;background:var(--paper);">
+      <input type="checkbox" data-school="${s.id}" ${selectedSchools.includes(s.id) ? 'checked' : ''} style="accent-color:var(--accent)">
+      ${escHtml(s.name || s.id)}
+    </label>
+  `).join('');
+
+  // Trigger scope-dependent visibility
+  const scope = $('dScope').value;
+  $('dSubjectGroup').style.display = scope === 'per_subject' ? 'block' : 'none';
+  $('dSchoolGroup').style.display = scope === 'per_school' ? 'block' : 'none';
+}
+
+function closeModal() {
+  $('modalDecision').classList.remove('open');
+  editingId = null;
+}
+
+async function saveDecision() {
+  const title = $('dTitle').value.trim();
+  const body = $('dBody').value.trim();
+  if (!title) { showToast('Title required.'); return; }
+  if (!body) { showToast('Body required.'); return; }
+
+  const scope = $('dScope').value;
+  const subjectIds = [...$('dSubjectChips').querySelectorAll('input:checked')].map(c => c.dataset.subject);
+  const schoolIds = [...$('dSchoolChips').querySelectorAll('input:checked')].map(c => c.dataset.school);
+
+  const effectiveFrom = $('dEffectiveFrom').value ? new Date($('dEffectiveFrom').value) : new Date();
+  const effectiveUntil = $('dEffectiveUntil').value ? new Date($('dEffectiveUntil').value) : null;
+
+  const payload = {
+    title,
+    body,
+    category: $('dCategory').value,
+    scope,
+    subjectIds: scope === 'per_subject' ? subjectIds : [],
+    schoolIds: scope === 'per_school' ? schoolIds : [],
+    status: $('dStatus').value,
+    effectiveFrom,
+    effectiveUntil,
+    updatedAt: serverTimestamp(),
+    lastEditedBy: currentUser.uid,
+  };
+
+  try {
+    if (editingId) {
+      await updateDoc(doc(db, 'coordinators_decisions', editingId), payload);
+      showToast('Decision updated.');
+    } else {
+      payload.createdBy = currentUser.uid;
+      payload.createdAt = serverTimestamp();
+      payload.sourceMeetingId = null;
+      payload.sourceItemId = null;
+      payload.supersededByDecisionId = null;
+      await addDoc(collection(db, 'coordinators_decisions'), payload);
+      showToast('Decision created.');
+    }
+    closeModal();
+  } catch (err) {
+    console.error('[saveDecision]', err);
+    showToast(`Save failed: ${err.code || err.message}`);
+  }
+}
+
+async function promoteDraft(id) {
+  try {
+    await updateDoc(doc(db, 'coordinators_decisions', id), {
+      status: 'active',
+      updatedAt: serverTimestamp(),
+      lastEditedBy: currentUser.uid,
+    });
+    showToast('Decision activated.');
+  } catch (err) {
+    console.error('[promoteDraft]', err);
+    showToast(`Activate failed: ${err.code || err.message}`);
+  }
+}
+
+/* ───── Supersede flow ──────────────────────────────────────────── */
+function openSupersedeModal(oldId) {
+  const old = allDecisions.find(x => x.id === oldId);
+  if (!old) { showToast('Original decision not found.'); return; }
+  editingId = null;
+  $('modalTitle').textContent = 'Supersede with new decision';
+  $('dTitle').value = old.title || '';
+  $('dBody').value = old.body || '';
+  $('dCategory').value = old.category || 'pedagogy';
+  $('dScope').value = old.scope || 'network_wide';
+  const today = new Date();
+  $('dEffectiveFrom').value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  $('dEffectiveUntil').value = '';
+  $('dStatus').value = 'active';
+  paintScopeWidgets(old.subjectIds || [], old.schoolIds || []);
+  $('modalDecision').classList.add('open');
+
+  // Override save behaviour for this one open
+  const saveBtn = $('modalSave');
+  const origHandler = saveBtn.onclick;
+  saveBtn.onclick = async () => {
+    saveBtn.onclick = origHandler;
+    await supersedeWithNew(oldId);
+  };
+}
+
+async function supersedeWithNew(oldId) {
+  const title = $('dTitle').value.trim();
+  const body = $('dBody').value.trim();
+  if (!title || !body) { showToast('Title + body required.'); return; }
+  const scope = $('dScope').value;
+  const subjectIds = [...$('dSubjectChips').querySelectorAll('input:checked')].map(c => c.dataset.subject);
+  const schoolIds = [...$('dSchoolChips').querySelectorAll('input:checked')].map(c => c.dataset.school);
+
+  try {
+    const ref = await addDoc(collection(db, 'coordinators_decisions'), {
+      title,
+      body,
+      category: $('dCategory').value,
+      scope,
+      subjectIds: scope === 'per_subject' ? subjectIds : [],
+      schoolIds: scope === 'per_school' ? schoolIds : [],
+      status: $('dStatus').value,
+      effectiveFrom: $('dEffectiveFrom').value ? new Date($('dEffectiveFrom').value) : new Date(),
+      effectiveUntil: $('dEffectiveUntil').value ? new Date($('dEffectiveUntil').value) : null,
+      sourceMeetingId: null,
+      sourceItemId: null,
+      supersededByDecisionId: null,
+      createdBy: currentUser.uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastEditedBy: currentUser.uid,
+    });
+    // Flip old to superseded
+    await updateDoc(doc(db, 'coordinators_decisions', oldId), {
+      status: 'superseded',
+      supersededByDecisionId: ref.id,
+      supersededAt: serverTimestamp(),
+      supersededByUid: currentUser.uid,
+      updatedAt: serverTimestamp(),
+    });
+    closeModal();
+    // Re-attach saveDecision to button (in case the user opens the modal again)
+    $('modalSave').onclick = null;
+    $('modalSave').addEventListener('click', saveDecision, { once: false });
+    showToast('Superseded — new decision active, original archived.');
+  } catch (err) {
+    console.error('[supersede]', err);
+    showToast(`Supersede failed: ${err.code || err.message}`);
+  }
+}
+
+async function confirmDelete(id, btn) {
+  if (!isAdmin) { showToast('Only admin can delete.'); return; }
+  if (btn.dataset.confirming === 'true') {
+    btn.dataset.confirming = 'false';
+    btn.textContent = 'Delete';
+    try {
+      await deleteDoc(doc(db, 'coordinators_decisions', id));
+      showToast('Decision deleted.');
+    } catch (err) {
+      console.error('[deleteDecision]', err);
+      showToast(`Delete failed: ${err.code || err.message}`);
+    }
+    return;
+  }
+  btn.dataset.confirming = 'true';
+  btn.textContent = 'Confirm delete';
+  setTimeout(() => {
+    if (btn.dataset.confirming === 'true') {
+      btn.dataset.confirming = 'false';
+      btn.textContent = 'Delete';
+    }
+  }, 3000);
+}
+</script>
+</body>
+</html>

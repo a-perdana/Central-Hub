@@ -444,6 +444,7 @@ const htmlFiles = [
   // long-running Heads-of-Departments Google Doc workflow.
   "coordinators-meetings.html",
   "department-artifacts.html",
+  "decisions-register.html",
 ];
 
 htmlFiles.forEach((file) => {
