@@ -9,19 +9,38 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
   <style>
-    /* Override sidebar for messageboard (flex layout, tighter padding) */
-    .sidebar { padding: 20px 12px; display: flex; flex-direction: column; gap: 6px; }
-    .sidebar-title { font-size: 0.68rem; padding: 8px 8px 4px; margin-bottom: 0; }
-    .cat-btn { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-radius: 7px; border: none; background: none; width: 100%; text-align: left; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--ink-2); transition: background 0.15s, color 0.15s; gap: 8px; }
-    .cat-btn:hover { background: var(--paper); color: var(--ink); }
-    .cat-btn.active { background: var(--accent-2); color: var(--accent-dk); font-weight: 600; }
-    .cat-btn-inner { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .cat-count { font-size: 0.72rem; font-weight: 600; background: var(--paper-2); color: var(--ink-3); border-radius: 20px; padding: 1px 7px; flex-shrink: 0; }
-    .cat-btn.active .cat-count { background: rgba(8,145,178,0.12); color: var(--accent-dk); }
+    /* Single-column layout under the hero — no sidebar.
+       Category filter lives in a chip row inside .page-toolbar instead. */
+    .main-content {
+      padding: 24px 28px;
+      max-width: var(--container-max);
+      margin: 0 auto;
+      width: 100%;
+    }
 
-    /* MAIN */
-    .main-content { padding: 24px 28px; }
+    /* Category chip row in the toolbar — uses the canonical
+       .page-toolbar from shared-styles.css as the outer container.
+       Each chip carries a coloured dot + label + live count badge.
+       Active state uses the page accent (cyan) so colour-coded dots
+       stay legible; we don't recolour the chip per category. */
+    .mb-cat-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--white);
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem;
+      font-weight: 500; color: var(--ink-2); cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .mb-cat-chip:hover { border-color: #cbc7bf; color: var(--ink); background: var(--paper); }
+    .mb-cat-chip.active { border-color: var(--accent); color: var(--accent-dk); background: var(--accent-2); font-weight: 600; }
+    .mb-cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .mb-cat-count {
+      font-size: 0.7rem; font-weight: 600;
+      background: var(--paper-2); color: var(--ink-3);
+      border-radius: 20px; padding: 1px 7px; flex-shrink: 0;
+    }
+    .mb-cat-chip.active .mb-cat-count { background: rgba(8,145,178,0.18); color: var(--accent-dk); }
 
     /* VIEWS */
     .view { display: none; }
@@ -114,10 +133,6 @@
 
     /* RESPONSIVE */
     @media (max-width: 768px) {
-      .page-layout { grid-template-columns: 1fr; }
-      .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 12px; gap: 4px; }
-      .sidebar-title, .sidebar-divider, .sidebar-stat { display: none; }
-      .cat-btn { width: auto; flex: none; }
       .main-content { padding: 18px 16px; }
       .topic-stats { display: none; }
       .search-wrap .search-input { width: 140px; }
@@ -3272,47 +3287,52 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="page-hero__text">
       <p class="page-hero__eyebrow">Communications · CentralHub</p>
       <h1 class="page-hero__title">Message Board</h1>
-      <p class="page-hero__desc">Network-wide discussion threads — coordination, questions, resources, events, and tech support. Browse by category from the sidebar, or open a thread to read replies and add yours.</p>
+      <p class="page-hero__desc">Network-wide discussion threads — coordination, questions, resources, events, and tech support. Filter by category in the toolbar below, or open a thread to read replies and add yours.</p>
     </div>
+    <aside class="page-hero__kpis">
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="totalTopics">—</div>
+        <div class="page-hero__kpi-lbl">Topics</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="totalReplies">—</div>
+        <div class="page-hero__kpi-lbl">Replies</div>
+      </div>
+    </aside>
   </div>
 </header>
 
-<div class="page-layout">
+<!-- Category filter toolbar — sticky below the hero, replaces the old sidebar -->
+<div class="page-toolbar" id="mbToolbar" aria-label="Category filter">
+  <div class="page-toolbar__inner" role="tablist" aria-label="Topic categories">
+    <button class="mb-cat-chip active" data-cat="all" role="tab" aria-selected="true" onclick="selectCat('all')">
+      <span class="mb-cat-dot" style="background:#8888a8"></span>All
+      <span class="mb-cat-count" id="cnt-all">0</span>
+    </button>
+    <button class="mb-cat-chip" data-cat="general" role="tab" aria-selected="false" onclick="selectCat('general')">
+      <span class="mb-cat-dot" style="background:#4338ca"></span>General
+      <span class="mb-cat-count" id="cnt-general">0</span>
+    </button>
+    <button class="mb-cat-chip" data-cat="academic" role="tab" aria-selected="false" onclick="selectCat('academic')">
+      <span class="mb-cat-dot" style="background:#059669"></span>Academic
+      <span class="mb-cat-count" id="cnt-academic">0</span>
+    </button>
+    <button class="mb-cat-chip" data-cat="resources" role="tab" aria-selected="false" onclick="selectCat('resources')">
+      <span class="mb-cat-dot" style="background:#d97706"></span>Resources
+      <span class="mb-cat-count" id="cnt-resources">0</span>
+    </button>
+    <button class="mb-cat-chip" data-cat="events" role="tab" aria-selected="false" onclick="selectCat('events')">
+      <span class="mb-cat-dot" style="background:#7c3aed"></span>Events
+      <span class="mb-cat-count" id="cnt-events">0</span>
+    </button>
+    <button class="mb-cat-chip" data-cat="technical" role="tab" aria-selected="false" onclick="selectCat('technical')">
+      <span class="mb-cat-dot" style="background:#dc2626"></span>Technical
+      <span class="mb-cat-count" id="cnt-technical">0</span>
+    </button>
+  </div>
+</div>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" aria-label="Categories">
-    <p class="sidebar-title">Categories</p>
-    <button class="cat-btn active" data-cat="all" onclick="selectCat('all')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#8888a8"></span>All</span>
-      <span class="cat-count" id="cnt-all">0</span>
-    </button>
-    <button class="cat-btn" data-cat="general" onclick="selectCat('general')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#4338ca"></span>General</span>
-      <span class="cat-count" id="cnt-general">0</span>
-    </button>
-    <button class="cat-btn" data-cat="academic" onclick="selectCat('academic')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#059669"></span>Academic</span>
-      <span class="cat-count" id="cnt-academic">0</span>
-    </button>
-    <button class="cat-btn" data-cat="resources" onclick="selectCat('resources')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#d97706"></span>Resources</span>
-      <span class="cat-count" id="cnt-resources">0</span>
-    </button>
-    <button class="cat-btn" data-cat="events" onclick="selectCat('events')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#7c3aed"></span>Events</span>
-      <span class="cat-count" id="cnt-events">0</span>
-    </button>
-    <button class="cat-btn" data-cat="technical" onclick="selectCat('technical')">
-      <span class="cat-btn-inner"><span class="cat-dot" style="background:#dc2626"></span>Technical</span>
-      <span class="cat-count" id="cnt-technical">0</span>
-    </button>
-    <div class="sidebar-divider"></div>
-    <div class="sidebar-stat"><span>Total topics</span><span class="sidebar-stat-val" id="totalTopics">—</span></div>
-    <div class="sidebar-stat"><span>Total replies</span><span class="sidebar-stat-val" id="totalReplies">—</span></div>
-  </aside>
-
-  <!-- MAIN -->
-  <main class="main-content">
+<main class="main-content">
 
     <!-- LIST VIEW -->
     <div class="view active" id="viewList">
@@ -3443,7 +3463,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     </div>
 
   </main>
-</div>
 
 <script src="firebase-config.js"></script>
 <script type="module" src="auth-guard.js"></script>
@@ -3543,7 +3562,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   function selectCat(cat) {
     currentCat = cat;
     visibleCount = PAGE_SIZE;
-    document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+    document.querySelectorAll('.mb-cat-chip').forEach(b => {
+      const isActive = b.dataset.cat === cat;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', String(isActive));
+    });
     document.getElementById('listTitle').textContent = CAT_LABEL[cat] || cat;
     renderTopics();
     showView('list');
