@@ -447,6 +447,11 @@ const htmlFiles = [
   "department-artifacts.html",
   "decisions-register.html",
   "coordinators-directory.html",
+  // Specialist appraisal walkthrough lens (2026-05-19) — Department Office >
+  // Workspace. Coordinator-gated own 15-school visit + Window 2/3/4 progress.
+  // Shares school_visits collection with /school-visits (Operations) via
+  // visitType: 'specialist_walkthrough' discriminator.
+  "my-school-visits.html",
 ];
 
 htmlFiles.forEach((file) => {
