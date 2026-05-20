@@ -15,9 +15,13 @@
 
     /* ── Browser-mode shell (mirrors /references pattern) ─────────── */
 
-    /* Hero — canonical CH page-hero (matches /references, question-bank, etc.) */
+    /* Hero — Knowledge family (canonical, data-accent="mor"). Reads the
+       same --hero-grad-mor token shared-styles.css uses for .page-hero, so
+       the handbook reader matches /references, /roles-positions, etc. AH+TH
+       carry the token in their own tokens.css. Fallback gradient preserves
+       visual identity if the variable ever goes missing. */
     .hero {
-      background: linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5a4ed1 75%, #6c5ce7 100%);
+      background: var(--hero-grad-mor, linear-gradient(140deg, #1e1b4b 0%, #3730a3 45%, #6c5ce7 100%));
       padding: 28px 40px 0; color: #fff; position: relative; overflow: hidden;
       /* Fixed minimum keeps the hero the same height whether 3 or 4 KPI
          tiles render, and matches the AH+TH handbook hero band. */
@@ -148,7 +152,9 @@
     }
     .hb-facet > span:first-child {
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+      display: inline-flex; align-items: center; gap: 7px;
     }
+    .hb-facet-emoji { font-size: 14px; line-height: 1; flex-shrink: 0; }
     .hb-facet:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--ink); }
     .hb-facet.active {
       background: var(--accent); border-color: var(--accent); color: #fff;
@@ -162,6 +168,20 @@
     .hb-facet.is-empty { opacity: 0.5; }
     .hb-facet.is-empty .count { background: #f3f4f6; color: var(--ink-3); }
     .hb-facet.active.is-empty .count { background: rgba(255,255,255,0.22); color: #fff; }
+
+    /* Per-category active accents — mirror the kind-badge palette so the
+       browser facet bar and the reader-toolbar pill speak the same colour
+       language. The bucket-to-kind merge (role bucket = role-operational
+       + aicf-companion, school bucket = school-facing + policy-topic) is
+       intentional and documented in bootBrowserMode(); we pick the
+       primary kind's hue for each bucket. */
+    .hb-facet[data-cat="induction"].active { background: #6c5ce7; border-color: #6c5ce7; }
+    .hb-facet[data-cat="role"].active      { background: #db2777; border-color: #db2777; }
+    .hb-facet[data-cat="school"].active    { background: #0891b2; border-color: #0891b2; }
+    .hb-facet[data-cat="induction"]:not(.active) .count { background: #ede9fe; color: #5b21b6; }
+    .hb-facet[data-cat="role"]:not(.active) .count      { background: #fce7f3; color: #9d174d; }
+    .hb-facet[data-cat="school"]:not(.active) .count    { background: #cffafe; color: #155e75; }
+
     @media (max-width: 960px) {
       .hb-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -635,20 +655,72 @@
     .hb-reader-toolbar .btn-print:hover { background: var(--accent-dk); }
     .hb-reader-toolbar .btn-print svg { width: 14px; height: 14px; }
 
+    /* Back-to-browser secondary button — sits at the toolbar's left edge so
+       the reader → browser jump is one obvious click. Visually quieter than
+       the print primary button so it doesn't compete. */
+    .hb-back-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px 6px 8px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: #fff; color: var(--ink-2);
+      font-size: 12.5px; font-weight: 600; text-decoration: none;
+      transition: color .12s, border-color .12s, background .12s;
+      flex-shrink: 0;
+    }
+    .hb-back-btn:hover { color: var(--accent-dk); border-color: var(--accent); background: var(--accent-2); }
+    .hb-back-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* Real-time filter input — when shown (default hidden until JS un-hides
+       after dropdown populates), typing scopes the dropdown to matching
+       handbooks. Empty value = show every handbook. */
+    .hb-filter-input {
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: 12.5px; background: #fff; color: var(--ink);
+      min-width: 140px; max-width: 200px;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .hb-filter-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .hb-filter-input[hidden] { display: none; }
+
+    /* Group-kind badge — sits to the right of the dropdown and tells the
+       reader which family the active handbook belongs to. Colour comes from
+       data-kind attribute; emoji + label assigned by JS at render time. */
+    .hb-kind-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      flex-shrink: 0;
+      font-family: inherit;
+    }
+    .hb-kind-badge[hidden] { display: none; }
+    .hb-kind-badge[data-kind="induction"]       { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+    .hb-kind-badge[data-kind="role-operational"]{ background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+    .hb-kind-badge[data-kind="aicf-companion"]  { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+    .hb-kind-badge[data-kind="school-facing"]   { background: #cffafe; color: #155e75; border-color: #67e8f9; }
+    .hb-kind-badge[data-kind="policy-topic"]    { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+    .hb-kind-badge[data-kind="other"]           { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+    .hb-kind-badge .emoji { font-size: 12px; line-height: 1; }
+
     /* ── Sticky reading-progress bar (under the reader toolbar) ──
        Tracks the active stage during scroll, shows a 0-100% completion
        bar (based on localStorage task ticks), and a "Stage N / total"
        chip with the inferred window glyph. Companion to the
        per-task checkbox feature. Hidden on mobile to keep room. */
     .hb-progress {
-      /* Sits under .hb-reader-toolbar (62 navbar + ~56 toolbar = 118). */
+      /* Sits under .hb-reader-toolbar (62 navbar + ~56 toolbar = 118).
+         Visually a quieter "alt-rail" below the toolbar — slimmer padding +
+         softer text contrast so the toolbar stays the primary control band
+         and the progress chip reads as ambient status, not primary chrome. */
       position: sticky; top: 118px; z-index: 39;
       background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%);
       backdrop-filter: saturate(160%) blur(8px);
       border-bottom: 1px solid var(--border);
-      padding: 10px 32px 12px;
-      display: flex; align-items: center; gap: 16px;
-      font-size: 12.5px; color: var(--ink-2);
+      padding: 6px 32px 7px;
+      display: flex; align-items: center; gap: 14px;
+      font-size: 11.5px; color: var(--ink-3);
     }
     /* Beat the display:flex above with a more-specific [hidden] override
        so JS setting bar.hidden = true actually hides the element
