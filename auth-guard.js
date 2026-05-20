@@ -657,7 +657,7 @@ function mountProfileDropdown({ user, profile, navUserName, navAvatar }) {
 // /mail-composer "System Templates". Built-in default used if the
 // admin has not yet customised the template doc. Mirrors AH/TH
 // notifyAdminsOfPending*User — keep all three in sync.
-const PENDING_NOTIFICATION_RECIPIENT = 'tech@eduversal.org';
+const PENDING_NOTIFICATION_RECIPIENT = 'secondary.edu@eduversal.org';
 
 const PENDING_NOTIFICATION_DEFAULT_SUBJECT =
   'New Central Hub signup awaiting approval — {{userName}}';
