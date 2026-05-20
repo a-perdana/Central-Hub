@@ -7754,37 +7754,105 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           day: "numeric",
         });
 
-      // ── Subject-gate denied banner (set by auth-guard.js redirect) ──
-      // When a user opens a pacing page outside their ch_subjects[],
-      // auth-guard.js redirects to /?denied=<slug> and stashes the
-      // detail in sessionStorage. Surface a one-shot toast so they know
-      // why they bounced.
-      (function showSubjectDeniedBanner() {
+      // ── Access-denied banner (set by auth-guard.js redirect) ────────
+      // Two sources surface a /?denied=<slug> redirect:
+      //   1. Subject-specialty gate (ch_subjects[] mismatch) — pacing
+      //      pages set sessionStorage 'ch_subject_denied' with the
+      //      required subjects list.
+      //   2. Page-access gate (visible_to[] mismatch / hidden:true) —
+      //      auth-guard step 4c sets sessionStorage 'ch_access_denied'
+      //      with the page label.
+      // Either way we render a friendly toast at the top of the page
+      // with the cause + a guidance line. Auto-dismiss in 8 seconds.
+      (function showAccessDeniedBanner() {
         try {
           const params = new URLSearchParams(window.location.search);
           const denied = params.get('denied');
           if (!denied) return;
-          let label = denied;
-          let required = '';
+
+          let title = 'Access denied';
+          let body = '';
+          let icon = '🔒';
+
+          // Subject-gate (pacing pages) — more specific message.
           try {
             const raw = sessionStorage.getItem('ch_subject_denied');
             if (raw) {
               const info = JSON.parse(raw);
               if (info?.pageKey === denied) {
                 if (Array.isArray(info.requiredSubjects) && info.requiredSubjects.length) {
-                  required = info.requiredSubjects.join(' / ');
+                  const required = info.requiredSubjects.join(' / ');
+                  title = 'Subject access required';
+                  body = `"${info.pageKey}" is filtered by Cambridge subject. You need one of: <strong>${required}</strong>. Ask central_admin to add the subject to your profile from /console.`;
+                  icon = '📚';
                 }
               }
               sessionStorage.removeItem('ch_subject_denied');
             }
           } catch (_) {}
+
+          // Page-access denied (sub-role gate).
+          if (!body) {
+            try {
+              const raw = sessionStorage.getItem('ch_access_denied');
+              if (raw) {
+                const info = JSON.parse(raw);
+                if (info?.pageKey === denied) {
+                  const label = info.label || denied;
+                  title = 'Page not enabled for your role';
+                  body = `"<strong>${label}</strong>" is restricted to specific sub-roles. Ask central_admin to grant your role access from <strong>/page-access</strong>.`;
+                }
+                sessionStorage.removeItem('ch_access_denied');
+              }
+            } catch (_) {}
+          }
+
+          // Fallback if neither sessionStorage entry was readable.
+          if (!body) {
+            body = `"<strong>${denied}</strong>" is not available for your role. Ask central_admin from /page-access.`;
+          }
+
           const el = document.createElement('div');
-          el.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:12px 18px;border-radius:10px;font-family:"DM Sans",sans-serif;font-size:0.9rem;box-shadow:0 6px 20px rgba(0,0,0,0.12);max-width:90vw';
-          el.textContent = required
-            ? `Access denied: "${label}" requires the ${required} specialty (set via console).`
-            : `Access denied: "${label}" is not available for your role.`;
+          el.style.cssText = [
+            'position:fixed',
+            'top:80px',
+            'left:50%',
+            'transform:translateX(-50%)',
+            'z-index:9999',
+            'background:#fff',
+            'color:#1f2937',
+            'border:1px solid #e5e7eb',
+            'border-left:4px solid #6c5ce7',
+            'padding:16px 22px 16px 18px',
+            'border-radius:12px',
+            'font-family:"DM Sans",sans-serif',
+            'font-size:0.9rem',
+            'box-shadow:0 12px 32px rgba(15,23,42,0.18)',
+            'max-width:min(540px,92vw)',
+            'display:flex',
+            'align-items:flex-start',
+            'gap:12px',
+            'opacity:0',
+            'transition:opacity 0.25s ease',
+          ].join(';');
+          el.innerHTML = `
+            <span style="font-size:1.5rem;line-height:1;flex-shrink:0;margin-top:1px">${icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Lora',serif;font-weight:600;font-size:1rem;color:#0f172a;margin-bottom:4px">${title}</div>
+              <div style="line-height:1.45;color:#475569">${body}</div>
+            </div>
+            <button type="button" aria-label="Dismiss" style="background:none;border:0;cursor:pointer;font-size:1.25rem;line-height:1;color:#94a3b8;padding:0 4px;margin-top:-2px;flex-shrink:0">×</button>
+          `;
           document.body.appendChild(el);
-          setTimeout(() => el.remove(), 6500);
+          requestAnimationFrame(() => { el.style.opacity = '1'; });
+          const dismiss = () => {
+            el.style.opacity = '0';
+            setTimeout(() => el.remove(), 250);
+          };
+          el.querySelector('button').addEventListener('click', dismiss);
+          setTimeout(dismiss, 8000);
+
+          // Strip ?denied=… from URL so a refresh doesn't re-toast.
           const url = new URL(window.location.href);
           url.searchParams.delete('denied');
           window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
