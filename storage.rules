@@ -50,10 +50,13 @@ service firebase.storage {
     //   - {uid}      = the submitting user's auth uid
     // Owner uploads up to 25 MB per file. central_admin can read/delete for review.
     match /competency_evidence/{platform}/{uid}/{filename} {
+      // Read: owner, or any CH user (admin or central_user reviewer).
+      // Since 2026-05-20 page-access UI gates who reaches /competency-admin;
+      // rule layer trusts the page-access decision.
       allow read: if request.auth != null
         && (request.auth.uid == uid
             || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
-                 .data.role_centralhub == 'central_admin');
+                 .data.role_centralhub in ['central_admin', 'central_user']);
       allow write: if request.auth != null
         && request.auth.uid == uid
         && request.resource.size <= 25 * 1024 * 1024;

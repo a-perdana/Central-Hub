@@ -1846,10 +1846,17 @@ service cloud.firestore {
     match /competency_evidence/{evId} {
       allow create: if isAuthorized()
                     && request.resource.data.userId == request.auth.uid;
-      allow read:   if isAdmin()
+      // Read: admin, any CH central_user (page-access gates /competency-admin),
+      // or the owner reading their own submission.
+      allow read:   if isAdmin() || isCentralUser()
                     || (isAuthorized() && resource.data.userId == request.auth.uid);
-      allow list:   if isAdmin();
-      allow update: if isAdmin();
+      // List: admin or any CH central_user (sayfaya giren listeleyebilir).
+      // Owner-scoped lists from TH/AH are not supported here — those hubs
+      // read individual docs by id.
+      allow list:   if isAdmin() || isCentralUser();
+      // Update: admin or any CH central_user (reviewer scope). Delete stays
+      // admin-only — submissions are an audit trail.
+      allow update: if isAdmin() || isCentralUser();
       allow delete: if isAdmin();
 
       // comments sub-collection: reviewer thread visible to owner and admins
@@ -1868,8 +1875,10 @@ service cloud.firestore {
     // User can read/write their own doc (for material done tracking).
     // Admin can read/write any doc (for approving earned levels).
     match /user_competencies/{uid} {
-      allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      // Owner reads/writes own doc; admin and CH central_user reviewers
+      // read/write any (for approving earned levels via /competency-admin).
+      allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin() || isCentralUser());
+      allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin() || isCentralUser());
     }
 
     // -- content_overrides_academic (Admin-edited reading text for Academic Hub) --
@@ -1892,11 +1901,14 @@ service cloud.firestore {
     // Update:  central_admin only (revoke flag)
     // Delete:  central_admin only
     match /competency_certificates/{certId} {
-      allow create: if isAdmin();
-      allow read:   if isAdmin()
+      // Create: admin or any CH central_user (issued from /competency-admin).
+      allow create: if isAdmin() || isCentralUser();
+      allow read:   if isAdmin() || isCentralUser()
                     || (isAuthorized() && resource.data.userId == request.auth.uid);
-      allow list:   if isAdmin();
-      allow update: if isAdmin();
+      allow list:   if isAdmin() || isCentralUser();
+      // Update: admin or any CH central_user (revoke flag).
+      allow update: if isAdmin() || isCentralUser();
+      // Delete: admin-only — certificates are an audit trail.
       allow delete: if isAdmin();
     }
 
