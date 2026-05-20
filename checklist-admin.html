@@ -164,6 +164,72 @@
     }
     .week-jump-select:focus { border-color: var(--accent); }
 
+    /* ── SEMESTER TOGGLE + WEEK PILLS ── */
+    .sem-toolbar {
+      display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .sem-toggle {
+      display: inline-flex; gap: 2px; background: var(--paper-2);
+      border-radius: 9px; padding: 3px; border: 1px solid var(--border);
+    }
+    .sem-toggle button {
+      padding: 6px 14px; border: none; background: transparent;
+      font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600;
+      color: var(--ink-3); cursor: pointer; border-radius: 7px;
+      transition: all 0.15s; letter-spacing: 0.01em;
+    }
+    .sem-toggle button:hover { color: var(--ink); }
+    .sem-toggle button.active {
+      background: var(--white); color: var(--accent-dk);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .sem-toolbar .sem-label-current {
+      font-size: 0.72rem; font-weight: 600; color: var(--ink-3);
+      letter-spacing: 0.04em;
+    }
+    .sem-toolbar .sem-label-current strong { color: var(--ink); font-weight: 700; }
+
+    .week-pills-wrap {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px; margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+    .week-pills {
+      display: flex; gap: 6px; overflow-x: auto;
+      -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+      padding-bottom: 4px;
+    }
+    .week-pills::-webkit-scrollbar { height: 5px; }
+    .week-pills::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .week-pill {
+      flex-shrink: 0; min-width: 42px; padding: 7px 11px;
+      border: 1px solid var(--border); background: var(--paper);
+      border-radius: 8px; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600;
+      color: var(--ink-2); transition: all 0.15s;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      line-height: 1.1; text-align: center;
+    }
+    .week-pill:hover {
+      background: var(--white); border-color: var(--accent);
+      color: var(--accent-dk);
+    }
+    .week-pill.active {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+      box-shadow: 0 2px 6px rgba(8,145,178,0.25);
+    }
+    .week-pill.active:hover { color: #fff; }
+    .week-pill.is-this-week:not(.active) {
+      border-color: var(--green); color: var(--green);
+    }
+    .week-pill .pill-num { font-size: 0.82rem; font-weight: 700; }
+    .week-pill .pill-dot {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+    }
+    .week-pill.active .pill-dot { background: #fff; }
+    .week-pill:not(.is-this-week) .pill-dot { display: none; }
+
     /* ── TASK ITEMS ── */
     #templateList,
     #essentialsList { display: flex; flex-direction: column; gap: 6px; }
@@ -522,8 +588,16 @@
         <div class="week-dates" id="weekDates"></div>
         <div class="week-this" id="weekThisIndicator" style="display:none">This week</div>
       </div>
-      <select class="week-jump-select" id="weekJumpSelect" title="Jump to week"></select>
       <button class="btn-nav" id="nextWeekBtn">Next →</button>
+    </div>
+
+    <!-- Semester toggle + week pills -->
+    <div class="week-pills-wrap">
+      <div class="sem-toolbar">
+        <div class="sem-toggle" id="semToggle"></div>
+        <span class="sem-label-current" id="semSummary"></span>
+      </div>
+      <div class="week-pills" id="weekPills"></div>
     </div>
 
     <!-- Two-column: Weekly Essentials | This Week's Tasks -->
@@ -759,6 +833,7 @@ let tasks           = [];
 let allProgress     = []; // [{uid, displayName, email, done, total}]
 let editTaskId      = null;
 let editEssentialId = null;
+let currentSem      = '';  // semLabel of currently-displayed semester, e.g. 'Semester I'
 let progressPage    = 0;
 const PAGE_SIZE     = 5;
 let unsubTemplate   = null;
@@ -803,17 +878,12 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
       if (main) main.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b">Academic calendar not configured. Open <a href="academic-calendar">Academic Calendar</a> → ⚙ Year Settings → Sync Teaching Weeks.</div>';
       return;
     }
-    // Populate jump select from actual teaching weeks (handles gaps).
-    const jumpSel = document.getElementById('weekJumpSelect');
-    _teachingWeeks.forEach(tw => {
-      const opt = document.createElement('option');
-      opt.value = tw.weekNo;
-      opt.textContent = `${getWeekLabelShort(tw.weekNo)}  (${getWeekDates(tw.weekNo)})`;
-      jumpSel.appendChild(opt);
-    });
-    jumpSel.addEventListener('change', () => loadWeek(Number(jumpSel.value)));
-
     currentWeek = getCurrentWeekNumber();
+    // Default to the semester of the current week (or the first available semester).
+    const initialSched = _weekScheduleByNo?.[currentWeek];
+    currentSem = initialSched?.semLabel || _teachingWeeks[0]?.semLabel || '';
+    renderSemToggle();
+    renderWeekPills();
     loadWeek(currentWeek);
     loadEssentials();
   });
@@ -908,14 +978,86 @@ function updateWeekUI() {
   const ind = document.getElementById('weekThisIndicator');
   ind.style.display = (currentWeek === getCurrentWeekNumber()) ? '' : 'none';
   document.getElementById('templatePanelTitle').textContent = `${label} Tasks`;
-  const jumpSel = document.getElementById('weekJumpSelect');
-  if (jumpSel) jumpSel.value = currentWeek;
   document.getElementById('essentialsPanelTitle').textContent = `Weekly Essentials — ${getPlatformLabel(currentPlatform)}`;
+
+  // Reflect active pill (only when pill row has been rendered).
+  const pills = document.getElementById('weekPills');
+  if (pills) {
+    pills.querySelectorAll('.week-pill').forEach(p => {
+      p.classList.toggle('active', Number(p.dataset.week) === currentWeek);
+    });
+    const activePill = pills.querySelector('.week-pill.active');
+    if (activePill) activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+}
+
+// ── Semester toggle ───────────────────────────────────────────────
+function renderSemToggle() {
+  const toggle = document.getElementById('semToggle');
+  if (!toggle) return;
+  const sems = [...new Set(_teachingWeeks.map(w => w.semLabel).filter(Boolean))];
+  if (sems.length === 0) { toggle.innerHTML = ''; return; }
+  toggle.innerHTML = sems.map(s => {
+    const short = s.replace(/^Semester\s+/i, 'Semester ');
+    return `<button type="button" data-sem="${escAttr(s)}"${s===currentSem?' class="active"':''}>${escHtml(short)}</button>`;
+  }).join('');
+  toggle.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      currentSem = b.dataset.sem;
+      renderSemToggle();
+      renderWeekPills();
+    });
+  });
+}
+
+function renderWeekPills() {
+  const wrap = document.getElementById('weekPills');
+  if (!wrap) return;
+  const semWeeks = _teachingWeeks.filter(w => w.semLabel === currentSem);
+  const thisWeek = getCurrentWeekNumber();
+  wrap.innerHTML = semWeeks.map(w => {
+    const isThis = w.weekNo === thisWeek;
+    const isActive = w.weekNo === currentWeek;
+    const cls = ['week-pill', isActive && 'active', isThis && 'is-this-week'].filter(Boolean).join(' ');
+    const dates = getWeekDates(w.weekNo);
+    return `
+      <button type="button" class="${cls}" data-week="${w.weekNo}" title="${escAttr(dates)}">
+        <span class="pill-num">W${w.semWeekNo}</span>
+        <span class="pill-dot"></span>
+      </button>`;
+  }).join('');
+  wrap.querySelectorAll('.week-pill').forEach(p => {
+    p.addEventListener('click', () => loadWeek(Number(p.dataset.week)));
+  });
+
+  // Update semester summary line.
+  const summary = document.getElementById('semSummary');
+  if (summary) {
+    const span = semWeeks.length
+      ? `${getWeekDates(semWeeks[0].weekNo).split(' – ')[0]} → ${getWeekDates(semWeeks[semWeeks.length-1].weekNo).split(' – ')[1]}`
+      : '';
+    summary.innerHTML = semWeeks.length
+      ? `<strong>${semWeeks.length}</strong> teaching weeks · ${escHtml(span)}`
+      : '';
+  }
+
+  // Scroll active pill into view if it lives in this semester.
+  const activePill = wrap.querySelector('.week-pill.active');
+  if (activePill) activePill.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
 }
 
 // ── Load week ─────────────────────────────────────────────────────
 function loadWeek(week) {
   currentWeek = week;
+
+  // If the picked week sits in a different semester, switch pills/toggle to match.
+  const sched = _weekScheduleByNo?.[week];
+  if (sched?.semLabel && sched.semLabel !== currentSem) {
+    currentSem = sched.semLabel;
+    renderSemToggle();
+    renderWeekPills();
+  }
+
   updateWeekUI();
 
   if (unsubTemplate) { unsubTemplate(); unsubTemplate = null; }
