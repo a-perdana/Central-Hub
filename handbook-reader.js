@@ -593,9 +593,19 @@ function renderHandbook(id) {
   buildTOC(hb, stagesArr);
   initScrollSpy();
   initProgress(hb, stagesArr);
+  // If the URL already targets a collapsed stage (deep-link landing
+  // like /handbook?id=X#hb-sec-stage-2), open it so the scroll lands
+  // inside the content, not above a closed summary.
+  if (window.location.hash) {
+    const tgt = document.querySelector(window.location.hash);
+    if (tgt && tgt.tagName === 'DETAILS') {
+      tgt.open = true;
+      requestAnimationFrame(() => tgt.scrollIntoView({ block: 'start' }));
+    }
+  }
   // Scroll to top whenever a new handbook is loaded (handles select-
   // dropdown switching between handbooks mid-scroll).
-  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  else window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
 /* ── Reading-progress bar + per-task checkbox persistence ─────────
@@ -920,7 +930,7 @@ function renderStage(stage, index) {
   const stageNum  = String(index + 1).padStart(2, '0');
 
   return `
-    <details class="hb-stage" id="hb-sec-stage-${index}" open>
+    <details class="hb-stage" id="hb-sec-stage-${index}">
       <summary class="hb-stage-head">
         <span class="hb-stage-caret" aria-hidden="true">▸</span>
         <span class="hb-stage-num" aria-hidden="true">${stageNum}</span>
@@ -984,7 +994,7 @@ function renderSection(section, index) {
     : '';
 
   return `
-    <details class="hb-stage hb-sec-school" id="hb-sec-stage-${index}" open>
+    <details class="hb-stage hb-sec-school" id="hb-sec-stage-${index}">
       <summary class="hb-stage-head">
         <span class="hb-stage-caret" aria-hidden="true">▸</span>
         <span class="hb-stage-num" aria-hidden="true">${sectionNum}</span>
@@ -1381,6 +1391,16 @@ function buildTOC(hb, stages) {
     items.push(`<li><a href="#hb-sec-open">Open items</a></li>`);
   }
   list.innerHTML = items.join('');
+
+  // Stages now render collapsed by default; when the user clicks a TOC
+  // anchor that points to a <details>, open it before the browser scrolls
+  // so the target lands visible instead of jumping past a closed summary.
+  list.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', () => {
+      const tgt = document.querySelector(a.getAttribute('href'));
+      if (tgt && tgt.tagName === 'DETAILS') tgt.open = true;
+    });
+  });
 
   // Show + wire the filter input when the section list is long enough
   // to justify it (>8 sub-items). Filter matches against the lowercase
