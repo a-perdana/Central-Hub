@@ -2539,13 +2539,20 @@
 
     // ── Role-aware Admin dropdown / section gating ───────────────────────────
     // The Admin dropdown (desktop) and Admin section (mobile) are marked with
-    // [data-admin-only="1"] and start hidden via inline style. Reveal them only
-    // for central_admin. auth-guard.js dispatches 'authReady' after profile
-    // load; if that already fired (window.userProfile populated) we apply
-    // immediately, otherwise we wait.
+    // [data-admin-only="1"] and start hidden via inline style. Since 2026-05-20
+    // we reveal them for EVERY signed-in central_user — auth-guard.js's
+    // applyPageAccessGating() then hides individual links + empty columns
+    // based on page_access_config[].visible_to, so a coordinator only sees
+    // the user-also surfaces (Hiring Funnel, Network Health, Frameworks,
+    // Survey Console, Checklist Admin, Schedule Settings, Design System,
+    // etc.) while admin-only links remain hidden via [data-pa-hidden].
+    // Note: if every link in the dropdown ends up hidden for this user,
+    // applyPageAccessGating() marks the wrap [data-pa-hidden="1"] and the
+    // dropdown disappears entirely (empty-wrap collapse). That's why we
+    // reveal here unconditionally for any signed-in user — let the
+    // page-access layer do the per-link filtering.
     function applyAdminGating(profile) {
-      const isAdmin = profile?.role_centralhub === 'central_admin';
-      if (!isAdmin) return; // start state is already hidden
+      if (!profile) return; // not signed in yet
       document.querySelectorAll('[data-admin-only="1"]').forEach(function(el) {
         el.style.display = '';
       });
