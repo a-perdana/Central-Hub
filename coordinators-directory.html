@@ -46,7 +46,8 @@
     .ec-avatar.director { background: linear-gradient(135deg,#0e7490,#155e75); }
     .ec-avatar.executive_director { background: linear-gradient(135deg,#1e3a8a,#0c4a6e); }
     .ec-name { font-weight: 600; color: var(--ink); font-size: 0.95rem; line-height: 1.25; }
-    .ec-kind { font-size: 0.72rem; color: var(--ink-3); margin-top: 1px; }
+    .ec-position { font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; font-weight: 500; line-height: 1.25; }
+    .ec-kind { font-size: 0.68rem; color: var(--ink-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.4px; }
     .ec-pills { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 8px; }
     .ec-pill { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
     .ec-pill.subj { background: #eff6ff; color: #1d4ed8; }
@@ -102,7 +103,7 @@
     <div class="cd-filter-bar">
       <div class="cd-search-wrap">
         <svg class="cd-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" class="cd-search" id="filterSearch" placeholder="Search name, email, or notes…">
+        <input type="text" class="cd-search" id="filterSearch" placeholder="Search name, position, email, or notes…">
       </div>
       <select class="cd-filter" id="filterSubject">
         <option value="">All subjects</option>
@@ -152,6 +153,11 @@
         <div class="form-group">
           <label class="form-label">Display name</label>
           <input type="text" class="form-input" id="eName" placeholder="Full name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Position</label>
+          <input type="text" class="form-input" id="ePosition" placeholder="e.g. Director of Primary Schools · EASE Coordinator G7-G12 · Head of Math">
+          <div class="form-hint">Specific title — what exactly this person is responsible for.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Email</label>
@@ -399,7 +405,7 @@ function renderGrid() {
     if (schF && e.schoolId !== schF) return false;
     if (grdF && String(e.gradeLevel || '') !== grdF) return false;
     if (search) {
-      const hay = `${e.displayName || ''} ${e.email || ''} ${e.roleNotes || ''}`.toLowerCase();
+      const hay = `${e.displayName || ''} ${e.position || ''} ${e.email || ''} ${e.roleNotes || ''}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -446,6 +452,7 @@ function renderCard(e) {
         <div class="ec-avatar ${kind}">${initials(e.displayName)}</div>
         <div style="min-width:0;flex:1;">
           <div class="ec-name">${escHtml(e.displayName || 'Unnamed')}</div>
+          ${e.position ? `<div class="ec-position">${escHtml(e.position)}</div>` : ''}
           <div class="ec-kind">${KIND_LABELS[kind] || kind}</div>
         </div>
       </div>
@@ -464,6 +471,7 @@ function openModal(entryId) {
     $('modalTitle').textContent = 'Edit entry';
     $('eKind').value = e.entryKind || 'hq_coordinator';
     $('eName').value = e.displayName || '';
+    $('ePosition').value = e.position || '';
     $('eEmail').value = e.email || '';
     $('ePhone').value = e.phone || '';
     $('eSubject').value = e.subjectId || '';
@@ -477,6 +485,7 @@ function openModal(entryId) {
     $('modalTitle').textContent = 'New entry';
     $('eKind').value = 'executive_director';
     $('eName').value = '';
+    $('ePosition').value = '';
     $('eEmail').value = '';
     $('ePhone').value = '';
     $('eSubject').value = '';
@@ -500,6 +509,8 @@ function closeModal() {
 async function saveEntry() {
   const name = $('eName').value.trim();
   if (!name) { showToast('Display name required.'); return; }
+  const position = $('ePosition').value.trim();
+  if (!position) { showToast('Position required.'); return; }
   const kind = $('eKind').value;
   const subjectId = $('eSubject').value || null;
   const schoolId = $('eSchool').value || null;
@@ -510,6 +521,7 @@ async function saveEntry() {
   const payload = {
     entryKind: kind,
     displayName: name,
+    position,
     email: $('eEmail').value.trim(),
     phone: $('ePhone').value.trim(),
     subjectId,
