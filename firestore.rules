@@ -990,9 +990,12 @@ service cloud.firestore {
     }
 
     // -- surveys (cross-platform) ----------------------------
+    // Since 2026-05-20: create/update opened to CH central_user
+    // (page-access gates /survey-console). Delete stays admin-only.
     match /surveys/{surveyId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- survey_responses ------------------------------------
@@ -1013,24 +1016,31 @@ service cloud.firestore {
     }
 
     // -- central_documents -----------------------------------
+    // Since 2026-05-20: create/update opened to CH central_user
+    // (page-access gates /inventory). Delete stays admin-only.
     match /central_documents/{docId} {
       allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- central_certificates --------------------------------
     match /central_certificates/{docId} {
       allow read:   if isAuthorized();
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- calendar_events (Academic Calendar admin-managed events) --
     match /calendar_events/{docId} {
       allow read:                    if isAuthorized();
-      allow create, update, delete:  if isAdmin();
+      allow create, update:          if isAdmin() || isCentralUser();
+      allow delete:                  if isAdmin();
     }
 
     // -- calendar_settings (Single-doc academic year config: yearStart, totalWeeks, terms) --
+    // Settings doc affects every page's date logic — kept admin-only to
+    // avoid accidental year-rollover from a coordinator's misclick.
     match /calendar_settings/{docId} {
       allow read:   if isAuthorized();
       allow write:  if isAdmin();
@@ -1039,10 +1049,11 @@ service cloud.firestore {
     // -- teaching_schedule (Pre-computed teaching weeks per subject, written by admin Sync) --
     match /teaching_schedule/{docId} {
       allow read:   if isAuthorized();
-      allow write:  if isAdmin();
+      allow write:  if isAdmin() || isCentralUser();
     }
 
     // -- nav_config (Navbar item order + labels, editable by central_admin) --
+    // Navbar config affects every CH user — kept admin-only.
     match /nav_config/{docId} {
       allow read:   if isAuthorized();
       allow write:  if isAdmin();
@@ -1051,13 +1062,14 @@ service cloud.firestore {
     // -- weekly_essentials (Standing recurring checklist items, per platform) --
     match /weekly_essentials/{platform} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- weekly_templates (Weekly checklist templates) -------
     match /weekly_templates/{docId} {
       allow read:                    if isAuthorized();
-      allow create, update, delete:  if isAdmin();
+      allow create, update:          if isAdmin() || isCentralUser();
+      allow delete:                  if isAdmin();
     }
 
     // -- weekly_progress (Per-user checklist progress) -------
@@ -1116,12 +1128,13 @@ service cloud.firestore {
     }
 
     // -- appraisal_cycles (Central Hub cycle management) ------
-    // Read: any authenticated user (apps need to know if a cycle is open)
-    // Create/Update: central_admin only
-    // Delete: central_admin only
+    // Read: any authenticated user (apps need to know if a cycle is open).
+    // Since 2026-05-20: create/update opened to CH central_user
+    // (page-access gates /appraisals). Delete stays admin-only.
     match /appraisal_cycles/{docId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- teacher_appraisals (Formal Appraisal v2.0) ----------
@@ -1217,7 +1230,7 @@ service cloud.firestore {
     // -- ease_system -----------------------------------------
     match /ease_system/{docId} {
       allow read:   if isAuthorized();
-      allow write:  if isAdmin();
+      allow write:  if isAdmin() || isCentralUser();
     }
 
     // -- documents (Academic Hub) ----------------------------
@@ -1258,9 +1271,12 @@ service cloud.firestore {
 
     // -- feedbacks (consolidated 2026-05-03 — was feedback + feedbacks) --
     //    All hubs (CH/AH/TH) now write here with a `__src` discriminator.
+    // Since 2026-05-20: read + update opened to CH central_user
+    // (page-access gates /feedback-management). Delete stays admin-only.
     match /feedbacks/{fbId} {
       allow create: if isAuthorized();
-      allow read, update, delete: if isAdmin();
+      allow read, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- timeline_activities (Academic Calendar) -------------
@@ -1284,40 +1300,36 @@ service cloud.firestore {
 
     // -- Cambridge syllabus reference data (all levels: IGCSE, AS/A-Level, Checkpoint) -----------------------
     // Read open to any authenticated user (Teachers Hub, Academic Hub, Central Hub all need this).
+    // Since 2026-05-20: write opened to CH central_user (page-access gates
+    // /igcse-syllabus, /as-alevel-syllabus, /secondary-checkpoint-syllabus,
+    // /primary-checkpoint-syllabus).
     match /cambridge_syllabus/{docId} {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- Cambridge scheme of work — teaching activities, resources, SDG links per ref code.
-    // Doc ID format: {subjectCode}_{code} e.g. 0580_C1.1. Surfaced via the Teaching Guide
-    // tab on the syllabus-objective modal in Teachers Hub pacing pages.
     match /cambridge_scheme_of_work/{docId} {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- Curated Stage 7→8→9 progression mapping (one doc per subject code).
-    // Used by the Progression Grid tab on checkpoint pacing pages.
     match /cambridge_syllabus_progression/{docId} {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
-    // -- Indonesian Kurikulum Merdeka curriculum chapters (textbook bab/chapter atoms).
-    // One doc per textbook chapter across G7-G12 and Fase D/E/F/F+. Read open to any
-    // authenticated user (other hubs may surface this comparatively in the future).
+    // -- Indonesian Kurikulum Merdeka curriculum chapters --
     match /km_curriculum/{docId} {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- Master conceptual taxonomy linking Cambridge G7-12 LOs with KM chapters.
-    // One doc per master topic (~75 for math). Powers the National Curriculum
-    // Alignment page in Central Hub. Read open so dashboards in other hubs can join.
     match /curriculum_master_topics/{docId} {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- IGCSE / A-Level / Checkpoint pacing structures ------
@@ -1684,26 +1696,28 @@ service cloud.firestore {
 
     // -- orientation_resources (public handbook/video/book list) --
     // Read: anyone (no auth required — public orientation page)
-    // Write: central_admin only
+    // Since 2026-05-20: create/update opened to CH central_user
+    // (page-access gates /orientation-admin). Delete stays admin-only.
     match /orientation_resources/{docId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- orientation_questions (competency quiz questions) --
-    // Read: anyone (public orientation page)
-    // Write: central_admin only
     match /orientation_questions/{docId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- orientation_registrations (submitted applications) --
     // Create: anyone (public form submission)
-    // Read/update/delete: central_admin only
+    // Read/update opened to CH central_user; delete stays admin-only.
     match /orientation_registrations/{docId} {
       allow create: if true;
-      allow read, update, delete: if isAdmin();
+      allow read, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- school_events (Partner Schools Event Calendar) ----------
@@ -1731,10 +1745,11 @@ service cloud.firestore {
 
     // -- cambridge_calendar (exam deadline dates per year+series) --
     // Read: any authorized user (AH, TH, CH all need to view)
-    // Write: central_admin only
+    // Since 2026-05-20: write opened to CH central_user (page-access
+    // gates /cambridge-calendar).
     match /cambridge_calendar/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- school_visits (Visit & Audit Management) ------------
@@ -1774,42 +1789,41 @@ service cloud.firestore {
 
     // -- announcement_reads (read-receipt tracking) ----------
     // Doc ID: {annId}__{uid}
-    // Any authorized user can write their own read receipt; admin reads all
+    // Any authorized user can write their own read receipt; admin + CH
+    // reviewers read all (read-receipt analytics).
     match /announcement_reads/{readId} {
-      allow read:   if isAdmin();
+      allow read:   if isAdmin() || isCentralUser();
       allow create, update: if isAuthorized()
                             && request.resource.data.userId == request.auth.uid;
       allow delete: if isAdmin();
     }
 
     // -- teacher_contacts (Unregistered teacher mailing list) --
-    // Read: central_admin only (mail-composer.html)
-    // Write: central_admin only
+    // Since 2026-05-20: opened to CH central_user (page-access gates
+    // /mail-composer). 463+ teacher addresses live here.
     match /teacher_contacts/{contactId} {
-      allow read, write: if isAdmin();
+      allow read:  if isAdmin() || isCentralUser();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- mail_campaigns (Newsletter campaign history) --------
     // Written by Railway mail service via Admin SDK (bypasses rules).
-    // Central Hub frontend only reads (mail-composer.html history table).
+    // Read opened to CH central_user for history table on /mail-composer.
     match /mail_campaigns/{campaignId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isCentralUser();
       allow write: if false; // Admin SDK only
     }
 
     // -- mail_templates (Reusable newsletter templates) ------
     // Saved from mail-composer.html "Save as Template" action.
-    // - Freeform templates: central_admin read+write only.
-    // - System templates (kind:'system'): any signed-in authorized user
-    //   may read by ID — needed because auth-guard.js / Cloud Function
-    //   notification paths run as the new pending user, not as admin.
-    //   Listing the collection still requires admin (no `list` for
-    //   non-admins, since rules don't filter list reads by field).
+    // Since 2026-05-20: opened to CH central_user. System templates
+    // (kind:'system') stay readable by any signed-in user for the
+    // auth-guard.js / Cloud Function notification paths.
     match /mail_templates/{templateId} {
-      allow get:    if isAdmin()
+      allow get:    if isAdmin() || isCentralUser()
                     || (isAuthorized() && resource.data.kind == 'system');
-      allow list:   if isAdmin();
-      allow write:  if isAdmin();
+      allow list:   if isAdmin() || isCentralUser();
+      allow write:  if isAdmin() || isCentralUser();
     }
 
     // -- user_notes (Personal post-it / notepad) ---------------------
@@ -1934,29 +1948,24 @@ service cloud.firestore {
     // running 5+ separate queries on every chip hover.
     match /cambridge_crossref/{docId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin();
+      // Aggregator built by scripts/competency/build-crossref-index.js
+      // (Admin SDK). Client write opened to CH central_user for in-app
+      // rebuild flows.
+      allow write: if isAdmin() || isCentralUser();
     }
 
     match /competency_framework/{trackId} {
       // Public read: the framework root doc holds Cambridge / Permendiknas
       // verbatim reference text + the Eduversal domain/competency taxonomy.
-      // Both are reference material we want visible on pre-login pages
-      // (e.g. TH /orientation reads competency_framework/teachers to render
-      // CTS chips and the inline standard-text panel). The per-(comp, level)
-      // learning content sits in the /levels/{...} subcollection and stays
-      // authenticated below.
       allow read:  if true;
-      allow write: if isAdmin();
+      // Since 2026-05-20: write opened to CH central_user (page-access
+      // gates /specialist-framework + /competency-admin).
+      allow write: if isAdmin() || isCentralUser();
 
-      // Per-(competency, level) base learning content. Doc ID format:
-      // {compId}_{level}  e.g. 'smc-1_awareness'. Loaded lazily by
-      // learning-path pages (one read per modal open). Admin overrides
-      // for specific (comp, level) pairs continue to live in their
-      // own collections (content_overrides_teachers / _academic) and
-      // are read on top of this base content.
+      // Per-(competency, level) base learning content.
       match /levels/{levelDocId} {
         allow read:  if isAuthorized();
-        allow write: if isAdmin();
+        allow write: if isAdmin() || isCentralUser();
       }
     }
 
@@ -2156,7 +2165,9 @@ service cloud.firestore {
       allow get:    if isSignedIn();
       allow list:   if isAdmin()
                     || (isSignedIn() && request.auth.uid != null);
-      allow create, update: if isAdmin();
+      // Since 2026-05-20: create/update opened to CH central_user
+      // (page-access gates /principal-360-admin to director).
+      allow create, update: if isAdmin() || isCentralUser();
       allow delete: if isAdmin();
     }
 
