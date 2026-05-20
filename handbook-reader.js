@@ -113,12 +113,51 @@
 function bootReaderMode(requestedId) {
   const select = document.getElementById('hbSelect');
   select.innerHTML = '';
-  allHandbooks.forEach(hb => {
-    const opt = document.createElement('option');
-    opt.value = hb.id;
-    opt.textContent = hb.title || hb.id;
-    select.appendChild(opt);
+  // 5-way partition by handbookKind — mirrors bootBrowserMode().
+  // Native <optgroup> renders label as bold-italic-grey (browser default);
+  // visual richness is intentionally minimal — semantic grouping is what
+  // unblocks scanning the 28-item flat list.
+  const GROUPS = [
+    { kinds: ['induction'],         label: '📕 Induction (Year-1 mentee tracks)' },
+    { kinds: ['role-operational'],  label: '🛡 Role & Operational (specialist quick-refs)' },
+    { kinds: ['aicf-companion'],    label: '🤖 AICF Companion (AI use playbooks)' },
+    { kinds: ['school-facing'],     label: '🏫 School-Facing (student / teacher / parent / staff)' },
+    { kinds: ['policy-topic'],      label: '📜 Policy-Topic (safeguarding / behaviour / assessment …)' },
+  ];
+  const seenIds = new Set();
+  GROUPS.forEach(group => {
+    const members = allHandbooks
+      .filter(hb => group.kinds.includes(hb.handbookKind || 'induction'))
+      .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+    if (!members.length) return;
+    const og = document.createElement('optgroup');
+    og.label = `${group.label} (${members.length})`;
+    members.forEach(hb => {
+      const opt = document.createElement('option');
+      opt.value = hb.id;
+      opt.textContent = hb.title || hb.id;
+      og.appendChild(opt);
+      seenIds.add(hb.id);
+    });
+    select.appendChild(og);
   });
+  // Catch-all for any future handbookKind that isn't in the partition above —
+  // surfaces it as "Other" rather than silently dropping. Same defensive
+  // posture as bootBrowserMode where unknown kinds fall through.
+  const orphans = allHandbooks
+    .filter(hb => !seenIds.has(hb.id))
+    .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+  if (orphans.length) {
+    const og = document.createElement('optgroup');
+    og.label = `❔ Other (${orphans.length})`;
+    orphans.forEach(hb => {
+      const opt = document.createElement('option');
+      opt.value = hb.id;
+      opt.textContent = hb.title || hb.id;
+      og.appendChild(opt);
+    });
+    select.appendChild(og);
+  }
   select.value = requestedId;
   select.addEventListener('change', () => {
     const newId = select.value;
