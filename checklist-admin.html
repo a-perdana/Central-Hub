@@ -82,6 +82,17 @@
     .hero-tabs [data-plat="director"]                 { --tc: #818cf8; --tc-bg: rgba(129,140,248,0.12); }
     .hero-tabs [data-plat="coordinator"]              { --tc: #fb923c; --tc-bg: rgba(251,146,60,0.12); }
 
+    /* Same palette projected onto <body> so the whole page can re-tint. */
+    body[data-plat="teachers"]                  { --pc: #38bdf8; --pc-dk: #0284c7; --pc-bg: rgba(56,189,248,0.10);  --pc-bg-2: rgba(56,189,248,0.18); }
+    body[data-plat="subject_leader"]            { --pc: #a78bfa; --pc-dk: #7c3aed; --pc-bg: rgba(167,139,250,0.10); --pc-bg-2: rgba(167,139,250,0.18); }
+    body[data-plat="academic_coordinator"]      { --pc: #10b981; --pc-dk: #047857; --pc-bg: rgba(16,185,129,0.10);  --pc-bg-2: rgba(16,185,129,0.18); }
+    body[data-plat="school_principal"]          { --pc: #f59e0b; --pc-dk: #b45309; --pc-bg: rgba(245,158,11,0.10);  --pc-bg-2: rgba(245,158,11,0.18); }
+    body[data-plat="foundation_representative"] { --pc: #fb7185; --pc-dk: #be123c; --pc-bg: rgba(251,113,133,0.10); --pc-bg-2: rgba(251,113,133,0.18); }
+    body[data-plat="cambridge_coordinator"]     { --pc: #14b8a6; --pc-dk: #0f766e; --pc-bg: rgba(20,184,166,0.10);  --pc-bg-2: rgba(20,184,166,0.18); }
+    body[data-plat="director"]                  { --pc: #818cf8; --pc-dk: #4338ca; --pc-bg: rgba(129,140,248,0.10); --pc-bg-2: rgba(129,140,248,0.18); }
+    body[data-plat="coordinator"]               { --pc: #fb923c; --pc-dk: #c2410c; --pc-bg: rgba(251,146,60,0.10);  --pc-bg-2: rgba(251,146,60,0.18); }
+    body:not([data-plat]) { --pc: var(--accent); --pc-dk: var(--accent-dk); --pc-bg: rgba(8,145,178,0.10); --pc-bg-2: rgba(8,145,178,0.18); }
+
     /* ── PLATFORM TABS (inside hero) ── */
     .hero-tabs {
       display: flex; gap: 0; position: relative; z-index: 2;
@@ -445,6 +456,56 @@
     .lagging-badge.partial     { background: #fef9c3; color: #a16207; }
 
     .overview-empty { text-align: center; padding: 48px; color: var(--ink-3); font-size: 0.875rem; }
+
+    /* ── PER-PLATFORM TINT OVERRIDES (driven by body[data-plat]) ── */
+    /* Every primary surface re-tints to the active platform's accent. The shared
+       cyan accent stays as the bootstrap value for the brief moment before the
+       body[data-plat] attribute is written (or on overview routes that ignore plat). */
+    .btn-primary { background: var(--pc); border-color: var(--pc); }
+    .btn-primary:hover { background: var(--pc-dk); border-color: var(--pc-dk); }
+    .view-btn.active { background: var(--pc); }
+    .sem-toggle button.active { color: var(--pc-dk); }
+    .week-pill.active {
+      background: var(--pc); border-color: var(--pc);
+      box-shadow: 0 2px 6px color-mix(in srgb, var(--pc) 35%, transparent);
+    }
+    .week-pill:not(.is-this-week):hover { border-color: var(--pc); color: var(--pc-dk); }
+    .form-input:focus, .form-select:focus { border-color: var(--pc); }
+    .ring-fill { stroke: var(--pc); }
+
+    /* Soft page-wide ambient tint — barely visible, lifts the platform mood. */
+    body[data-plat] {
+      background:
+        radial-gradient(ellipse at top right, var(--pc-bg) 0%, transparent 55%),
+        radial-gradient(ellipse at 5% 35%, var(--pc-bg) 0%, transparent 40%),
+        var(--paper);
+    }
+
+    /* Hero accent strip — replaces the static cyan bottom-line with platform colour. */
+    .hero::after {
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.12) 30%,
+        color-mix(in srgb, var(--pc) 65%, transparent) 55%,
+        rgba(255,255,255,0.12) 80%,
+        transparent 100%);
+    }
+    .hero::before {
+      background:
+        radial-gradient(ellipse at 8% 80%, color-mix(in srgb, var(--pc) 25%, transparent) 0%, transparent 55%),
+        radial-gradient(ellipse at 90% 10%, rgba(255,255,255,0.04) 0%, transparent 45%),
+        radial-gradient(ellipse at 55% 50%, rgba(0,0,0,0.12) 0%, transparent 60%);
+    }
+
+    /* Panel head gets a subtle bottom-border accent in the active platform colour. */
+    .panel-head {
+      border-bottom-color: color-mix(in srgb, var(--pc) 18%, var(--border));
+    }
+    .panel-head h3::before {
+      content: ''; display: inline-block; width: 3px; height: 14px;
+      background: var(--pc); border-radius: 2px; vertical-align: middle;
+      margin-right: 10px; margin-top: -2px;
+    }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
@@ -853,11 +914,13 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
   document.getElementById('heroTabs').style.display = '';
 
   // Platform tabs
+  document.body.dataset.plat = currentPlatform;  // initial paint
   document.querySelectorAll('.plat-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.plat-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       currentPlatform = tab.dataset.plat;
+      document.body.dataset.plat = currentPlatform;
       loadWeek(currentWeek);
       loadEssentials();
     });
