@@ -110,15 +110,94 @@
 
 
 /* ── Reader mode (existing single-handbook detail view) ──────────── */
+// Group spec shared by the dropdown population + the toolbar kind badge.
+// Native <optgroup> renders label as bold-italic-grey (browser default);
+// visual richness is intentionally minimal — semantic grouping is what
+// unblocks scanning the 28-item flat list. Kind badge in the toolbar
+// surfaces the active handbook's family with a colour-coded pill so the
+// reader's mental model stays in sync with /handbook browser facets.
+const HANDBOOK_GROUPS = [
+  { kind: 'induction',        emoji: '📕', short: 'Induction',         long: 'Induction (Year-1 mentee tracks)' },
+  { kind: 'role-operational', emoji: '🛡', short: 'Role-Operational',  long: 'Role & Operational (specialist quick-refs)' },
+  { kind: 'aicf-companion',   emoji: '🤖', short: 'AICF',              long: 'AICF Companion (AI use playbooks)' },
+  { kind: 'school-facing',    emoji: '🏫', short: 'School-Facing',     long: 'School-Facing (student / teacher / parent / staff)' },
+  { kind: 'policy-topic',     emoji: '📜', short: 'Policy-Topic',      long: 'Policy-Topic (safeguarding / behaviour / assessment …)' },
+];
+
+function updateKindBadge(handbookId) {
+  const badge = document.getElementById('hbReaderKindBadge');
+  if (!badge) return;
+  const hb = allHandbooks.find(h => h.id === handbookId);
+  if (!hb) { badge.hidden = true; return; }
+  const kind = hb.handbookKind || 'induction';
+  const group = HANDBOOK_GROUPS.find(g => g.kind === kind);
+  if (group) {
+    badge.dataset.kind = group.kind;
+    badge.innerHTML = `<span class="emoji">${group.emoji}</span><span>${group.short}</span>`;
+  } else {
+    badge.dataset.kind = 'other';
+    badge.innerHTML = `<span class="emoji">❔</span><span>Other</span>`;
+  }
+  badge.hidden = false;
+}
+
+function applyHandbookFilter(query) {
+  const select = document.getElementById('hbSelect');
+  if (!select) return;
+  const q = (query || '').trim().toLowerCase();
+  Array.from(select.querySelectorAll('optgroup')).forEach(og => {
+    let visibleInGroup = 0;
+    Array.from(og.querySelectorAll('option')).forEach(opt => {
+      const match = !q || (opt.textContent || '').toLowerCase().includes(q);
+      opt.hidden = !match;
+      // Disabled keeps the option un-selectable when hidden — some browsers
+      // ignore [hidden] on <option> but honour [disabled] for keyboard nav.
+      opt.disabled = !match;
+      if (match) visibleInGroup += 1;
+    });
+    og.hidden = visibleInGroup === 0;
+  });
+}
+
 function bootReaderMode(requestedId) {
   const select = document.getElementById('hbSelect');
   select.innerHTML = '';
-  allHandbooks.forEach(hb => {
-    const opt = document.createElement('option');
-    opt.value = hb.id;
-    opt.textContent = hb.title || hb.id;
-    select.appendChild(opt);
+  // 5-way partition by handbookKind — mirrors bootBrowserMode().
+  const GROUPS = HANDBOOK_GROUPS.map(g => ({ kinds: [g.kind], label: `${g.emoji} ${g.long}` }));
+  const seenIds = new Set();
+  GROUPS.forEach(group => {
+    const members = allHandbooks
+      .filter(hb => group.kinds.includes(hb.handbookKind || 'induction'))
+      .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+    if (!members.length) return;
+    const og = document.createElement('optgroup');
+    og.label = `${group.label} (${members.length})`;
+    members.forEach(hb => {
+      const opt = document.createElement('option');
+      opt.value = hb.id;
+      opt.textContent = hb.title || hb.id;
+      og.appendChild(opt);
+      seenIds.add(hb.id);
+    });
+    select.appendChild(og);
   });
+  // Catch-all for any future handbookKind that isn't in the partition above —
+  // surfaces it as "Other" rather than silently dropping. Same defensive
+  // posture as bootBrowserMode where unknown kinds fall through.
+  const orphans = allHandbooks
+    .filter(hb => !seenIds.has(hb.id))
+    .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+  if (orphans.length) {
+    const og = document.createElement('optgroup');
+    og.label = `❔ Other (${orphans.length})`;
+    orphans.forEach(hb => {
+      const opt = document.createElement('option');
+      opt.value = hb.id;
+      opt.textContent = hb.title || hb.id;
+      og.appendChild(opt);
+    });
+    select.appendChild(og);
+  }
   select.value = requestedId;
   select.addEventListener('change', () => {
     const newId = select.value;
@@ -126,9 +205,29 @@ function bootReaderMode(requestedId) {
     url.searchParams.set('id', newId);
     window.history.replaceState({}, '', url);
     renderHandbook(newId);
+    updateKindBadge(newId);
   });
   renderHandbook(requestedId);
+  updateKindBadge(requestedId);
   document.getElementById('btnPrint').addEventListener('click', () => window.print());
+
+  // Filter input — only shown once dropdown is populated (avoids a useless
+  // empty box on the half-second between auth-guard load and Firestore
+  // resolve). debounce-free because list is small (≤30 handbooks) so
+  // every-keystroke re-filter is cheap.
+  const filterInput = document.getElementById('hbFilter');
+  if (filterInput) {
+    filterInput.hidden = false;
+    filterInput.addEventListener('input', (ev) => applyHandbookFilter(ev.target.value));
+    // Esc clears the filter
+    filterInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        filterInput.value = '';
+        applyHandbookFilter('');
+      }
+    });
+  }
+
   initNNPopover();
 }
 
