@@ -530,6 +530,30 @@
     .lagging-badge.not-started { background: var(--paper-2); color: var(--ink-3); }
     .lagging-badge.partial     { background: #fef9c3; color: #a16207; }
 
+    .lagging-pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--paper);
+      font-size: 0.78rem; color: var(--ink-3);
+    }
+    .lagging-pagination .pg-info { font-weight: 500; }
+    .lagging-pagination .pg-controls { display: flex; align-items: center; gap: 4px; }
+    .lagging-pagination .pg-btn {
+      padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--white); color: var(--ink-2);
+      font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; min-width: 30px;
+    }
+    .lagging-pagination .pg-btn:hover:not(:disabled):not(.is-active) {
+      border-color: var(--pc, var(--accent)); color: var(--pc, var(--accent));
+    }
+    .lagging-pagination .pg-btn.is-active {
+      background: var(--pc, var(--accent)); color: #fff; border-color: var(--pc, var(--accent));
+    }
+    .lagging-pagination .pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .lagging-pagination .pg-ellipsis { padding: 0 4px; color: var(--ink-3); }
+
     .overview-empty { text-align: center; padding: 48px; color: var(--ink-3); font-size: 0.875rem; }
 
     /* ── PER-PLATFORM TINT OVERRIDES (driven by body[data-plat]) ── */
@@ -611,7 +635,7 @@
     <div class="hero-top">
       <div class="hero-text">
         <p class="eyebrow">User Console · CentralHub</p>
-        <h1>Weekly Checklist Admin</h1>
+        <h1>Checklist Management</h1>
         <p class="sub">Manage task templates and monitor staff &amp; leadership weekly progress.</p>
       </div>
       <div class="progress-ring-wrap" id="adminRingWrap" style="display:none;">
@@ -715,6 +739,7 @@
                 </thead>
                 <tbody id="laggingBody"></tbody>
               </table>
+              <div class="lagging-pagination" id="laggingPagination" style="display:none"></div>
             </div>
           </div>
         </div>
@@ -1878,7 +1903,14 @@ function populateLaggingFilter() {
   });
 }
 
-function renderLagging() {
+const LAGGING_PAGE_SIZE = 10;
+let laggingPage = 1;
+
+function renderLagging(opts) {
+  // Most callers (search/filter oninput/onchange) want page reset; loadOverview()
+  // sets keepPage:true after a data refresh so the user stays where they were.
+  if (!opts || !opts.keepPage) laggingPage = 1;
+
   const q    = (document.getElementById('laggingSearch')?.value || '').toLowerCase();
   const plat = document.getElementById('laggingPlatFilter')?.value || '';
 
@@ -1888,15 +1920,22 @@ function renderLagging() {
 
   document.getElementById('laggingCountBadge').textContent = `(${data.length})`;
 
+  const pagEl = document.getElementById('laggingPagination');
   if (data.length === 0) {
     document.getElementById('laggingEmpty').style.display      = '';
     document.getElementById('laggingTableWrap').style.display  = 'none';
+    if (pagEl) pagEl.style.display = 'none';
     return;
   }
   document.getElementById('laggingEmpty').style.display      = 'none';
   document.getElementById('laggingTableWrap').style.display  = '';
 
-  document.getElementById('laggingBody').innerHTML = data.map(u => {
+  const totalPages = Math.max(1, Math.ceil(data.length / LAGGING_PAGE_SIZE));
+  if (laggingPage > totalPages) laggingPage = totalPages;
+  const start = (laggingPage - 1) * LAGGING_PAGE_SIZE;
+  const pageRows = data.slice(start, start + LAGGING_PAGE_SIZE);
+
+  document.getElementById('laggingBody').innerHTML = pageRows.map(u => {
     const statusBadge = u.pct === 0
       ? `<span class="lagging-badge not-started">Not started</span>`
       : `<span class="lagging-badge partial">${u.pct}%</span>`;
@@ -1917,6 +1956,51 @@ function renderLagging() {
         <td>${statusBadge}</td>
       </tr>`;
   }).join('');
+
+  renderLaggingPagination(data.length, totalPages, start, pageRows.length);
+}
+
+function renderLaggingPagination(totalRows, totalPages, start, shown) {
+  const pagEl = document.getElementById('laggingPagination');
+  if (!pagEl) return;
+  if (totalPages <= 1) { pagEl.style.display = 'none'; return; }
+  pagEl.style.display = '';
+
+  const info = `Showing <strong>${start + 1}–${start + shown}</strong> of <strong>${totalRows}</strong>`;
+
+  // Windowed page buttons: always show 1, last, current ±1; ellipses elsewhere.
+  const pages = [];
+  const push = n => pages.push(n);
+  push(1);
+  if (laggingPage - 1 > 2) pages.push('…');
+  for (let p = Math.max(2, laggingPage - 1); p <= Math.min(totalPages - 1, laggingPage + 1); p++) push(p);
+  if (laggingPage + 1 < totalPages - 1) pages.push('…');
+  if (totalPages > 1) push(totalPages);
+
+  const btns = pages.map(p => {
+    if (p === '…') return `<span class="pg-ellipsis">…</span>`;
+    const active = p === laggingPage ? ' is-active' : '';
+    return `<button class="pg-btn${active}" data-page="${p}">${p}</button>`;
+  }).join('');
+
+  pagEl.innerHTML = `
+    <div class="pg-info">${info}</div>
+    <div class="pg-controls">
+      <button class="pg-btn" data-step="-1" ${laggingPage === 1 ? 'disabled' : ''}>← Prev</button>
+      ${btns}
+      <button class="pg-btn" data-step="1" ${laggingPage === totalPages ? 'disabled' : ''}>Next →</button>
+    </div>`;
+
+  pagEl.querySelectorAll('.pg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      const step = Number(btn.dataset.step || 0);
+      const page = Number(btn.dataset.page || 0);
+      if (step) laggingPage = Math.max(1, Math.min(totalPages, laggingPage + step));
+      else if (page) laggingPage = page;
+      renderLagging({ keepPage: true });
+    });
+  });
 }
 
 window.renderLagging = renderLagging;
