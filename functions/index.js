@@ -1257,13 +1257,12 @@ exports.easeBankProxy = onCall(
     const userSnap = await db.collection("users").doc(uid).get();
     const u = userSnap.exists ? userSnap.data() : null;
     const isAdmin = u?.role_centralhub === "central_admin";
-    const subRoles = Array.isArray(u?.ch_sub_roles) ? u.ch_sub_roles : [];
-    const allowed = isAdmin
-      || subRoles.includes("director")
-      || subRoles.includes("coordinator");
-    if (!allowed) {
+    const isCentralUser = u?.role_centralhub === "central_user";
+    // Page-access UI is the sole gate since 2026-05-20 — any signed-in
+    // central_user who reaches /ease-bank-browser can proxy upstream.
+    if (!(isAdmin || isCentralUser)) {
       throw new HttpsError("permission-denied",
-        "Requires CH admin / director / coordinator.");
+        "Requires CH admin or central_user.");
     }
 
     const path = String(request.data?.path || "");
@@ -1446,13 +1445,21 @@ exports.practiceBankAiSuggest = onCall(
     const userSnap = await db.collection("users").doc(uid).get();
     const u = userSnap.exists ? userSnap.data() : null;
     const isAdmin = u?.role_centralhub === "central_admin";
+    const isCentralUser = u?.role_centralhub === "central_user";
     const subRoles = Array.isArray(u?.ch_sub_roles) ? u.ch_sub_roles : [];
-    const isDirector = subRoles.includes("director");
-    const isCoordinator = subRoles.includes("coordinator");
-    if (!(isAdmin || isDirector || isCoordinator)) {
+    // Page-access UI is the sole gate since 2026-05-20 — any signed-in
+    // central_user who reaches /practice-assessment-author can run the
+    // AI suggest. Sub-role hierarchy removed.
+    if (!(isAdmin || isCentralUser)) {
       throw new HttpsError("permission-denied",
-        "Requires CH admin / director / coordinator.");
+        "Requires CH admin or central_user.");
     }
+    // For audit log: serialise the actor's effective role string. Admin
+    // takes precedence; otherwise list sub-roles (or 'central_user' for
+    // plain users with no sub-role assigned).
+    const actorRole = isAdmin
+      ? "central_admin"
+      : (subRoles.length ? subRoles.join(",") : "central_user");
 
     const data = request.data || {};
     const subjectId = String(data.subjectId || "").trim();
@@ -1460,12 +1467,14 @@ exports.practiceBankAiSuggest = onCall(
       throw new HttpsError("invalid-argument",
         `subjectId must be math/english/science (got ${subjectId})`);
     }
-    // Coordinator subject gate.
-    if (!isAdmin && !isDirector && isCoordinator) {
+    // Subject-specialty gate: non-admin central_user constrained to subjects
+    // in their ch_subjects[]. Applies uniformly across sub-roles since
+    // 2026-05-20 (director no longer bypasses).
+    if (!isAdmin) {
       const chSubjects = Array.isArray(u?.ch_subjects) ? u.ch_subjects : [];
       if (!chSubjects.includes(subjectId)) {
         throw new HttpsError("permission-denied",
-          `Coordinator not entitled to subject ${subjectId}`);
+          `central_user not entitled to subject ${subjectId}`);
       }
     }
 
@@ -1525,8 +1534,7 @@ exports.practiceBankAiSuggest = onCall(
       const auditRef = await db.collection("practice_ai_audit").add({
         actorUid: uid,
         actorEmail: u?.email || request.auth.token?.email || null,
-        actorRole: isAdmin ? "central_admin"
-          : (isDirector ? "director" : "coordinator"),
+        actorRole,
         assessmentId,
         subjectId,
         intent,
@@ -1569,8 +1577,7 @@ exports.practiceBankAiSuggest = onCall(
         const auditRef = await db.collection("practice_ai_audit").add({
           actorUid: uid,
           actorEmail: u?.email || request.auth.token?.email || null,
-          actorRole: isAdmin ? "central_admin"
-            : (isDirector ? "director" : "coordinator"),
+          actorRole,
           assessmentId,
           subjectId,
           intent,
@@ -1657,8 +1664,7 @@ exports.practiceBankAiSuggest = onCall(
     const auditRef = await db.collection("practice_ai_audit").add({
       actorUid: uid,
       actorEmail: u?.email || request.auth.token?.email || null,
-      actorRole: isAdmin ? "central_admin"
-        : (isDirector ? "director" : "coordinator"),
+      actorRole,
       assessmentId,
       subjectId,
       intent,

@@ -3227,10 +3227,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <button class="cd-btn-add" id="btnAdd">+ New entry</button>
     </div>
 
-    <div id="readonlyBanner" class="readonly-banner" style="display:none">
-      Read-only view — directory curation is restricted to <strong>central_admin</strong> and <strong>director</strong>. Ask one of them to add or correct an entry.
-    </div>
-
     <div class="cd-filter-bar">
       <div class="cd-search-wrap">
         <svg class="cd-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -3367,7 +3363,7 @@ const KIND_LABELS = {
 };
 
 let db, currentUser, userProfile;
-let isAdmin = false, isDirector = false, canEdit = false;
+let isAdmin = false, canEdit = false;
 let allEntries = [];
 let allSchools = [];
 let allUsers = [];
@@ -3395,21 +3391,11 @@ document.addEventListener('authReady', async () => {
   db = window.db;
 
   isAdmin = userProfile.role_centralhub === 'central_admin';
-  const subRoles = Array.isArray(userProfile.ch_sub_roles) ? userProfile.ch_sub_roles : [];
-  isDirector = isAdmin || subRoles.includes('director');
-  const isCoord = subRoles.includes('coordinator');
-  canEdit = isAdmin || isDirector;
-
-  if (!isAdmin && !isDirector && !isCoord) {
-    location.href = '/?denied=coordinators-directory';
-    return;
-  }
-
+  // Page-access is the SOLE auth gate since 2026-05-20: every central_user
+  // who reaches this page (via /page-access visible_to[]) can read + write.
+  // No sub-role-based write elevation.
+  canEdit = true;
   $('mainRoot').style.display = 'block';
-  if (!canEdit) {
-    $('readonlyBanner').style.display = 'block';
-    $('btnAdd').disabled = true;
-  }
 
   populateSubjectFilter();
   await prefetchSchools();
@@ -3544,7 +3530,7 @@ function renderGrid() {
 
   const grid = $('entriesGrid');
   if (!filtered.length) {
-    grid.innerHTML = `<div class="empty-state"><h3>No entries match</h3><p>${canEdit ? 'Try clearing filters, or hit <strong>+ New entry</strong> to add one.' : 'Ask a director to populate the directory.'}</p></div>`;
+    grid.innerHTML = `<div class="empty-state"><h3>No entries match</h3><p>Try clearing filters, or hit <strong>+ New entry</strong> to add one.</p></div>`;
     return;
   }
   grid.innerHTML = filtered.map(renderCard).join('');

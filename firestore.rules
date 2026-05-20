@@ -57,12 +57,15 @@ service cloud.firestore {
              && userProfile().role_centralhub == 'central_admin';
     }
 
+    // isCHCoordinator: name kept for back-compat across the ~30 callsites
+    // that pre-date the 2026-05-20 role architecture flattening. Now means
+    // "any signed-in central_user (sub-role-agnostic)" — page-access is the
+    // sole authorization gate; rules trust that gate. Director, coordinator,
+    // and plain central_user all match. central_admin matches isAdmin() and
+    // is OR'd separately by callsites for clarity.
     function isCHCoordinator() {
       return isAuthorized() && userProfileExists() &&
-             userProfile().role_centralhub == 'central_user' &&
-             ('ch_sub_roles' in userProfile()) &&
-             userProfile().ch_sub_roles is list &&
-             userProfile().ch_sub_roles.hasAny(['coordinator']);
+             userProfile().role_centralhub == 'central_user';
     }
 
     // CentralHub Subject Specialist: a central_user whose ch_subjects[]
@@ -830,12 +833,12 @@ service cloud.firestore {
                && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
                && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
       }
+      // CH reviewer = central_admin OR any signed-in central_user. Page-access
+      // is the sole authorization gate since 2026-05-20 — admin manages who
+      // sees /practice-bank-flags via page_access_config.visible_to[]. Any
+      // central_user who reaches the page can triage.
       function isCHReviewer() {
-        return isAdmin()
-               || (isAuthorized() && userProfileExists()
-                   && ('ch_sub_roles' in userProfile())
-                   && userProfile().ch_sub_roles is list
-                   && userProfile().ch_sub_roles.hasAny(['director', 'coordinator']));
+        return isAdmin() || isCentralUser();
       }
       allow get, list: if isCHReviewer();
       allow create: if isObserverStudent()
@@ -875,12 +878,11 @@ service cloud.firestore {
                && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
                && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
       }
+      // CH reviewer = central_admin OR any signed-in central_user. See
+      // practice_question_flags rule above for full reasoning. Page-access
+      // is the sole authorization gate since 2026-05-20.
       function isCHReviewer() {
-        return isAdmin()
-               || (isAuthorized() && userProfileExists()
-                   && ('ch_sub_roles' in userProfile())
-                   && userProfile().ch_sub_roles is list
-                   && userProfile().ch_sub_roles.hasAny(['director', 'coordinator']));
+        return isAdmin() || isCentralUser();
       }
       function validTagsArray(tags) {
         return tags is list
@@ -2114,12 +2116,14 @@ service cloud.firestore {
                     );
       allow list:   if isAdmin()
                     || (isSignedIn() && request.auth.uid != null);
+      // 2026-05-20: write opened to any central_user whom page-access has
+      // granted access to /principal-coaching-session. Charter NN5
+      // (coaching confidentiality — Foundation Reps excluded) is now
+      // enforced at the page-access UI layer, not at the rule level.
+      // mentorUid == auth.uid pin remains (no impersonating another mentor).
       allow create: if isSignedIn()
                     && request.auth.uid == request.resource.data.mentorUid
-                    && (
-                       isAdmin()
-                       || ('director' in (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ch_sub_roles))
-                    );
+                    && (isAdmin() || isCentralUser());
       allow update: if isSignedIn()
                     && request.auth.uid == resource.data.mentorUid
                     && resource.data.status != 'logged';
@@ -2510,13 +2514,13 @@ service cloud.firestore {
     //   and vice-versa.
     // ─────────────────────────────────────────────────────────
 
-    // Helper: is the requester a CH reviewer (director / coordinator / admin)?
-    // Used by both the teacher self-assessment block (CH staff line-manager
-    // validation) and the maturity-assessment appraisal block.
+    // Helper: any signed-in central_user (admin or otherwise). Since
+    // 2026-05-20, AI Maturity reviewer scope is gated solely by
+    // page-access — admin manages who sees /ai-maturity-admin via
+    // page_access_config.visible_to[]. Any central_user who reaches
+    // the page can validate maturity levels and write back.
     function isAICFReviewer() {
-      return isAdmin() || isCHCoordinator()
-          || (isCentralUser() &&
-              'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ch_sub_roles', []));
+      return isAdmin() || isCentralUser();
     }
 
     // Helper: is the requester an AH line-manager (school_principal /
@@ -2765,14 +2769,14 @@ service cloud.firestore {
     // activity_tasks rules — these collections never duplicate it.
     // ─────────────────────────────────────────────────────────
 
-    // Helper: HQ Director or Subject Coordinator OR central_admin.
-    // Mirrors isAICFReviewer() but named for the dept-office scope so
-    // future tightening (e.g. coordinator-only on a particular sub-
-    // path) does not entangle the AI-Maturity reviewer logic.
+    // Helper: any signed-in central_user (admin or otherwise). Since
+    // 2026-05-20 the "department office" scope is gated solely by
+    // page-access — admin manages who sees /coordinators-meetings,
+    // /decisions-register, /coordinators-directory, /department-artifacts
+    // via page_access_config.visible_to[]. Any central_user who reaches
+    // those pages can read + write the underlying collections.
     function isDeptOfficeMember() {
-      return isAdmin() || isCHCoordinator()
-          || (isCentralUser() &&
-              'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ch_sub_roles', []));
+      return isAdmin() || isCentralUser();
     }
 
     match /coordinators_meetings/{meetingId} {
@@ -2826,14 +2830,14 @@ service cloud.firestore {
     // plus per-school Subject Leaders + per-grade Grade Coordinators.
     // entryKind discriminates: 'hq_coordinator' | 'school_subject_leader' | 'grade_coordinator'.
     // Read-open to dept-office members; admin-only write keeps the
-    // directory canonical (coordinators don't self-promote a school
-    // teacher into "Subject Leader" — directors / admin curate).
+    // directory canonical. Since 2026-05-20 write opened to any
+    // central_user whom page-access has granted access to
+    // /coordinators-directory — admin manages who curates via
+    // page_access_config.visible_to[].
     match /coordinators_directory_entries/{entryId} {
       allow get, list:        if isDeptOfficeMember();
       allow create, update, delete:
-                              if isAdmin() ||
-                                 (isCentralUser() &&
-                                  'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ch_sub_roles', []));
+                              if isAdmin() || isCentralUser();
     }
   }
 }

@@ -84,11 +84,14 @@ Each platform has its own role field — there is no shared `role` field (legacy
 | Academic Hub | `ah_sub_roles[]` | `foundation_representative`, `school_principal`, `academic_coordinator`, `cambridge_coordinator` |
 | Teachers Hub | `th_sub_roles[]` | `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` |
 
-**Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, science, english, bahasa, religion}`. `science` is the combined-science specialty (Lower Secondary / Primary Checkpoint). Checkpoint Science **also accepts** any of `biology` / `chemistry` / `physics` specialists — a Biology Coordinator can enter the Science syllabus + pacing pages to see how their subject builds up at lower-secondary level. The reverse is not true: a `science` specialist does NOT see IGCSE / AS-A-Level Biology, Chemistry, or Physics (those remain single-subject). Sub-role hierarchy:
-- `central_admin` → bypass (full management).
-- `director` → bypass (network-wide, sits above specialists).
-- `coordinator` → IS a subject specialist; always filtered by `ch_subjects[]`. Empty = no subject access (misconfig — promote to director or assign subjects).
-- plain `central_user` → filtered; empty = no access.
+**Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, science, english, bahasa, religion}`. `science` is the combined-science specialty (Lower Secondary / Primary Checkpoint). Checkpoint Science **also accepts** any of `biology` / `chemistry` / `physics` specialists — a Biology Coordinator can enter the Science syllabus + pacing pages to see how their subject builds up at lower-secondary level. The reverse is not true: a `science` specialist does NOT see IGCSE / AS-A-Level Biology, Chemistry, or Physics (those remain single-subject).
+
+**Authorization model (since 2026-05-20):**
+- `central_admin` → bypass everything (page-access, rule-level write capacity, subject-specialty gate). Full management.
+- `central_user` → page-access UI is the SOLE authorization mechanism. Whoever the admin lets onto a page can read AND write whatever the page exposes. Sub-roles (`director`, `coordinator`) are pure UI labels for `/page-access` scoping; they grant NO rule-level capabilities. Plain `central_user` (no sub-role) reaches pages with `visible_to: []` (open) just like director/coordinator.
+- **Subject-specialty gate** (`ch_subjects[]`) stays separate and unchanged — pacing pages remain filtered against the user's subject(s) regardless of sub-role. Admin bypasses this too.
+
+This replaces the pre-2026-05-20 "director bypasses page-access" model. See `memory/project_ch_role_simplification_2026_05_20.md` for the full migration write-up.
 
 **Approval status (AH + TH only):** `approval_status_academichub` / `approval_status_teachershub` ∈ `'pending'` / `'approved'` / `'rejected'`. `/console` shows a banner + stat card for pending users.
 
@@ -114,9 +117,9 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 
 **Cache key:** `pac:__all__:centralhub` (5 min TTL).
 
-**Director hierarchy (page-access):** `director` bypasses page-access entirely (mirrors `central_admin`). The `/page-access` UI omits the Director column on the CH tab — toggling it would have no effect. Only `coordinator` is configurable. `applyPageAccessGating` and the URL-level guard both honour the bypass.
+**Page-access since 2026-05-20:** `central_admin` is the sole bypass. Every other user — director, coordinator, plain central_user — is filtered through `page_access_config.visible_to[]`. The `/page-access` UI exposes a Director column AND a Coordinator column on the CH tab; toggling either narrows visibility. Empty `visible_to[]` (default seed) is open to every signed-in central_user.
 
-**Critical-page guard (at `/page-access` save time):** restricting `visible_to[]` on admin tooling pages opens a confirm modal — `central_admin` and `director` bypass anyway, but `coordinator` users get locked out without explicit acknowledgement. CRITICAL_PAGES: `page-access`, `console`, `rules-viewer`, `design-system`, `kpi-admin`, `competency-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `mail-composer`, `feedback-management`, `induction-admin`, `careers-admin`, `careers-compare`.
+**Critical-page guard (at `/page-access` save time):** restricting `visible_to[]` on admin tooling pages opens a confirm modal — `central_admin` bypasses anyway, but every other sub-role can be locked out without explicit acknowledgement. CRITICAL_PAGES: `page-access`, `console`, `rules-viewer`, `design-system`, `kpi-admin`, `competency-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `mail-composer`, `feedback-management`, `induction-admin`, `careers-admin`, `careers-compare`.
 
 ---
 
