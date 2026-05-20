@@ -165,8 +165,28 @@
     .week-jump-select:focus { border-color: var(--accent); }
 
     /* ── TASK ITEMS ── */
-    #templateList { display: flex; flex-direction: column; gap: 6px; }
-    #templateList .task-item { margin-bottom: 0; }
+    #templateList,
+    #essentialsList { display: flex; flex-direction: column; gap: 6px; }
+    #templateList .task-item,
+    #essentialsList .task-item { margin-bottom: 0; }
+
+    /* ── TWO-COLUMN LAYOUT (Essentials | This Week's Tasks) ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+      align-items: start;
+    }
+    .two-col > .panel { margin-bottom: 0; }
+
+    /* Category-coloured left border on every task-item */
+    .task-item {
+      border-left-width: 3px;
+      border-left-style: solid;
+      transition: background 0.15s;
+    }
+    .task-item:hover { background: var(--white); }
 
     /* ── TEMPLATE PANEL ── */
     .panel {
@@ -506,34 +526,36 @@
       <button class="btn-nav" id="nextWeekBtn">Next →</button>
     </div>
 
-    <!-- Weekly Essentials Panel -->
-    <div class="panel" style="margin-bottom:24px">
-      <div class="panel-head">
-        <h3 id="essentialsPanelTitle">Weekly Essentials</h3>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="form-input" id="essentialTitleInput" type="text" placeholder="Add essential item…" style="width:200px;padding:6px 10px;font-size:0.82rem">
-          <button class="btn btn-primary btn-sm" id="essentialAddBtn">+ Add</button>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div id="essentialsList"></div>
-      </div>
-    </div>
+    <!-- Two-column: Weekly Essentials | This Week's Tasks -->
+    <div class="two-col">
 
-    <!-- Week Tasks panel (full width) -->
-    <div class="panel" style="margin-bottom:24px">
-      <div class="panel-head">
-        <h3 id="templatePanelTitle">This Week's Tasks</h3>
-        <button class="btn btn-primary btn-sm" onclick="openTaskModal(null)">+ Add</button>
-      </div>
-      <div class="panel-body">
-        <div id="templateLoading" class="loading-state" style="padding:24px">
-          <div class="spinner"></div>
+      <!-- Weekly Essentials Panel -->
+      <div class="panel">
+        <div class="panel-head">
+          <h3 id="essentialsPanelTitle">Weekly Essentials</h3>
+          <button class="btn btn-primary btn-sm" onclick="openEssentialModal(null)">+ Add</button>
         </div>
-        <div id="templateEmpty" class="no-tasks" style="display:none">No tasks set for this week.</div>
-        <div id="templateList" style="display:none"></div>
+        <div class="panel-body">
+          <div id="essentialsList"></div>
+        </div>
       </div>
-    </div>
+
+      <!-- Week Tasks panel -->
+      <div class="panel">
+        <div class="panel-head">
+          <h3 id="templatePanelTitle">This Week's Tasks</h3>
+          <button class="btn btn-primary btn-sm" onclick="openTaskModal(null)">+ Add</button>
+        </div>
+        <div class="panel-body">
+          <div id="templateLoading" class="loading-state" style="padding:24px">
+            <div class="spinner"></div>
+          </div>
+          <div id="templateEmpty" class="no-tasks" style="display:none">No tasks set for this week.</div>
+          <div id="templateList" style="display:none"></div>
+        </div>
+      </div>
+
+    </div><!-- /two-col -->
 
     <!-- Stats row -->
     <div class="progress-stats" id="statsRow" style="margin-bottom:20px">
@@ -626,6 +648,29 @@
   </div>
 </div>
 
+<!-- ── ESSENTIAL MODAL ── -->
+<div class="modal-bg" id="essentialModal">
+  <div class="modal-box">
+    <div class="modal-head"><h3 id="essentialModalTitle">Add Essential</h3></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="essentialTitleInput">Essential</label>
+        <input class="form-input" id="essentialTitleInput" type="text" placeholder="Essential description"
+          onkeydown="if(event.key==='Enter')saveEssential()" oninput="this.classList.remove('invalid');document.getElementById('essentialTitleError').style.display='none'">
+        <p class="field-error" id="essentialTitleError">Essential description is required.</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="essentialCatInput">Category</label>
+        <select class="form-select" id="essentialCatInput"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeEssentialModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEssential()">Save Essential</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="firebase-config.js"></script>
@@ -713,6 +758,7 @@ let currentWeek     = 1;
 let tasks           = [];
 let allProgress     = []; // [{uid, displayName, email, done, total}]
 let editTaskId      = null;
+let editEssentialId = null;
 let progressPage    = 0;
 const PAGE_SIZE     = 5;
 let unsubTemplate   = null;
@@ -772,11 +818,6 @@ document.addEventListener('authReady', ({ detail: { profile } }) => {
     loadEssentials();
   });
 
-  // Essentials events
-  document.getElementById('essentialAddBtn').addEventListener('click', addEssential);
-  document.getElementById('essentialTitleInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') addEssential();
-  });
 });
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -919,7 +960,7 @@ function renderTemplate() {
   list.innerHTML = tasks.map((t, i) => {
     const cc = CAT_COLORS[t.category] || CAT_COLORS['Other'];
     return `
-      <div class="task-item">
+      <div class="task-item" style="border-left-color:${cc.color}">
         <span style="color:var(--ink-3);font-size:0.72rem;min-width:18px">${i+1}</span>
         <span class="task-item-title">${escHtml(t.title)}</span>
         <span class="task-item-cat" style="color:${cc.color};background:${cc.bg}">${escHtml(t.category)}</span>
@@ -1198,12 +1239,24 @@ function renderEssentials() {
     list.innerHTML = '<p class="no-tasks">No essentials yet.</p>';
     return;
   }
-  list.innerHTML = essentials.map(item => `
-    <div class="task-item">
-      <span class="task-item-title">${escHtml(item.title)}</span>
-      <button class="btn-xs danger" data-del-ess="${escAttr(item.id)}">Del</button>
-    </div>`).join('');
+  list.innerHTML = essentials.map((item, i) => {
+    const cat = item.category || 'Other';
+    const cc  = CAT_COLORS[cat] || CAT_COLORS['Other'];
+    return `
+      <div class="task-item" style="border-left-color:${cc.color}">
+        <span style="color:var(--ink-3);font-size:0.72rem;min-width:18px">${i+1}</span>
+        <span class="task-item-title">${escHtml(item.title)}</span>
+        <span class="task-item-cat" style="color:${cc.color};background:${cc.bg}">${escHtml(cat)}</span>
+        <div class="task-item-actions">
+          <button class="btn-xs" data-edit-ess="${escAttr(item.id)}">Edit</button>
+          <button class="btn-xs danger" data-del-ess="${escAttr(item.id)}">Del</button>
+        </div>
+      </div>`;
+  }).join('');
 
+  list.querySelectorAll('[data-edit-ess]').forEach(btn => {
+    btn.addEventListener('click', () => openEssentialModal(btn.dataset.editEss));
+  });
   list.querySelectorAll('[data-del-ess]').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.dataset.confirming === 'true') {
@@ -1223,14 +1276,46 @@ async function saveEssentials() {
   });
 }
 
-async function addEssential() {
-  const input = document.getElementById('essentialTitleInput');
-  const title = input.value.trim();
-  if (!title) return;
-  essentials.push({ id: genId(), title });
+function openEssentialModal(itemId) {
+  editEssentialId = itemId;
+  const item = itemId ? essentials.find(e => e.id === itemId) : null;
+
+  document.getElementById('essentialModalTitle').textContent = item ? 'Edit Essential' : 'Add Essential';
+  document.getElementById('essentialTitleInput').value = item?.title || '';
+
+  const cats = PLATFORM_CATS[currentPlatform] || PLATFORM_CATS.teachers;
+  const catSel = document.getElementById('essentialCatInput');
+  const currentCat = item?.category || cats[0];
+  catSel.innerHTML = cats.map(c => `<option value="${escAttr(c)}"${currentCat===c?' selected':''}>${escHtml(c)}</option>`).join('');
+
+  document.getElementById('essentialTitleInput').classList.remove('invalid');
+  document.getElementById('essentialTitleError').style.display = 'none';
+  document.getElementById('essentialModal').classList.add('open');
+  document.getElementById('essentialTitleInput').focus();
+}
+
+function closeEssentialModal() {
+  document.getElementById('essentialModal').classList.remove('open');
+  editEssentialId = null;
+}
+
+async function saveEssential() {
+  const title = document.getElementById('essentialTitleInput').value.trim();
+  const cat   = document.getElementById('essentialCatInput').value;
+  if (!title) {
+    document.getElementById('essentialTitleInput').classList.add('invalid');
+    document.getElementById('essentialTitleError').style.display = 'block';
+    return;
+  }
+  if (editEssentialId) {
+    const idx = essentials.findIndex(e => e.id === editEssentialId);
+    if (idx >= 0) essentials[idx] = { ...essentials[idx], title, category: cat };
+  } else {
+    essentials.push({ id: genId(), title, category: cat });
+  }
+  closeEssentialModal();
   await saveEssentials();
-  input.value = '';
-  showToast('Essential added.');
+  showToast(editEssentialId ? 'Essential updated.' : 'Essential added.');
 }
 
 async function deleteEssential(id) {
@@ -1280,6 +1365,12 @@ function switchView(view) {
   if (view === 'overview') loadOverview();
 }
 window.switchView = switchView;
+window.openTaskModal = openTaskModal;
+window.closeTaskModal = closeTaskModal;
+window.saveTask = saveTask;
+window.openEssentialModal = openEssentialModal;
+window.closeEssentialModal = closeEssentialModal;
+window.saveEssential = saveEssential;
 
 // ── Network Overview ──────────────────────────────────────────────
 const ALL_PLATFORMS = [
