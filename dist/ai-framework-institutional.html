@@ -251,6 +251,20 @@
   display: flex; align-items: flex-start; gap: 12px;
   padding-bottom: 16px; border-bottom: 1px solid var(--border, #e5e0d8); margin-bottom: 16px;
 }
+.ew-lane-head[role="button"] { cursor: pointer; user-select: none; }
+.ew-lane-head[role="button"]:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline-offset: 4px; border-radius: 8px; }
+.ew-lane-head > .ew-lane-headtext { flex: 1; min-width: 0; }
+.ew-lane-caret {
+  margin-left: auto; flex-shrink: 0; margin-top: 4px;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ink-3, #8888a8); font-size: 0.85rem; line-height: 1;
+  transition: transform 180ms ease, color 180ms ease, background 180ms ease;
+}
+.ew-lane-head[role="button"]:hover .ew-lane-caret { color: var(--accent-dk, #4c3fb3); background: rgba(108,92,231,0.08); }
+.ew-lane.is-collapsed .ew-lane-head { border-bottom-color: transparent; margin-bottom: 0; padding-bottom: 4px; }
+.ew-lane.is-collapsed .ew-lane-caret { transform: rotate(-90deg); }
+.ew-lane.is-collapsed .ew-list { display: none; }
 .ew-lane-dot {
   width: 12px; height: 12px; border-radius: 100px; flex-shrink: 0;
   margin-top: 6px; box-shadow: 0 0 0 4px rgba(0,0,0,0.04);
@@ -899,19 +913,26 @@
   .mob-nav-top-link:hover, .mob-nav-top-link.active { color: #fff; background: rgba(255,255,255,0.06); }
 
   /* ===== BASE NAV STYLES (shared across all pages) ===== */
+  /* Outer bar: full-bleed sticky background. Inner wrapper (.top-nav-inner) constrains content to 1200px to align with .main-content. */
   .top-nav {
     position: sticky;
     top: 0;
     z-index: 100;
     height: 62px;
-    padding: 0 28px;
-    display: flex;
-    align-items: center;
-    gap: 28px;
     background: rgba(5, 5, 16, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .top-nav-inner {
+    height: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    box-sizing: border-box;
   }
   .nav-brand {
     display: flex;
@@ -1236,10 +1257,11 @@
   @media (max-width: 1100px) {
     .nav-links { display: none; }
     .nav-hamburger { display: flex; }
-    .top-nav { gap: 16px; padding: 0 20px; }
+    .top-nav-inner { gap: 16px; padding: 0 20px; }
   }
   @media (max-width: 640px) {
-    .top-nav { height: 58px; padding: 0 10px; gap: 10px; }
+    .top-nav { height: 58px; }
+    .top-nav-inner { padding: 0 10px; gap: 10px; }
     .nav-brand-divider, .nav-brand-name { display: none; }
     .nav-avatar { width: 30px; height: 30px; font-size: 0.7rem; }
   }
@@ -1343,6 +1365,7 @@
 </style>
 
 <nav class="top-nav" aria-label="Main navigation">
+ <div class="top-nav-inner">
   <a href="index" class="nav-brand">
     <img class="nav-brand-img" src="eduversal-logo-white.png" alt="Eduversal">
     <span class="nav-brand-divider" aria-hidden="true"></span>
@@ -2194,6 +2217,7 @@
     </button>
     <div class="nav-avatar" id="navAvatar" aria-hidden="true"></div>
   </div>
+ </div>
 </nav>
 
 <!-- Nav edit mode bar -->
@@ -4404,6 +4428,42 @@ document.addEventListener('authReady', () => {
 });
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
+
+/* ---- Evidence-wall lane accordion ---- */
+(function initLaneAccordion(){
+  const lanes = document.querySelectorAll('.ew-lanes .ew-lane');
+  if (!lanes.length) return;
+  lanes.forEach((lane, idx) => {
+    const head = lane.querySelector('.ew-lane-head');
+    if (!head || head.dataset.accordion === '1') return;
+    const textWrap = head.querySelector(':scope > div:not(.ew-lane-dot)');
+    if (textWrap) textWrap.classList.add('ew-lane-headtext');
+    const caret = document.createElement('span');
+    caret.className = 'ew-lane-caret';
+    caret.setAttribute('aria-hidden', 'true');
+    caret.textContent = '▾';
+    head.appendChild(caret);
+    head.setAttribute('role', 'button');
+    head.setAttribute('tabindex', '0');
+    head.dataset.accordion = '1';
+    const list = lane.querySelector('.ew-list');
+    const listId = list && (list.id || (list.id = `ewLaneList_${idx}`));
+    head.setAttribute('aria-controls', listId || '');
+    lane.classList.add('is-collapsed');
+    head.setAttribute('aria-expanded', 'false');
+    const toggle = () => {
+      const collapsed = lane.classList.toggle('is-collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+    head.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      toggle();
+    });
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  });
+})();
 </script>
 <script src="cambridge-crossref.js" defer></script>
 </body>
