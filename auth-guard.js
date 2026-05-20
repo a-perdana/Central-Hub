@@ -26,11 +26,17 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 // ── Platform identity ─────────────────────────────────────────────
-const PLATFORM_KEY  = 'role_centralhub';   // per-user Firestore field
+const PLATFORM_KEY  = 'role_centralhub';        // per-user Firestore field
+const APPROVAL_KEY  = 'approval_status_centralhub'; // 'pending' | 'approved' | 'rejected'
 const DEFAULT_ROLE  = 'central_user';
 
 // Roles permitted to use CentralHub
 const ALLOWED_ROLES = ['central_admin', 'central_user'];
+
+// Pages that bypass the approval gate so the user can still reach the
+// waiting screen + log out + read the login page when their account is
+// pending or rejected.
+const APPROVAL_BYPASS_PAGES = new Set(['waiting', 'login']);
 
 // Only @eduversal.org email addresses are allowed to access CentralHub.
 // Email/password accounts (manually created in Firebase Console) bypass
@@ -643,6 +649,103 @@ function mountProfileDropdown({ user, profile, navUserName, navAvatar }) {
   window.addEventListener('scroll', () => { if (wrap.classList.contains('open')) position(); }, true);
 }
 
+// ── Pending-user admin notification ──────────────────────────────
+// Fires once when a brand-new users/{uid} doc is created with
+// approval_status_centralhub: 'pending'. Sends an email to a fixed
+// recipient so HQ admins know to triage. Body comes from
+// mail_templates/ch_pending_notification — admin-editable in CH
+// /mail-composer "System Templates". Built-in default used if the
+// admin has not yet customised the template doc. Mirrors AH/TH
+// notifyAdminsOfPending*User — keep all three in sync.
+const PENDING_NOTIFICATION_RECIPIENT = 'tech@eduversal.org';
+
+const PENDING_NOTIFICATION_DEFAULT_SUBJECT =
+  'New Central Hub signup awaiting approval — {{userName}}';
+
+const PENDING_NOTIFICATION_DEFAULT_BODY = `
+<p>Hi team,</p>
+<p>A new HQ user has signed up to the <strong>Central Hub</strong> and is waiting for approval.</p>
+<table style="border-collapse:collapse;margin:14px 0;font-size:14px">
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">Name</td><td style="padding:6px 0"><strong>{{userName}}</strong></td></tr>
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">Email</td><td style="padding:6px 0">{{userEmail}}</td></tr>
+  <tr><td style="padding:6px 14px 6px 0;color:#64748b">Signed up</td><td style="padding:6px 0">{{signupTime}}</td></tr>
+</table>
+<p>Review the user, assign their sub-role(s) + subject specialty, and approve in the Central Hub console:</p>
+<p><a href="{{consoleUrl}}" style="display:inline-block;background:#6c5ce7;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open Console &rarr;</a></p>
+<p style="color:#64748b;font-size:13px;margin-top:24px">If this looks like a mistaken or unauthorised signup, you can reject the account from the same screen.</p>`.trim();
+
+function _renderTemplate(str, values) {
+  return String(str || '').replace(/\{\{(\w+)\}\}/g, (_, k) =>
+    Object.prototype.hasOwnProperty.call(values, k) ? String(values[k] ?? '') : '');
+}
+
+async function notifyAdminsOfPendingCHUser(user, database) {
+  const url    = (window.ENV?.MAIL_SERVICE_URL || '').replace(/\/$/, '');
+  const secret = window.ENV?.MAIL_SERVICE_SECRET || '';
+  if (!url || !secret) {
+    console.info('[pending-notif] mail-service not configured — skipping');
+    return;
+  }
+
+  let subject = PENDING_NOTIFICATION_DEFAULT_SUBJECT;
+  let body    = PENDING_NOTIFICATION_DEFAULT_BODY;
+  try {
+    const snap = await getDoc(doc(database, 'mail_templates', 'ch_pending_notification'));
+    if (snap.exists()) {
+      const t = snap.data();
+      if (t.subject)  subject = t.subject;
+      if (t.bodyHtml) body    = t.bodyHtml;
+    }
+  } catch (e) {
+    console.info('[pending-notif] template fetch failed, using default:', e?.message);
+  }
+
+  const values = {
+    userName:   user.displayName || user.email.split('@')[0] || '(no name)',
+    userEmail:  user.email,
+    signupTime: new Date().toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
+    }) + ' WIB',
+    consoleUrl: 'https://centralhub.eduversal.org/console',
+  };
+
+  const renderedSubject = _renderTemplate(subject, values);
+  const renderedBody    = _renderTemplate(body,    values);
+
+  try {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const res = await fetch(url + '/send-transactional', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + secret,
+      },
+      body: JSON.stringify({
+        toEmail:      PENDING_NOTIFICATION_RECIPIENT,
+        subject:      renderedSubject,
+        bodyHtml:     renderedBody,
+        templateName: 'default',
+        tags: [
+          { name: 'kind',     value: 'ch-pending-notification' },
+          { name: 'platform', value: 'centralhub' },
+        ],
+      }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('[pending-notif] mail-service rejected:', res.status, data);
+    } else {
+      console.info('[pending-notif] notification email queued');
+    }
+  } catch (e) {
+    console.warn('[pending-notif] network error:', e?.message);
+  }
+}
+
 // ── Auth state listener ──────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
 
@@ -678,13 +781,18 @@ onAuthStateChanged(auth, async (user) => {
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
-      // First sign-in: assign default CentralHub role.
+      // First sign-in: assign default CentralHub role + pending approval.
+      // Mirrors the AH / TH pattern — even though the domain gate already
+      // restricts CH to @eduversal.org Workspace accounts, central_admin
+      // still wants to vet new HQ hires and assign sub-roles / subjects
+      // before they see the full hub.
       const newProfile = {
         uid:            user.uid,
         email:          user.email,
         displayName:    user.displayName || '',
         photoURL:       user.photoURL    || '',
         [PLATFORM_KEY]: DEFAULT_ROLE,
+        [APPROVAL_KEY]: 'pending',
         createdAt:      serverTimestamp(),
       };
       // Pre-fill from staff/{...} record if HQ has seeded one for this email.
@@ -692,11 +800,25 @@ onAuthStateChanged(auth, async (user) => {
       await applyStaffBridge(db, user, newProfile);
       await setDoc(userRef, newProfile);
       profile = newProfile;
+
+      // Fire-and-forget admin notification email. Body comes from
+      // mail_templates/ch_pending_notification (admin-editable in CH
+      // /mail-composer). Falls back to a built-in default.
+      notifyAdminsOfPendingCHUser(user, db).catch(err => {
+        console.warn('Pending-user notification failed:', err);
+      });
     } else {
       profile = userSnap.data();
       if (profile[PLATFORM_KEY] == null) {
         await setDoc(userRef, { [PLATFORM_KEY]: DEFAULT_ROLE }, { merge: true });
         profile = { ...profile, [PLATFORM_KEY]: DEFAULT_ROLE };
+      }
+      // Pre-pending users (created before the approval gate landed) are
+      // backfilled to 'approved' by scripts/users/backfill-ch-approval.js.
+      // Any user without the field after that point is treated as pending.
+      if (profile[APPROVAL_KEY] == null) {
+        await setDoc(userRef, { [APPROVAL_KEY]: 'pending' }, { merge: true });
+        profile = { ...profile, [APPROVAL_KEY]: 'pending' };
       }
     }
   } catch (err) {
@@ -711,6 +833,23 @@ onAuthStateChanged(auth, async (user) => {
   if (!ALLOWED_ROLES.includes(platformRole)) {
     await signOut(auth);
     window.location.replace('login?error=access');
+    return;
+  }
+
+  // 4a. Approval gate (central_admin bypasses — always approved).
+  //     Mirrors AH/TH. Non-admin users not yet approved are sent to
+  //     /waiting (which polls every 30s and auto-redirects on flip).
+  //     Rejected users see a different state on /waiting and can sign out.
+  const approvalStatus = profile[APPROVAL_KEY];
+  const isAdminRole    = platformRole === 'central_admin';
+  if (!isAdminRole && approvalStatus !== 'approved') {
+    const currentSlug = currentPageKey();
+    if (!APPROVAL_BYPASS_PAGES.has(currentSlug)) {
+      window.location.replace('waiting');
+      return;
+    }
+    // On /waiting itself: reveal the page so the polling logic can run.
+    document.body.style.visibility = 'visible';
     return;
   }
 

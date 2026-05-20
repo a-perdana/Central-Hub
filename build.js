@@ -355,6 +355,7 @@ const htmlFiles = [
   "staff.html",
   "inventory.html",
   "login.html",
+  "waiting.html",
   "academic-calendar.html",
   "appraisals.html",
   "school-appraisals.html",
@@ -508,7 +509,7 @@ htmlFiles.forEach((file) => {
   // handbook.html had CSS/JS comments referencing "cambridge-crossref.js"
   // which made the loose substring check think the script was already
   // there → ES/CTS/SKL/PIGP chips rendered but were unclickable.
-  if (file !== 'login.html' && file !== 'index.html' &&
+  if (file !== 'login.html' && file !== 'index.html' && file !== 'waiting.html' &&
       !/<script\s[^>]*src=["']cambridge-crossref\.js["']/.test(output)) {
     const closeIdx = output.lastIndexOf('</body>');
     if (closeIdx >= 0) {

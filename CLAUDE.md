@@ -54,10 +54,12 @@ Steps:
 2. Init Firebase (guarded against double-init)
 3. `onAuthStateChanged` — no user → `login` (clean URL)
 4. **Domain check** — non-`@eduversal.org` Google SSO → `login?error=domain` (email/password bypasses)
-5. Fetch / create `users/{uid}`. Auto-assigns `central_user`.
+5. Fetch / create `users/{uid}`. Auto-assigns `central_user` + `approval_status_centralhub:'pending'`. Pre-existing docs without the field are treated as pending; one-shot migration in `scripts/users/backfill-ch-approval.js` stamps all current CH users `'approved'` before rolling the gate out.
 6. **Role check** — `role_centralhub ∈ ['central_user','central_admin']`
-7. Mount profile modal (display name / phone / title / photo edit)
-8. Expose globals · dispatch `authReady`
+7. **Approval gate** (Step 4a) — `central_admin` bypasses unconditionally. Non-admin not yet `'approved'` is redirected to `/waiting` (polls every 30s, auto-redirects on flip; rejected state shown when status flips to `'rejected'`). Bypass pages: `'waiting'`, `'login'`. Mirrors AH/TH. On first signup a fire-and-forget admin notification email is sent via `notifyAdminsOfPendingCHUser()` using template `mail_templates/ch_pending_notification` (admin-editable in `/mail-composer` → System Templates).
+8. Subject-specialty + page-access gates (4b/4c)
+9. Mount profile modal (display name / phone / title / photo edit)
+10. Expose globals · dispatch `authReady`
 
 **Globals:** `window.firebaseApp`, `window.auth`, `window.db`, `window.storage`, `window.currentUser`, `window.userProfile`.
 
@@ -93,7 +95,7 @@ Each platform has its own role field — there is no shared `role` field (legacy
 
 This replaces the pre-2026-05-20 "director bypasses page-access" model. See `memory/project_ch_role_simplification_2026_05_20.md` for the full migration write-up.
 
-**Approval status (AH + TH only):** `approval_status_academichub` / `approval_status_teachershub` ∈ `'pending'` / `'approved'` / `'rejected'`. `/console` shows a banner + stat card for pending users.
+**Approval status (all 3 hubs):** `approval_status_centralhub` / `approval_status_academichub` / `approval_status_teachershub` ∈ `'pending'` / `'approved'` / `'rejected'`. `/console` shows a banner + stat card + per-hub filter chip for pending users; the user table carries a CH/AH/TH approval column each with inline Approve/Reject buttons. CH approval landed 2026-05-20 (root CLAUDE.md "Central Hub — Pending-User Approval"); pre-existing CH users were backfilled to `'approved'` by `scripts/users/backfill-ch-approval.js` so the gate only kicks in for new HQ hires. `central_admin` bypasses approval on every hub regardless of stored value.
 
 **isAdmin pattern:**
 ```js
