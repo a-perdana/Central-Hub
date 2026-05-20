@@ -324,6 +324,9 @@
     .btn-xs.danger:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
     .no-tasks { text-align: center; padding: 24px; color: var(--ink-3); font-size: 0.875rem; }
 
+    /* viewer-mode (non-admin central_user) hides every write control */
+    body.viewer-mode .admin-only { display: none !important; }
+
     /* ── PROGRESS TABLE ── */
     .progress-stats {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -694,7 +697,7 @@
       <div class="panel">
         <div class="panel-head">
           <h3 id="essentialsPanelTitle">Weekly Essentials</h3>
-          <button class="btn btn-primary btn-sm" onclick="openEssentialModal(null)">+ Add</button>
+          <button class="btn btn-primary btn-sm admin-only" onclick="openEssentialModal(null)">+ Add</button>
         </div>
         <div class="panel-body">
           <div id="essentialsList"></div>
@@ -705,7 +708,7 @@
       <div class="panel">
         <div class="panel-head">
           <h3 id="templatePanelTitle">This Week's Tasks</h3>
-          <button class="btn btn-primary btn-sm" onclick="openTaskModal(null)">+ Add</button>
+          <button class="btn btn-primary btn-sm admin-only" onclick="openTaskModal(null)">+ Add</button>
         </div>
         <div class="panel-body">
           <div id="templateLoading" class="loading-state" style="padding:24px">
@@ -928,16 +931,20 @@ let essentials      = [];
 let unsubEssentials = null;
 
 // ── Auth ──────────────────────────────────────────────────────────
+// Open to all central_user (read-only) since 2026-05-20. central_admin
+// retains full write access; non-admins see template + progress but
+// cannot edit. Write controls are gated by the .admin-only class
+// (added to every Add/Save/Delete button in this page).
+let isAdminUser = false;
 document.addEventListener('authReady', ({ detail: { profile } }) => {
-  const isAdmin = profile?.role_centralhub === 'central_admin';
-
-  if (!isAdmin) {
-    document.getElementById('accessDenied').style.display = '';
-    return;
-  }
+  isAdminUser = profile?.role_centralhub === 'central_admin';
 
   document.getElementById('mainContent').style.display = '';
   document.getElementById('heroTabs').style.display = '';
+
+  if (!isAdminUser) {
+    document.body.classList.add('viewer-mode');
+  }
 
   // Platform tabs
   document.body.dataset.plat = currentPlatform;  // initial paint
@@ -1196,8 +1203,8 @@ function renderTemplate() {
         <span class="task-item-title">${escHtml(t.title)}</span>
         <span class="task-item-cat" style="color:${cc.color};background:${cc.bg}">${escHtml(t.category)}</span>
         <div class="task-item-actions">
-          <button class="btn-xs" data-edit="${escAttr(t.id)}">Edit</button>
-          <button class="btn-xs danger" data-delete="${escAttr(t.id)}">Del</button>
+          <button class="btn-xs admin-only" data-edit="${escAttr(t.id)}">Edit</button>
+          <button class="btn-xs danger admin-only" data-delete="${escAttr(t.id)}">Del</button>
         </div>
       </div>`;
   }).join('');
@@ -1390,6 +1397,7 @@ async function saveTaskTemplate() {
 
 // ── Task modal ────────────────────────────────────────────────────
 function openTaskModal(taskId) {
+  if (!isAdminUser) return;
   editTaskId = taskId;
   const task = taskId ? tasks.find(t => t.id === taskId) : null;
 
@@ -1430,6 +1438,7 @@ async function saveTask() {
 }
 
 async function deleteTask(taskId) {
+  if (!isAdminUser) return;
   tasks = tasks.filter(t => t.id !== taskId);
   await saveTaskTemplate();
   showToast('Task deleted.');
@@ -1479,8 +1488,8 @@ function renderEssentials() {
         <span class="task-item-title">${escHtml(item.title)}</span>
         <span class="task-item-cat" style="color:${cc.color};background:${cc.bg}">${escHtml(cat)}</span>
         <div class="task-item-actions">
-          <button class="btn-xs" data-edit-ess="${escAttr(item.id)}">Edit</button>
-          <button class="btn-xs danger" data-del-ess="${escAttr(item.id)}">Del</button>
+          <button class="btn-xs admin-only" data-edit-ess="${escAttr(item.id)}">Edit</button>
+          <button class="btn-xs danger admin-only" data-del-ess="${escAttr(item.id)}">Del</button>
         </div>
       </div>`;
   }).join('');
@@ -1508,6 +1517,7 @@ async function saveEssentials() {
 }
 
 function openEssentialModal(itemId) {
+  if (!isAdminUser) return;
   editEssentialId = itemId;
   const item = itemId ? essentials.find(e => e.id === itemId) : null;
 
@@ -1550,6 +1560,7 @@ async function saveEssential() {
 }
 
 async function deleteEssential(id) {
+  if (!isAdminUser) return;
   essentials = essentials.filter(item => item.id !== id);
   await saveEssentials();
   showToast('Essential deleted.');
