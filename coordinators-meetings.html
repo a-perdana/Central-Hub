@@ -448,10 +448,16 @@ function subscribeMeetingsList() {
     orderBy('meetingDate', 'desc'),
     limit(200)
   );
+  let didAutoSelect = false;
   onSnapshot(q, (snap) => {
     meetings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     populateYearFilter();
     renderMeetingsList();
+    if (!didAutoSelect && !currentMeeting && meetings.length) {
+      didAutoSelect = true;
+      const first = visibleMeetings()[0] || meetings[0];
+      if (first) openMeeting(first.id);
+    }
   }, (err) => {
     console.error('[meetings-list]', err);
     $('meetingsList').innerHTML = `<div class="ms-empty">Could not load. ${escHtml(err.code || 'error')}</div>`;
@@ -466,11 +472,11 @@ function populateYearFilter() {
   if (years.includes(prev)) sel.value = prev;
 }
 
-function renderMeetingsList() {
+function visibleMeetings() {
   const yearF = $('filterYear').value;
   const statusF = $('filterStatus').value;
   const searchF = ($('filterSearch').value || '').trim().toLowerCase();
-  const list = meetings.filter(m => {
+  return meetings.filter(m => {
     if (yearF && m.academicYear !== yearF) return false;
     if (statusF && (m.status || 'draft') !== statusF) return false;
     if (searchF) {
@@ -479,6 +485,10 @@ function renderMeetingsList() {
     }
     return true;
   });
+}
+
+function renderMeetingsList() {
+  const list = visibleMeetings();
   const wrap = $('meetingsList');
   if (!list.length) {
     wrap.innerHTML = `<div class="ms-empty">No meetings match. Try clearing filters.</div>`;
