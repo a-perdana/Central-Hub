@@ -1472,33 +1472,32 @@ service cloud.firestore {
     }
 
     // -- kpi_config (School Performance KPI - criteria definitions) --
-    // Write: isAHAdmin() covers central_admin (kpi-admin.html) + academic_admin
+    // Read: AH users (school KPI is visible to academic side).
+    // Write: AH admin OR any CH central_user — /page-access UI on CH side
+    // gates who reaches /kpi-admin; rule trusts the gate (since 2026-05-20).
     match /kpi_config/{kpiId} {
       allow read:  if isAcademicUser();
-      allow write: if isAHAdmin();
+      allow write: if isAHAdmin() || isCentralUser();
     }
 
     // -- kpi_settings (School Performance KPI - semester settings) ---
-    // Write: isAHAdmin() covers central_admin (kpi-admin.html) + academic_admin
     match /kpi_settings/{semId} {
       allow read:  if isAcademicUser();
-      allow write: if isAHAdmin();
+      allow write: if isAHAdmin() || isCentralUser();
     }
 
     // -- teacher_kpi_config (Teacher KPI criteria definitions) -------
     // Read: any authorized user (teachers may need to view their KPI criteria)
-    // Write: central_admin only (managed from kpi-admin.html)
+    // Write: admin OR any CH central_user (page-access gates /kpi-admin).
     match /teacher_kpi_config/{kpiId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- teacher_kpi_settings (Teacher KPI evaluation periods) -------
-    // Read: any authorized user
-    // Write: central_admin only
     match /teacher_kpi_settings/{periodId} {
       allow read:  if isAuthorized();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCentralUser();
     }
 
     // -- teacher_kpi_evaluations (Admin evaluations of teacher submissions) --
@@ -1546,6 +1545,7 @@ service cloud.firestore {
       // sibling fields and silently collapse the whole OR chain to false.
       allow read: if isSignedIn() && resource != null && resource.data.userId == request.auth.uid
                   || isAdmin()
+                  || isCentralUser()  // CH reviewers reach via /kpi-admin (page-access gates)
                   || isTeachersAdmin()
                   || isAHAdmin()
                   || (isAcademicUser()
@@ -1757,14 +1757,14 @@ service cloud.firestore {
     // Write (create/update): academic_admin or academic_user for their own school
     // Status updates (approve/reject/under_review): central_admin only
     match /kpi_school_submissions/{submId} {
-      allow read: if isAdmin() || isAHAdmin()
+      allow read: if isAdmin() || isCentralUser() || isAHAdmin()
                   || (isAcademicUser()
                       && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == resource.data.schoolId);
       allow create: if isAHAdmin()
                     || (isAcademicUser()
                         && request.resource.data.schoolId ==
                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId);
-      allow update: if isAdmin()
+      allow update: if isAdmin() || isCentralUser()
                     || isAHAdmin()
                     || (isAcademicUser()
                         && resource.data.schoolId ==
@@ -2070,9 +2070,14 @@ service cloud.firestore {
                        || isMentorOf(menteeUid)               // assigned mentor
                        || isInductionSchoolLeaderOf(menteeUid)// assigned school leader
                        || isAdmin()
+                       || isCentralUser()                      // CH reviewers via /induction-admin
                     );
-      allow list:   if isAdmin();
-      allow create: if isAdmin()
+      // Since 2026-05-20: CH list + create/update opened to any central_user
+      // who page-access has granted /induction-admin surface access. NN3
+      // (active mentor certification) and NN4 (three named uids) still
+      // enforced at create.
+      allow list:   if isAdmin() || isCentralUser();
+      allow create: if (isAdmin() || isCentralUser())
                     && request.resource.data.uid == menteeUid
                     && request.resource.data.mentorUid is string
                     && request.resource.data.mentorUid.size() > 0
@@ -2080,7 +2085,7 @@ service cloud.firestore {
                     && request.resource.data.schoolLeaderUid.size() > 0
                     && request.resource.data.programId is string
                     && hasActiveMentorCertification(request.resource.data.mentorUid);
-      allow update: if isAdmin();   // status transitions and re-assignments
+      allow update: if isAdmin() || isCentralUser();
       allow delete: if isAdmin();   // rare; usually we transition to 'withdrew' instead
     }
 
@@ -2310,10 +2315,15 @@ service cloud.firestore {
       allow get:    if isSignedIn() && (
                        resource.data.uid == request.auth.uid
                        || isAdmin()
-                       || isAcademicUser()  // AH school leaders need to verify mentor candidates
+                       || isCentralUser()    // CH reviewers via /induction-admin
+                       || isAcademicUser()   // AH school leaders need to verify mentor candidates
                     );
-      allow list:   if isAdmin() || isAcademicUser();
-      allow create, update, delete: if isAdmin();
+      // Since 2026-05-20: list + issue/revoke opened to any central_user
+      // who page-access has granted /induction-admin or
+      // /mentor-certification surface access. Delete stays admin-only.
+      allow list:   if isAdmin() || isCentralUser() || isAcademicUser();
+      allow create, update: if isAdmin() || isCentralUser();
+      allow delete: if isAdmin();
     }
 
     // -- induction_journal_aggregates ------------------------
