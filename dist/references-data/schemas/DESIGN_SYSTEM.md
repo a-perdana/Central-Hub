@@ -95,6 +95,31 @@ Some pages have their own thematic accent (red for math pacing, green for biolog
 }
 ```
 
+**Hero ↔ page-wrap alignment — both wrappers must clamp + pad identically.** The hero block is full-bleed (gradient touches the viewport edges) but its inner text column AND the page content column below it must share the exact same left edge. The pitfall: applying horizontal padding on the **outer** `.hero` (clamp happens AFTER padding) and on the **inner** `.page-wrap` (clamp happens BEFORE padding) leaves the hero text 40 px to the left of the content column on viewports > 1280 px — visible misalignment, even though both wrappers nominally read 1200 px wide.
+
+**Rule:** keep horizontal padding on the INNER wrappers (`.hero-inner` + `.page-wrap`), not on the outer `.hero`. Both inner wrappers carry `max-width: var(--container-max); margin: 0 auto; padding: 0 var(--space-10)` (40 px) — content left-edges then line up bit-perfect at every viewport.
+
+```css
+/* CORRECT — both wrappers clamp-then-pad in the same order */
+.hero { padding: var(--space-9) 0 0; /* vertical only */ }
+.hero-inner {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 var(--space-10);
+}
+.page-wrap {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-10) var(--space-16);
+}
+
+/* WRONG — hero padding is outside the clamp, page-wrap padding is inside */
+.hero { padding: var(--space-9) var(--space-10) 0; }
+.hero-inner { max-width: var(--container-max); margin: 0 auto; }
+```
+
+Past incident 2026-05-21 on CH `/checklist-admin`: the page shipped with the WRONG pattern; widening the container 1100 → 1200 made the 40 px misalignment between hero title and the task-grid kart kolonları visible. Fix: move padding from `.hero` onto `.hero-inner` (commit `9f62bfb` in CH).
+
 ---
 
 ## Shadows
@@ -185,6 +210,8 @@ Feature pages (user-facing content surfaces — NOT dashboards, NOT admin/author
 Don't write a new gradient. Don't override `.page-hero` background in a page `<style>` block. If a future page genuinely needs a 4th family (e.g. ever a "Wellbeing" zone), add it to this table FIRST and add `--hero-grad-<name>` to `tokens.css` — page-level invention is forbidden.
 
 The same discipline applies to **shared chrome under the hero** — `.page-toolbar` (sticky filter/search bar) and `.page-empty` (empty state with icon + title + desc) live in `shared-styles.css`; don't fork them per page.
+
+**Reminder on padding placement:** when a page is built on `.hero` + `.hero-inner` + `.page-wrap` (the older 3-wrapper pattern still in use on `checklist-admin`, `kpi-admin`, etc.) keep horizontal padding on the INNER wrappers — see "Hero ↔ page-wrap alignment" under §Spacing & layout. The canonical `.page-hero` already does this correctly; the gotcha only bites legacy pages that haven't been migrated yet.
 
 ---
 
