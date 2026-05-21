@@ -149,6 +149,15 @@
       background: #fee2e2; color: #991b1b; font-size: 0.7rem; font-weight: 600;
       margin-left: 6px;
     }
+    /* Shown when visible_to[] carries only sub-roles from OTHER hubs — the
+       current platform tab has nobody allowed, but the doc isn't truly "open
+       to all" either. Surfaces cross-hub coupling that would otherwise look
+       like a blank row with no badge. */
+    .pa-other-hub-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      background: #fef3c7; color: #92400e; font-size: 0.7rem; font-weight: 600;
+      margin-left: 6px;
+    }
 
     /* Platform-level info banner (e.g. CH director hierarchy note) */
     .pa-platform-note {
@@ -459,6 +468,14 @@
     ],
   };
 
+  // Short labels for the "hidden on <hub>" cross-hub badge. Keep in sync with
+  // SUB_ROLES keys above.
+  const PLATFORM_LABELS = {
+    academichub: 'AH',
+    teachershub: 'TH',
+    centralhub:  'CH',
+  };
+
   // ── State ────────────────────────────────────────────────────────
   let db = null;
   let currentPlatform = 'academichub';
@@ -634,10 +651,7 @@
       html += '</tr></thead><tbody>';
       bucket.rows.forEach(p => {
         const dirty = isDirty(p);
-        const allOpen = p.visible_to.length === 0;
-        const labelBadge = p.hidden
-          ? '<span class="pa-hidden-badge" title="Hidden from every non-admin user on this platform">hidden</span>'
-          : (allOpen ? '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>' : '');
+        const labelBadge = badgeFor(p, subRoles);
         const trClasses = [];
         if (dirty) trClasses.push('dirty');
         if (p.hidden) trClasses.push('hidden-row');
@@ -727,20 +741,44 @@
     updateDirtyState();
   });
 
+  // Decide which badge (if any) belongs next to the page label, per CURRENT
+  // platform tab. Three states:
+  //   • hidden flag set         → "hidden" (red)   — platform-wide takedown
+  //   • visible_to[] empty      → "open to all" (green) — every signed-in user
+  //   • visible_to[] populated, but carries NO sub-role for this tab's platform
+  //                              → "hidden on <hub>" (amber) — cross-hub coupling
+  //                              where another hub's seed has populated the doc
+  //                              with its own sub-roles; auth-guard on this hub
+  //                              will deny every non-admin user. Easy mistake to
+  //                              hide otherwise — a blank row with no rosette
+  //                              looks identical to "restricted to all CH roles".
+  //   • visible_to[] populated, at least one CURRENT-platform sub-role present
+  //                              → no badge (regular "restricted" row)
+  function badgeFor(page, subRolesForPlatform) {
+    if (page.hidden) {
+      return '<span class="pa-hidden-badge" title="Hidden from every non-admin user on this platform">hidden</span>';
+    }
+    if (page.visible_to.length === 0) {
+      return '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>';
+    }
+    const currentHubRoleValues = new Set(subRolesForPlatform.map(r => r.value));
+    const hasCurrentHubRole = page.visible_to.some(r => currentHubRoleValues.has(r));
+    if (!hasCurrentHubRole) {
+      const tabLabel = PLATFORM_LABELS[currentPlatform] || currentPlatform;
+      return `<span class="pa-other-hub-badge" title="visible_to[] carries only sub-roles from other hubs — no ${escapeAttr(tabLabel)} user can reach this page. Tick a checkbox to grant access.">hidden on ${escapeHtml(tabLabel)}</span>`;
+    }
+    return '';
+  }
+
   function refreshRowChrome(row, page) {
     const dirty = isDirty(page);
     row.classList.toggle('dirty', dirty);
     row.classList.toggle('hidden-row', page.hidden === true);
     const labelEl = row.querySelector('.col-page-label');
     if (!labelEl) return;
-    labelEl.querySelectorAll('.pa-all-badge, .pa-hidden-badge').forEach(b => b.remove());
-    if (page.hidden) {
-      labelEl.insertAdjacentHTML('beforeend',
-        '<span class="pa-hidden-badge" title="Hidden from every non-admin user on this platform">hidden</span>');
-    } else if (page.visible_to.length === 0) {
-      labelEl.insertAdjacentHTML('beforeend',
-        '<span class="pa-all-badge" title="Empty visible_to = open to everyone on this platform">open to all</span>');
-    }
+    labelEl.querySelectorAll('.pa-all-badge, .pa-hidden-badge, .pa-other-hub-badge').forEach(b => b.remove());
+    const html = badgeFor(page, SUB_ROLES[currentPlatform] || []);
+    if (html) labelEl.insertAdjacentHTML('beforeend', html);
   }
 
   function rerenderRow(row, page) {
