@@ -287,6 +287,8 @@ Every CH feature page (user-facing content surface — NOT dashboard, NOT admin 
 
 **When adding a new feature page**, default to the canonical hero. The only legitimate reason to skip is one of the three above (cross-hub coupling, embedded non-canonical content, Operations family). Inventing a new gradient in a page `<style>` block is a regression — see root CLAUDE.md Common Mistake #50.
 
+**Legacy 3-wrapper pages** (`.hero` + `.hero-inner` + `.page-wrap` — currently `checklist-admin`, `kpi-admin`, and a handful of older admin tools) must keep horizontal padding on the INNER wrappers, NOT on the outer `.hero`. If `.hero` carries `padding: X 40px 0` and `.hero-inner` is just `max-width:1200; margin:0 auto`, the hero text sits 40 px left of the `.page-wrap` content column on viewports > 1280 px — the clamp-then-pad order is asymmetric (hero pads BEFORE clamping the inner box, page-wrap pads INSIDE its clamp). Past incident 2026-05-21 on `/checklist-admin`. Fix pattern: `.hero { padding: 36px 0 0; }` + `.hero-inner { max-width:1200; margin:0 auto; padding: 0 40px; }` + `.page-wrap { max-width:1200; margin:0 auto; padding: 28px 40px 72px; }`. See `docs/architecture/DESIGN_SYSTEM.md` "Hero ↔ page-wrap alignment" for the full rule.
+
 ---
 
 ## Mail Composer + Resend Mail-Service
