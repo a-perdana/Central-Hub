@@ -239,6 +239,45 @@ service firebase.storage {
              .data.role_centralhub == 'central_admin';
     }
 
+    // AH School Leadership artifact uploads (2026-05-21) — per-(school,
+    // subject) living documents (Annual Plan, Department Handbook,
+    // Subject Policy) attached to school_artifacts.fileUrl. Same
+    // boundary as specialist_artifacts but school-scoped: path carries
+    // schoolId and only AH leadership team at that school can read/write.
+    // Path: school_artifacts/{schoolId}/{subjectId}/{timestamp}_{filename}
+    //   - schoolId: partner_schools doc id (caller must equal own schoolId)
+    //   - subjectId: 'math'/'biology'/'chemistry'/'physics'/'science'/
+    //                'english'/'bahasa'/'religion'/'school-wide' (non-subject)
+    match /school_artifacts/{schoolId}/{subjectId}/{filename} {
+      function isAHSchoolLeaderAtSchool() {
+        let u = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        return u.role_centralhub == 'central_admin'
+            || u.role_academichub == 'academic_admin'
+            || (u.role_academichub == 'academic_user'
+                && u.schoolId == schoolId
+                && u.ah_sub_roles is list
+                && u.ah_sub_roles.hasAny([
+                     'foundation_representative',
+                     'school_principal',
+                     'academic_coordinator',
+                     'cambridge_coordinator'
+                   ]));
+      }
+      allow read: if request.auth != null && isAHSchoolLeaderAtSchool();
+      allow write: if request.auth != null
+        && isAHSchoolLeaderAtSchool()
+        && request.resource.size <= 25 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*')
+            || request.resource.contentType.matches('application/msword')
+            || request.resource.contentType.matches('image/.*'));
+      allow delete: if request.auth != null
+        && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+              .data.role_centralhub == 'central_admin'
+            || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+              .data.role_academichub == 'academic_admin');
+    }
+
     // Mail-composer image embeds. Quill's "image" toolbar button uploads
     // here instead of inlining base64 — Gmail silently drops data:image
     // URIs in newsletters, but external <img src=https://...> renders

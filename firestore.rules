@@ -1417,6 +1417,27 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId;
     }
 
+    // schoolId-based variant — used by school-scoped collections
+    // (school_leadership_*, school_artifacts, school_activity_*) where
+    // the doc itself carries schoolId. Avoids the second get() that
+    // isAHUserAtSameSchool(uid) needs.
+    function isAHUserAtSchool(schoolId) {
+      return isAcademicUser() && userProfile().schoolId == schoolId;
+    }
+    // School leadership team member at given school. Audience: FR + SP +
+    // AC + CC. academic_admin bypasses via isAHAdmin() composition at
+    // call site.
+    function isAHSchoolLeader(schoolId) {
+      return isAHUserAtSchool(schoolId)
+             && userProfile().ah_sub_roles is list
+             && userProfile().ah_sub_roles.hasAny([
+                  'foundation_representative',
+                  'school_principal',
+                  'academic_coordinator',
+                  'cambridge_coordinator'
+                ]);
+    }
+
     match /userProgress/{uid} {
       allow get:   if (isSignedIn() && request.auth.uid == uid)
                    || isAdmin()
@@ -2871,6 +2892,131 @@ service cloud.firestore {
       allow get, list:        if isDeptOfficeMember();
       allow create, update, delete:
                               if isAdmin() || isCentralUser();
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // ACADEMIC HUB SCHOOL LEADERSHIP WORKSPACE (2026-05-21)
+    // ─────────────────────────────────────────────────────────────
+    // Mirrors CH Coordinators (Department Office) but school-scoped.
+    // Audience: Foundation Representative + School Principal +
+    // Academic Coordinator + Cambridge Coordinator at the SAME
+    // school. academic_admin + central_admin bypass via isAHAdmin().
+    //
+    // Every record carries `schoolId` (REQUIRED) and rules enforce
+    // same-school scoping via isAHSchoolLeader(schoolId). The
+    // page-access UI further refines which sub-roles see each page;
+    // rule layer just gates the network primitive.
+    //
+    // Collections in this block:
+    //   school_leadership_meetings        — minutes envelope
+    //   school_leadership_meeting_items   — agenda items (top-level FK)
+    //   school_leadership_decisions       — binding school policies
+    //   school_leadership_directory_entries — leadership team contact list
+    //   school_artifacts                  — per-subject artifacts
+    //                                       (annual plan / handbook / policy)
+    //   school_activity_projects          — kanban project envelopes
+    //   school_activity_tasks             — kanban tasks (FK to project)
+    // ═════════════════════════════════════════════════════════════
+
+    match /school_leadership_meetings/{meetingId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      // Delete: admin only — minutes are an audit trail.
+      allow delete:     if isAHAdmin();
+    }
+
+    // Top-level so we can query agenda items across meetings
+    // (e.g. "find every action-tagged item from last 90 days").
+    // FK to parent meeting via `meetingId`. Records also carry
+    // `schoolId` for same-school filtering on list queries.
+    match /school_leadership_meeting_items/{itemId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      allow delete:     if isAHAdmin()
+                           || (isAHSchoolLeader(resource.data.schoolId)
+                               && resource.data.createdBy == request.auth.uid);
+    }
+
+    // Binding school-level policies. Source meeting link is optional
+    // (admin-authored policies may not have one). Active decisions
+    // should be superseded via supersededByDecisionId rather than
+    // edited in place (UI enforces; rule allows update for now).
+    match /school_leadership_decisions/{decisionId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      allow delete:     if isAHAdmin();
+    }
+
+    match /school_leadership_directory_entries/{entryId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      // Any school leader can curate the directory (entries are
+      // routine HR-style records, not sensitive evaluation data).
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update, delete:
+                        if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+    }
+
+    // Per-(school, subject) living documents. Versioning via
+    // previousVersionId chain; exactly one status:'current' per
+    // (schoolId, subjectId, artifactType, academicYear) tuple
+    // enforced by the UI (not by rule).
+    match /school_artifacts/{artifactId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      allow delete:     if isAHAdmin();
+    }
+
+    // School-scoped kanban (mirrors network-scoped /activity_projects
+    // + /activity_tasks but per-school). Same-school read + write for
+    // every leadership member.
+    match /school_activity_projects/{projectId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      allow delete:     if isAHAdmin();
+    }
+
+    match /school_activity_tasks/{taskId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      // Any school leader can update status / assignee / dueDate
+      // (collaborative kanban). createdBy/schoolId/projectId pinned by UI.
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      allow delete:     if isAHAdmin()
+                           || (isAHSchoolLeader(resource.data.schoolId)
+                               && resource.data.createdBy == request.auth.uid);
     }
   }
 }
