@@ -214,7 +214,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 
 **Admin tooling:** `console`, `page-access`, `competency-admin`, `induction-admin`, `orientation-admin`, `checklist-admin`, `schedule-settings`, `feedback-management`, `rules-viewer`, `design-system`, `weekly-checklist`, `settings`, `diagrams` (per-subject diagram repository)
 
-**Specialist CPD (4-page set for HQ Subject Specialists):** `specialist-framework`, `specialist-path`, `specialist-portfolio`, `specialist-certificates`
+**Specialist CPD (4-page set for HQ Subject Specialists):** `competency-framework`, `learning-path`, `specialist-portfolio`, `specialist-certificates`. The framework + path pages were renamed from `specialist-framework` → `competency-framework` (2026-05-22) and `specialist-path` → `learning-path` (2026-05-23) for cross-hub parity with AH; CH owns the Specialist track, AH owns the Leadership track, both surfaced on the same two slugs via `page_access_config.platforms[]`.
 
 **Induction (HQ-side):** `induction-admin`, `my-induction`, `handbook` — `handbook` is **dual-mode** (2026-05-14): `/handbook` no-params is the browser catalogue of all 10 docs (3 induction `docs/induction/` + 7 role-operational `docs/handbooks/`) with handbookKind / hub / sub-role filter chips; `/handbook?id=<programId>` is the reader (sticky TOC + scroll-spy + 5 chip families: CTS / SKL / PIGP / CL / NN). NN chips load from [`docs/induction/INDUCTION_CHARTER.json`](../docs/induction/INDUCTION_CHARTER.json). See root CLAUDE.md "Handbook Ecosystem" for cross-link discipline.
 

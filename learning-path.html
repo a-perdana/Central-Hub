@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Learning Path — CentralHub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="firebase-config.js"></script>
+<style>
+:root {
+  --accent: #6c5ce7;
+  --accent-dk: #5a4bd1;
+  --accent-2: #ede9fe;
+}
+body {
+  padding-top: 62px;
+  background: #f8f5fb;
+  position: relative;
+}
+/* Artistic mor + cyan atmosphere — paired with /competency-framework so the
+   two CPD pages share one visual context. Fixed, behind everything, never
+   intercepts pointer events (Common Mistake #22 in root CLAUDE.md). */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 8% 12%, rgba(108,92,231,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 92% 88%, rgba(8,145,178,0.07) 0%, transparent 62%),
+    radial-gradient(ellipse 80% 70% at 50% 50%, rgba(237,233,254,0.45) 0%, transparent 70%),
+    linear-gradient(180deg, #f8f5fb 0%, #f6f3f9 100%);
+}
+
+.page-wrap { max-width: 1200px; margin: 0 auto; padding: 32px 20px 100px; }
+
+/* LAYOUT */
+.lp-layout { display: grid; grid-template-columns: 270px 1fr; gap: 24px; align-items: start; }
+@media (max-width: 768px) { .lp-layout { grid-template-columns: 1fr; } }
+
+/* SIDEBAR */
+.lp-sidebar { position: sticky; top: 80px; }
+.lp-overall-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+.lp-overall-label { font-size: 11px; color: var(--ink-3); font-weight: 600; margin-bottom: 6px; }
+.lp-overall-bar { height: 7px; background: var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 6px; }
+.lp-overall-fill { height: 100%; background: var(--accent); border-radius: 6px; transition: width .4s; }
+.lp-overall-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+.lp-domain-nav { background: var(--white); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm); }
+.lp-domain-nav-title { padding: 12px 14px 10px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--border); }
+.lp-domain-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; transition: background .14s; border-bottom: 1px solid var(--border); text-decoration: none; }
+.lp-domain-item:last-child { border-bottom: none; }
+.lp-domain-item:hover { background: var(--paper); }
+.lp-domain-item.active { background: var(--accent-2); }
+.lp-domain-item .di-icon { font-size: 16px; }
+.lp-domain-item .di-name { font-size: 12.5px; font-weight: 600; color: var(--ink); flex: 1; }
+.lp-domain-item.active .di-name { color: var(--accent); }
+.lp-domain-item .di-pct { font-size: 11px; font-weight: 700; color: var(--ink-3); background: var(--paper); border-radius: 50px; padding: 2px 7px; }
+.lp-domain-item.active .di-pct { background: #fff; color: var(--accent); }
+
+/* COMP SECTION */
+.comp-section { margin-bottom: 32px; }
+.comp-section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--border); }
+.comp-section-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.comp-section-title { font-size: 16px; font-weight: 700; color: var(--ink); }
+.comp-section-sub { font-size: 12px; color: var(--ink-3); }
+
+/* COMP CARD */
+.comp-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow-sm); transition: box-shadow .2s; }
+.comp-card:hover { box-shadow: var(--shadow); }
+.comp-card.completed { border-left: 3px solid #22c55e; }
+.comp-card.in-progress { border-left: 3px solid var(--accent); }
+.comp-card-header { padding: 16px 18px; display: flex; align-items: flex-start; gap: 12px; cursor: pointer; user-select: none; }
+.comp-card-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.comp-card-body { flex: 1; }
+.comp-card-name { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 5px; }
+.comp-card-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+.status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 50px; font-size: 11px; font-weight: 700; }
+.status-badge.not-started { background: #f1f5f9; color: #64748b; }
+.status-badge.in-progress { background: #ede9fe; color: #5a4bd1; }
+.status-badge.completed { background: #dcfce7; color: #15803d; }
+.comp-card-toggle { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--paper); color: var(--ink-3); flex-shrink: 0; transition: transform .2s, background .15s; }
+.comp-card.expanded .comp-card-toggle { transform: rotate(180deg); background: var(--accent-2); color: var(--accent); }
+
+/* DETAIL */
+.comp-card-detail { display: none; padding: 0 18px 18px; }
+.comp-card.expanded .comp-card-detail { display: block; }
+.levels-track { display: flex; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.level-step { flex: 1; padding: 12px 10px; text-align: center; border-right: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+.level-step:last-child { border-right: none; }
+.level-step:hover { background: var(--paper); }
+.level-step.done { background: #f0fdf4; }
+.level-step.done:hover { background: #dcfce7; }
+.level-step.current { background: var(--accent-2); }
+.level-step.current:hover { background: #ddd6fe; }
+.level-step.locked { background: var(--paper); opacity: .6; }
+.ls-num { width: 22px; height: 22px; border-radius: 50%; margin: 0 auto 5px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
+.level-step.done .ls-num { background: #22c55e; color: #fff; }
+.level-step.current .ls-num { background: var(--accent); color: #fff; }
+.level-step.locked .ls-num { background: var(--border); color: var(--ink-3); }
+.ls-name { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+.level-step.done .ls-name { color: #15803d; }
+.level-step.current .ls-name { color: var(--accent); }
+.level-step.locked .ls-name { color: var(--ink-3); }
+.ls-sub { font-size: 10px; color: var(--ink-3); }
+
+/* MATERIALS */
+.mat-section-title { font-size: 12px; font-weight: 700; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px; }
+.mat-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.mat-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--paper); cursor: pointer; transition: all .14s; }
+.mat-item:hover { border-color: var(--accent); background: var(--accent-2); }
+.mat-item.done-mat { border-color: #bbf7d0; background: #f0fdf4; }
+.mat-type-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.mat-type-icon.reading { background: #dbeafe; }
+.mat-type-icon.video { background: #fce7f3; }
+.mat-type-icon.activity { background: #fef3c7; }
+.mat-type-icon.reflection { background: #ede9fe; }
+.mat-info { flex: 1; }
+.mat-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.mat-meta { font-size: 11px; color: var(--ink-3); }
+.mat-check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.mat-item.done-mat .mat-check { background: #22c55e; border-color: #22c55e; }
+.mat-item.done-mat .mat-check::after { content: '✓'; font-size: 10px; color: #fff; font-weight: 800; }
+
+.assessment-cta { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--white); cursor: pointer; transition: all .15s; margin-top: 12px; }
+.assessment-cta:hover { border-color: var(--accent); background: var(--accent-2); }
+.assessment-cta.locked { opacity: .5; cursor: not-allowed; }
+.assessment-cta.locked:hover { border-color: var(--border); background: var(--white); }
+@keyframes ctaUnlock { 0%{box-shadow:0 0 0 0 rgba(108,92,231,.5)} 60%{box-shadow:0 0 0 10px rgba(108,92,231,0)} 100%{box-shadow:0 0 0 0 rgba(108,92,231,0)} }
+.assessment-cta.unlocked-flash { animation: ctaUnlock .7s ease forwards; }
+.acta-left { display: flex; align-items: center; gap: 10px; }
+.acta-icon { font-size: 20px; }
+.acta-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+.acta-sub { font-size: 11.5px; color: var(--ink-3); }
+.acta-right { font-size: 13px; font-weight: 700; color: var(--accent); }
+
+
+/* ─── MATERIAL MODAL ────────────────────────────────────── */
+.mat-modal-overlay { position: fixed; inset: 0; background: rgba(10,10,30,.6); z-index: 1500; display: none; align-items: center; justify-content: center; padding: 24px 16px; overflow: hidden; }
+.mat-modal-overlay.open { display: flex; }
+.mat-modal { background: #fff; border-radius: 20px; width: 100%; max-width: 980px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.25); animation: matIn .22s ease; margin: auto; }
+@keyframes matIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+.mat-modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.mat-modal-body { padding: 20px 24px; flex: 1; overflow-y: auto; }
+.mat-reading-text p { font-size: 13.5px; line-height: 1.75; color: var(--ink-2); }
+.mat-takeaways { margin-top: 18px; }
+.mat-takeaway-item { font-size: 13px; color: var(--ink-2); padding: 7px 10px; border-radius: 8px; background: var(--accent-2); margin-bottom: 6px; line-height: 1.5; }
+.mat-self-assess { margin-top: 18px; }
+.sa-item { margin-bottom: 14px; }
+.sa-statement { font-size: 13px; color: var(--ink); margin-bottom: 6px; line-height: 1.5; }
+.sa-scale { display: flex; gap: 6px; }
+.sa-btn { width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--paper); font-size: 13px; font-weight: 700; cursor: pointer; color: var(--ink-3); transition: all .14s; font-family: 'DM Sans', sans-serif; }
+.sa-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sa-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sa-toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px);
+  background: #1a1a2e; color: #fff; font-size: 12.5px; font-weight: 600;
+  padding: 9px 18px; border-radius: 20px; z-index: 2000;
+  opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none;
+  white-space: nowrap;
+}
+.sa-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.mat-activity-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 14px 16px; margin-top: 18px; }
+.mat-activity-row { display: flex; gap: 10px; margin-bottom: 0; }
+.mat-activity-label { font-size: 11px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: .05em; min-width: 76px; padding-top: 2px; flex-shrink: 0; }
+.mat-activity-val { font-size: 13px; color: #78350f; line-height: 1.5; }
+
+/* ─── v3 case study (cyan-deep, narrative box) ─── */
+.mat-cs-box { background: #ecfeff; border: 1px solid #a5f3fc; border-left: 4px solid #0891b2; border-radius: 12px; padding: 14px 16px; margin-top: 0; }
+.mat-cs-title { font-size: 12px; font-weight: 700; color: #0e7490; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.mat-cs-narrative { font-size: 13px; line-height: 1.65; color: var(--ink-2); }
+.mat-cs-narrative p { margin: 0 0 10px; }
+.mat-cs-narrative p:last-child { margin-bottom: 0; }
+.mat-cs-lesson { font-size: 12.5px; line-height: 1.55; color: #0e7490; background: rgba(8,145,178,.07); border-radius: 8px; padding: 8px 10px; margin-top: 10px; }
+
+/* ─── v3 common pitfalls (rose, warning box) ─── */
+.mat-pitfalls-box { background: #fff1f2; border: 1px solid #fecdd3; border-left: 4px solid #e11d48; border-radius: 12px; padding: 12px 14px; margin-top: 0; }
+.mat-pitfall-item { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 12.5px; line-height: 1.55; color: #881337; }
+.mat-pitfall-item + .mat-pitfall-item { border-top: 1px dashed #fecdd3; }
+.mat-pitfall-icon { font-size: 14px; color: #e11d48; flex-shrink: 0; padding-top: 1px; }
+
+/* ─── v3 reflection prompts (violet, contemplative) ─── */
+.mat-reflection-box { background: #f5f3ff; border: 1px solid #ddd6fe; border-left: 4px solid #7c3aed; border-radius: 12px; padding: 12px 14px; margin-top: 0; }
+.mat-reflection-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; font-size: 13px; line-height: 1.6; color: #4c1d95; font-style: italic; }
+.mat-reflection-item + .mat-reflection-item { border-top: 1px dashed #ddd6fe; }
+.mat-reflection-num { width: 22px; height: 22px; border-radius: 50%; background: #7c3aed; color: #fff; font-size: 11px; font-weight: 700; font-style: normal; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+
+/* ─── v3 glossary (definition list) ─── */
+.mat-glossary-list { margin: 0; padding: 10px 14px; background: var(--paper); border: 1px solid var(--border); border-radius: 12px; }
+.mat-glossary-item { padding: 8px 0; }
+.mat-glossary-item + .mat-glossary-item { border-top: 1px dashed var(--border); }
+.mat-glossary-item dt { font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+.mat-glossary-item dd { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); margin: 0; }
+
+/* ─── v3 related competencies ─── */
+.mat-related-list { display: flex; flex-direction: column; gap: 8px; }
+.mat-related-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; background: var(--paper); border: 1px solid var(--border); border-radius: 10px; }
+.mat-related-id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent-dk); background: var(--accent-2); padding: 4px 8px; border-radius: 6px; font-weight: 700; flex-shrink: 0; min-width: 60px; text-align: center; }
+.mat-related-body { flex: 1; min-width: 0; }
+.mat-related-name { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.mat-related-why { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+.mat-modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+.btn-mark-done { padding: 10px 22px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .18s; font-family: 'DM Sans', sans-serif; display: flex; align-items: center; gap: 7px; }
+.btn-mark-done:hover { background: var(--accent-dk); transform: translateY(-1px); }
+.btn-mark-done.already-done { background: #22c55e; }
+.btn-mark-done.already-done:hover { background: #16a34a; }
+.btn-mat-close { padding: 10px 18px; border-radius: 10px; background: var(--paper); border: 1px solid var(--border); color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .14s; }
+.btn-mat-close:hover { background: var(--border); }
+
+/* ─── READING EDITOR ────────────────────────────────── */
+.btn-edit-reading { display: none; align-items: center; gap: 5px; padding: 6px 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--paper); color: var(--ink-2); font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .14s; }
+.btn-edit-reading:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-2); }
+.btn-edit-reading svg { width: 13px; height: 13px; }
+.reading-editor-wrap { display: none; margin-bottom: 16px; border: 1.5px solid var(--accent); border-radius: 14px; overflow: hidden; background: #fff; }
+.reading-editor-wrap.active { display: block; }
+.editor-toolbar { display: flex; gap: 4px; padding: 8px 12px; background: var(--paper); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+.editor-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: #fff; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .12s; line-height: 1.4; }
+.editor-btn:hover { border-color: var(--accent); color: var(--accent); }
+.editor-btn-hl { background: #fef08a; border-color: #fbbf24; color: #78350f; }
+.editor-btn-hl:hover { background: #fde047; border-color: #f59e0b; color: #78350f; }
+.editor-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.editor-area { padding: 16px 20px; min-height: 140px; font-size: 13.5px; line-height: 1.75; color: var(--ink-2); outline: none; font-family: 'DM Sans', sans-serif; }
+.editor-area p { margin-bottom: 10px; }
+.editor-area p:last-child { margin-bottom: 0; }
+.editor-area strong { font-weight: 700; }
+.editor-area em { font-style: italic; }
+.editor-area mark { background: #fef08a; border-radius: 3px; padding: 0 2px; }
+.editor-area ul { margin: 8px 0 8px 20px; }
+.editor-area li { margin-bottom: 4px; }
+.editor-actions { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); justify-content: flex-end; background: var(--paper); }
+.btn-save-reading { padding: 8px 20px; border-radius: 9px; border: none; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .15s; display: flex; align-items: center; gap: 6px; }
+.btn-save-reading:hover { background: var(--accent-dk); }
+.btn-save-reading:disabled { opacity: .6; cursor: not-allowed; }
+.btn-cancel-edit { padding: 8px 16px; border-radius: 9px; border: 1px solid var(--border); background: var(--white); color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .14s; }
+.btn-cancel-edit:hover { background: var(--border); }
+.reading-override-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-2); border-radius: 50px; padding: 2px 8px; margin-left: 8px; vertical-align: middle; }
+
+.skel { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ── New-user intro banner (dismissable) ─────────────────────── */
+.page-intro { display:none; background:linear-gradient(135deg,#ede9fe 0%,#e0f2fe 100%); border:1px solid #c4b5fd; border-radius:14px; padding:16px 20px 16px 18px; margin-bottom:18px; position:relative; }
+.page-intro.show { display:flex; gap:14px; align-items:flex-start; }
+.page-intro-icon { font-size:22px; flex-shrink:0; padding-top:1px; }
+.page-intro-body { flex:1; min-width:0; padding-right:26px; }
+.page-intro-title { font-size:13.5px; font-weight:700; color:#5b21b6; margin-bottom:4px; }
+.page-intro-text { font-size:12.5px; color:#44445a; line-height:1.55; }
+.page-intro-text strong { color:#5b21b6; }
+.page-intro-link { display:inline-block; margin-top:8px; font-size:12px; font-weight:600; color:#6d28d9; text-decoration:none; }
+.page-intro-link:hover { text-decoration:underline; }
+.page-intro-dismiss { position:absolute; top:10px; right:10px; background:rgba(255,255,255,.7); border:1px solid #c4b5fd; border-radius:6px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#6d28d9; font-size:14px; line-height:1; transition:all .15s; }
+.page-intro-dismiss:hover { background:#fff; }
+
+/* ─── THE FOUNDATIONS SHOWCASE (rounded card aligned to content width) ─── */
+.foundations {
+  position: relative;
+  margin: 56px 0 0;
+  padding: 56px 40px 48px;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(108,92,231,0.20) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 100%, rgba(8,145,178,0.16) 0%, transparent 55%),
+    linear-gradient(180deg, #0a0a1a 0%, #1a1438 100%);
+  color: #fff;
+  overflow: hidden;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px -20px rgba(10,14,26,0.45);
+}
+@media (max-width: 768px) {
+  .foundations { margin: 40px 0 0; padding: 44px 22px 36px; border-radius: 18px; }
+}
+.foundations::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 100%, rgba(8,145,178,0.10) 0%, transparent 70%),
+    repeating-linear-gradient(135deg, transparent 0, transparent 60px, rgba(255,255,255,0.012) 60px, rgba(255,255,255,0.012) 61px);
+  border-radius: inherit;
+}
+.foundations-inner { position: relative; z-index: 1; }
+
+.foundations-header { text-align: center; margin-bottom: 48px; }
+.foundations-eyebrow {
+  display: inline-block;
+  font-size: 11px; font-weight: 700; letter-spacing: .28em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.9);
+  padding: 6px 16px; border-radius: 999px;
+  background: rgba(108,92,231,0.18);
+  border: 1px solid rgba(108,92,231,0.32);
+  margin-bottom: 18px;
+}
+.foundations-title {
+  font-family: 'Lora', serif; font-size: 2.4rem; font-weight: 600;
+  color: #fff; line-height: 1.18; margin: 0 0 14px;
+  letter-spacing: -0.01em;
+}
+.foundations-title em {
+  font-style: italic;
+  background: linear-gradient(120deg, #c4b5fd, #ddd6fe);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.foundations-lede {
+  font-size: 15px; line-height: 1.65; color: rgba(255,255,255,.72);
+  max-width: 680px; margin: 0 auto;
+}
+@media (max-width: 768px) {
+  .foundations-title { font-size: 1.7rem; }
+  .foundations-lede { font-size: 13.5px; }
+}
+
+/* Coverage strip — the "ohaa" metrics row */
+.foundations-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 48px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 20px 8px;
+  backdrop-filter: blur(8px);
+}
+.foundations-metric {
+  text-align: center; padding: 6px 8px;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+.foundations-metric:last-child { border-right: none; }
+.foundations-metric-num {
+  font-family: 'Lora', serif; font-size: 2.6rem; line-height: 1; font-weight: 700;
+  background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+.foundations-metric-lbl {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: rgba(255,255,255,.55);
+}
+@media (max-width: 768px) {
+  .foundations-metrics { grid-template-columns: repeat(2, 1fr); gap: 4px; padding: 14px 4px; }
+  .foundations-metric { padding: 12px 4px; }
+  .foundations-metric:nth-child(2) { border-right: none; }
+  .foundations-metric-num { font-size: 1.8rem; }
+}
+
+/* Pillar grid — 4 large foundation tiles */
+.foundations-pillars {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin-bottom: 48px;
+}
+@media (max-width: 1024px) { .foundations-pillars { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .foundations-pillars { grid-template-columns: 1fr; } }
+.foundation-pillar {
+  position: relative;
+  display: flex; flex-direction: column;
+  padding: 26px 22px 22px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px;
+  text-decoration: none;
+  overflow: hidden;
+  transition: transform .25s ease, border-color .25s ease, background .25s ease;
+}
+.foundation-pillar::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--pillar-accent, #6c5ce7);
+  transition: height .25s ease;
+}
+.foundation-pillar::after {
+  content: ''; position: absolute; bottom: -120px; right: -120px;
+  width: 280px; height: 280px;
+  background: radial-gradient(circle, var(--pillar-glow, rgba(108,92,231,0.18)) 0%, transparent 70%);
+  pointer-events: none;
+  transition: opacity .25s ease, transform .35s ease;
+  opacity: 0.6;
+}
+.foundation-pillar:hover {
+  transform: translateY(-4px);
+  border-color: var(--pillar-accent, #6c5ce7);
+  background: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%);
+}
+.foundation-pillar:hover::before { height: 5px; }
+.foundation-pillar:hover::after  { opacity: 1; transform: scale(1.15); }
+
+.foundation-pillar[data-pillar="cts"]   { --pillar-accent: #6c5ce7; --pillar-glow: rgba(108,92,231,0.25); }
+.foundation-pillar[data-pillar="pmd"]   { --pillar-accent: #f43f5e; --pillar-glow: rgba(244,63,94,0.22); }
+.foundation-pillar[data-pillar="es"]    { --pillar-accent: #0e7490; --pillar-glow: rgba(14,116,144,0.25); }
+.foundation-pillar[data-pillar="aicf"]  { --pillar-accent: #f59e0b; --pillar-glow: rgba(245,158,11,0.22); }
+
+.foundation-pillar-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--pillar-accent); color: #fff;
+  font-size: 18px; font-weight: 700; letter-spacing: .02em;
+  margin-bottom: 18px;
+  box-shadow: 0 6px 20px var(--pillar-glow, rgba(108,92,231,0.3));
+}
+.foundation-pillar-title {
+  font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 600;
+  color: #fff; line-height: 1.25; margin-bottom: 6px;
+  position: relative; z-index: 1;
+}
+.foundation-pillar-meta {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  color: rgba(255,255,255,.5); text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.foundation-pillar-desc {
+  font-size: 12.5px; line-height: 1.6; color: rgba(255,255,255,.72);
+  flex: 1; position: relative; z-index: 1;
+}
+.foundation-pillar-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 16px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .04em;
+  color: rgba(255,255,255,.85);
+  text-transform: uppercase;
+}
+.foundation-pillar-cta svg { width: 12px; height: 12px; transition: transform .2s ease; }
+.foundation-pillar:hover .foundation-pillar-cta svg { transform: translateX(3px); }
+
+/* 2026 freshness banner */
+.foundations-freshness {
+  display: flex; align-items: center; gap: 18px;
+  padding: 18px 22px;
+  background: linear-gradient(90deg, rgba(244,63,94,0.10) 0%, rgba(244,63,94,0.04) 100%);
+  border: 1px solid rgba(244,63,94,0.25);
+  border-radius: 14px;
+  margin-bottom: 48px;
+}
+.foundations-freshness-pulse {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #f43f5e;
+  box-shadow: 0 0 0 0 rgba(244,63,94,0.6);
+  animation: pulseRing 2.2s infinite;
+  flex-shrink: 0;
+}
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0   rgba(244,63,94,0.6); }
+  70%  { box-shadow: 0 0 0 14px rgba(244,63,94,0); }
+  100% { box-shadow: 0 0 0 0   rgba(244,63,94,0); }
+}
+.foundations-freshness-text {
+  flex: 1; font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.85);
+}
+.foundations-freshness-text strong { color: #fda4af; font-weight: 600; }
+.foundations-freshness-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: #fb7185;
+  margin-bottom: 3px; display: block;
+}
+@media (max-width: 600px) {
+  .foundations-freshness { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
+
+/* Research constellation — named anchors as glowing chips */
+.foundations-research { position: relative; }
+.foundations-research-head {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 22px;
+}
+.foundations-research-line {
+  flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.18) 0%, transparent 100%);
+}
+.foundations-research-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .18em;
+  text-transform: uppercase; color: rgba(196,181,253,0.85);
+  white-space: nowrap;
+}
+.foundations-research-line + .foundations-research-label + .foundations-research-line {
+  background: linear-gradient(270deg, rgba(255,255,255,0.18) 0%, transparent 100%);
+}
+.foundations-research-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center;
+}
+.research-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 999px;
+  font-size: 12px; font-weight: 500;
+  color: rgba(255,255,255,.78);
+  transition: all .18s ease;
+  cursor: default;
+}
+.research-chip::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--chip-dot, #6c5ce7); flex-shrink: 0;
+}
+.research-chip:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.2);
+  color: #fff; transform: translateY(-1px);
+}
+.research-chip[data-tier="cambridge"] { --chip-dot: #6c5ce7; }
+.research-chip[data-tier="meta"]      { --chip-dot: #06b6d4; }
+.research-chip[data-tier="research"]  { --chip-dot: #06b6d4; }
+.research-chip[data-tier="framework"] { --chip-dot: #7c3aed; }
+.research-chip[data-tier="indo"]      { --chip-dot: #f43f5e; }
+.research-chip[data-tier="ai"]        { --chip-dot: #f59e0b; }
+
+.foundations-signature {
+  text-align: center;
+  margin-top: 48px;
+  padding-top: 28px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 12px; color: rgba(255,255,255,.45);
+}
+.foundations-signature strong { color: rgba(255,255,255,.7); font-weight: 600; }
+</style>
+<script type="module" src="auth-guard.js"></script>
+</head>
+<body>
+
+<!-- Intro banner show/dismiss (runs early, no Firebase dep) -->
+<script>
+(function() {
+  const KEY_PREFIX = 'ch_intro_dismissed_';
+  window.__dismissIntro = function(slug) {
+    try { localStorage.setItem(KEY_PREFIX + slug, '1'); } catch (_) {}
+    const el = document.querySelector(`.page-intro[data-intro-key="${slug}"]`);
+    if (el) el.classList.remove('show');
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.page-intro[data-intro-key]').forEach(el => {
+      const slug = el.getAttribute('data-intro-key');
+      let dismissed = false;
+      try { dismissed = localStorage.getItem(KEY_PREFIX + slug) === '1'; } catch (_) {}
+      if (!dismissed) el.classList.add('show');
+    });
+  });
+})();
+</script>
+
+<!-- SHARED_NAVBAR -->
+
+<div class="page-wrap">
+  <div class="page-intro" data-intro-key="learning-path">
+    <div class="page-intro-icon">📈</div>
+    <div class="page-intro-body">
+      <div class="page-intro-title">First time on Learning Path?</div>
+      <div class="page-intro-text">
+        This page is your <strong>Specialist CPD course</strong>. It shows the <strong>29 specialist competencies</strong> across <strong>6 domains</strong> — Subject Mastery, Coaching, PD, Curriculum QA, Network Leadership, and External Networks. Each competency has <strong>3 or 4 stages</strong>: Awareness → Practitioner → Advanced → Lead. Click any competency to expand it, then click a stage to read the lesson, self-assess, and mark the level done.
+      </div>
+      <a class="page-intro-link" href="/competency-framework">📖 Browse the framework map →</a>
+    </div>
+    <button class="page-intro-dismiss" type="button" aria-label="Dismiss intro" onclick="window.__dismissIntro('learning-path')">✕</button>
+  </div>
+
+  <div class="lp-layout">
+    <aside class="lp-sidebar">
+      <div class="lp-overall-card">
+        <div class="lp-overall-label">Overall Progress</div>
+        <div class="lp-overall-bar"><div class="lp-overall-fill" id="overallBar" style="width:0%"></div></div>
+        <div class="lp-overall-stats"><span id="overallEarned">0 earned</span><span id="overallPct">0%</span></div>
+      </div>
+      <div class="lp-domain-nav">
+        <div class="lp-domain-nav-title">Domains</div>
+        <div id="domainNav"></div>
+      </div>
+    </aside>
+    <main id="lpMain">
+      <div class="skel" style="height:200px;border-radius:14px;margin-bottom:14px;"></div>
+      <div class="skel" style="height:200px;border-radius:14px;"></div>
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       THE FOUNDATIONS — high-impact provenance showcase
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="foundations" aria-labelledby="foundationsTitle">
+    <div class="foundations-inner">
+
+      <header class="foundations-header">
+        <div class="foundations-eyebrow">The Foundations</div>
+        <h2 class="foundations-title" id="foundationsTitle">
+          Every lesson on this path stands on <em>verifiable evidence</em>.
+        </h2>
+        <p class="foundations-lede">
+          We do not invent the Specialist role. We build on the international standards bodies, Indonesian regulatory frameworks, and the global research consensus that shape coaching, observation, and subject mastery across the Eduversal partner-school network.
+        </p>
+      </header>
+
+      <div class="foundations-metrics" role="group" aria-label="Course coverage metrics">
+        <div class="foundations-metric">
+          <div class="foundations-metric-num">11<span style="font-size:1.4rem;color:rgba(255,255,255,.4);">/27</span></div>
+          <div class="foundations-metric-lbl">CTS Standards</div>
+        </div>
+        <div class="foundations-metric">
+          <div class="foundations-metric-num">50+</div>
+          <div class="foundations-metric-lbl">ES Madde Refs</div>
+        </div>
+        <div class="foundations-metric">
+          <div class="foundations-metric-num">14+</div>
+          <div class="foundations-metric-lbl">AICF Blocks</div>
+        </div>
+        <div class="foundations-metric">
+          <div class="foundations-metric-num">25+</div>
+          <div class="foundations-metric-lbl">Research Anchors</div>
+        </div>
+      </div>
+
+      <div class="foundations-pillars">
+        <a class="foundation-pillar" data-pillar="cts" href="https://www.cambridgeinternational.org/Images/690744-cambridge-teacher-standards.pdf" target="_blank" rel="noopener">
+          <div class="foundation-pillar-badge">CTS</div>
+          <div class="foundation-pillar-title">Cambridge Teacher Standards</div>
+          <div class="foundation-pillar-meta">2023 · 27 standards · 6 domains</div>
+          <div class="foundation-pillar-desc">The primary international anchor for what a Cambridge teacher knows and does. Specialists work <em>with</em> teachers — we cover 11 of the 27 standards intentionally, focusing on coaching, observation, subject mastery, and PD.</div>
+          <span class="foundation-pillar-cta">Open official PDF <svg viewBox="0 0 14 14" fill="currentColor"><path d="M2 7h9m0 0L7.5 3.5M11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+
+        <a class="foundation-pillar" data-pillar="pmd" href="/references?doc=permendiknas-16-2007" target="_self">
+          <div class="foundation-pillar-badge">PMD</div>
+          <div class="foundation-pillar-title">Permendiknas + Permendikdasmen 2026</div>
+          <div class="foundation-pillar-meta">16/2007 · 1+9/2026 · 6/2026 · SKB 7 Menteri 2026</div>
+          <div class="foundation-pillar-desc">Indonesian national regulations — the four-pillar teacher competency model, the 2026 Standar Proses + Asesmen Nasional reform, PPKSP safeguarding, and the SKB 7 Menteri governance frame.</div>
+          <span class="foundation-pillar-cta">Read in references <svg viewBox="0 0 14 14" fill="currentColor"><path d="M2 7h9m0 0L7.5 3.5M11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+
+        <a class="foundation-pillar" data-pillar="es" href="/references?doc=eduversal-standards-manifest" target="_self">
+          <div class="foundation-pillar-badge">ES</div>
+          <div class="foundation-pillar-title">Eduversal Academic Standards</div>
+          <div class="foundation-pillar-meta">manifest v1 · 23 sections · 393 madde · CIS:WASC toolkit</div>
+          <div class="foundation-pillar-desc">The network-wide policy authority — Specialists own §7 Appraisal &amp; Coaching, §11 Curriculum Quality, §17 QA, and the §18 CIS:WASC self-study toolkit.</div>
+          <span class="foundation-pillar-cta">Browse manifest <svg viewBox="0 0 14 14" fill="currentColor"><path d="M2 7h9m0 0L7.5 3.5M11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+
+        <a class="foundation-pillar" data-pillar="aicf" href="/references?doc=aicf-manifest" target="_self">
+          <div class="foundation-pillar-badge">AICF</div>
+          <div class="foundation-pillar-title">AI Competency Framework</div>
+          <div class="foundation-pillar-meta">v1.0 · UNESCO AI-CFT 2024 aligned · Teacher tier</div>
+          <div class="foundation-pillar-desc">AI literacy ladder for teachers + Specialists who coach them. Foundation → Practitioner → Leader across five domains. Cambridge GenAI 2024 policy + JCQ AI patterns + 5Rights AI Code are the operating frame.</div>
+          <span class="foundation-pillar-cta">Open AICF <svg viewBox="0 0 14 14" fill="currentColor"><path d="M2 7h9m0 0L7.5 3.5M11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+      </div>
+
+      <div class="foundations-freshness" role="region" aria-label="2026 regulatory wave">
+        <div class="foundations-freshness-pulse" aria-hidden="true"></div>
+        <div class="foundations-freshness-text">
+          <span class="foundations-freshness-label">2026 Regulatory Wave — Live</span>
+          Anchored to <strong>Permendikdasmen 1/2026</strong> (Standar Proses, eff. 5 Jan) · <strong>9/2026</strong> (Asesmen Nasional, eff. Feb) · <strong>6/2026</strong> (PPKSP update) · <strong>SKB 7 Menteri 2026</strong> (eff. 12 Mar) · <strong>Cambridge GenAI Coursework Policy 2024</strong> · <strong>UNESCO AI-CFT 2024</strong>. Every lesson is read against this regulatory frame, not the 2023 baseline.
+        </div>
+      </div>
+
+      <div class="foundations-research">
+        <div class="foundations-research-head">
+          <div class="foundations-research-line"></div>
+          <div class="foundations-research-label">Research + Practice Anchors</div>
+          <div class="foundations-research-line"></div>
+        </div>
+        <div class="foundations-research-grid">
+          <span class="research-chip" data-tier="meta" title="Teacher coaching meta-analysis: +0.49 SD instruction, +0.18 SD achievement">Kraft Blazar Hogan 2018</span>
+          <span class="research-chip" data-tier="framework" title="Knight Impact Cycles — Identify-Learn-Improve">Knight Impact Cycles</span>
+          <span class="research-chip" data-tier="framework" title="Bambrick-Santoyo — granular action steps">Get Better Faster</span>
+          <span class="research-chip" data-tier="framework" title="City et al. Instructional Rounds — low-inference observation">City Instructional Rounds</span>
+          <span class="research-chip" data-tier="framework" title="Danielson Framework for Teaching — 4 domains">Danielson FfT</span>
+          <span class="research-chip" data-tier="framework" title="EEF Effective PD 2024 — 14 mechanisms × 4 groups">EEF Effective PD 2024</span>
+          <span class="research-chip" data-tier="framework" title="EEF Implementation 2024 — Explore/Prepare/Deliver/Sustain">EEF Implementation 2024</span>
+          <span class="research-chip" data-tier="framework" title="Wenger Communities of Practice">Wenger CoP</span>
+          <span class="research-chip" data-tier="framework" title="DuFour Professional Learning Communities">DuFour PLC</span>
+          <span class="research-chip" data-tier="framework" title="Lesson Study — Japanese subject-based collaborative inquiry">Lesson Study</span>
+
+          <span class="research-chip" data-tier="research" title="Wiliam embedded formative assessment">Wiliam FA</span>
+          <span class="research-chip" data-tier="research" title="Rosenshine — Principles of Instruction">Rosenshine</span>
+          <span class="research-chip" data-tier="research" title="Schoenfeld — mathematical problem-solving">Schoenfeld</span>
+          <span class="research-chip" data-tier="research" title="Driver et al. — children's alternative conceptions in science">Driver Alt-Conceptions</span>
+          <span class="research-chip" data-tier="research" title="Bruner CPA — concrete / pictorial / abstract">Bruner CPA</span>
+          <span class="research-chip" data-tier="research" title="Hammond — Culturally Responsive Teaching and the Brain">Hammond CRT</span>
+          <span class="research-chip" data-tier="research" title="Cummins BICS/CALP — EAL/ESL framework">Cummins BICS/CALP</span>
+          <span class="research-chip" data-tier="research" title="Wiggins & McTighe Understanding by Design">Wiggins & McTighe UbD</span>
+
+          <span class="research-chip" data-tier="cambridge" title="Cambridge Teacher Standards 2023">Cambridge CTS 2023</span>
+          <span class="research-chip" data-tier="cambridge" title="Cambridge Principal Examiner Reports per subject + series">Cambridge PER</span>
+          <span class="research-chip" data-tier="cambridge" title="Cambridge Professional Development Qualifications">Cambridge PDQ</span>
+          <span class="research-chip" data-tier="cambridge" title="Cambridge School Evaluation Framework">Cambridge SEF</span>
+          <span class="research-chip" data-tier="cambridge" title="Cambridge Exams Officers' Guide — Phase 3 Coursework & Moderation">Exams Officers' Guide</span>
+
+          <span class="research-chip" data-tier="indo" title="Permendiknas 16/2007 — teacher competency standards">Permendiknas 16/2007</span>
+          <span class="research-chip" data-tier="indo" title="Permendikdasmen 1/2026 — Standar Proses (eff. 5 Jan 2026)">Permendikdasmen 1/2026</span>
+          <span class="research-chip" data-tier="indo" title="Permendikdasmen 9/2026 — Asesmen Nasional reform">Permendikdasmen 9/2026</span>
+          <span class="research-chip" data-tier="indo" title="Indonesian Tri Pusat Pendidikan — school + family + community triad">Tri Pusat Pendidikan</span>
+          <span class="research-chip" data-tier="indo" title="Permendikbud 5/2022 — Satuan Pendidikan Kerjasama (SPK)">Permendikbud 5/2022 SPK</span>
+          <span class="research-chip" data-tier="indo" title="Pencegahan dan Penanganan Kekerasan di Lingkungan Satuan Pendidikan">PPKSP 46/2023 + 6/2026</span>
+
+          <span class="research-chip" data-tier="ai" title="UNESCO AI Competency Framework for Teachers 2024">UNESCO AI-CFT 2024</span>
+          <span class="research-chip" data-tier="ai" title="Cambridge GenAI in Coursework Policy 2024">Cambridge GenAI 2024</span>
+          <span class="research-chip" data-tier="ai" title="JCQ A.I. Use in Assessments 2024 — most concrete pattern list">JCQ AI Patterns 2024</span>
+          <span class="research-chip" data-tier="ai" title="5Rights Foundation AI Code — child rights in the AI environment">5Rights AI Code 2024</span>
+        </div>
+      </div>
+
+      <div class="foundations-signature">
+        Cited per competency in <strong>cambridgeStandardRefs[]</strong>, <strong>eduversalStandardRefs[]</strong>, <strong>aicfRefs[]</strong>, <strong>permendiknasRefs[]</strong>, and <strong>pedagogyRefs[]</strong>.<br>
+        Every reading, self-assessment, and activity in the 89-entry course is anchored to one or more of these sources. No filler. No outdated frameworks.
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+
+<!-- MATERIAL MODAL -->
+<div id="saToast" class="sa-toast"></div>
+<div class="mat-modal-overlay" id="matModal" onclick="closeMatModal(event)">
+  <div class="mat-modal">
+    <div class="mat-modal-head">
+      <div>
+        <div id="matModalType" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:4px;"></div>
+        <div id="matModalTitle" style="font-size:16px;font-weight:700;color:var(--ink);"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn-edit-reading" id="btnEditReading" onclick="toggleReadingEditor()">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+          Edit
+        </button>
+        <button class="btn-mat-close" onclick="closeMatModal()">&#x2715;</button>
+      </div>
+    </div>
+    <div class="mat-modal-body">
+      <div class="reading-editor-wrap" id="readingEditorWrap">
+        <div class="editor-toolbar">
+          <button class="editor-btn" onmousedown="event.preventDefault();edCmd('bold')" title="Bold"><b>B</b></button>
+          <button class="editor-btn" onmousedown="event.preventDefault();edCmd('italic')" title="Italic"><i>I</i></button>
+          <button class="editor-btn editor-btn-hl" onmousedown="event.preventDefault();edHighlight()" title="Highlight">H</button>
+          <div class="editor-sep"></div>
+          <button class="editor-btn" onmousedown="event.preventDefault();edCmd('insertUnorderedList')" title="Bullet list">• List</button>
+          <button class="editor-btn" onmousedown="event.preventDefault();edInsertParagraph()" title="New paragraph">¶ Para</button>
+          <div class="editor-sep"></div>
+          <button class="editor-btn" onmousedown="event.preventDefault();edCmd('removeFormat')" title="Clear formatting" style="color:#be123c;">Clear</button>
+        </div>
+        <div class="editor-area" id="readingEditorArea" contenteditable="true" spellcheck="false"></div>
+        <div class="editor-actions">
+          <button class="btn-cancel-edit" onclick="cancelReadingEdit()">Cancel</button>
+          <button class="btn-save-reading" id="btnSaveReading" onclick="saveReadingEdit()">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+            Save
+          </button>
+        </div>
+      </div>
+      <div id="matModalReading" class="mat-reading-text"></div>
+      <div id="matModalCaseStudy"></div>
+      <div id="matModalPitfalls"></div>
+      <div id="matModalTakeaways" class="mat-takeaways"></div>
+      <div id="matModalReflection"></div>
+      <div id="matModalGlossary"></div>
+      <div id="matModalSelfAssess" class="mat-self-assess"></div>
+      <div id="matModalActivity"></div>
+      <div id="matModalRelated"></div>
+    </div>
+    <div class="mat-modal-footer">
+      <button class="btn-mat-close" onclick="closeMatModal()">Close</button>
+      <button class="btn-mark-done" id="btnMarkDone" onclick="markLevelDone()"></button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// ─── CONTENT OVERRIDES ─────────────────────────────────────────
+// central_admin can edit per-(competency, level) reading text. The
+// edited HTML is stored in content_overrides_central and rendered
+// into a modal that every Specialist opens — so any unsanitised
+// <script> or onerror= attribute injected here would execute in every
+// reader's browser. sanitizeOverrideHtml() walks the parsed fragment,
+// drops anything outside a strict tag allowlist (P/BR/STRONG/EM/B/I/
+// U/MARK/UL/OL/LI/H3/H4) keeping only their text content, and strips
+// every attribute. Applied on both save (defence in depth) and on
+// load (defence against historical unsanitised docs).
+const _OVERRIDE_ALLOWED_TAGS = new Set(['P','BR','STRONG','EM','B','I','U','MARK','UL','OL','LI','H3','H4']);
+function sanitizeOverrideHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const walk = (node) => {
+    Array.from(node.childNodes).forEach(child => {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        if (!_OVERRIDE_ALLOWED_TAGS.has(child.tagName)) {
+          const text = document.createTextNode(child.textContent || '');
+          child.replaceWith(text);
+          return;
+        }
+        Array.from(child.attributes).forEach(a => child.removeAttribute(a.name));
+        walk(child);
+      } else if (child.nodeType === Node.COMMENT_NODE) {
+        child.remove();
+      }
+    });
+  };
+  walk(tpl.content);
+  return tpl.innerHTML;
+}
+
+const _overrideCache = {};
+async function loadOverride(compId, lvl) {
+  const key = compId + '_' + lvl;
+  if (key in _overrideCache) return _overrideCache[key];
+  try {
+    const snap = await getDoc(doc(window.db, 'content_overrides_central', key));
+    const raw = snap.exists() ? (snap.data().reading || null) : null;
+    _overrideCache[key] = raw ? sanitizeOverrideHtml(raw) : null;
+  } catch { _overrideCache[key] = null; }
+  return _overrideCache[key];
+}
+async function saveOverride(compId, lvl, html) {
+  const key = compId + '_' + lvl;
+  const clean = sanitizeOverrideHtml(html);
+  await setDoc(doc(window.db, 'content_overrides_central', key), { reading: clean });
+  _overrideCache[key] = clean;
+  return clean;
+}
+
+// ─── BASE CONTENT (Firestore-only — no inline fallback) ────────
+// v2-seeded content lives in
+// competency_framework/specialists/levels/{compId}_{level}. 89 entries
+// (29 competencies × 3-4 levels) seeded 2026-05-19 by
+// scripts/competency/seed-specialist-content-v2.js. No inline
+// CONTENT_DATA fallback (D5 — Firestore-only). v3 enriched blocks
+// (caseStudy / commonPitfalls / reflectionPrompts / glossary /
+// relatedComps) render conditionally when present.
+const _contentCache = {};
+async function loadContent(compId, lvl) {
+  const key = compId + '_' + lvl;
+  if (key in _contentCache) return _contentCache[key];
+  try {
+    const snap = await getDoc(doc(window.db, 'competency_framework', 'specialists', 'levels', key));
+    if (snap.exists()) {
+      const d = snap.data();
+      _contentCache[key] = {
+        reading:           d.reading || '',
+        keyTakeaways:      Array.isArray(d.keyTakeaways) ? d.keyTakeaways : [],
+        selfAssessment:    Array.isArray(d.selfAssessment) ? d.selfAssessment : [],
+        activity:          d.activity || null,
+        // v3 enriched blocks — pass through if present
+        caseStudy:         d.caseStudy || null,
+        commonPitfalls:    Array.isArray(d.commonPitfalls) ? d.commonPitfalls : [],
+        reflectionPrompts: Array.isArray(d.reflectionPrompts) ? d.reflectionPrompts : [],
+        glossary:          Array.isArray(d.glossary) ? d.glossary : [],
+        relatedComps:      Array.isArray(d.relatedComps) ? d.relatedComps : [],
+        schemaVersion:     d.schemaVersion || 'v2',
+      };
+      return _contentCache[key];
+    }
+  } catch { /* fall through */ }
+  _contentCache[key] = null;
+  return null;
+}
+
+// ─── FRAMEWORK + USER STATE ────────────────────────────────────
+let FW = null;        // raw competency_framework/specialists doc
+let uid = '';
+let earned = {};      // earned_central map from user_competencies/{uid}
+let saScores = {};    // saScores_central
+let expanded = {};
+let isAdmin = false;
+window.saScores = saScores;
+
+const LEVEL_LABEL  = { awareness:'Awareness', practitioner:'Practitioner', advanced:'Advanced', lead:'Lead / Mentor' };
+const LEVEL_ORDER  = ['awareness','practitioner','advanced','lead'];
+// Fallback domain visuals — keep page resilient even if the seeded
+// doc omits icon/color.
+const DOMAIN_FALLBACK = {
+  csm: { icon: '🎓', color: '#6c5ce7', bg: '#ede9fe' },
+  cof: { icon: '🔍', color: '#0891b2', bg: '#cffafe' },
+  tpd: { icon: '🌱', color: '#16a34a', bg: '#dcfce7' },
+  cqa: { icon: '📊', color: '#d97706', bg: '#fef3c7' },
+  nls: { icon: '🧭', color: '#e11d48', bg: '#ffe4e6' },
+  xen: { icon: '🌐', color: '#0d9488', bg: '#ccfbf1' },
+};
+function domVisuals(d) {
+  const fb = DOMAIN_FALLBACK[d.id] || { icon: '📚', color: '#6c5ce7', bg: '#ede9fe' };
+  return {
+    icon:  d.icon  || fb.icon,
+    color: d.color || fb.color,
+    bg:    d.bg    || fb.bg,
+  };
+}
+
+document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
+  uid = user.uid;
+  isAdmin = profile?.role_centralhub === 'central_admin';
+  const [fwSnap, ucSnap] = await Promise.all([
+    getDoc(doc(window.db, 'competency_framework', 'specialists')),
+    getDoc(doc(window.db, 'user_competencies', uid)),
+  ]);
+  if (!fwSnap.exists()) {
+    document.getElementById('lpMain').innerHTML =
+      '<div style="padding:40px;text-align:center;color:var(--ink-3);">Framework not seeded. Run <code>scripts/competency/seed-ch-competency-framework.js --apply</code>.</div>';
+    return;
+  }
+  FW = fwSnap.data();
+  if (ucSnap.exists()) {
+    const d = ucSnap.data();
+    earned = d.earned_central || {};
+    saScores = d.saScores_central || {};
+    window.saScores = saScores;
+  }
+  renderAll();
+  // ── Deep-link: ?comp=<id> auto-expands the card on load.
+  const focusComp = new URLSearchParams(location.search).get('comp');
+  if (focusComp) setTimeout(() => {
+    expanded[focusComp] = true;
+    const el = document.getElementById('comp-' + focusComp);
+    if (el) { el.classList.add('expanded'); el.scrollIntoView({ behavior:'smooth', block:'center' }); }
+  }, 300);
+});
+
+window._saToastTimer = null;
+window.showSaToast = function(msg) {
+  const t = document.getElementById('saToast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._saToastTimer);
+  window._saToastTimer = setTimeout(function() { t.classList.remove('show'); }, 1800);
+};
+
+async function persist() {
+  await setDoc(doc(window.db, 'user_competencies', uid), {
+    earned_central:   earned,
+    saScores_central: saScores,
+  }, { merge: true });
+}
+
+window.save = async function save() {
+  await persist();
+  window.showSaToast('✓ Answer saved');
+};
+
+function getHighest(cid) { return earned[cid]?.level || null; }
+function getCurrentLevel(comp) {
+  const h = getHighest(comp.id);
+  const levels = comp.levels || [];
+  if (!h) return levels[0];
+  const idx = LEVEL_ORDER.indexOf(h);
+  const next = LEVEL_ORDER[idx + 1];
+  if (next && levels.includes(next)) return next;
+  return h;
+}
+
+function compsByDomain(domainId) {
+  return (FW.competencies || []).filter(c => c.domainId === domainId);
+}
+
+function renderAll() {
+  const allComps = FW.competencies || [];
+  const total = allComps.length;
+  const earnedCount = allComps.filter(c => getHighest(c.id)).length;
+  const pct = total > 0 ? Math.round((earnedCount / total) * 100) : 0;
+  document.getElementById('overallBar').style.width = pct + '%';
+  document.getElementById('overallEarned').textContent = earnedCount + ' earned';
+  document.getElementById('overallPct').textContent = pct + '%';
+
+  document.getElementById('domainNav').innerHTML = (FW.domains || []).map(d => {
+    const v = domVisuals(d);
+    const dc = compsByDomain(d.id);
+    const de = dc.filter(c => getHighest(c.id)).length;
+    const dp = dc.length > 0 ? Math.round((de / dc.length) * 100) : 0;
+    return `<a class="lp-domain-item" href="#dom-${esc(d.id)}"><span class="di-icon">${v.icon}</span><span class="di-name">${esc(d.name || d.id)}</span><span class="di-pct">${dp}%</span></a>`;
+  }).join('');
+
+  document.getElementById('lpMain').innerHTML = (FW.domains || []).map(domain => {
+    const v = domVisuals(domain);
+    const dc = compsByDomain(domain.id);
+    return `<div class="comp-section" id="dom-${esc(domain.id)}">
+      <div class="comp-section-header">
+        <div class="comp-section-icon" style="background:${v.bg}">${v.icon}</div>
+        <div><div class="comp-section-title">${esc(domain.name || domain.id)}</div><div class="comp-section-sub">${dc.length} competencies</div></div>
+      </div>
+      ${dc.map(comp => renderCard(comp, domain)).join('')}
+    </div>`;
+  }).join('');
+}
+
+function renderCard(comp, domain) {
+  const v = domVisuals(domain);
+  const levels = comp.levels || [];
+  const h = getHighest(comp.id);
+  const lastLevel = levels[levels.length - 1];
+  const isCompleted = h === lastLevel;
+  const statusClass = isCompleted ? 'completed' : h ? 'in-progress' : '';
+  const statusLabel = isCompleted ? '✓ Completed' : h ? `In Progress — ${LEVEL_LABEL[h] || h}` : 'Not Started';
+  const statusBadge = isCompleted ? 'completed' : h ? 'in-progress' : 'not-started';
+  const isExpanded = expanded[comp.id];
+
+  const levelsTrack = levels.map((lvl, i) => {
+    const li = LEVEL_ORDER.indexOf(lvl);
+    const hi = h ? LEVEL_ORDER.indexOf(h) : -1;
+    const sc = hi >= li ? 'done' : (hi === li - 1 || (!h && i === 0)) ? 'current' : 'locked';
+    const num = sc === 'done' ? '✓' : (i + 1);
+    const sub = sc === 'done' ? 'Earned' : sc === 'current' ? 'Current' : 'Locked';
+    return `<div class="level-step ${sc}" onclick="openLevel('${esc(comp.id)}','${esc(lvl)}')"><div class="ls-num">${num}</div><div class="ls-name">${esc(LEVEL_LABEL[lvl] || lvl)}</div><div class="ls-sub">${sub}</div></div>`;
+  }).join('');
+
+  const curLvl = isCompleted ? lastLevel : getCurrentLevel(comp);
+  const matsHtml = curLvl ? `<div class="mat-section-title">Lesson — ${esc(LEVEL_LABEL[curLvl] || curLvl)}</div>
+    <div class="mat-list">
+      <div class="mat-item" onclick="openLevel('${esc(comp.id)}','${esc(curLvl)}')">
+        <div class="mat-type-icon reading">📖</div>
+        <div class="mat-info">
+          <div class="mat-name">Open ${esc(LEVEL_LABEL[curLvl] || curLvl)} lesson</div>
+          <div class="mat-meta">reading · self-assess · activity</div>
+        </div>
+        <div class="mat-check"></div>
+      </div>
+    </div>` : '';
+
+  const assHtml = !isCompleted && curLvl
+    ? `<div class="assessment-cta" onclick="goPortfolio('${esc(comp.id)}','${esc(curLvl)}')">
+        <div class="acta-left">
+          <span class="acta-icon">📋</span>
+          <div>
+            <div class="acta-title">Submit Evidence for ${esc(LEVEL_LABEL[curLvl] || curLvl)}</div>
+            <div class="acta-sub">Upload evidence to request level certification</div>
+          </div>
+        </div>
+        <span class="acta-right">→</span>
+      </div>`
+    : isCompleted
+      ? `<div style="padding:12px 14px;border-radius:10px;background:#dcfce7;border:1px solid #bbf7d0;font-size:13px;font-weight:600;color:#15803d;">🏆 Completed! <a href="/specialist-certificates" style="color:#15803d;">View certificates →</a></div>`
+      : '';
+
+  return `<div class="comp-card ${statusClass} ${isExpanded?'expanded':''}" id="comp-${esc(comp.id)}">
+    <div class="comp-card-header" onclick="toggleCard('${esc(comp.id)}')">
+      <div class="comp-card-icon" style="background:${v.bg}">${v.icon}</div>
+      <div class="comp-card-body">
+        <div class="comp-card-name">${esc(comp.name || comp.id)}</div>
+        <div class="comp-card-meta"><span class="status-badge ${statusBadge}">${statusLabel}</span></div>
+      </div>
+      <div class="comp-card-toggle"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></div>
+    </div>
+    <div class="comp-card-detail"><div class="levels-track">${levelsTrack}</div>${matsHtml}${assHtml}</div>
+  </div>`;
+}
+
+window.toggleCard = (id) => {
+  expanded[id] = !expanded[id];
+  const c = document.getElementById('comp-' + id);
+  if (c) c.classList.toggle('expanded', expanded[id]);
+};
+
+// ─── MODAL ─────────────────────────────────────────────────────
+let _modalState = null;
+
+window.openLevel = async function(compId, lvl) {
+  const comp = (FW.competencies || []).find(c => c.id === compId);
+  if (!comp) return;
+  _modalState = { compId, lvl };
+
+  document.getElementById('matModalType').textContent = `📖 ${LEVEL_LABEL[lvl] || lvl} · ${(comp.id || '').toUpperCase()}`;
+  document.getElementById('matModalTitle').textContent = comp.name || comp.id;
+
+  const editBtn = document.getElementById('btnEditReading');
+  if (editBtn) editBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+  cancelReadingEdit();
+
+  // Clear all blocks before render (so re-open doesn't keep stale content).
+  for (const id of ['matModalReading','matModalCaseStudy','matModalPitfalls','matModalTakeaways','matModalReflection','matModalGlossary','matModalSelfAssess','matModalActivity','matModalRelated']) {
+    document.getElementById(id).innerHTML = '';
+  }
+
+  const content = await loadContent(compId, lvl);
+  const h = getHighest(compId);
+  const isLevelDone = h && LEVEL_ORDER.indexOf(h) >= LEVEL_ORDER.indexOf(lvl);
+
+  if (!content) {
+    document.getElementById('matModalReading').innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--ink-3);"><div style="font-size:32px;margin-bottom:12px;">🚧</div><div style="font-size:14px;font-weight:600;color:var(--ink-2);margin-bottom:6px;">Content Coming Soon</div><div style="font-size:13px;">This level is being prepared and will be available shortly.</div></div>';
+    const btn = document.getElementById('btnMarkDone');
+    btn.textContent = isLevelDone ? '✓ Done' : 'Mark Level Done';
+    btn.className = 'btn-mark-done' + (isLevelDone ? ' already-done' : '');
+    document.getElementById('matModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    return;
+  }
+
+  // ── Reading (admin override takes precedence)
+  const override = await loadOverride(compId, lvl);
+  const readingEl = document.getElementById('matModalReading');
+  if (override) {
+    readingEl.innerHTML = '<span class="reading-override-badge">✎ Edited</span>' + override;
+  } else {
+    const paraHtml = String(content?.reading || '')
+      .split(/\n{2,}/)
+      .map(p => '<p style="font-size:13.5px;line-height:1.75;color:var(--ink-2);margin:0 0 14px;">' + esc(p.trim()) + '</p>')
+      .join('');
+    readingEl.innerHTML = paraHtml;
+  }
+
+  // ── v3: Case Study
+  const csEl = document.getElementById('matModalCaseStudy');
+  if (content?.caseStudy?.narrative) {
+    const cs = content.caseStudy;
+    csEl.innerHTML = '<div class="mat-section-title" style="margin-top:22px;">Case Study</div>' +
+      '<div class="mat-cs-box">' +
+      (cs.title ? '<div class="mat-cs-title">' + esc(cs.title) + '</div>' : '') +
+      '<div class="mat-cs-narrative">' + esc(cs.narrative).replace(/\n{2,}/g, '</p><p>').replace(/^/, '<p>').replace(/$/, '</p>') + '</div>' +
+      (cs.lesson ? '<div class="mat-cs-lesson"><strong>Lesson:</strong> ' + esc(cs.lesson) + '</div>' : '') +
+      '</div>';
+  }
+
+  // ── v3: Common Pitfalls
+  const cpEl = document.getElementById('matModalPitfalls');
+  if (Array.isArray(content?.commonPitfalls) && content.commonPitfalls.length) {
+    cpEl.innerHTML = '<div class="mat-section-title" style="margin-top:22px;">Common Pitfalls — Don’t Do This</div>' +
+      '<div class="mat-pitfalls-box">' +
+      content.commonPitfalls.map(p => '<div class="mat-pitfall-item"><span class="mat-pitfall-icon">⚠</span><div>' + esc(p) + '</div></div>').join('') +
+      '</div>';
+  }
+
+  // ── Key Takeaways
+  const tkEl = document.getElementById('matModalTakeaways');
+  tkEl.innerHTML = content?.keyTakeaways?.length
+    ? '<div class="mat-section-title" style="margin-top:22px;">Key Takeaways</div>' + content.keyTakeaways.map(t => '<div class="mat-takeaway-item">&#x2714; ' + esc(t) + '</div>').join('')
+    : '';
+
+  // ── v3: Reflection Prompts
+  const rpEl = document.getElementById('matModalReflection');
+  if (Array.isArray(content?.reflectionPrompts) && content.reflectionPrompts.length) {
+    rpEl.innerHTML = '<div class="mat-section-title" style="margin-top:22px;">Reflect Before You Continue</div>' +
+      '<div class="mat-reflection-box">' +
+      content.reflectionPrompts.map((q, i) => '<div class="mat-reflection-item"><span class="mat-reflection-num">' + (i + 1) + '</span><div>' + esc(q) + '</div></div>').join('') +
+      '</div>';
+  }
+
+  // ── v3: Glossary
+  const glEl = document.getElementById('matModalGlossary');
+  if (Array.isArray(content?.glossary) && content.glossary.length) {
+    glEl.innerHTML = '<div class="mat-section-title" style="margin-top:22px;">Glossary</div>' +
+      '<dl class="mat-glossary-list">' +
+      content.glossary.map(g => '<div class="mat-glossary-item"><dt>' + esc(g.term) + '</dt><dd>' + esc(g.definition) + '</dd></div>').join('') +
+      '</dl>';
+  }
+
+  // ── Self-Assessment
+  const saEl = document.getElementById('matModalSelfAssess');
+  saEl.innerHTML = content?.selfAssessment?.length
+    ? '<div class="mat-section-title" style="margin-top:22px;">Self-Assessment</div>' +
+      '<div style="font-size:12px;color:var(--ink-3);margin-bottom:12px;">Rate yourself honestly (1 = Not yet, 4 = Confident)</div>' +
+      content.selfAssessment.map(function(s, i) {
+        const key = compId + '/' + lvl + '/' + i;
+        const saved = saScores[key];
+        return '<div class="sa-item"><div class="sa-statement">' + esc(s) + '</div>' +
+          '<div class="sa-scale">' + [1,2,3,4].map(function(n) {
+            const active = saved === n ? ' active' : '';
+            return '<button class="sa-btn' + active + '" onclick="(function(btn,k,v){btn.parentElement.querySelectorAll(\'.sa-btn\').forEach(function(b){b.classList.remove(\'active\')});btn.classList.add(\'active\');window.saScores[k]=v;window.save();})(this,\'' + key + '\',' + n + ')">' + n + '</button>';
+          }).join('') + '</div></div>';
+      }).join('')
+    : '';
+
+  // ── Activity
+  const actEl = document.getElementById('matModalActivity');
+  if (content?.activity) {
+    const act = content.activity;
+    const rows = [
+      ['Task', act.task],
+      ['Output', act.output],
+      ['Duration', act.duration],
+      act.uploadPath ? ['Upload to', act.uploadPath] : null,
+      act.reviewQueue ? ['Review by', act.reviewQueue] : null,
+      ['Evidence', act.evidence],
+    ].filter(Boolean);
+    actEl.innerHTML = '<div class="mat-section-title" style="margin-top:22px;">Practice Activity</div>' +
+      '<div class="mat-activity-box" style="margin-top:0;">' +
+      rows.map((r, i) => '<div class="mat-activity-row"' + (i ? ' style="border-top:1px solid #fde68a;padding-top:10px;margin-top:8px;"' : '') + '><span class="mat-activity-label">' + esc(r[0]) + '</span><span class="mat-activity-val">' + esc(r[1]) + '</span></div>').join('') +
+      '</div>';
+  }
+
+  // ── v3: Related Competencies
+  const relEl = document.getElementById('matModalRelated');
+  if (Array.isArray(content?.relatedComps) && content.relatedComps.length) {
+    relEl.innerHTML = '<div class="mat-section-title" style="margin-top:22px;">Related Competencies</div>' +
+      '<div class="mat-related-list">' +
+      content.relatedComps.map(r => '<div class="mat-related-item"><div class="mat-related-id">' + esc(r.id) + '</div><div class="mat-related-body"><div class="mat-related-name">' + esc(r.name) + '</div>' + (r.why ? '<div class="mat-related-why">' + esc(r.why) + '</div>' : '') + '</div></div>').join('') +
+      '</div>';
+  }
+
+  // ── Footer button
+  const btn = document.getElementById('btnMarkDone');
+  btn.textContent = isLevelDone ? '✓ Done' : 'Mark Level Done';
+  btn.className = 'btn-mark-done' + (isLevelDone ? ' already-done' : '');
+
+  document.getElementById('matModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+};
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ─── READING EDITOR ────────────────────────────────────────────
+window.edCmd = function(cmd) { document.execCommand(cmd, false, null); document.getElementById('readingEditorArea').focus(); };
+window.edHighlight = function() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  try { const r = sel.getRangeAt(0); const m = document.createElement('mark'); r.surroundContents(m); }
+  catch { document.execCommand('backColor', false, '#fef08a'); }
+  document.getElementById('readingEditorArea').focus();
+};
+window.edInsertParagraph = function() {
+  document.execCommand('insertHTML', false, '<p><br></p>');
+  document.getElementById('readingEditorArea').focus();
+};
+window.toggleReadingEditor = function() {
+  if (!_modalState) return;
+  const { compId, lvl } = _modalState;
+  const wrap = document.getElementById('readingEditorWrap');
+  const area = document.getElementById('readingEditorArea');
+  const readingEl = document.getElementById('matModalReading');
+  if (wrap.classList.contains('active')) { cancelReadingEdit(); return; }
+  const override = _overrideCache[compId + '_' + lvl];
+  const content = _contentCache[compId + '_' + lvl];
+  if (override) {
+    area.innerHTML = override;
+  } else if (content?.reading) {
+    const sentences = content.reading.match(/[^.!?]+[.!?]+/g) || [content.reading];
+    const paras = [];
+    for (let i = 0; i < sentences.length; i += 3) paras.push(sentences.slice(i, i + 3).join(' ').trim());
+    area.innerHTML = paras.map(p => '<p>' + p + '</p>').join('');
+  } else { area.innerHTML = '<p></p>'; }
+  wrap.classList.add('active');
+  readingEl.style.opacity = '0.3';
+  area.focus();
+};
+window.cancelReadingEdit = function() {
+  const wrap = document.getElementById('readingEditorWrap');
+  const readingEl = document.getElementById('matModalReading');
+  if (wrap) wrap.classList.remove('active');
+  if (readingEl) readingEl.style.opacity = '';
+};
+window.saveReadingEdit = async function() {
+  if (!_modalState) return;
+  const { compId, lvl } = _modalState;
+  const area = document.getElementById('readingEditorArea');
+  const btn = document.getElementById('btnSaveReading');
+  const html = area.innerHTML.trim();
+  if (!html || html === '<p><br></p>') { window.showSaToast('⚠ Nothing to save'); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const clean = await saveOverride(compId, lvl, html);
+    const readingEl = document.getElementById('matModalReading');
+    readingEl.innerHTML = '<span class="reading-override-badge">✎ Edited</span>' + clean;
+    readingEl.style.opacity = '';
+    document.getElementById('readingEditorWrap').classList.remove('active');
+    window.showSaToast('✓ Reading saved');
+  } catch { window.showSaToast('✗ Save failed'); }
+  finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> Save';
+  }
+};
+
+window.closeMatModal = function(evt) {
+  if (evt && evt.target !== document.getElementById('matModal')) return;
+  cancelReadingEdit();
+  document.getElementById('matModal').classList.remove('open');
+  document.body.style.overflow = '';
+};
+
+// Mark Done flips earned_central[compId] = { level: lvl, at: ms } if
+// the user is claiming this (or any earlier) level. If they tap Done
+// on a level they have already passed, treat as "Unmark" — drop to
+// the previous level (or clear if it was the first level).
+window.markLevelDone = async function() {
+  if (!_modalState) return;
+  const { compId, lvl } = _modalState;
+  const comp = (FW.competencies || []).find(c => c.id === compId);
+  if (!comp) return;
+  const levels = comp.levels || [];
+  const lvlIdx = levels.indexOf(lvl);
+  if (lvlIdx < 0) return;
+
+  const h = getHighest(compId);
+  const hi = h ? levels.indexOf(h) : -1;
+
+  if (hi >= lvlIdx) {
+    // Already at or past this level → step BACK to the previous level (or clear).
+    if (lvlIdx === 0) {
+      delete earned[compId];
+    } else {
+      earned[compId] = { level: levels[lvlIdx - 1], at: Date.now() };
+    }
+  } else {
+    earned[compId] = { level: lvl, at: Date.now() };
+  }
+
+  await persist();
+
+  // Re-render the affected card + sidebar overall progress + domain pct.
+  const domain = (FW.domains || []).find(d => d.id === comp.domainId);
+  if (domain) {
+    const cardEl = document.getElementById('comp-' + compId);
+    if (cardEl) {
+      cardEl.outerHTML = renderCard(comp, domain);
+      const refreshed = document.getElementById('comp-' + compId);
+      if (refreshed && expanded[compId]) refreshed.classList.add('expanded');
+    }
+  }
+  // Refresh sidebar totals.
+  const allComps = FW.competencies || [];
+  const total = allComps.length;
+  const earnedCount = allComps.filter(c => getHighest(c.id)).length;
+  const pct = total > 0 ? Math.round((earnedCount / total) * 100) : 0;
+  document.getElementById('overallBar').style.width = pct + '%';
+  document.getElementById('overallEarned').textContent = earnedCount + ' earned';
+  document.getElementById('overallPct').textContent = pct + '%';
+  // Re-render the domain nav (per-domain pct may have changed).
+  document.getElementById('domainNav').innerHTML = (FW.domains || []).map(d => {
+    const v = domVisuals(d);
+    const dc = compsByDomain(d.id);
+    const de = dc.filter(c => getHighest(c.id)).length;
+    const dp = dc.length > 0 ? Math.round((de / dc.length) * 100) : 0;
+    return `<a class="lp-domain-item" href="#dom-${esc(d.id)}"><span class="di-icon">${v.icon}</span><span class="di-name">${esc(d.name || d.id)}</span><span class="di-pct">${dp}%</span></a>`;
+  }).join('');
+
+  const isLevelDone = (earned[compId] && levels.indexOf(earned[compId].level) >= lvlIdx);
+  const btn = document.getElementById('btnMarkDone');
+  btn.textContent = isLevelDone ? '✓ Done' : 'Mark Level Done';
+  btn.className = 'btn-mark-done' + (isLevelDone ? ' already-done' : '');
+  window.showSaToast(isLevelDone ? '✓ Level marked done' : 'Level cleared');
+};
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    cancelReadingEdit();
+    document.getElementById('matModal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+});
+
+window.goPortfolio = (compId, level) => {
+  window.location.href = `/specialist-portfolio?comp=${encodeURIComponent(compId)}&level=${encodeURIComponent(level)}`;
+};
+</script>
+</body>
+</html>

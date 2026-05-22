@@ -466,8 +466,8 @@ Issued certificates. `central_admin` create + delete; owner can read own.
 #### `central_certificates/{certId}`
 Workshop certificate records (separate from competency_certificates). `central_admin` write; any authorised read.
 
-#### `framework_config/{docId}` + `content_overrides_academic/{docId}` + `content_overrides_teachers/{docId}`
-Admin-edited reading text + sample document links for the appraisal framework. Doc ID format `{compId}_{lvl}` e.g. `evsi-1_awareness`. Read open; AH admin or TH admin write.
+#### `framework_config/{docId}` + `content_overrides_academic/{docId}` + `content_overrides_teachers/{docId}` + `content_overrides_central/{docId}`
+Admin-edited reading text + sample document links for the appraisal / competency / specialist frameworks. Doc ID format `{compId}_{lvl}` e.g. `evsi-1_awareness`, `csm-1_awareness`. `content_overrides_central` mirrors the AH + TH pattern for the CH Specialist track — central_admin writes (XSS-sanitised client-side), every authorised user reads. Used by `/learning-path` modal to overlay HQ-edited prose on the base level content seeded into `competency_framework/{track}/levels/{compId}_{lvl}`.
 
 ---
 
