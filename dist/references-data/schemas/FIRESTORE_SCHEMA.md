@@ -1559,6 +1559,129 @@ Director + Subject Coordinator workspace replacing the long-running Google Docs 
 
 ---
 
+### 23. Academic Hub — School Leadership Workspace (2026-05-21)
+
+Mirrors §22 (CH Coordinators / Department Office) but **school-scoped**: every record carries a required `schoolId` field and rules enforce same-school visibility via `isAHSchoolLeader(schoolId)` (Foundation Rep + School Principal + Academic Coordinator + Cambridge Coordinator at that school). `academic_admin` + `central_admin` bypass via `isAHAdmin()`.
+
+Lives under AH navbar > School Leaders dropdown:
+- `school-leadership-read-me` · `school-leadership-operational-guide` — ESL-friendly static guides
+- `school-leadership-meetings` — minutes envelope + agenda-item editor
+- `school-leadership-decisions` — binding school-level policies
+- `school-leadership-directory` — leadership team contact list
+- `school-artifacts` — per-(school, subject) living documents
+- `school-activities` — kanban project board
+
+#### `school_leadership_meetings/{meetingId}`
+**PK:** auto-id.
+**Scope:** Weekly + ad-hoc school-leadership meeting minutes. Same shape as `coordinators_meetings` plus required `schoolId`.
+**Fields:**
+- Identity: `title` (optional; defaults to `"School Leaders Meeting · {date}"`), `meetingDate` (Timestamp), `meetingType` (`'school_leadership' | 'sub_committee' | 'parents_council' | 'foundation_review' | 'other'`, default `'school_leadership'`).
+- Calendar context: `academicYear` (e.g. `'2025-2026'`), `semester` (`'sem1' | 'sem2'`).
+- Attendees: `attendees[]` (array of `{userId →users.uid, name, present: bool, sub_role}`).
+- Content: `summary` (optional one-paragraph context).
+- Lifecycle: `status` (`'draft' | 'published'`).
+- **Required:** `schoolId →partner_schools.id` (pinned at create, immutable thereafter via UI discipline).
+- Audit: `createdBy →users.uid` (pinned to `auth.uid` on create), `createdAt`, `updatedAt`, `lastEditedBy →users.uid`.
+
+**FKs:** `partner_schools.id` (via `schoolId`); `users.uid` (via `createdBy`, `lastEditedBy`, attendees).
+**Indexes:** composite `(schoolId, academicYear, meetingDate desc)`, `(schoolId, status, meetingDate desc)`.
+**Write scope:**
+- **READ:** `isAHAdmin()` or `isAHSchoolLeader(schoolId)` (same-school leadership team).
+- **CREATE:** `isAHSchoolLeader(request.resource.data.schoolId)` with `createdBy == request.auth.uid`.
+- **UPDATE:** any same-school leader (collaborative editing pattern, mirroring G-Docs).
+- **DELETE:** `isAHAdmin()` only — minutes are an audit trail.
+
+#### `school_leadership_meeting_items/{itemId}`
+**PK:** auto-id (top-level, NOT a sub-collection — enables cross-meeting queries within a school).
+**Scope:** Per-meeting agenda items. FK to parent meeting via `meetingId`; carries denormalised `schoolId` for same-school list queries.
+**Fields:**
+- Linkage: `meetingId →school_leadership_meetings.id`, `schoolId →partner_schools.id` (denormalised), `order` (integer).
+- Content: `title` (≤200 chars), `body` (≤5000 chars), `links[]` (array of `{label, url}`), `subItems[]` (nested bullet structure).
+- Tags: `tags[]` ⊂ `{'decision', 'action', 'discussion', 'announcement', 'red_text'}`.
+- Subject context: `subjectIds[]` (subset of 8 ch_subjects; empty for cross-subject items).
+- Activity bridge (optional): `activityTaskId →school_activity_tasks.id | null` (when an `action`-tagged item is promoted into the school kanban).
+- Decision bridge (optional): `decisionId →school_leadership_decisions.id | null` (when a `decision`-tagged item is promoted into the decisions register).
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**FKs:** `school_leadership_meetings.id` (via `meetingId`); `partner_schools.id` (via `schoolId`); optional `school_activity_tasks.id`; optional `school_leadership_decisions.id`; `users.uid` (via `createdBy`).
+**Indexes:** composite `(meetingId, order)`, `(schoolId, tags array-contains, updatedAt desc)` for cross-meeting tag queries.
+**Write scope:**
+- **READ + UPDATE:** same-school leader or admin.
+- **CREATE:** same-school leader with `createdBy == auth.uid` and `schoolId == own schoolId`.
+- **DELETE:** admin or item's own `createdBy`.
+
+#### `school_leadership_decisions/{decisionId}`
+**PK:** auto-id.
+**Scope:** Binding school-level policies surfaced from meetings (red-text items) or authored directly. Same lifecycle (`draft → active → superseded`) as `coordinators_decisions` but school-scoped.
+**Fields:**
+- Identity: `title` (≤200 chars), `body` (≤3000 chars).
+- Categorisation: `category` (`'pedagogy' | 'safeguarding' | 'admin' | 'conduct' | 'communications' | 'parent_relations' | 'staff_welfare' | 'other'`), `scope` (`'school_wide' | 'per_subject' | 'per_grade'`).
+- Per-subject/grade: `subjectIds[]` (when scope='per_subject'), `gradeLevels[]` (when scope='per_grade').
+- Lifecycle: `status` (`'draft' | 'active' | 'superseded'`), `effectiveFrom` (Timestamp), `effectiveUntil` (Timestamp; null = open-ended).
+- Source: `sourceMeetingId →school_leadership_meetings.id | null`, `sourceItemId →school_leadership_meeting_items.id | null`.
+- Supersession: `supersededByDecisionId →school_leadership_decisions.id | null`, `supersededAt`, `supersededByUid →users.uid`.
+- **Required:** `schoolId →partner_schools.id`.
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**FKs:** `school_leadership_meetings.id` (via `sourceMeetingId`); `school_leadership_meeting_items.id` (via `sourceItemId`); self-FK via `supersededByDecisionId`; `partner_schools.id` (via `schoolId`); `users.uid` (via `createdBy`, `supersededByUid`).
+**Indexes:** composite `(schoolId, status, effectiveFrom desc)`, `(schoolId, scope, status, effectiveFrom desc)`, `(schoolId, category, status, effectiveFrom desc)`.
+**Write scope:** same-school leader (read/create/update); admin (delete). Active decisions should be superseded rather than edited in-place — UI discipline today, rule deferral matches CH §22.
+
+#### `school_leadership_directory_entries/{entryId}`
+**PK:** auto-id.
+**Scope:** Per-school leadership team phone-book (Foundation Reps + Principal + ACs + CCs + grade/subject leaders + parent-council reps + Eduversal-side liaison contacts). Discoverable lookup for the leadership team.
+**Fields:**
+- Identity: `entryKind` (`'school_leader' | 'subject_leader' | 'grade_leader' | 'parent_council' | 'eduversal_liaison' | 'other'`), `displayName`, `position`, `email`, `phone` (optional).
+- Link to user: `userId →users.uid | null`.
+- Subject/grade context: `subjectId` (one of 8 ch_subjects, or null), `gradeLevel` (integer 7-12, or null).
+- Notes: `roleNotes` (≤500 chars).
+- Lifecycle: `status` (`'active' | 'archived'`).
+- **Required:** `schoolId →partner_schools.id`.
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**FKs:** `users.uid` (via `userId`, `createdBy`); `partner_schools.id` (via `schoolId`).
+**Indexes:** composite `(schoolId, entryKind, status)`, `(schoolId, subjectId, status)`.
+**Write scope:** any same-school leader can CREATE / UPDATE / DELETE (routine HR-style records; no NN constraint).
+
+#### `school_artifacts/{artifactId}`
+**PK:** auto-id (or optional composite `{schoolId}_{subjectId}_{artifactType}_{academicYear}` for deterministic lookups).
+**Scope:** Per-(school, subject) living documents — Annual Plan, Department Handbook, Subject Policy, Lesson Plan templates, etc. Versioned via `previousVersionId` chain.
+**Fields:**
+- Identity: `title`, `description` (optional), `artifactType` (`'annual_plan' | 'department_handbook' | 'subject_policy' | 'lesson_plan_template' | 'sow' | 'assessment_plan' | 'other'`).
+- Context: `subjectId` (one of 8 ch_subjects, or `'school-wide'` for cross-subject docs), `academicYear`.
+- Storage: `fileUrl` (Cloud Storage `school_artifacts/{schoolId}/{subjectId}/{ts}_{filename}`) **XOR** `externalUrl` (Google Doc / external link).
+- Versioning: `version` (integer, default 1), `previousVersionId →school_artifacts.id | null`.
+- Ownership: `ownerUid →users.uid` (subject coordinator or principal responsible).
+- Lifecycle: `status` (`'draft' | 'current' | 'archived'`; exactly one `'current'` per `(schoolId, subjectId, artifactType, academicYear)` tuple — UI enforces, not rule).
+- **Required:** `schoolId →partner_schools.id`.
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`, `lastEditedBy →users.uid`.
+
+**FKs:** `partner_schools.id` (via `schoolId`); `users.uid` (via `ownerUid`, `createdBy`, `lastEditedBy`); self-FK via `previousVersionId`.
+**Storage path:** `school_artifacts/{schoolId}/{subjectId}/{ts}_{filename}` — same-school-leader read+write only (≤25 MB; PDF / Word / image MIME), `academic_admin` + `central_admin` delete. See `Central Hub/storage.rules` `match /school_artifacts/{schoolId}/{subjectId}/{filename}`.
+**Indexes:** composite `(schoolId, subjectId, artifactType, status)`, `(schoolId, status, updatedAt desc)`.
+
+#### `school_activity_projects/{projectId}` + `school_activity_tasks/{taskId}`
+**PK:** auto-id for both.
+**Scope:** School-scoped kanban board. Mirrors network-scoped `activity_projects` + `activity_tasks` but per-school. Used for tracking initiatives, sub-committee work, parent-council projects, school improvement programmes.
+**Project fields:**
+- Identity: `name`, `description` (optional), `color` (hex).
+- Lifecycle: `status` (`'active' | 'archived'`).
+- **Required:** `schoolId →partner_schools.id`.
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**Task fields:**
+- Linkage: `projectId →school_activity_projects.id`, `schoolId →partner_schools.id` (denormalised).
+- Content: `title`, `description` (optional), `assignees[]` (array of `→users.uid`).
+- Lifecycle: `status` (`'todo' | 'in_progress' | 'review' | 'done'`), `dueDate` (Timestamp; optional).
+- Source (when spawned from meeting item): `sourceMeetingItemId →school_leadership_meeting_items.id | null`.
+- Audit: `createdBy →users.uid`, `createdAt`, `updatedAt`.
+
+**FKs:** `partner_schools.id` (via `schoolId` on both); `school_activity_projects.id` (via `projectId` on tasks); `users.uid` (via `createdBy`, `assignees[]`); optional `school_leadership_meeting_items.id` (via `sourceMeetingItemId`).
+**Indexes:** project: `(schoolId, status, updatedAt desc)`. Task: composite `(projectId, status, dueDate)`, `(schoolId, assignees array-contains, status)`.
+**Write scope:** same-school leader for read + create + update (collaborative); admin for delete (own-created exception: task's `createdBy` can delete own task).
+
+---
+
 
 
 Things this schema knows are inconsistent. Prioritise these in upcoming refactors.
