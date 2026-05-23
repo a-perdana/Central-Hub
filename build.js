@@ -550,6 +550,8 @@ if (fs.existsSync("cambridge-crossref.js")) {
 //    JSONs live in monorepo-root docs/research/permendiknas/. CH's
 //    Vercel deploy checks out the parent (monorepo) so the relative
 //    `..` path resolves at build time without a local mirror.
+//    NOTE 2026-05-23: explicit log + count to confirm the block ran on
+//    Vercel — previous build failed silently and PMD popovers 404'd.
 const researchSrcDir  = path.join("..", "docs", "research", "permendiknas");
 const researchDestDir = path.join("dist", "research", "permendiknas");
 if (fs.existsSync(researchSrcDir)) {
