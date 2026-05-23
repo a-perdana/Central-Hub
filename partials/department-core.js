@@ -26,7 +26,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 import {
-  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_ACCENT, isValidSubject, subjectLabel
+  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, isValidSubject, subjectLabel
 } from './subject-config.js';
 
 // ---------------------------------------------------------------------------
@@ -148,7 +148,9 @@ function renderPicker() {
       <a class="dw-pick-card${isMine ? ' dw-pick-card--mine' : ''}"
          href="?subject=${encodeURIComponent(s)}"
          data-subject="${escHtml(s)}">
-        <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}">${SUBJECT_BADGE[s]}</div>
+        <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}" aria-hidden="true">
+          <span class="dw-pick-emoji">${SUBJECT_EMOJI[s] || SUBJECT_BADGE[s]}</span>
+        </div>
         <div class="dw-pick-body">
           <div class="dw-pick-name">${escHtml(SUBJECT_LABELS[s])}</div>
           ${writeChip}
@@ -184,16 +186,15 @@ function openSubject(subjectId) {
 
   const accent = SUBJECT_ACCENT[subjectId];
   const label = SUBJECT_LABELS[subjectId];
-  const badge = SUBJECT_BADGE[subjectId];
+  const badge = SUBJECT_EMOJI[subjectId] || SUBJECT_BADGE[subjectId];
   const writeBadge = canWriteActive
     ? '<span class="dw-write-badge dw-write-badge--yes">You can edit</span>'
     : '<span class="dw-write-badge dw-write-badge--no">Read-only · not your subject</span>';
 
   host.innerHTML = `
     <div class="dw-subject-head">
-      <a class="dw-back" href="department-workspace" aria-label="Back to picker">← All departments</a>
       <div class="dw-subject-id-row">
-        <div class="dw-subject-badge" style="background:${accent}">${badge}</div>
+        <div class="dw-subject-badge" style="background:${accent}" aria-hidden="true"><span>${badge}</span></div>
         <div class="dw-subject-title-block">
           <h2 class="dw-subject-title">${escHtml(label)} Department</h2>
           <div class="dw-subject-sub">${writeBadge}</div>

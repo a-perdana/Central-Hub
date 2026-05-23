@@ -45,6 +45,21 @@ export const SUBJECT_BADGE = {
   edu_steam: 'ES',
 };
 
+// Subject-themed emoji, used as the primary visual on /department-workspace
+// picker cards + subject view header. Chosen to be platform-stable
+// (no skin-tone modifiers, no flags except where culturally meaningful).
+export const SUBJECT_EMOJI = {
+  math:      '🧮',  // abacus
+  biology:   '🧬',  // DNA
+  chemistry: '⚗️',  // alembic
+  physics:   '🔭',  // telescope
+  science:   '🔬',  // microscope (combined science)
+  english:   '📖',  // open book
+  bahasa:    '📚',  // stack of books (Bahasa Indonesia)
+  religion:  '🕌',  // mosque (Indonesian school context)
+  edu_steam: '🚀',  // rocket (Edu-STEAM = science + tech + engineering + arts + math)
+};
+
 // Per-subject gradient. Reuses the same hues as department-artifacts.html
 // so the two surfaces feel like one system.
 export const SUBJECT_ACCENT = {
