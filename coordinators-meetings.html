@@ -26,18 +26,19 @@
        hero (replaces 2026-05-24 sidebar with 2026-05-25 pills). */
     .meetings-layout { display: block; }
 
-    /* === Pills toolbar — sticky below hero ===
-       Pattern parallels .page-toolbar in shared-styles.css but with a
-       horizontal-scroll pill row inside instead of category chips. */
-    .pills-toolbar {
+    /* === Breadcrumb bar — sticky below hero (2026-05-25)
+       Replaces the pills toolbar with a slim "current meeting + Switch"
+       row. Switch opens a command-palette modal (full search, grouped
+       by academic year + term). Cmd/Ctrl+K is the keyboard shortcut. */
+    .crumb-bar {
       position: sticky;
       top: 0;
       z-index: var(--z-sticky, 50);
       background: var(--paper);
       border-bottom: 1px solid var(--border);
-      padding: 12px 0;
+      padding: 10px 0;
     }
-    .pills-toolbar__inner {
+    .crumb-bar__inner {
       max-width: var(--container-max, 1200px);
       margin: 0 auto;
       padding: 0 28px;
@@ -46,15 +47,66 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-    .pills-toolbar__label {
-      font-size: 0.7rem;
-      font-weight: 700;
+    .crumb-bar__trail {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
       color: var(--ink-3);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      overflow: hidden;
+    }
+    .crumb-bar__home {
+      font-weight: 600;
+      color: var(--ink-2);
       flex-shrink: 0;
     }
-    .pills-new-btn {
+    .crumb-bar__sep {
+      color: var(--ink-3);
+      flex-shrink: 0;
+      opacity: 0.6;
+    }
+    .crumb-bar__current {
+      color: var(--ink);
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .crumb-bar__current-meta {
+      color: var(--ink-3);
+      font-weight: 400;
+      flex-shrink: 0;
+    }
+    .crumb-switch-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--ink-2);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .12s;
+      flex-shrink: 0;
+    }
+    .crumb-switch-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .crumb-switch-btn .kbd {
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--paper-2);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--ink-3);
+    }
+    .crumb-new-btn {
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -63,100 +115,155 @@
       color: #fff;
       border: none;
       border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 600;
       font-family: 'DM Sans', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
       cursor: pointer;
       transition: opacity .15s, transform .12s;
       flex-shrink: 0;
     }
-    .pills-new-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+    .crumb-new-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 
-    /* Scrolling pill row — survives long meeting lists without breaking layout. */
-    .pills-row {
-      flex: 1;
-      display: flex;
-      gap: 6px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: thin;
-      padding: 4px 2px;
-      min-width: 0;
+    /* === Command palette modal (Cmd/Ctrl+K) === */
+    .cmdp-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(15, 23, 42, 0.55);
+      padding: 80px 20px 20px;
+      overflow-y: auto;
     }
-    .pills-row::-webkit-scrollbar { height: 6px; }
-    .pills-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    .pills-row__empty { font-size: 0.82rem; color: var(--ink-3); padding: 6px 4px; }
+    .cmdp-overlay.open { display: block; animation: cmdpFadeIn .12s ease-out; }
+    @keyframes cmdpFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    .ms-pill {
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 7px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
+    .cmdp {
+      max-width: 620px;
+      margin: 0 auto;
       background: var(--white);
+      border-radius: 12px;
+      box-shadow: 0 25px 80px rgba(15, 23, 42, 0.35);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 100px);
+    }
+    .cmdp__search-wrap {
+      position: relative;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmdp__search-icon {
+      position: absolute;
+      left: 30px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-3);
+      pointer-events: none;
+    }
+    .cmdp__search {
+      width: 100%;
+      padding: 12px 14px 12px 42px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    .cmdp__search:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--white);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.08);
+    }
+    .cmdp__list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0 12px;
+    }
+    .cmdp__empty {
+      padding: 36px 20px;
+      text-align: center;
+      color: var(--ink-3);
+      font-size: 0.9rem;
+    }
+    .cmdp__group-head {
+      padding: 10px 20px 4px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-3);
+    }
+    .cmdp__item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 20px;
       cursor: pointer;
       font-family: 'DM Sans', sans-serif;
-      font-size: 0.8rem;
-      color: var(--ink-2);
-      transition: all .12s;
-      max-width: 280px;
+      transition: background .08s;
     }
-    .ms-pill:hover { border-color: var(--accent); color: var(--ink); }
-    .ms-pill.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-      box-shadow: 0 1px 6px rgba(124,58,237,0.25);
+    .cmdp__item:hover,
+    .cmdp__item.is-active {
+      background: var(--paper);
     }
-    .ms-pill.active .ms-pill-meta { color: rgba(255,255,255,0.85); }
-    .ms-pill.active .ms-pill-dot.draft { background: #fbbf24; }
-    .ms-pill.active .ms-pill-dot.published { background: #34d399; }
-
-    .ms-pill-dot {
-      width: 7px;
-      height: 7px;
+    .cmdp__item.is-active {
+      background: #f5f3ff;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .cmdp__item.is-current { font-weight: 700; }
+    .cmdp__item-dot {
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .ms-pill-dot.draft { background: #d97706; }
-    .ms-pill-dot.published { background: #10b981; }
-
-    .ms-pill-title {
-      font-weight: 600;
+    .cmdp__item-dot.draft { background: #d97706; }
+    .cmdp__item-dot.published { background: #10b981; }
+    .cmdp__item-title {
+      flex: 1;
+      font-size: 0.92rem;
+      color: var(--ink);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      max-width: 200px;
     }
-    .ms-pill-meta {
-      font-size: 0.72rem;
+    .cmdp__item-meta {
+      font-size: 0.78rem;
       color: var(--ink-3);
       flex-shrink: 0;
     }
-
-    /* Filter cluster (year + status + search) — right-aligned on wide,
-       wraps below pills on narrow. Hidden until meeting count >= 5. */
-    .pills-filters { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-    .pills-filters[hidden] { display: none; }
-    .pills-filters select,
-    .pills-filters input {
-      padding: 6px 10px;
+    .cmdp__item-current-pill {
+      padding: 1px 7px;
+      border-radius: 8px;
+      font-size: 0.66rem;
+      font-weight: 700;
+      background: var(--accent);
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .cmdp__foot {
+      padding: 10px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 14px;
+      font-size: 0.72rem;
+      color: var(--ink-3);
+      background: var(--paper);
+    }
+    .cmdp__foot .kbd {
+      padding: 1px 5px;
+      border-radius: 3px;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 0.78rem;
-      color: var(--ink);
       background: var(--white);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--ink-2);
+      margin-right: 3px;
     }
-    .pills-filters select:focus,
-    .pills-filters input:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(124,58,237,0.08);
-    }
-    .pills-filters input { min-width: 160px; }
 
     /* === Main area === */
     .meeting-main {
@@ -168,7 +275,7 @@
       min-width: 0;
     }
     @media (max-width: 768px) {
-      .pills-toolbar__inner { padding: 0 16px; }
+      .crumb-bar__inner { padding: 0 16px; }
       .meeting-main { padding: 0 16px; }
     }
     .meeting-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 40px; text-align: center; color: var(--ink-3); }
@@ -461,7 +568,7 @@
 
     /* === Print styles for export-as-PDF === */
     @media print {
-      .page-hero, .pills-toolbar, .navbar, .mh-actions, .agenda-add-btn, .ai-actions, .ai-extras-toggle { display: none !important; }
+      .page-hero, .crumb-bar, .cmdp-overlay, .navbar, .mh-actions, .agenda-add-btn, .ai-actions, .ai-extras-toggle { display: none !important; }
       .ai-extras { display: block !important; }
       .meeting-main { max-width: none; padding: 0; }
       .mh-wrap { border: none; box-shadow: none; margin-top: 0; padding: 0 0 12px; border-bottom: 1px solid #ccc; border-radius: 0; }
@@ -516,25 +623,23 @@
 
   <main class="meetings-layout" id="mainRoot" style="display:none">
 
-    <div class="pills-toolbar" aria-label="Meetings list">
-      <div class="pills-toolbar__inner">
-        <span class="pills-toolbar__label">Meetings</span>
-        <button class="pills-new-btn" id="btnNewMeeting" title="Start a new meeting">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <div class="crumb-bar" aria-label="Current meeting + meetings switcher">
+      <div class="crumb-bar__inner">
+        <div class="crumb-bar__trail" id="crumbTrail" aria-live="polite">
+          <span class="crumb-bar__home">Meetings</span>
+          <span class="crumb-bar__sep" aria-hidden="true">›</span>
+          <span class="crumb-bar__current" id="crumbCurrent">No meeting selected</span>
+          <span class="crumb-bar__current-meta" id="crumbCurrentMeta"></span>
+        </div>
+        <button class="crumb-switch-btn" id="btnSwitchMeeting" type="button" title="Switch to another meeting (Ctrl+K)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Switch meeting
+          <span class="kbd">Ctrl K</span>
+        </button>
+        <button class="crumb-new-btn" id="btnNewMeeting" type="button" title="Start a new meeting">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New
         </button>
-        <div class="pills-row" id="meetingsList" role="tablist">
-          <div class="pills-row__empty">Loading…</div>
-        </div>
-        <div class="pills-filters" id="filterRow" hidden>
-          <select id="filterYear" aria-label="Filter by academic year"><option value="">All years</option></select>
-          <select id="filterStatus" aria-label="Filter by status">
-            <option value="">All status</option>
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-          </select>
-          <input type="text" id="filterSearch" placeholder="Search title or agenda…" aria-label="Search meetings">
-        </div>
       </div>
     </div>
 
@@ -603,6 +708,22 @@
       </div>
     </section>
   </main>
+
+  <!-- Command palette — meeting switcher (Cmd/Ctrl+K) -->
+  <div class="cmdp-overlay" id="cmdpOverlay" aria-hidden="true">
+    <div class="cmdp" role="dialog" aria-modal="true" aria-label="Switch meeting">
+      <div class="cmdp__search-wrap">
+        <svg class="cmdp__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="cmdp__search" id="cmdpSearch" placeholder="Search meetings by title, date, or year…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="cmdp__list" id="cmdpList" role="listbox" aria-label="Matching meetings"></div>
+      <div class="cmdp__foot">
+        <span><span class="kbd">↑</span><span class="kbd">↓</span>navigate</span>
+        <span><span class="kbd">Enter</span>open</span>
+        <span><span class="kbd">Esc</span>close</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Add attendee modal -->
   <div class="modal-overlay" id="modalAttendee">
@@ -787,17 +908,7 @@ function paintHeroKpis() {
   $('heroKpiPublished').textContent = published;
 }
 
-/* Filter cluster (year + status + search) only appears once the
-   collection grows past a small threshold. Below that, the 3 widgets
-   are pure visual noise. */
-const FILTER_REVEAL_THRESHOLD = 5;
-function paintSidebarFilters() {
-  const show = meetings.length >= FILTER_REVEAL_THRESHOLD;
-  const row = $('filterRow');
-  if (row) row.hidden = !show;
-}
-
-/* ───── Sidebar — meetings list ─────────────────────────────────── */
+/* ───── Meetings collection — subscribe + breadcrumb paint ──────── */
 function subscribeMeetingsList() {
   const q = query(
     collection(db, 'coordinators_meetings'),
@@ -808,79 +919,192 @@ function subscribeMeetingsList() {
   onSnapshot(q, (snap) => {
     meetings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     paintHeroKpis();
-    paintSidebarFilters();
-    populateYearFilter();
-    renderMeetingsList();
+    paintBreadcrumb();
+    // Palette stays live if it's open — refresh its list.
+    if ($('cmdpOverlay').classList.contains('open')) renderCmdpList();
     if (!didAutoSelect && !currentMeeting && meetings.length) {
       didAutoSelect = true;
-      const first = visibleMeetings()[0] || meetings[0];
-      if (first) openMeeting(first.id);
+      openMeeting(meetings[0].id);
     }
   }, (err) => {
     console.error('[meetings-list]', err);
-    $('meetingsList').innerHTML = `<div class="pills-row__empty">Could not load. ${escHtml(err.code || 'error')}</div>`;
   });
 }
 
-function populateYearFilter() {
-  const sel = $('filterYear');
-  const prev = sel.value;
-  const years = [...new Set(meetings.map(m => m.academicYear).filter(Boolean))].sort().reverse();
-  sel.innerHTML = '<option value="">All years</option>' + years.map(y => `<option value="${escHtml(y)}">${escHtml(y)}</option>`).join('');
-  if (years.includes(prev)) sel.value = prev;
-}
-
-function visibleMeetings() {
-  const yearF = $('filterYear').value;
-  const statusF = $('filterStatus').value;
-  const searchF = ($('filterSearch').value || '').trim().toLowerCase();
-  return meetings.filter(m => {
-    if (yearF && m.academicYear !== yearF) return false;
-    if (statusF && (m.status || 'draft') !== statusF) return false;
-    if (searchF) {
-      const hay = `${m.title || ''} ${m.summary || ''}`.toLowerCase();
-      if (!hay.includes(searchF)) return false;
-    }
-    return true;
-  });
-}
-
-function renderMeetingsList() {
-  const list = visibleMeetings();
-  const wrap = $('meetingsList');
-  if (!list.length) {
-    const msg = meetings.length
-      ? 'No meetings match — clear filters'
-      : 'No meetings yet — hit New to start one';
-    wrap.innerHTML = `<div class="pills-row__empty">${msg}</div>`;
+/* Breadcrumb — passive read of currentMeeting. Called on snapshot
+   refresh + every openMeeting / paintMeetingHeader / persistMeeting
+   completion. */
+function paintBreadcrumb() {
+  const cur = $('crumbCurrent');
+  const meta = $('crumbCurrentMeta');
+  if (!currentMeeting) {
+    cur.textContent = meetings.length ? 'No meeting selected' : 'No meetings yet';
+    meta.textContent = '';
     return;
   }
-  wrap.innerHTML = list.map(m => {
-    const active = currentMeeting && currentMeeting.id === m.id ? 'active' : '';
-    const status = m.status || 'draft';
-    const dateStr = m.meetingDate ? fmtDate(m.meetingDate) : '';
-    return `
-      <button type="button" class="ms-pill ${active}" data-id="${m.id}" role="tab" aria-selected="${active ? 'true' : 'false'}" title="${escHtml(m.title || 'Untitled meeting')} · ${escHtml(dateStr)}">
-        <span class="ms-pill-dot ${status}" aria-hidden="true"></span>
-        <span class="ms-pill-title">${escHtml(m.title || 'Untitled meeting')}</span>
-        <span class="ms-pill-meta">${escHtml(dateStr)}</span>
-      </button>
-    `;
-  }).join('');
-  wrap.querySelectorAll('.ms-pill').forEach(el => {
-    el.addEventListener('click', () => openMeeting(el.dataset.id));
+  cur.textContent = currentMeeting.title || 'Untitled meeting';
+  const bits = [];
+  if (currentMeeting.meetingDate) bits.push(fmtDate(currentMeeting.meetingDate));
+  if (currentMeeting.academicYear) bits.push(currentMeeting.academicYear);
+  if (currentMeeting.semester) bits.push(currentMeeting.semester === 'sem1' ? 'Sem 1' : 'Sem 2');
+  meta.textContent = bits.length ? `· ${bits.join(' · ')}` : '';
+}
+
+/* ───── Command palette — meeting switcher (Cmd/Ctrl+K) ─────────── */
+let _cmdpActiveIdx = 0;     // highlighted row in the current filtered set
+let _cmdpFilteredIds = [];  // doc ids in render order
+
+function openMeetingPalette() {
+  $('cmdpOverlay').classList.add('open');
+  $('cmdpOverlay').setAttribute('aria-hidden', 'false');
+  $('cmdpSearch').value = '';
+  _cmdpActiveIdx = 0;
+  renderCmdpList();
+  // Auto-focus the search input on next frame — direct focus during the
+  // click handler that opened the palette gets stolen by Chrome.
+  requestAnimationFrame(() => $('cmdpSearch').focus());
+}
+
+function closeMeetingPalette() {
+  $('cmdpOverlay').classList.remove('open');
+  $('cmdpOverlay').setAttribute('aria-hidden', 'true');
+}
+
+/* Group meetings by academicYear + semester. Latest year first; within
+   a year, Sem 2 before Sem 1 (current term tends to be the high one). */
+function groupMeetingsForPalette(matched) {
+  const groups = new Map(); // key = "2025-2026 · Sem 2", value = []
+  matched.forEach(m => {
+    const year = m.academicYear || 'Unfiled';
+    const sem = m.semester === 'sem1' ? 'Sem 1' : m.semester === 'sem2' ? 'Sem 2' : '';
+    const key = sem ? `${year} · ${sem}` : year;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
   });
-  // Scroll the active pill into view (horizontal) on render.
-  const active = wrap.querySelector('.ms-pill.active');
-  if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // Sort group keys: year desc, then sem desc (Sem 2 first within year).
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    const [ya, sa = ''] = a.split(' · ');
+    const [yb, sb = ''] = b.split(' · ');
+    if (ya !== yb) return yb.localeCompare(ya);
+    return sb.localeCompare(sa);
+  });
+  return sortedKeys.map(key => ({ key, items: groups.get(key) }));
+}
+
+function cmdpFilteredMeetings() {
+  const needle = ($('cmdpSearch').value || '').trim().toLowerCase();
+  if (!needle) return meetings;
+  return meetings.filter(m => {
+    const hay = `${m.title || ''} ${m.summary || ''} ${m.academicYear || ''} ${fmtDate(m.meetingDate)}`.toLowerCase();
+    return hay.includes(needle);
+  });
+}
+
+function renderCmdpList() {
+  const list = $('cmdpList');
+  const matched = cmdpFilteredMeetings();
+
+  if (!matched.length) {
+    list.innerHTML = `<div class="cmdp__empty">${meetings.length ? 'No meetings match your search.' : 'No meetings yet — close this and hit New.'}</div>`;
+    _cmdpFilteredIds = [];
+    return;
+  }
+
+  const groups = groupMeetingsForPalette(matched);
+  const html = groups.map(g => {
+    const head = `<div class="cmdp__group-head">${escHtml(g.key)} <span style="opacity:0.6;font-weight:400;">(${g.items.length})</span></div>`;
+    const rows = g.items.map(m => {
+      const isCurrent = currentMeeting && currentMeeting.id === m.id;
+      const status = m.status || 'draft';
+      const dateStr = m.meetingDate ? fmtDate(m.meetingDate) : '';
+      return `<div class="cmdp__item ${isCurrent ? 'is-current' : ''}" data-id="${m.id}" role="option" tabindex="-1">
+        <span class="cmdp__item-dot ${status}" aria-hidden="true"></span>
+        <span class="cmdp__item-title">${escHtml(m.title || 'Untitled meeting')}</span>
+        <span class="cmdp__item-meta">${escHtml(dateStr)}</span>
+        ${isCurrent ? '<span class="cmdp__item-current-pill">Current</span>' : ''}
+      </div>`;
+    }).join('');
+    return head + rows;
+  }).join('');
+
+  list.innerHTML = html;
+  _cmdpFilteredIds = [...list.querySelectorAll('.cmdp__item')].map(el => el.dataset.id);
+  // Clamp active index + highlight.
+  if (_cmdpActiveIdx >= _cmdpFilteredIds.length) _cmdpActiveIdx = 0;
+  paintCmdpActive();
+
+  // Click-to-pick + hover highlight.
+  list.querySelectorAll('.cmdp__item').forEach((el, i) => {
+    el.addEventListener('click', () => {
+      openMeeting(el.dataset.id);
+      closeMeetingPalette();
+    });
+    el.addEventListener('mouseenter', () => {
+      _cmdpActiveIdx = i;
+      paintCmdpActive();
+    });
+  });
+}
+
+function paintCmdpActive() {
+  const list = $('cmdpList');
+  list.querySelectorAll('.cmdp__item').forEach((el, i) => {
+    el.classList.toggle('is-active', i === _cmdpActiveIdx);
+  });
+  const active = list.querySelector('.cmdp__item.is-active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function handleCmdpKeydown(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeMeetingPalette(); return; }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (_cmdpFilteredIds.length) _cmdpActiveIdx = (_cmdpActiveIdx + 1) % _cmdpFilteredIds.length;
+    paintCmdpActive();
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (_cmdpFilteredIds.length) _cmdpActiveIdx = (_cmdpActiveIdx - 1 + _cmdpFilteredIds.length) % _cmdpFilteredIds.length;
+    paintCmdpActive();
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const id = _cmdpFilteredIds[_cmdpActiveIdx];
+    if (id) {
+      openMeeting(id);
+      closeMeetingPalette();
+    }
+  }
 }
 
 /* ───── UI wiring ──────────────────────────────────────────────── */
 function wireUI() {
   $('btnNewMeeting').addEventListener('click', createMeeting);
-  $('filterYear').addEventListener('change', renderMeetingsList);
-  $('filterStatus').addEventListener('change', renderMeetingsList);
-  $('filterSearch').addEventListener('input', debounce(renderMeetingsList, 200));
+  $('btnSwitchMeeting').addEventListener('click', openMeetingPalette);
+
+  // Command palette — search input live filter + keyboard nav.
+  $('cmdpSearch').addEventListener('input', () => {
+    _cmdpActiveIdx = 0;
+    renderCmdpList();
+  });
+  $('cmdpSearch').addEventListener('keydown', handleCmdpKeydown);
+  // Click on the overlay backdrop (not on the .cmdp panel) closes it.
+  $('cmdpOverlay').addEventListener('click', (e) => {
+    if (e.target === $('cmdpOverlay')) closeMeetingPalette();
+  });
+  // Global Ctrl/Cmd+K shortcut anywhere on the page — but skip inside
+  // Quill editors so the user can still use Quill's native Ctrl+K
+  // (insert link). Title contenteditable + plain inputs are non-issue;
+  // they don't bind Ctrl+K natively.
+  document.addEventListener('keydown', (e) => {
+    if (!((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K'))) return;
+    if (e.target?.closest?.('.ai-body-quill')) return;
+    e.preventDefault();
+    if ($('cmdpOverlay').classList.contains('open')) closeMeetingPalette();
+    else openMeetingPalette();
+  });
 
   $('btnAddItem').addEventListener('click', addAgendaItem);
   $('btnPublishToggle').addEventListener('click', togglePublish);
@@ -900,7 +1124,12 @@ function wireUI() {
   });
 
   // Header field auto-save
-  $('meetingTitle').addEventListener('blur', () => persistMeeting({ title: $('meetingTitle').textContent.trim() }));
+  $('meetingTitle').addEventListener('blur', () => {
+    const newTitle = $('meetingTitle').textContent.trim();
+    if (currentMeeting) currentMeeting.title = newTitle;
+    paintBreadcrumb();
+    persistMeeting({ title: newTitle });
+  });
   $('meetingDate').addEventListener('change', () => persistMeeting({ meetingDate: $('meetingDate').value ? new Date($('meetingDate').value) : null }));
   $('meetingYear').addEventListener('change', () => persistMeeting({ academicYear: $('meetingYear').value }));
   $('meetingSemester').addEventListener('change', () => persistMeeting({ semester: $('meetingSemester').value }));
@@ -949,7 +1178,7 @@ async function openMeeting(id) {
     const snap = await getDoc(doc(db, 'coordinators_meetings', id));
     if (!snap.exists()) { showToast('Meeting not found.'); return; }
     currentMeeting = { id: snap.id, ...snap.data() };
-    renderMeetingsList();
+    paintBreadcrumb();
     paintMeetingHeader();
     subscribeAgendaItems();
     $('meetingEmpty').style.display = 'none';
@@ -1116,6 +1345,7 @@ async function confirmDeleteMeeting() {
       // Then the meeting itself
       await deleteDoc(doc(db, 'coordinators_meetings', currentMeeting.id));
       currentMeeting = null;
+      paintBreadcrumb();
       $('meetingEditor').style.display = 'none';
       $('meetingEmpty').style.display = 'flex';
       showToast('Meeting deleted.');
