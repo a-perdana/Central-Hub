@@ -185,7 +185,7 @@
     .task-table col.col-status   { width: 130px; }
     .task-table col.col-assignee { width: 26%; }
     .task-table col.col-priority { width: 100px; }
-    .task-table col.col-due      { width: 140px; }
+    .task-table col.col-due      { width: 160px; }
     .task-table col.col-progress { width: 130px; }
     .task-table th {
       font-size: 0.7rem; font-weight: 700;
@@ -1326,7 +1326,7 @@ function renderTaskTable(filterStatus = 'all', search = '') {
     const s   = STATUS[task.status]   || STATUS.todo;
     const p   = PRIORITY[task.priority] || PRIORITY.medium;
     const due = task.startDate
-      ? formatDate(task.startDate) + ' – ' + (task.dueDate ? formatDate(task.dueDate) : '?')
+      ? formatRange(task.startDate, task.dueDate)
       : (task.dueDate ? formatDate(task.dueDate) : '—');
     const isOverdue = task.dueDate && task.status !== 'completed' && new Date(task.dueDate) < _now;
     const pct = task.progress || 0;
@@ -1346,7 +1346,7 @@ function renderTaskTable(filterStatus = 'all', search = '') {
         <td>
           <span class="priority-badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
         </td>
-        <td class="${isOverdue ? 'due-overdue' : ''}">${due}</td>
+        <td class="due-cell ${isOverdue ? 'due-overdue' : ''}">${due}</td>
         <td>
           <div class="progress-wrap">
             <div class="progress-bar">
@@ -1789,6 +1789,29 @@ function formatDate(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Compact range: drops repeated year, drops repeated month when both ends share it
+// "1 Apr 2026" + "3 Apr 2026" → "1–3 Apr 2026"
+// "1 Apr 2026" + "3 May 2026" → "1 Apr – 3 May 2026"
+// "1 Apr 2026" + "3 Apr 2027" → "1 Apr 2026 – 3 Apr 2027"
+function formatRange(startStr, endStr) {
+  if (!startStr) return endStr ? formatDate(endStr) : '—';
+  if (!endStr) return formatDate(startStr) + ' – ?';
+  const s = new Date(startStr + 'T00:00:00');
+  const e = new Date(endStr + 'T00:00:00');
+  const sameYear  = s.getFullYear() === e.getFullYear();
+  const sameMonth = sameYear && s.getMonth() === e.getMonth();
+  if (sameMonth) {
+    const month = s.toLocaleDateString('en-GB', { month: 'short' });
+    return `${s.getDate()}–${e.getDate()} ${month} ${s.getFullYear()}`;
+  }
+  if (sameYear) {
+    const sFmt = s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const eFmt = e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return `${sFmt} – ${eFmt} ${e.getFullYear()}`;
+  }
+  return formatDate(startStr) + ' – ' + formatDate(endStr);
 }
 </script>
 
