@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
+  <!-- Quill rich-text editor (per-agenda-item, lazy-init on focus) -->
+  <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
   <style>
     /* === Page-specific tokens === */
     :root {
@@ -242,9 +244,70 @@
     .ai-icon-btn { width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; }
     .ai-icon-btn:hover { color: var(--accent); border-color: var(--accent); }
     .ai-icon-btn.danger:hover { color: #dc2626; border-color: #fecdd3; background: #fff1f2; }
-    .ai-body { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; line-height: 1.55; color: var(--ink-2); background: var(--paper-2); resize: vertical; min-height: 30px; }
-    .ai-body:focus { outline: none; border-color: var(--accent); background: var(--white); }
-    .ai-body.has-red-text { color: var(--tag-red-text); }
+    /* Body editor — Quill rich-text, lazy-mounted on first focus.
+       Before mount: .ai-body-preview shows sanitised HTML (or plain
+       text from legacy items). After mount: Quill takes over. */
+    .ai-body-wrap { margin-top: 4px; }
+    .ai-body-preview {
+      min-height: 44px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--white);
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      cursor: text;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .ai-body-preview:hover { border-color: var(--accent); }
+    .ai-body-preview:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .ai-body-preview .ai-body-placeholder { color: var(--ink-3); font-style: italic; }
+    .ai-body-preview > p:first-child { margin-top: 0; }
+    .ai-body-preview > p:last-child { margin-bottom: 0; }
+    .ai-body-preview p, .ai-body-preview ul, .ai-body-preview ol, .ai-body-preview blockquote { margin: 0.5em 0; }
+    .ai-body-preview ul, .ai-body-preview ol { padding-left: 1.4em; }
+    .ai-body-preview blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--ink-2); }
+    .ai-body-preview h1, .ai-body-preview h2, .ai-body-preview h3 { font-family: 'Lora', serif; margin: 0.5em 0 0.3em; line-height: 1.3; }
+    .ai-body-preview h1 { font-size: 1.2rem; }
+    .ai-body-preview h2 { font-size: 1.1rem; }
+    .ai-body-preview h3 { font-size: 1rem; }
+    .ai-body-preview pre, .ai-body-preview code { font-family: 'DM Mono', monospace; font-size: 0.85em; background: var(--paper-2); border-radius: 4px; }
+    .ai-body-preview code { padding: 1px 4px; }
+    .ai-body-preview pre { padding: 8px 10px; overflow-x: auto; }
+    .ai-body-preview a { color: var(--accent); text-decoration: underline; }
+
+    /* Quill mount — only borders + radius; let Quill snow theme do typography. */
+    .ai-body-quill { border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; background: var(--white); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .ai-body-quill[hidden] { display: none; }
+    .ai-body-quill .ql-toolbar.ql-snow {
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: var(--paper);
+      padding: 6px 8px;
+    }
+    .ai-body-quill .ql-container.ql-snow {
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.92rem;
+    }
+    .ai-body-quill .ql-editor {
+      min-height: 100px;
+      padding: 12px 14px;
+      line-height: 1.6;
+      color: var(--ink);
+    }
+    .ai-body-quill .ql-editor.ql-blank::before {
+      color: var(--ink-3);
+      font-style: italic;
+      left: 14px;
+      right: 14px;
+    }
+
+    /* Red-text tag tints the preview text the same way the old textarea did. */
+    .ai-body-wrap.has-red-text .ai-body-preview { color: var(--tag-red-text); }
+    .ai-body-wrap.has-red-text .ai-body-quill .ql-editor { color: var(--tag-red-text); }
 
     /* === Sub-items + Links === */
     .ai-section { margin-top: 10px; }
@@ -403,11 +466,19 @@
       .mh-wrap { border: none; box-shadow: none; margin-top: 0; padding: 0 0 12px; border-bottom: 1px solid #ccc; border-radius: 0; }
       .agenda-wrap { padding: 0; background: #fff; }
       .agenda-item { box-shadow: none; page-break-inside: avoid; }
+      /* Force every body to render as preview HTML — preview was prefilled
+         with bodyHtml on render; Quill mount (if open) is hidden so the
+         already-saved bodyHtml is what prints. beforeprint handler flushes
+         any unsaved Quill content into the preview first. */
+      .ai-body-preview { display: block !important; border: none; padding: 0; min-height: 0; }
+      .ai-body-quill { display: none !important; }
     }
   </style>
 </head>
 <body data-page-accent="cyan">
   <script src="firebase-config.js"></script>
+  <!-- Quill must load before the module script that references it. -->
+  <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
   <script type="module" src="auth-guard.js"></script>
 
   <!-- SHARED_NAVBAR -->
@@ -815,6 +886,18 @@ function wireUI() {
   $('btnDeleteMeeting').addEventListener('click', confirmDeleteMeeting);
   $('btnPrintExport').addEventListener('click', () => window.print());
 
+  // Before printing, flush every open Quill into its sibling preview node
+  // so the print CSS (which hides the Quill mount) renders the latest
+  // content. Triggered by Ctrl+P as well as the Export button.
+  window.addEventListener('beforeprint', () => {
+    agendaQuills.forEach((q, itemId) => {
+      const root = document.querySelector(`.agenda-item[data-item="${itemId}"]`);
+      const preview = root?.querySelector('[data-body-preview]');
+      if (!preview) return;
+      preview.innerHTML = sanitiseAgendaHtml(q.root.innerHTML) || '<span class="ai-body-placeholder">—</span>';
+    });
+  });
+
   // Header field auto-save
   $('meetingTitle').addEventListener('blur', () => persistMeeting({ title: $('meetingTitle').textContent.trim() }));
   $('meetingDate').addEventListener('change', () => persistMeeting({ meetingDate: $('meetingDate').value ? new Date($('meetingDate').value) : null }));
@@ -1053,9 +1136,23 @@ async function confirmDeleteMeeting() {
 
 /* ───── Agenda items — subscribe + render ───────────────────────── */
 let itemsUnsub = null;
+
+// One Quill instance per active agenda item, indexed by item id. Lives
+// through onSnapshot redraws because renderAgenda preserves the mount
+// node for items that have an active Quill instance.
+const agendaQuills = new Map();
+
+// Debounced re-render — snapshot fires after every per-keystroke save.
+// Without this, the active Quill instance would be torn down on every
+// 700ms save cycle, losing focus + selection.
+const renderAgendaDebounced = debounce(() => renderAgenda(), 350);
+
 function subscribeAgendaItems() {
   if (itemsUnsub) { itemsUnsub(); itemsUnsub = null; }
   if (!currentMeeting) return;
+  // Switching meetings — drop any Quill instances tied to the previous one.
+  agendaQuills.forEach((q) => { try { q.disable(); } catch {} });
+  agendaQuills.clear();
   const q = query(
     collection(db, 'coordinators_meeting_items'),
     where('meetingId', '==', currentMeeting.id),
@@ -1063,7 +1160,7 @@ function subscribeAgendaItems() {
   );
   itemsUnsub = onSnapshot(q, (snap) => {
     currentItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderAgenda();
+    renderAgendaDebounced();
   }, (err) => {
     console.error('[agenda-items]', err);
     $('agendaList').innerHTML = `<div style="text-align:center;padding:30px;color:var(--ink-3);font-size:0.86rem;">Could not load items: ${escHtml(err.code || err.message)}</div>`;
@@ -1073,12 +1170,167 @@ function subscribeAgendaItems() {
 function renderAgenda() {
   const wrap = $('agendaList');
   if (!currentItems.length) {
+    // Tear down all Quills before nuking the DOM.
+    agendaQuills.forEach((q) => { try { q.disable(); } catch {} });
+    agendaQuills.clear();
     wrap.innerHTML = `<div style="text-align:center;padding:30px;color:var(--ink-3);font-size:0.86rem;">No agenda items yet. Hit "Add agenda item" to start.</div>`;
     return;
   }
-  wrap.innerHTML = currentItems.map((it, idx) => renderAgendaItem(it, idx)).join('');
-  // Wire up
-  currentItems.forEach((it, idx) => wireAgendaItem(it, idx));
+
+  // Surgical reconciliation: items with an active Quill are preserved
+  // in-place (their DOM nodes never leave the tree, so the Quill instance
+  // stays alive). Other items are re-rendered from scratch on each pass.
+  const existingNodes = new Map();
+  wrap.querySelectorAll('.agenda-item[data-item]').forEach(node => {
+    existingNodes.set(node.dataset.item, node);
+  });
+
+  const frag = document.createDocumentFragment();
+  currentItems.forEach((it, idx) => {
+    const hasActiveQuill = agendaQuills.has(it.id);
+    const existing = existingNodes.get(it.id);
+    if (hasActiveQuill && existing) {
+      // Keep the existing node — Quill state survives. Other field changes
+      // (tag toggle, subject pick, sub-items) WILL be deferred until the
+      // user clicks out of the Quill; acceptable since edits to those
+      // fields originate from this user's UI anyway.
+      existing.querySelector('.ai-num').textContent = `${idx + 1}.`;
+      frag.appendChild(existing);
+      existingNodes.delete(it.id);
+    } else {
+      // Build fresh DOM + wire it up. If a stale DOM existed (no active
+      // Quill), it gets discarded.
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderAgendaItem(it, idx);
+      const node = tmp.firstElementChild;
+      frag.appendChild(node);
+      existingNodes.delete(it.id);
+    }
+  });
+
+  // Anything left in existingNodes was deleted upstream — tear down its Quill.
+  existingNodes.forEach((node, id) => {
+    if (agendaQuills.has(id)) { try { agendaQuills.get(id).disable(); } catch {} agendaQuills.delete(id); }
+  });
+
+  wrap.innerHTML = '';
+  wrap.appendChild(frag);
+
+  // Wire up only the items that DON'T already have a live Quill (those
+  // were appended as existing nodes with listeners still attached).
+  currentItems.forEach((it, idx) => {
+    if (!agendaQuills.has(it.id)) wireAgendaItem(it, idx);
+  });
+}
+
+/* HTML allowlist for the body editor. Quill emits clean HTML by default
+   but we still sanitise on save + render — defence-in-depth for paste
+   from external sources (Word, web pages). */
+const AGENDA_ALLOWED_TAGS = new Set([
+  'P','BR','STRONG','EM','B','I','U','S','STRIKE',
+  'UL','OL','LI',
+  'H1','H2','H3','H4','H5','H6',
+  'A','BLOCKQUOTE','CODE','PRE','SPAN','DIV'
+]);
+const AGENDA_ALLOWED_ATTRS = {
+  A: new Set(['href','title','target','rel']),
+  '*': new Set([])
+};
+function sanitiseAgendaHtml(html) {
+  if (!html) return '';
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html);
+  (function walk(node) {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType !== 1) continue;
+      if (!AGENDA_ALLOWED_TAGS.has(child.tagName)) {
+        // Lift children up + drop the tag itself.
+        while (child.firstChild) child.parentNode.insertBefore(child.firstChild, child);
+        child.remove();
+        continue;
+      }
+      const okSet = AGENDA_ALLOWED_ATTRS[child.tagName] || AGENDA_ALLOWED_ATTRS['*'];
+      for (const attr of [...child.attributes]) {
+        if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+      }
+      if (child.tagName === 'A') {
+        const href = child.getAttribute('href') || '';
+        if (!/^(https?:|mailto:|\/|#)/i.test(href)) child.removeAttribute('href');
+        child.setAttribute('rel', 'noopener noreferrer');
+        if (/^https?:/i.test(href)) child.setAttribute('target', '_blank');
+      }
+      walk(child);
+    }
+  })(tpl.content);
+  return tpl.innerHTML.trim();
+}
+
+/* Initialise a Quill instance for one agenda item. Idempotent — repeat
+   calls return the same instance. Mounts under [data-quill-mount] and
+   hides the [data-body-preview] sibling. */
+function mountAgendaQuill(it, preview, mount) {
+  if (agendaQuills.has(it.id)) {
+    // Already mounted — just focus the editor (preview click should still
+    // place the cursor at end).
+    agendaQuills.get(it.id).focus();
+    return agendaQuills.get(it.id);
+  }
+  if (typeof Quill === 'undefined') {
+    // CDN failed — fall back to a plain textarea so the user can still type.
+    const ta = document.createElement('textarea');
+    ta.value = it.body || '';
+    ta.style.cssText = 'width:100%;min-height:120px;padding:10px;border:1px solid var(--accent);border-radius:8px;font-family:DM Sans,sans-serif;font-size:0.92rem;line-height:1.6;';
+    ta.addEventListener('input', debounce(() => persistItem(it.id, { body: ta.value, bodyHtml: '' })));
+    mount.innerHTML = '';
+    mount.appendChild(ta);
+    mount.hidden = false;
+    preview.hidden = true;
+    ta.focus();
+    return null;
+  }
+
+  preview.hidden = true;
+  mount.hidden = false;
+
+  const q = new Quill(mount, {
+    theme: 'snow',
+    placeholder: 'Body — context, decisions, sample text…',
+    modules: {
+      toolbar: [
+        [{ header: [2, 3, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link', 'blockquote', 'code-block'],
+        ['clean'],
+      ],
+    },
+  });
+
+  // Seed initial content from bodyHtml (preferred) or plain body.
+  if (it.bodyHtml) {
+    q.clipboard.dangerouslyPasteHTML(sanitiseAgendaHtml(it.bodyHtml));
+  } else if (it.body) {
+    // Convert plain-text legacy body into a paragraph so Quill renders
+    // line breaks correctly.
+    q.setText(it.body);
+  }
+  q.focus();
+  // Cursor at end of content.
+  q.setSelection(q.getLength(), 0);
+
+  // Debounced save — text-change fires per keystroke. Save both fields:
+  // body (plain text, used by Activities task description + Decision body)
+  // + bodyHtml (sanitised rich text, used by the reader).
+  const save = debounce(() => {
+    const html = q.root.innerHTML;
+    const cleanHtml = sanitiseAgendaHtml(html);
+    const plain = q.getText().replace(/\n+$/, ''); // Quill always appends a trailing \n
+    persistItem(it.id, { body: plain, bodyHtml: cleanHtml });
+  }, 700);
+  q.on('text-change', save);
+
+  agendaQuills.set(it.id, q);
+  return q;
 }
 
 function renderAgendaItem(it, idx) {
@@ -1164,7 +1416,12 @@ function renderAgendaItem(it, idx) {
           <button class="ai-icon-btn danger" data-delete="1" title="Delete item">×</button>
         </div>
       </div>
-      <textarea class="ai-body ${tags.includes('red_text') ? 'has-red-text' : ''}" data-field="body" placeholder="Body — context, decisions, sample text. Plain text only.">${escHtml(it.body || '')}</textarea>
+      <div class="ai-body-wrap ${tags.includes('red_text') ? 'has-red-text' : ''}" data-body-wrap>
+        <!-- Pre-render: read-only preview of the existing body. Quill mounts
+             into [data-quill-mount] on first focus and the preview hides. -->
+        <div class="ai-body-preview" data-body-preview tabindex="0" role="textbox" aria-label="Agenda item body — click to edit">${(it.bodyHtml ? sanitiseAgendaHtml(it.bodyHtml) : escHtml(it.body || '').replace(/\n/g,'<br>')) || `<span class="ai-body-placeholder">Body — context, decisions, sample text. Click to format with rich text.</span>`}</div>
+        <div class="ai-body-quill" data-quill-mount hidden></div>
+      </div>
 
       <div class="ai-meta-row">
         <div class="ai-tags-row">${tagBtns}</div>
@@ -1201,13 +1458,25 @@ function wireAgendaItem(it, idx) {
   const root = document.querySelector(`.agenda-item[data-item="${it.id}"]`);
   if (!root) return;
 
-  // Title + body auto-save
+  // Title auto-save
   root.querySelector('[data-field="title"]').addEventListener('input', debounce((e) => {
     persistItem(it.id, { title: e.target.value });
   }));
-  root.querySelector('[data-field="body"]').addEventListener('input', debounce((e) => {
-    persistItem(it.id, { body: e.target.value });
-  }));
+
+  // Body — lazy-mount Quill on first focus of the preview. Until then the
+  // preview shows the sanitised existing content so the user reads it as
+  // formatted text instead of an empty toolbar.
+  const preview = root.querySelector('[data-body-preview]');
+  const mount = root.querySelector('[data-quill-mount]');
+  if (preview && mount) {
+    preview.addEventListener('focus', () => mountAgendaQuill(it, preview, mount), { once: true });
+    preview.addEventListener('mousedown', (e) => {
+      // Click anywhere in the preview opens the editor immediately and
+      // re-focuses into Quill at the end of the content.
+      e.preventDefault();
+      mountAgendaQuill(it, preview, mount);
+    });
+  }
 
   // Move + delete
   root.querySelector('[data-move="up"]').addEventListener('click', () => moveItem(idx, -1));
@@ -1267,6 +1536,7 @@ async function addAgendaItem() {
       order: nextOrder,
       title: '',
       body: '',
+      bodyHtml: '',
       links: [],
       subItems: [],
       tags: [],
