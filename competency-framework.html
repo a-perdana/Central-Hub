@@ -157,18 +157,40 @@ body::before {
 .domain-card[data-color="dom-amber"]  { --dc: #d97706; --dc-soft: #fef3c7; --dc-text: #92400e; }
 .domain-card[data-color="dom-rose"]   { --dc: #e11d48; --dc-soft: #ffe4e6; --dc-text: #be123c; }
 .domain-card[data-color="dom-teal"]   { --dc: #0d9488; --dc-soft: #ccfbf1; --dc-text: #0f766e; }
-.domain-comps { padding: 6px 20px 14px; }
+/* ─── Per-domain progress bar (AH parity) ─── */
+.domain-progress { padding: 0 20px 12px; }
+.dp-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); margin-bottom: 5px; }
+.dp-bar { height: 5px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.dp-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+
+/* ─── Competency cards (AH .comp-item parity) ─── */
+.domain-comps { padding: 6px 20px 16px; display: flex; flex-direction: column; gap: 6px; }
 .comp-row {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 12px 12px; font-size: 13px; color: var(--ink); border-bottom: 1px dashed var(--border);
-  cursor: pointer; border-radius: 6px;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--paper);
+  cursor: pointer; transition: all .15s;
+  font-size: 13px; color: var(--ink);
 }
-.comp-row:hover { background: var(--accent-2); }
-.comp-row:last-child { border-bottom: none; }
-.comp-row__head {
-  display: flex; align-items: baseline; gap: 10px;
+.comp-row:hover { border-color: var(--dc, var(--accent)); background: var(--dc-soft, var(--accent-2)); }
+.comp-row[hidden] { display: none !important; }
+.comp-check {
+  width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); background: #fff;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;
 }
+.comp-check.earned { background: #22c55e; border-color: #22c55e; }
+.comp-check.earned svg { display: block; }
+.comp-check svg { display: none; width: 10px; height: 10px; color: #fff; }
+.comp-body { flex: 1; min-width: 0; }
+.comp-name { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.comp-intent { font-size: 11.5px; color: var(--ink-2); line-height: 1.5; margin-top: 2px; }
+.comp-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.comp-level-badge { display: inline-flex; padding: 2px 8px; border-radius: 50px; font-size: 10px; font-weight: 700; }
+.comp-arrow { color: var(--ink-3); flex-shrink: 0; padding-top: 4px; }
+.comp-arrow svg { width: 14px; height: 14px; }
+.lvl-awareness   { background: #e0f2fe; color: #0369a1; }
+.lvl-practitioner { background: #fef3c7; color: #92400e; }
+.lvl-advanced    { background: #ccfbf1; color: #0f766e; }
+.lvl-lead        { background: #dcfce7; color: #15803d; }
 .comp-id {
   font-family: 'DM Mono', monospace; font-size: 10.5px; color: var(--ink-3);
   flex-shrink: 0; min-width: 48px; padding-top: 2px;
@@ -459,12 +481,21 @@ body::before {
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 const LEVEL_ORDER = ['awareness', 'practitioner', 'advanced', 'lead'];
+const LEVEL_LABEL = { awareness: 'Awareness', practitioner: 'Practitioner', advanced: 'Advanced', lead: 'Lead' };
+
+// Per-user earned levels — matches AH pattern (let earned = {} loaded
+// from user_competencies/{uid}.earned_central). Shape: { [compId]: { level } }.
+let earned = {};
 
 document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
-  // Read the Specialist track straight from Firestore. The doc was seeded
-  // by scripts/competency/seed-ch-competency-framework.js — see Phase 2 C.3.
-  const snap = await getDoc(doc(window.db, 'competency_framework', 'specialists'));
-  if (!snap.exists()) {
+  // Read the Specialist track + the user's own earned-levels map in parallel.
+  // earned_central is the CH-side field (TH = earned, AH = earned_academic).
+  const [fwSnap, uSnap] = await Promise.all([
+    getDoc(doc(window.db, 'competency_framework', 'specialists')),
+    getDoc(doc(window.db, 'user_competencies', user.uid)),
+  ]);
+
+  if (!fwSnap.exists()) {
     document.getElementById('domainGrid').innerHTML =
       '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--ink-3);font-size:13px;">' +
       'Specialist competency framework has not been seeded yet. Run ' +
@@ -472,7 +503,11 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
     return;
   }
 
-  const fw = snap.data();
+  if (uSnap.exists()) {
+    earned = uSnap.data().earned_central || {};
+  }
+
+  const fw = fwSnap.data();
   renderBasis(fw);
   renderKpis(fw);
   renderDomains(fw);
@@ -584,54 +619,88 @@ document.addEventListener('keydown', (e) => {
   if (id) window.goToPath(id);
 });
 
+// Render domain grid + per-domain progress bar + each competency as a
+// click-to-Learning-Path card. Mirrors AH CompetencyFramework.html
+// renderDomains so all three hubs share the same visual contract.
 function renderDomains(fw) {
   const grid = document.getElementById('domainGrid');
   const compsByDomain = {};
   for (const c of fw.competencies || []) {
     (compsByDomain[c.domainId] ||= []).push(c);
   }
+  const colorMap = {
+    'dom-teal':'#0d9488','dom-blue':'#2563eb','dom-green':'#16a34a',
+    'dom-amber':'#d97706','dom-purple':'#7c3aed','dom-rose':'#e11d48'
+  };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
   grid.innerHTML = (fw.domains || []).map(d => {
     const comps = compsByDomain[d.id] || [];
+    const earnedInDomain = comps.filter(c => earned[c.id]?.level).length;
+    const pct = comps.length ? Math.round((earnedInDomain / comps.length) * 100) : 0;
     const color = d.color || 'dom-purple';
+    const fill = colorMap[color] || '#7c3aed';
+
+    const compsHtml = comps.map(c => {
+      const lvl = earned[c.id]?.level;
+      const isEarned = !!lvl;
+      const firstLevel = (c.levels || [])[0] || 'awareness';
+      const displayLevel = lvl ? LEVEL_LABEL[lvl] : LEVEL_LABEL[firstLevel];
+      const levelClass = `lvl-${lvl || firstLevel}`;
+
+      const refs    = Array.isArray(c.cambridgeStandardRefs) ? c.cambridgeStandardRefs : [];
+      const perms   = Array.isArray(c.permendiknasRefs)      ? c.permendiknasRefs      : [];
+      const esRefs  = Array.isArray(c.eduversalStandardRefs) ? c.eduversalStandardRefs : [];
+      const aicfRefs = Array.isArray(c.aicfRefs)             ? c.aicfRefs              : [];
+      const pedRefs  = Array.isArray(c.pedagogyRefs)         ? c.pedagogyRefs          : [];
+      const chips =
+        refs.map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('') +
+        perms.map(p => `<span class="perm-pill" title="Permendiknas No.16/2007 pillar — ${esc(p)}">${esc(p)}</span>`).join('') +
+        esRefs.map(e => `<span class="es-pill" data-es-ref="${esc(e)}" title="Eduversal Academic Standards madde ${esc(e)}">ES ${esc(e)}</span>`).join('') +
+        aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF block ${esc(a)}">AICF</span>`).join('') +
+        pedRefs.map(p => `<span class="ped-pill" title="${esc(p)}">📖 ${esc(p)}</span>`).join('');
+
+      const checkSvg = `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M10 3L5 9 2 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      const arrowSvg = `<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>`;
+
+      return `
+        <div class="comp-row"
+             data-comp-id="${esc(c.id)}"
+             data-domain-id="${esc(c.domainId)}"
+             data-search="${esc((c.id + ' ' + c.name + ' ' + (c.intent||'')).toLowerCase())}"
+             onclick="goToPath('${esc(c.id)}')"
+             role="link" tabindex="0" title="Open in Learning Path">
+          <div class="comp-check ${isEarned ? 'earned' : ''}">${checkSvg}</div>
+          <div class="comp-body">
+            <div class="comp-name">${esc(c.name)}</div>
+            ${c.intent ? `<div class="comp-intent">${esc(c.intent)}</div>` : ''}
+            <div class="comp-meta-row">
+              <span class="comp-level-badge ${levelClass}">${isEarned ? '✓ ' : ''}${displayLevel}</span>
+            </div>
+            ${chips ? `<div class="comp-chips">${chips}</div>` : ''}
+          </div>
+          <div class="comp-arrow">${arrowSvg}</div>
+        </div>`;
+    }).join('');
+
     return `
       <div class="domain-card" data-color="${color}" data-domain-id="${d.id}">
         <div class="domain-card-header">
-          <div class="domain-icon">${d.icon || '•'}</div>
+          <div class="domain-icon">${esc(d.icon || '•')}</div>
           <div class="domain-info">
-            <div class="domain-label">${d.id.toUpperCase()}</div>
-            <div class="domain-name">${d.name}</div>
+            <div class="domain-label">${esc(d.id.toUpperCase())}</div>
+            <div class="domain-name">${esc(d.name)}</div>
           </div>
         </div>
-        ${d.desc ? `<div class="domain-desc">${d.desc}</div>` : ''}
-        <div class="domain-comps">
-          ${comps.map(c => {
-            const refs = Array.isArray(c.cambridgeStandardRefs) ? c.cambridgeStandardRefs : [];
-            const perms = Array.isArray(c.permendiknasRefs) ? c.permendiknasRefs : [];
-            const esRefs = Array.isArray(c.eduversalStandardRefs) ? c.eduversalStandardRefs : [];
-            const aicfRefs = Array.isArray(c.aicfRefs) ? c.aicfRefs : [];
-            const pedRefs = Array.isArray(c.pedagogyRefs) ? c.pedagogyRefs : [];
-            const lvls = Array.isArray(c.levels) ? c.levels.length : 0;
-            const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-            const intent = c.intent ? `<div class="comp-intent">${esc(c.intent)}</div>` : '';
-            const chips =
-              refs.map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('') +
-              perms.map(p => `<span class="perm-pill" title="Permendiknas No.16/2007 pillar">${esc(p)}</span>`).join('') +
-              esRefs.map(e => `<span class="es-pill" data-es-ref="${esc(e)}" title="Eduversal Academic Standards madde ${esc(e)}">ES ${esc(e)}</span>`).join('') +
-              aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF block ${esc(a)}">AICF ${esc(a)}</span>`).join('') +
-              pedRefs.map(p => `<span class="ped-pill" title="${esc(p)}">📖 ${esc(p)}</span>`).join('');
-            return `
-              <div class="comp-row" data-comp-id="${esc(c.id)}" data-domain-id="${esc(c.domainId)}" data-search="${esc((c.id + ' ' + c.name + ' ' + (c.intent||'')).toLowerCase())}" onclick="goToPath('${esc(c.id)}')" role="link" tabindex="0" title="Open in Learning Path">
-                <div class="comp-row__head">
-                  <span class="comp-id">${esc(c.id)}</span>
-                  <span class="comp-name">${esc(c.name)}</span>
-                  <span class="comp-levels">${lvls} lvl</span>
-                </div>
-                ${intent}
-                ${chips ? `<div class="comp-chips">${chips}</div>` : ''}
-              </div>
-            `;
-          }).join('')}
+        ${d.desc ? `<div class="domain-desc">${esc(d.desc)}</div>` : ''}
+        <div class="domain-progress">
+          <div class="dp-label">
+            <span>${earnedInDomain}/${comps.length} earned</span>
+            <span>${pct}%</span>
+          </div>
+          <div class="dp-bar"><div class="dp-fill" style="width:${pct}%;background:${fill};"></div></div>
         </div>
+        <div class="domain-comps">${compsHtml}</div>
       </div>
     `;
   }).join('');
