@@ -26,7 +26,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 import {
-  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, isValidSubject, subjectLabel
+  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, SUBJECT_PACING_LINKS, isValidSubject, subjectLabel
 } from './subject-config.js';
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,16 @@ function renderPicker() {
         ? 'You have no ch_subjects[] assigned. Browse any department in read-only mode below.'
         : `Your specialty: ${userSubjects.map(subjectLabel).join(', ')}.`;
 
-  const cards = SUBJECTS.map(s => {
+  // Sort so the coordinator's own subjects float to the top of the grid.
+  // Within each group preserve the canonical SUBJECTS array order (Math
+  // first, edu-steam last) so the layout is predictable for admins/directors
+  // who see all 9.
+  const orderedSubjects = [
+    ...SUBJECTS.filter(s => userSubjects.includes(s)),
+    ...SUBJECTS.filter(s => !userSubjects.includes(s)),
+  ];
+
+  const cards = orderedSubjects.map(s => {
     const isMine = userSubjects.includes(s);
     const writable = isAdmin || isDirector || isMine;
     const writeChip = writable
@@ -208,20 +217,39 @@ function openSubject(subjectId) {
         <h3 class="dw-section-title">Overview</h3>
       </div>
       <div class="dw-kpi-grid" id="dwKpiGrid">
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Annual Plan</div><div class="dw-kpi-val" id="kpiArtifacts">—</div><div class="dw-kpi-sub">artifacts complete</div></div>
+        <div class="dw-kpi"><div class="dw-kpi-lbl">Artifacts</div><div class="dw-kpi-val" id="kpiArtifacts">—</div><div class="dw-kpi-sub">of 4 core types</div></div>
         <div class="dw-kpi"><div class="dw-kpi-lbl">Subject Leaders</div><div class="dw-kpi-val" id="kpiLeaders">—</div><div class="dw-kpi-sub">across the network</div></div>
         <div class="dw-kpi"><div class="dw-kpi-lbl">Schools Covered</div><div class="dw-kpi-val" id="kpiSchools">—</div><div class="dw-kpi-sub">with a named leader</div></div>
         <div class="dw-kpi"><div class="dw-kpi-lbl">Last Meeting</div><div class="dw-kpi-val" id="kpiLastMeeting">—</div><div class="dw-kpi-sub" id="kpiLastMeetingSub">no minutes yet</div></div>
       </div>
     </section>
 
-    <!-- Annual Plan (bound) -->
+    <!-- Annual Plan: pacing-link strip (auto) + Annual Strategy artifact (manual) -->
     <section class="dw-section" data-section="annual-plan" aria-label="Annual Plan">
       <div class="dw-section-head">
         <h3 class="dw-section-title">Annual Plan</h3>
-        <span class="dw-section-mode">Artifact · Department Artifacts</span>
+        <span class="dw-section-mode">Pacing + Strategy</span>
       </div>
-      <div id="dwAnnualPlan" class="dw-bound-slot"><div class="dw-loading">Loading…</div></div>
+
+      <!-- Auto-rendered live links to the Cambridge pacing pages for this subject. -->
+      <div class="dw-pacing-block">
+        <div class="dw-block-lbl">
+          <span class="dw-block-lbl-icon" aria-hidden="true">📐</span>
+          <span>Pacing — Cambridge Curriculum</span>
+          <span class="dw-block-lbl-hint">live · Curriculum > Pacing</span>
+        </div>
+        <div id="dwPacingStrip" class="dw-pacing-strip"></div>
+      </div>
+
+      <!-- Manual artifact slot — coordinator's annual strategy notes / PDF. -->
+      <div class="dw-strategy-block">
+        <div class="dw-block-lbl">
+          <span class="dw-block-lbl-icon" aria-hidden="true">📋</span>
+          <span>Annual Strategy</span>
+          <span class="dw-block-lbl-hint">artifact · Department Artifacts</span>
+        </div>
+        <div id="dwAnnualPlan" class="dw-bound-slot"><div class="dw-loading">Loading…</div></div>
+      </div>
     </section>
 
     <!-- Subject Leaders (live) -->
@@ -244,10 +272,37 @@ function openSubject(subjectId) {
   `;
 
   // Wire each section.
+  renderPacingStrip(subjectId);
   bindAnnualPlan(subjectId);
   bindSubjectLeaders(subjectId);
   bindDiscussion(subjectId);
   bindOverviewKpi(subjectId);
+}
+
+// ---------------------------------------------------------------------------
+// Section: Pacing strip (auto-rendered, no Firestore)
+// ---------------------------------------------------------------------------
+
+function renderPacingStrip(subjectId) {
+  const slot = $('dwPacingStrip');
+  if (!slot) return;
+  const links = SUBJECT_PACING_LINKS[subjectId] || [];
+  if (!links.length) {
+    slot.innerHTML = `
+      <div class="dw-pacing-empty">
+        No Cambridge pacing pages for ${escHtml(SUBJECT_LABELS[subjectId])} —
+        the department is managed through the Annual Strategy artifact below.
+      </div>
+    `;
+    return;
+  }
+  slot.innerHTML = links.map(L => `
+    <a class="dw-pacing-link" href="${escHtml(L.slug)}">
+      <span class="dw-pacing-stage">${escHtml(L.stage)}</span>
+      <span class="dw-pacing-label">${escHtml(L.label)}</span>
+      <svg class="dw-pacing-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </a>
+  `).join('');
 }
 
 // ---------------------------------------------------------------------------
@@ -293,11 +348,12 @@ function renderAnnualPlan(slot, subjectId, docs) {
   if (!docs.length) {
     slot.innerHTML = `
       <div class="dw-empty">
-        <div class="dw-empty-title">No Annual Plan yet for ${escHtml(SUBJECT_LABELS[subjectId])}.</div>
+        <div class="dw-empty-title">No Annual Strategy uploaded yet for ${escHtml(SUBJECT_LABELS[subjectId])}.</div>
         <div class="dw-empty-desc">
+          The Cambridge pacing pages above already cover <em>what</em> gets taught. Use the Annual Strategy artifact for the rest — yearly goals, staffing, budget, club plans, retrospective.
           ${canWriteActive
-            ? `Open <a href="department-artifacts?subject=${encodeURIComponent(subjectId)}&type=annual_plan">Department Artifacts</a> to upload one.`
-            : 'The subject coordinator will add one when ready.'}
+            ? ` <a href="department-artifacts?subject=${encodeURIComponent(subjectId)}&type=annual_plan">Open Department Artifacts</a> to upload one.`
+            : ''}
         </div>
       </div>
     `;
@@ -313,9 +369,9 @@ function renderAnnualPlan(slot, subjectId, docs) {
   slot.innerHTML = `
     <div class="dw-artifact-card">
       <div class="dw-artifact-row">
-        <div class="dw-artifact-icon" aria-hidden="true">📘</div>
+        <div class="dw-artifact-icon" aria-hidden="true">📋</div>
         <div class="dw-artifact-main">
-          <div class="dw-artifact-title">${escHtml(current.title || 'Annual Plan')}</div>
+          <div class="dw-artifact-title">${escHtml(current.title || 'Annual Strategy')}</div>
           <div class="dw-artifact-meta">
             <span class="dw-pill dw-pill--${statusClass}">${escHtml(current.status || 'draft')}</span>
             ${current.version ? `<span class="dw-pill">v${escHtml(current.version)}</span>` : ''}

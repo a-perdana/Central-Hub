@@ -37,6 +37,57 @@
     .subject-icon.english { background: linear-gradient(135deg,#ec4899,#9d174d); }
     .subject-icon.bahasa { background: linear-gradient(135deg,#f43f5e,#9f1239); }
     .subject-icon.religion { background: linear-gradient(135deg,#6366f1,#3730a3); }
+    /* Cambridge pacing strip — surfaces the live "Annual Plan" via links to the
+       per-stage pacing pages above the 4 manual artifact slots. */
+    .pacing-strip {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      background: linear-gradient(180deg, #faf8ff 0%, #f5f3ff 100%);
+      border: 1px solid #ede9fe;
+      border-radius: 8px;
+      align-items: center;
+    }
+    .pacing-strip-lbl {
+      font-size: 0.66rem; font-weight: 700;
+      color: #6d28d9;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-right: 4px;
+      flex-shrink: 0;
+    }
+    .pacing-strip-link {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 8px 3px 4px;
+      background: #fff;
+      border: 1px solid #c4b5fd;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: border-color .12s, background .12s, transform .1s;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .pacing-strip-link:hover { border-color: #7c3aed; background: #f5f3ff; transform: translateY(-1px); }
+    .pacing-strip-stage {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem; font-weight: 700;
+      color: #fff;
+      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      padding: 2px 5px;
+      border-radius: 4px;
+      letter-spacing: 0.02em;
+      flex-shrink: 0;
+    }
+    .pacing-strip-label {
+      font-size: 0.74rem;
+      color: var(--ink-2);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pacing-strip-link:hover .pacing-strip-label { color: #6d28d9; }
+
     .artifact-row-list { display: flex; flex-direction: column; gap: 8px; }
     .artifact-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--paper); border: 1px solid var(--border); border-radius: 7px; font-size: 0.86rem; transition: background .12s; cursor: pointer; }
     .artifact-row:hover { background: #faf8ff; border-color: #c4b5fd; }
@@ -120,7 +171,7 @@
     <div class="main-header">
       <div>
         <h1>Department Artifacts</h1>
-        <div class="subtitle">Annual Plan · DTP Report · Department Handbook · Subject Policy — versioned per subject.</div>
+        <div class="subtitle">Annual Strategy · DTP Report · Department Handbook · Subject Policy — versioned per subject. Cambridge pacing pages render at the top of each subject card.</div>
       </div>
       <button class="da-btn-add" id="btnAddArtifact">+ Add artifact</button>
     </div>
@@ -131,7 +182,7 @@
       </select>
       <select class="da-filter" id="filterType">
         <option value="">All types</option>
-        <option value="annual_plan">Annual Plan</option>
+        <option value="annual_plan">Annual Strategy</option>
         <option value="dtp_report">DTP Report</option>
         <option value="department_handbook">Department Handbook</option>
         <option value="subject_policy">Subject Policy</option>
@@ -169,7 +220,7 @@
         <div class="form-group">
           <label class="form-label">Type</label>
           <select class="form-select" id="artType">
-            <option value="annual_plan">Annual Plan</option>
+            <option value="annual_plan">Annual Strategy</option>
             <option value="dtp_report">DTP Report</option>
             <option value="department_handbook">Department Handbook</option>
             <option value="subject_policy">Subject Policy</option>
@@ -178,7 +229,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">Title</label>
-          <input type="text" class="form-input" id="artTitle" placeholder="e.g. English Annual Plan 2025-2026">
+          <input type="text" class="form-input" id="artTitle" placeholder="e.g. English Annual Strategy 2025-2026">
         </div>
         <div class="form-group">
           <label class="form-label">Academic year</label>
@@ -246,11 +297,12 @@ import {
 import {
   getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+import { SUBJECT_PACING_LINKS } from './partials/subject-config.js';
 
 const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion'];
 const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion' };
 const ARTIFACT_TYPES = ['annual_plan','dtp_report','department_handbook','subject_policy','other'];
-const ARTIFACT_TYPE_LABELS = { annual_plan:'Annual Plan', dtp_report:'DTP Report', department_handbook:'Department Handbook', subject_policy:'Subject Policy', other:'Other' };
+const ARTIFACT_TYPE_LABELS = { annual_plan:'Annual Strategy', dtp_report:'DTP Report', department_handbook:'Department Handbook', subject_policy:'Subject Policy', other:'Other' };
 
 let db, storage, currentUser, userProfile;
 let isAdmin = false;
@@ -423,9 +475,23 @@ function renderGrid() {
       `;
     }).join('');
 
+    const pacingLinks = SUBJECT_PACING_LINKS[subjectId] || [];
+    const pacingStrip = pacingLinks.length ? `
+      <div class="pacing-strip">
+        <div class="pacing-strip-lbl">📐 Cambridge pacing</div>
+        ${pacingLinks.map(L => `
+          <a class="pacing-strip-link" href="${escHtml(L.slug)}" title="${escHtml(L.label)}">
+            <span class="pacing-strip-stage">${escHtml(L.stage)}</span>
+            <span class="pacing-strip-label">${escHtml(L.label)}</span>
+          </a>
+        `).join('')}
+      </div>
+    ` : '';
+
     return `
       <div class="subject-card">
         <h3><span class="subject-icon ${subjectId}">${SUBJECT_LABELS[subjectId].slice(0,2)}</span>${SUBJECT_LABELS[subjectId]}</h3>
+        ${pacingStrip}
         <div class="artifact-row-list">${rows}</div>
       </div>
     `;
