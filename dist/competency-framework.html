@@ -7,6 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="competency-framework.css">
 <script src="firebase-config.js"></script>
   <link rel="stylesheet" href="shared-styles.css">
 
@@ -179,15 +180,8 @@ body::before {
 .level-card-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
 
 /* ─── DOMAIN TAKEAWAYS ACCORDION (AH parity port 2026-05-23) ─── */
-.domain-takeaways { padding: 0 20px 16px; border-top: 1px solid var(--border); margin-top: 4px; }
-.domain-takeaways-toggle { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 0; cursor: pointer; user-select: none; }
-.domain-takeaways-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
-.domain-takeaways-chevron { width: 16px; height: 16px; color: var(--ink-3); transition: transform .2s; flex-shrink: 0; }
-.domain-card.tk-open .domain-takeaways-chevron { transform: rotate(180deg); }
-.domain-takeaways-list { display: none; padding-top: 10px; flex-direction: column; gap: 6px; }
-.domain-card.tk-open .domain-takeaways-list { display: flex; }
-.domain-tk-item { font-size: 12px; color: var(--ink-2); line-height: 1.5; padding: 7px 10px; border-radius: 8px; background: var(--paper); border-left: 3px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
-.domain-tk-item::before { content: '→'; font-weight: 700; color: var(--ink-3); flex-shrink: 0; margin-top: 1px; }
+/* .domain-takeaways accordion + .cf-legend popover — shared CSS partial in
+   competency-framework.css (source: /shared-design/competency-framework.css) */
 
 /* ─── PAGE INTRO BANNER (AH parity port 2026-05-23, dismissable) ─── */
 .page-intro { display:none; background:linear-gradient(135deg,#ede9fe 0%,#e0e7ff 100%); border:1px solid #c4b5fd; border-radius:14px; padding:16px 20px 16px 18px; margin:18px 0; position:relative; }
@@ -4087,13 +4081,40 @@ function nextRecommendedLevel(c) {
 let earned = {};
 let saScores = {};
 
+// Minimal load-error toast. Triggered when Firestore reads fail
+// (network drop, rule reject). Auto-dismisses after 5s. Silent failure
+// would let the user think their data is empty when it's just unreachable.
+function showCfLoadError(msg) {
+  let t = document.getElementById('cfLoadErrorToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'cfLoadErrorToast';
+    t.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;max-width:340px;padding:12px 16px;background:#fef3c7;border:1px solid #fde68a;border-radius:10px;color:#92400e;font-family:DM Sans,sans-serif;font-size:13px;box-shadow:0 8px 20px rgba(146,64,14,.15);';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  clearTimeout(window._cfToastTimer);
+  window._cfToastTimer = setTimeout(() => t.remove(), 5000);
+}
+
 document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
   // Read the Specialist track + the user's own earned-levels map in parallel.
   // earned_central is the CH-side field (TH = earned, AH = earned_academic).
-  const [fwSnap, uSnap] = await Promise.all([
-    getDoc(doc(window.db, 'competency_framework', 'specialists')),
-    getDoc(doc(window.db, 'user_competencies', user.uid)),
-  ]);
+  // Wrapped in try/catch: silent failure (empty maps) would mislead the user
+  // into thinking they have no SA / earned data when it's actually a network
+  // or rule-reject issue. Page still renders the framework taxonomy on
+  // partial failure — only the per-user overlay is lost.
+  let fwSnap, uSnap;
+  try {
+    [fwSnap, uSnap] = await Promise.all([
+      getDoc(doc(window.db, 'competency_framework', 'specialists')),
+      getDoc(doc(window.db, 'user_competencies', user.uid)),
+    ]);
+  } catch (err) {
+    console.warn('[competency-framework] Firestore read failed:', err);
+    showCfLoadError("Couldn't load your progress — refresh to retry.");
+    return;
+  }
 
   if (!fwSnap.exists()) {
     document.getElementById('domainGrid').innerHTML =
@@ -4230,7 +4251,7 @@ function renderProgressOverview(fw) {
   const avgSa = overallAvgSa(fw);
   const saHtml = avgSa !== null
     ? `<div class="progress-stat-sa"><span style="white-space:nowrap;">${avgSa.toFixed(1)}/4</span><div class="sa-score-bar"><div class="sa-score-fill" style="width:${Math.round((avgSa/4)*100)}%"></div></div></div>`
-    : `<div class="progress-stat-sub" style="margin-top:4px;">No self-assessments yet</div>`;
+    : `<div class="progress-stat-sub" style="margin-top:4px;">No self-assessments yet · <a href="/learning-path" style="color:var(--accent);font-weight:600;text-decoration:none;">Start →</a></div>`;
   document.getElementById('progressOverview').innerHTML = `
     <div class="progress-stat"><div class="progress-stat-num">${pct}%</div><div class="progress-stat-label">Overall Progress</div><div class="progress-stat-sub">${earnedCount} of ${total} competencies</div></div>
     <div class="progress-stat"><div class="progress-stat-num">${earnedCount}</div><div class="progress-stat-label">Competencies Earned</div><div class="progress-stat-sub">across all domains</div></div>
@@ -4460,81 +4481,8 @@ function renderDomains(fw) {
 }
 </script>
 
-<!-- Chip legend (sticky bottom-right) — explains the abbreviations on every competency card -->
-<style>
-.cf-legend-btn {
-  position: fixed; right: 24px; bottom: 24px; z-index: 90;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
-  background: #1e1b4b; color: #fff;
-  border: none; border-radius: 999px;
-  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
-  box-shadow: 0 10px 28px rgba(30, 27, 75, 0.32), 0 2px 6px rgba(30, 27, 75, 0.18);
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.cf-legend-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(30, 27, 75, 0.4), 0 3px 8px rgba(30, 27, 75, 0.2); }
-.cf-legend-btn:focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
-.cf-legend-btn .cf-legend-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: rgba(255,255,255,0.18); font-size: 11px; font-weight: 700; font-style: italic; font-family: 'Lora', serif;
-}
-
-.cf-legend-popover {
-  position: fixed; right: 24px; bottom: 80px; z-index: 91;
-  width: 360px; max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 120px); overflow-y: auto;
-  background: #fff; color: #0f172a;
-  border-radius: 14px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28), 0 6px 16px rgba(15, 23, 42, 0.12);
-  border: 1px solid #e2e8f0;
-  font-family: 'DM Sans', sans-serif;
-  opacity: 0; transform: translateY(8px) scale(0.98); pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-.cf-legend-popover.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
-.cf-legend-popover__head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.cf-legend-popover__title { font-family: 'Lora', serif; font-size: 15px; font-weight: 700; color: #0f172a; margin: 0; }
-.cf-legend-popover__close {
-  appearance: none; background: transparent; border: none;
-  width: 28px; height: 28px; border-radius: 6px;
-  font-size: 18px; line-height: 1; color: #64748b; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.cf-legend-popover__close:hover { background: #f1f5f9; color: #0f172a; }
-.cf-legend-popover__body { padding: 12px 16px 16px; }
-.cf-legend-popover__intro {
-  font-size: 12px; line-height: 1.5; color: #64748b;
-  margin: 0 0 12px;
-}
-.cf-legend-row {
-  display: grid; grid-template-columns: auto 1fr; gap: 10px 12px;
-  align-items: start;
-  padding: 8px 0;
-  border-top: 1px solid #f1f5f9;
-}
-.cf-legend-row:first-of-type { border-top: none; padding-top: 4px; }
-.cf-legend-row__sample { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 64px; }
-.cf-legend-row__text { font-size: 12px; line-height: 1.45; }
-.cf-legend-row__label { display: block; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
-.cf-legend-row__desc { color: #475569; }
-.cf-legend-popover__footer {
-  margin-top: 8px; padding-top: 10px; border-top: 1px solid #f1f5f9;
-  font-size: 11px; color: #94a3b8; line-height: 1.5;
-}
-@media (max-width: 720px) {
-  .cf-legend-btn { right: 16px; bottom: 16px; padding: 9px 14px; font-size: 12px; }
-  .cf-legend-popover { right: 16px; left: 16px; width: auto; bottom: 68px; }
-}
-@media print {
-  .cf-legend-btn, .cf-legend-popover { display: none !important; }
-}
-</style>
+<!-- Chip legend (sticky bottom-right) — .cf-legend-* CSS lives in shared
+     /shared-design/competency-framework.css (linked in <head>) -->
 
 <button type="button" class="cf-legend-btn" id="cfLegendBtn" aria-expanded="false" aria-controls="cfLegendPopover" aria-label="Open chip legend">
   <span class="cf-legend-icon">i</span>

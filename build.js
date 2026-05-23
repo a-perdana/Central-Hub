@@ -931,6 +931,25 @@ if (fs.existsSync("eduversal-logo-white.png")) {
   }
 });
 
+// competency-framework.css — 3-hub byte-identical CSS partial (cf-legend
+// popover + domain-takeaways accordion). Source-of-truth lives in
+// monorepo-root /shared-design/competency-framework.css. Same local-then-
+// shared fallback as references-viewer. Linked from competency-framework.html
+// at dist root. If shared CSS is missing, the page still renders but the
+// cf-legend bottom-right help button + takeaways toggle lose styling.
+{
+  const name   = 'competency-framework.css';
+  const local  = name;
+  const shared = path.join('..', 'shared-design', name);
+  const src    = fs.existsSync(local) ? local : (fs.existsSync(shared) ? shared : null);
+  if (src) {
+    fs.copyFileSync(src, path.join('dist', name));
+    console.log(`Copied: ${src} -> dist/${name}`);
+  } else {
+    console.warn(`WARNING: ${name} not found locally or in shared-design/`);
+  }
+}
+
 // -- Copy partials/*.js shared modules + shared partial CSS
 const partialsDistDir = path.join("dist", "partials");
 if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
