@@ -252,6 +252,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   } catch (err) {
     console.error('boot', err);
     document.getElementById('loadingState').innerHTML = `<div class="no-induction"><h2>Could not load</h2><p>${escapeHtml(err.message || err.code || 'unknown')}</p></div>`;
+    try { showStaticHero('Could not load your induction. See message below.'); } catch (_) {}
   }
 });
 
@@ -268,15 +269,30 @@ function flattenTasks() {
 function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isCompleted(taskId) { return !!progressMap[taskId]?.completedAt; }
 
+function showStaticHero(metaText) {
+  // Hero is normally populated by render() (active induction). For the
+  // no-induction / completed / withdrawn paths we still show it as a
+  // page identity strip — generic title + status sentence, no window pill.
+  const heroEl = document.getElementById('myInductionHero');
+  document.getElementById('heroTitle').textContent =
+    `Welcome, ${window.userProfile?.displayName || 'colleague'}`;
+  document.getElementById('heroMeta').textContent = metaText;
+  const pill = document.getElementById('heroWindowPill');
+  if (pill) pill.hidden = true;
+  if (heroEl) heroEl.hidden = false;
+}
+
 function showNoInduction() {
   document.getElementById('loadingState').style.display = 'none';
   document.getElementById('mainContent').style.display = '';
   document.getElementById('mainContent').innerHTML = `<div class="no-induction"><h2>You don't have an active induction</h2><p>HQ Subject Specialist induction is for first-year specialists at Eduversal HQ. If you should have an active induction, contact your reporting Director.</p></div>`;
+  showStaticHero('No active induction. This page activates when a Director assigns you a year-1 induction programme.');
 }
 function showCompletedOrWithdrawn() {
   document.getElementById('loadingState').style.display = 'none';
   document.getElementById('mainContent').style.display = '';
   document.getElementById('mainContent').innerHTML = `<div class="no-induction"><h2>Your induction is ${escapeHtml(assignment.status)}</h2><p>Year-2 specialist development continues through the network competency framework and your subject's strategic-initiative cycle.</p></div>`;
+  showStaticHero(`Induction status: ${assignment.status}. Year-2 development continues through the competency framework.`);
 }
 
 function render() {
