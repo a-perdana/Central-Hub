@@ -461,20 +461,45 @@ function renderLeaders(slot, subjectId, entries) {
 
 function renderLeaderCard(e) {
   const school = e.schoolName || e.school || '—';
-  const phone = e.phone ? `<span class="dw-leader-phone">${escHtml(e.phone)}</span>` : '';
-  const email = e.email ? `<a class="dw-leader-email" href="mailto:${escHtml(e.email)}">${escHtml(e.email)}</a>` : '';
+  const fullName = e.displayName || e.name || '—';
+  const grad = SUBJECT_ACCENT[activeSubject] || 'linear-gradient(135deg,#7c3aed,#0891b2)';
+  const initials = leaderInitials(fullName);
+
+  const mailSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 7 9-7"/></svg>`;
+  const phoneSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>`;
+
+  const email = e.email
+    ? `<div class="dw-leader-contact-row">${mailSvg}<a class="dw-leader-email" href="mailto:${escHtml(e.email)}" title="${escHtml(e.email)}">${escHtml(e.email)}</a></div>`
+    : '';
+  const phone = e.phone
+    ? `<div class="dw-leader-contact-row">${phoneSvg}<span class="dw-leader-phone">${escHtml(e.phone)}</span></div>`
+    : '';
+
   const removeBtn = canWriteActive
     ? `<button type="button" class="dw-leader-remove" data-remove="${escHtml(e.id)}" aria-label="Remove subject leader" title="Remove">×</button>`
     : '';
+
   return `
-    <div class="dw-leader-card">
-      ${removeBtn}
-      <div class="dw-leader-school">${escHtml(school)}</div>
-      <div class="dw-leader-name">${escHtml(e.displayName || e.name || '—')}</div>
-      ${e.position ? `<div class="dw-leader-position">${escHtml(e.position)}</div>` : ''}
-      <div class="dw-leader-contact">${email}${phone}</div>
+    <div class="dw-leader-card" style="--leader-grad:${grad}">
+      <div class="dw-leader-strip">
+        ${removeBtn}
+        <div class="dw-leader-school">${escHtml(school)}</div>
+      </div>
+      <div class="dw-leader-body">
+        <div class="dw-leader-avatar" aria-hidden="true"><span>${escHtml(initials)}</span></div>
+        <div class="dw-leader-name">${escHtml(fullName)}</div>
+        ${e.position ? `<div class="dw-leader-position">${escHtml(e.position)}</div>` : ''}
+        ${(email || phone) ? `<div class="dw-leader-contact">${email}${phone}</div>` : ''}
+      </div>
     </div>
   `;
+}
+
+function leaderInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '–';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function renderLeaderComposerHtml(subjectId) {
