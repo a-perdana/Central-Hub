@@ -442,7 +442,7 @@ Single-doc aggregator (Phase 4). For every Cambridge Teacher Standards (2023) ID
 
 #### `competency_framework/{trackId}`
 **PK:** `trackId` (string slug — `'teachers'`, `'leaders'`, `'specialists'`).
-**Fields:** `trackId`, `platform`, `audience`, `basis`, `sources{cambridgeTeacherStandards, permendiknas, eduversalAcademicStandards, aiCompetencyFramework, ...}`, `levelOrder[]`, `levelLabels{}`, `levelDescriptors{}`, `domains[]`, `competencies[]` (each carries `id`, `domainId`, `name`, `levels[]`, `intent`, `cambridgeStandardRefs[]`, `cambridgeStandardTexts[]`, `permendiknasRefs[]`, `permendiknasTexts[]`, **`eduversalStandardRefs[]`** (Specialist v2 onwards — ES madde IDs validated against `docs/research/eduversal/academic-standards/manifest.json`), **`aicfRefs[]`** (Specialist v2 onwards — canonical AICF refIds `teacher.{foundation|practitioner|leader}.{domainA-E}` or `unesco_aicft.{acquire|deepen|create}` validated against `docs/research/eduversal/ai-competency-framework/reference/eduversal-v1-part1-teacher.json` + `unesco-ai-cft-2024.json`), **`pedagogyRefs[]`** (Specialist v2 onwards — free-text bibliographic anchors: Rosenshine / EEF / Kraft 2018 / Wenger / Schoenfeld / Driver / Wiliam / Lesson Study)), `cambridgeStandards{}`, `cambridgeAttributes[]`, `permendiknasPillars{}`, `updatedAt`, **`v2RefreshNote`** (Specialist v2 marker).
+**Fields:** `trackId`, `platform`, `audience`, `basis`, `sources{cambridgeTeacherStandards, permendiknas, eduversalAcademicStandards, aiCompetencyFramework, ...}`, `levelOrder[]`, `levelLabels{}`, `levelDescriptors{}`, `domains[]`, **`domainTakeaways{}`** (2026-05-23, all 3 tracks — `{ [domainId]: string[] }` ESL B1-B2 key takeaways surfaced by the domain-card accordion at the bottom of each card; moved out of AH page-local hardcoded const into Firestore for 3-hub parity; CH content authored 2026-05-23 for Subject Specialist audience, TH content authored same day for Subject Teacher audience including the new `aid` 7th domain), `competencies[]` (each carries `id`, `domainId`, `name`, `levels[]`, `intent`, `cambridgeStandardRefs[]`, `cambridgeStandardTexts[]`, `permendiknasRefs[]`, `permendiknasTexts[]`, **`eduversalStandardRefs[]`** (Specialist v2 onwards — ES madde IDs validated against `docs/research/eduversal/academic-standards/manifest.json`), **`aicfRefs[]`** (Specialist v2 onwards — canonical AICF refIds `teacher.{foundation|practitioner|leader}.{domainA-E}` or `unesco_aicft.{acquire|deepen|create}` validated against `docs/research/eduversal/ai-competency-framework/reference/eduversal-v1-part1-teacher.json` + `unesco-ai-cft-2024.json`), **`pedagogyRefs[]`** (Specialist v2 onwards — free-text bibliographic anchors: Rosenshine / EEF / Kraft 2018 / Wenger / Schoenfeld / Driver / Wiliam / Lesson Study)), `cambridgeStandards{}`, `cambridgeAttributes[]`, `permendiknasPillars{}`, `updatedAt`, **`v2RefreshNote`** (Specialist v2 marker).
 **Source:** Verbatim Cambridge / Permendiknas text comes from `docs/research/cambridge/*.json` and `docs/research/permendiknas/*.json` — see `docs/research/README.md` for provenance and SHA-256 hashes. Seeded by `scripts/competency/seed-{th,ah,ch}-competency-framework.js`. **Note:** as of 2026-05-19, only the `specialists` track has been refreshed to v2 schema (29 competencies, ES + AICF + pedagogy refs); `teachers` and `leaders` tracks remain on v1 schema (CTS + Permendiknas only).
 **Writers:** `central_admin` only (seeded via Admin SDK). Read open to any authorised user.
 
@@ -450,8 +450,14 @@ Single-doc aggregator (Phase 4). For every Cambridge Teacher Standards (2023) ID
 
 #### `user_competencies/{uid}`
 **PK:** `uid`.
-**Fields:** `earned{compId: {level, date}}`, `matDone{matId: bool}` (TH); `earned_academic{}`, `matDone_academic{}` (AH).
-**Writers:** owner only.
+**Fields (per-track namespace):**
+- TH (`teachers` track): `earned{compId: {level, date}}`, `matDone{matId: bool}`, `saScores{"${compId}/${lvl}/${itemIdx}": 1-4}`.
+- AH (`leaders` track): `earned_academic{}`, `matDone_academic{}`, `saScores_academic{}`.
+- CH (`specialists` track): `earned_central{}`, `saScores_central{}` (no `matDone_central` — Specialist learning-path does not yet ship the MAT-done step).
+
+`saScores*` is the per-user self-assessment map written by each hub's `/learning-path` modal SA picker and read by the matching `/competency-framework` page's "Avg Self-Assessment" KPI tile. Key shape `${compId}/${lvl}/${itemIdx}` where `itemIdx` is the 0-indexed position in the level's `selfAssessment[]` statements; value is 1-4 (Awareness/Practitioner/Advanced/Lead). Empty map → KPI tile degrades to "No self-assessments yet".
+
+**Writers:** owner only (each hub writes only its own track's namespace); `central_admin` + CH reviewers may write any field for `/competency-admin` approval flows. Field-name namespace per hub is load-bearing — CH writing `saScores` (bare) would silently shadow the TH user's data on the same uid. See root CLAUDE.md "Role Architecture" for the precedent.
 
 #### `competency_evidence/{evId}`
 **PK:** auto-id.
@@ -1556,6 +1562,32 @@ Director + Subject Coordinator workspace replacing the long-running Google Docs 
 **Indexes:** composite on `(entryKind, subjectId, status)` for the most common per-subject directory view; composite on `(schoolId, status)` for per-school views.
 **Write scope:**
 - **CREATE + UPDATE + DELETE:** `central_admin` or any `director`. Plain `coordinator` can READ but NOT mutate — coordinators don't self-promote a school teacher into "Subject Leader" status; directors / admin curate this canonical map.
+
+---
+
+#### `department_notes/{subjectId}` + subcollection `sections/{sectionId}` (2026-05-24)
+**PK:** `subjectId` ∈ `{math, biology, chemistry, physics, science, english, bahasa, religion, edu_steam}` (9-value `ch_subjects[]` enum, including `edu_steam` added 2026-05-21 for the Edu-STEAM Coordinator entry kind).
+
+**Scope:** Free-text scratch space rendered by `/department-workspace?subject=<subjectId>` — the subject-scoped command centre for HQ Subject Coordinators. Parent doc is optional (currently a flat aggregate stamp); all content lives in the `sections/` subcollection.
+
+**Section ids (open-string, current shipped set):**
+- `discussion_topics` — Coordinator's running list of items to raise with school subject leaders next visit / next sync.
+- *(future additions e.g. `coordinator_journal`, `clubs_log` write into new section ids without schema change.)*
+
+**`sections/{sectionId}` fields:**
+- Identity: `subjectId` (must equal the parent doc id — rule pinned), `sectionId` (must equal the path segment — rule pinned).
+- Content: `contentMd` (markdown body, free-form).
+- Audit: `lastEditedBy →users.uid`, `lastEditedByName` (denormalised display name), `lastEditedAt`, `updatedAt`.
+
+**FKs:** `users.uid` (via `lastEditedBy`).
+
+**Read scope (loose):** any `isDeptOfficeMember()` (admin + every signed-in central_user reaches through `/page-access`). A Bahasa Coordinator can READ Math's discussion topics — matches the network-transparency stance of the four cross-subject Department Office views.
+
+**Write scope (tight, subject-scoped):**
+- **CREATE + UPDATE:** `central_admin` bypasses; otherwise the caller's `users/{uid}.ch_subjects[]` must contain the `subjectId` in the path **OR** the caller must hold `ch_sub_roles ∈ {director}`. Plain `central_user` without the subject specialty gets the read-only view in UI.
+- **DELETE:** `central_admin` only.
+
+**Companion module:** [`Central Hub/partials/department-core.js`](Central%20Hub/partials/department-core.js) orchestrates picker landing + 4 MVP section renderers; [`Central Hub/partials/subject-config.js`](Central%20Hub/partials/subject-config.js) is the canonical 9-subject taxonomy.
 
 ---
 
