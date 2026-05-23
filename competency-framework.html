@@ -160,8 +160,11 @@ body::before {
 .domain-comps { padding: 6px 20px 14px; }
 .comp-row {
   display: flex; flex-direction: column; gap: 6px;
-  padding: 12px 0; font-size: 13px; color: var(--ink); border-bottom: 1px dashed var(--border);
+  padding: 12px 12px; font-size: 13px; color: var(--ink); border-bottom: 1px dashed var(--border);
+  cursor: pointer; border-radius: 6px;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
+.comp-row:hover { background: var(--accent-2); }
 .comp-row:last-child { border-bottom: none; }
 .comp-row__head {
   display: flex; align-items: baseline; gap: 10px;
@@ -563,6 +566,24 @@ function renderBasis(fw) {
   }
 }
 
+// Navigate to the Learning Path reader for a specific competency. Matches
+// the TH + AH pattern (window.goToPath = id => /learning-path?comp=id) so
+// the three hubs route from framework → reader the same way. Inline
+// onclick on each .comp-row calls this; keydown handler below adds
+// Enter/Space keyboard parity for role="link" tabindex="0" rows.
+window.goToPath = function(compId) {
+  window.location.href = `/learning-path?comp=${encodeURIComponent(compId)}`;
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const row = e.target.closest?.('.comp-row');
+  if (!row) return;
+  e.preventDefault();
+  const id = row.dataset.compId;
+  if (id) window.goToPath(id);
+});
+
 function renderDomains(fw) {
   const grid = document.getElementById('domainGrid');
   const compsByDomain = {};
@@ -599,7 +620,7 @@ function renderDomains(fw) {
               aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF block ${esc(a)}">AICF ${esc(a)}</span>`).join('') +
               pedRefs.map(p => `<span class="ped-pill" title="${esc(p)}">📖 ${esc(p)}</span>`).join('');
             return `
-              <div class="comp-row" data-comp-id="${esc(c.id)}" data-domain-id="${esc(c.domainId)}" data-search="${esc((c.id + ' ' + c.name + ' ' + (c.intent||'')).toLowerCase())}">
+              <div class="comp-row" data-comp-id="${esc(c.id)}" data-domain-id="${esc(c.domainId)}" data-search="${esc((c.id + ' ' + c.name + ' ' + (c.intent||'')).toLowerCase())}" onclick="goToPath('${esc(c.id)}')" role="link" tabindex="0" title="Open in Learning Path">
                 <div class="comp-row__head">
                   <span class="comp-id">${esc(c.id)}</span>
                   <span class="comp-name">${esc(c.name)}</span>
