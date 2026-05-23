@@ -545,20 +545,40 @@ if (fs.existsSync("cambridge-crossref.js")) {
   }
 });
 
-// -- Indonesian statutory references (PIGP + SKL) for the cross-ref
-//    runtime. Fetched on-demand when the user clicks an SKL / PIGP chip.
-//    Source JSONs live in monorepo-root docs/research/permendiknas/.
+// -- Indonesian statutory references for the cross-ref runtime. Fetched
+//    on-demand when the user clicks an SKL / PIGP / PMD chip. Source
+//    JSONs live in monorepo-root docs/research/permendiknas/. CH's
+//    Vercel deploy checks out the parent (monorepo) so the relative
+//    `..` path resolves at build time without a local mirror.
 const researchSrcDir  = path.join("..", "docs", "research", "permendiknas");
 const researchDestDir = path.join("dist", "research", "permendiknas");
 if (fs.existsSync(researchSrcDir)) {
   fs.mkdirSync(researchDestDir, { recursive: true });
-  ["no-27-2010-pigp.json", "no-10-2025-skl.json"].forEach(name => {
+  ["no-27-2010-pigp.json", "no-10-2025-skl.json", "no-16-2007.json"].forEach(name => {
     const src = path.join(researchSrcDir, name);
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, path.join(researchDestDir, name));
       console.log(`Copied: dist/research/permendiknas/${name}`);
     } else {
       console.warn(`WARNING: ${name} not found in docs/research/permendiknas/`);
+    }
+  });
+}
+
+// -- Cambridge research archive (CSLS chip popovers — used by AH
+//    leadership track but also surfaced cross-hub via /references
+//    reader). Same source path pattern.
+const cambridgeSrcDir  = path.join("..", "docs", "research", "cambridge");
+const cambridgeDestDir = path.join("dist", "research", "cambridge");
+if (fs.existsSync(cambridgeSrcDir)) {
+  fs.mkdirSync(cambridgeDestDir, { recursive: true });
+  ["school-leader-standards-2023.json"].forEach(name => {
+    const src = path.join(cambridgeSrcDir, name);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(cambridgeDestDir, name));
+      console.log(`Copied: dist/research/cambridge/${name}`);
+    } else {
+      console.warn(`WARNING: ${name} not found in docs/research/cambridge/`);
     }
   });
 }

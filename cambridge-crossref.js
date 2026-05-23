@@ -796,10 +796,118 @@
   // full citation for the ESL audience that may not recognise the short form.
   // ──────────────────────────────────────────────────────────────────
 
+  // Brief lookup map for the well-known secondary research anchors that
+  // appear on the framework page's grounded-band. Each entry: { what, why }.
+  // Match logic: try exact key first, then case-insensitive substring.
+  // Unknown anchors fall through to the generic "bibliographic reference"
+  // copy (so unknown chips still get the bubbling-stop + popover).
+  const ANCHOR_BRIEFS = {
+    'Danielson FfT': {
+      what: 'Charlotte Danielson Framework for Teaching (4 domains × 22 components).',
+      why: 'The North-American observation rubric Eduversal\'s Walkthrough Rubric was structurally modeled on. Used as the cross-walk anchor when calibrating observers across hubs.'
+    },
+    'Kraft 2018': {
+      what: 'Kraft, Blazar & Hogan (2018) — meta-analysis of 60 causal studies on teacher coaching. Effect sizes: +0.49 SD on practice, +0.18 SD on student achievement.',
+      why: 'Foundational evidence base for Specialist + Subject Leader coaching cycles. Cited to defend network investment in observation + Glow/Grow/Go protocols.'
+    },
+    'EEF Effective PD 2024': {
+      what: 'Education Endowment Foundation — 14 mechanisms for effective professional development (4 families: build knowledge, motivate teachers, develop teaching techniques, embed practice).',
+      why: 'Workshop + module design discipline. Every Specialist workshop maps to at least one mechanism per family — without that mapping, EEF evidence predicts <30% landing rate.'
+    },
+    'EEF Implementation 2024': {
+      what: 'Education Endowment Foundation — School\'s Guide to Implementation 2024 (Explore / Prepare / Deliver / Sustain cycle).',
+      why: 'Frame for multi-year CPD pathway design + annual workshop programmes at department + network scale.'
+    },
+    'Cambridge GenAI Coursework Policy': {
+      what: 'Cambridge International 2024 GenAI in Coursework policy. Requires student declaration of AI use + draft-version capture + in-class supervised drafting.',
+      why: 'Coursework moderation discipline anchor. Undeclared AI use = malpractice; the policy is the line every Specialist coaches partner schools against.'
+    },
+    'UNESCO AI-CFT 2024': {
+      what: 'UNESCO AI Competency Framework for Teachers (2024) — 5 aspects × 3 levels (acquire / deepen / create).',
+      why: 'International alignment anchor for Eduversal\'s AICF v1.0 + xen-5 Cambridge AI authenticity work. Multi-framework triangulation expected at Lead-stage publication.'
+    },
+    'Wenger CoP': {
+      what: 'Etienne Wenger (1998) — Communities of Practice framework. Communities develop shared practice through cumulative joint engagement.',
+      why: 'Theoretical backbone of the subject CoP discipline. Justifies the structured-facilitation rule: CoPs producing shared repertoire outperform conversational CoPs 3-4× on practice change.'
+    },
+    'Lesson Study': {
+      what: 'Japanese collaborative lesson research tradition (jugyō kenkyū). Cycles of plan → teach → observe → refine.',
+      why: 'Reference pattern for moderated lesson observation work + co-design protocols. Cited as evidence for the network\'s structured observation cadence.'
+    },
+    'Robinson 2007': {
+      what: 'Viviane Robinson (2007) — Student-Centred Leadership meta-analysis. 5 dimensions; Dimension 1 (Establishing Goals + Expectations) has largest effect size on student outcomes.',
+      why: 'Foundational evidence for AH leadership track. Cited extensively in evsi (vision + strategy) domain.'
+    },
+    'Leithwood 2020': {
+      what: 'Kenneth Leithwood (2020) — Seven Strong Claims About Successful School Leadership.',
+      why: 'AH leadership track anchor. Claim 2 (shared vision) underpins evsi-1; claims 3-5 underpin pdpc domain.'
+    },
+    'Kotter Leading Change': {
+      what: 'John Kotter — 8-step change framework. Establish urgency, form coalition, develop vision, communicate, empower, generate quick wins, consolidate, anchor.',
+      why: 'AH change-leadership reference for evsi-4 (Leading Change & Sustaining Improvement).'
+    },
+    'Bruner spiral': {
+      what: 'Jerome Bruner — Spiral Curriculum: same concept revisited at deeper levels each stage.',
+      why: 'Curriculum-architecture anchor for cqa domain + Cambridge syllabus vertical alignment work.'
+    },
+    'Wiggins & McTighe': {
+      what: 'Wiggins & McTighe — Understanding by Design (backward design). Define mastery → design assessments → design lessons.',
+      why: 'Scheme-of-work design + curriculum review reference across all 3 hubs.'
+    },
+    'Rosenshine Principles': {
+      what: 'Barak Rosenshine (2012) — 17 Principles of Instruction. Daily review, model, ask questions, scaffold, monitor, weekly + monthly review.',
+      why: 'Operational backbone for partner-school classroom routines + Specialist coaching diagnoses.'
+    },
+    'Karpicke 2008': {
+      what: 'Karpicke & Roediger (2008) — Retrieval Practice. Recalling from memory consolidates learning more than re-reading.',
+      why: 'Evidence base for daily warm-up routines + Command Word of the Day discipline.'
+    },
+    'Sweller CLT': {
+      what: 'John Sweller — Cognitive Load Theory. Working memory is limited; new techniques compete for it.',
+      why: 'Sequencing + scheme-of-work pacing reference. Justifies the "no more than one new technique per lesson" rule.'
+    },
+    'Cummins BICS/CALP': {
+      what: 'Jim Cummins — Basic Interpersonal Communication Skills vs Cognitive Academic Language Proficiency. ESL learners may develop BICS in 1-2 years but CALP takes 5-7.',
+      why: 'ESL command-word + academic-writing pedagogy anchor. Frames why Cambridge command-word teaching needs daily routine, not one-off lesson.'
+    },
+    'City et al. Instructional Rounds': {
+      what: 'City, Elmore, Fiarman & Teitel (2009) — Instructional Rounds in Education. Low-inference scripting + structured pattern-naming.',
+      why: 'Discipline reference for cof-1 (Lesson Observation Technique). Imported into education from medical rounds.'
+    },
+    'Knight Impact Cycle': {
+      what: 'Jim Knight (2017) — The Impact Cycle. Facilitative coaching model (teacher diagnoses gap, coach scaffolds).',
+      why: 'Coaching style anchor — strongest for experienced teachers (paired with Bambrick for new teachers).'
+    },
+    'Bambrick-Santoyo': {
+      what: 'Paul Bambrick-Santoyo (2016) — Get Better Faster. Directive coaching style (coach names gap, prescribes concrete action).',
+      why: 'Coaching style anchor — strongest for new teachers + concrete classroom-management gaps.'
+    },
+    'BERA Ethics': {
+      what: 'British Educational Research Association — Ethical Guidelines for Educational Research.',
+      why: 'Standard for practitioner research at Lead-stage (xen-4, cof-4_lead). Required for video coaching libraries + research publication.'
+    }
+  };
+
+  function lookupAnchorBrief(label) {
+    if (ANCHOR_BRIEFS[label]) return ANCHOR_BRIEFS[label];
+    const lower = String(label).toLowerCase();
+    for (const k of Object.keys(ANCHOR_BRIEFS)) {
+      if (lower.includes(k.toLowerCase()) || k.toLowerCase().includes(lower)) return ANCHOR_BRIEFS[k];
+    }
+    return null;
+  }
+
   function openPedCrossref(ref, anchorEl) {
     const pop = ensurePopoverEl();
     // ref is the FULL citation text passed at wire time (from title attribute).
     pop.style.display = 'block';
+    const brief = lookupAnchorBrief(ref);
+    const briefHtml = brief
+      ? `
+        <div style="font-size:12.5px;color:#1c1c2e;line-height:1.55;margin-bottom:8px;">${escHtml(brief.what)}</div>
+        <div style="font-size:11.5px;color:#64748b;line-height:1.55;font-style:italic;border-left:3px solid #cbd5e1;padding-left:10px;">${escHtml(brief.why)}</div>
+      `
+      : `<div style="font-size:11.5px;color:#64748b;line-height:1.55;">Bibliographic reference anchoring this competency to research, regulation, or framework. The framework lists this as evidence the level descriptor draws on — open the relevant CPD reading in the Learning Path modal for the full Eduversal interpretation.</div>`;
     pop.innerHTML = `
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
         <div>
@@ -808,8 +916,8 @@
         </div>
         ${closeBtn()}
       </div>
-      <div style="border-top:1px solid #e5e0d8;padding-top:8px;font-size:11.5px;color:#64748b;line-height:1.55;">
-        Bibliographic reference anchoring this competency to research, regulation, or framework. The framework lists this as evidence the level descriptor draws on — open the relevant CPD reading in the Learning Path modal for the full Eduversal interpretation.
+      <div style="border-top:1px solid #e5e0d8;padding-top:8px;">
+        ${briefHtml}
       </div>
     `;
     positionPopover(pop, anchorEl);
@@ -943,6 +1051,21 @@
       if (!ref) return;
       el.dataset.pedWired = '1';
       el.dataset.pedRef   = ref;
+      makeClickable(el, ref, openPedCrossref);
+    });
+
+    // Grounded-band secondary research anchors — chips in the framework
+    // page's "Secondary research anchors per competency" strip. Re-uses
+    // openPedCrossref + the ANCHOR_BRIEFS lookup so well-known anchors
+    // (Danielson, Kraft 2018, EEF, UNESCO etc.) get a brief instead of
+    // the generic "bibliographic reference" copy.
+    scope.querySelectorAll('.grounded-anchor').forEach(el => {
+      if (el.dataset.gndWired === '1') return;
+      const ref = (el.textContent || '').trim();
+      if (!ref) return;
+      el.dataset.gndWired = '1';
+      el.dataset.pedRef   = ref;
+      el.title = el.title || `Click for a brief on ${ref}.`;
       makeClickable(el, ref, openPedCrossref);
     });
   }
