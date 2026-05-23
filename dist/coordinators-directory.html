@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="shared-styles.css">
   <style>
     .main-content { padding: 24px 32px; width: min(100%, 1180px); margin: 0 auto; }
+    /* Align canonical page-footer to this page's content wrapper. */
+    .page-footer__inner, .page-footer__meta { max-width: 1180px; padding-left: 32px; padding-right: 32px; }
     .main-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
     .main-header h1 { font-size: 1.4rem; font-weight: 600; }
     .main-header .subtitle { font-size: 0.86rem; color: var(--ink-3); margin-top: 4px; }
@@ -34,34 +36,293 @@
     .cd-tab.active .cd-tab-count { background: #ede9fe; color: var(--accent); }
 
     /* === Cards grid === */
-    .entries-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-    .entry-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow-sm); transition: box-shadow .15s; position: relative; }
-    .entry-card:hover { box-shadow: var(--shadow); }
+    .entries-wrap { display: flex; flex-direction: column; gap: 28px; }
+    .kind-section { display: flex; flex-direction: column; gap: 14px; }
+    .kind-section-head {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .kind-section-rank {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 6px;
+      background: var(--kind-grad);
+      color: #fff; font-size: 0.7rem; font-weight: 700;
+      box-shadow: 0 2px 4px rgba(15,23,42,0.10);
+      font-family: 'DM Mono', monospace;
+    }
+    .kind-section-label {
+      font-family: 'Lora', serif; font-size: 1rem; font-weight: 600; color: var(--ink);
+    }
+    .kind-section-count {
+      background: var(--paper-2); padding: 1px 9px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; color: var(--ink-3);
+    }
+    .kind-section-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+    /* Per-kind section accent — same colour scale as the cards inside */
+    .kind-section[data-kind="executive_director"]    { --kind-grad: linear-gradient(135deg,#1e3a8a,#0c4a6e); }
+    .kind-section[data-kind="director"]              { --kind-grad: linear-gradient(135deg,#0e7490,#155e75); }
+    .kind-section[data-kind="consultant"]            { --kind-grad: linear-gradient(135deg,#4f46e5,#3730a3); }
+    .kind-section[data-kind="hq_coordinator"]        { --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2); }
+
+    .entry-card {
+      --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2);
+      --kind-soft: #ede9fe;
+      --kind-ink: #5b21b6;
+      --kind-tint: rgba(124,58,237,0.05);
+      position: relative;
+      background: var(--white);
+      border: 1px solid #e8e9ee;
+      border-radius: 16px;
+      padding: 0;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 2px 6px rgba(15,23,42,0.04);
+      transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    /* Tinted header band — the "brand strip" half of the business card.
+       Sligthly darker tone + Eduversal logo watermark for premium feel. */
+    .ec-header {
+      position: relative;
+      height: 72px;
+      background: var(--kind-grad);
+      overflow: hidden;
+    }
+    /* Sheen pattern (top-right highlight + bottom-left shadow) */
+    .ec-header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 70% 100% at 100% 0%, rgba(255,255,255,0.18) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 80% at 0% 100%, rgba(0,0,0,0.14) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    /* Eduversal logo watermark — bottom-right of the header band */
+    .ec-header::after {
+      content: '';
+      position: absolute;
+      top: 50%; right: 14px;
+      transform: translateY(-50%);
+      width: 124px; height: 50px;
+      background: url('/eduversal-logo-white.png') no-repeat right center;
+      background-size: contain;
+      opacity: 0.20;
+      pointer-events: none;
+      filter: brightness(2) contrast(1.1);
+    }
+    /* Tiny corporate wordmark in the bottom-right of the card body */
+    .ec-wordmark {
+      position: absolute;
+      bottom: 10px; right: 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--kind-ink);
+      opacity: 0.40;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .ec-wordmark::before {
+      content: '';
+      display: inline-block;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--kind-ink);
+      margin-right: 5px;
+      vertical-align: 1px;
+      opacity: 0.55;
+    }
+    /* Bottom card-fade — soft kind-tinted gradient up from the base */
+    .entry-card::after {
+      content: '';
+      position: absolute; left: 0; right: 0; bottom: 0; height: 60%;
+      background: linear-gradient(180deg, transparent 0%, var(--kind-tint) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .entry-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 14px rgba(15,23,42,0.06), 0 18px 36px rgba(15,23,42,0.10);
+      border-color: transparent;
+    }
     .entry-card.archived { opacity: 0.55; border-style: dashed; }
-    .ec-row1 { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-    .ec-avatar { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; flex-shrink: 0; font-size: 0.9rem; }
-    .ec-avatar.hq_coordinator { background: linear-gradient(135deg,#7c3aed,#0891b2); }
-    .ec-avatar.school_subject_leader { background: linear-gradient(135deg,#10b981,#047857); }
-    .ec-avatar.grade_coordinator { background: linear-gradient(135deg,#f59e0b,#b45309); }
-    .ec-avatar.director { background: linear-gradient(135deg,#0e7490,#155e75); }
-    .ec-avatar.executive_director { background: linear-gradient(135deg,#1e3a8a,#0c4a6e); }
-    .ec-name { font-weight: 600; color: var(--ink); font-size: 0.95rem; line-height: 1.25; }
-    .ec-position { font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; font-weight: 500; line-height: 1.25; }
-    .ec-kind { font-size: 0.68rem; color: var(--ink-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.4px; }
-    .ec-pills { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 8px; }
-    .ec-pill { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
-    .ec-pill.subj { background: #eff6ff; color: #1d4ed8; }
-    .ec-pill.grade { background: #fef3c7; color: #92400e; }
-    .ec-pill.school { background: #d1fae5; color: #065f46; }
-    .ec-meta { font-size: 0.78rem; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
-    .ec-meta a { color: var(--accent); text-decoration: none; }
-    .ec-meta a:hover { text-decoration: underline; }
-    .ec-notes { font-size: 0.78rem; color: var(--ink-3); margin-top: 8px; font-style: italic; line-height: 1.4; }
-    .ec-actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+    .entry-card.archived .ec-header { opacity: 0.55; }
+    /* Kind-specific accent — gradient + soft tint + ink colour */
+    .entry-card.kind-hq_coordinator        { --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2); --kind-soft: #ede9fe; --kind-ink: #5b21b6; --kind-tint: rgba(124,58,237,0.05); }
+    .entry-card.kind-director              { --kind-grad: linear-gradient(135deg,#0e7490,#155e75); --kind-soft: #cffafe; --kind-ink: #0e7490; --kind-tint: rgba(14,116,144,0.05); }
+    .entry-card.kind-consultant            { --kind-grad: linear-gradient(135deg,#4f46e5,#3730a3); --kind-soft: #e0e7ff; --kind-ink: #3730a3; --kind-tint: rgba(79,70,229,0.05); }
+    .entry-card.kind-executive_director    { --kind-grad: linear-gradient(135deg,#1e3a8a,#0c4a6e); --kind-soft: #dbeafe; --kind-ink: #1e3a8a; --kind-tint: rgba(30,58,138,0.05); }
+
+    .ec-body { padding: 0 20px 28px; position: relative; z-index: 1; }
+
+    /* Avatar floats over the header band (half over / half under) */
+    .ec-avatar-wrap {
+      position: relative;
+      width: 64px; height: 64px;
+      margin: -32px 0 12px;
+      z-index: 2;
+    }
+    .ec-avatar {
+      position: relative;
+      width: 100%; height: 100%;
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: #fff; font-size: 1.05rem;
+      background: var(--kind-grad);
+      box-shadow: 0 6px 16px rgba(15,23,42,0.18), 0 0 0 4px #fff, inset 0 1px 0 rgba(255,255,255,0.22);
+      overflow: hidden;
+    }
+    .ec-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .ec-name { font-weight: 700; color: var(--ink); font-size: 1.05rem; line-height: 1.25; letter-spacing: -0.01em; }
+    .ec-positions { margin-top: 3px; }
+    .ec-position { font-size: 0.84rem; color: var(--kind-ink); font-weight: 600; line-height: 1.4; }
+    .ec-positions.is-multi { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+    .ec-positions.is-multi .ec-position {
+      position: relative;
+      padding-left: 14px;
+      font-weight: 500;
+      font-size: 0.82rem;
+    }
+    .ec-positions.is-multi .ec-position::before {
+      content: '';
+      position: absolute;
+      left: 4px; top: 9px;
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--kind-ink);
+      opacity: 0.55;
+    }
+    .ec-kind {
+      display: inline-block; margin-top: 8px;
+      font-size: 0.66rem; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .ec-pills { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 0; }
+    .ec-pill {
+      padding: 3px 9px; border-radius: 6px;
+      font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 600;
+      line-height: 1.4; letter-spacing: 0.01em;
+      border: 1px solid transparent;
+    }
+    .ec-pill.subj   { background: #eef4ff; color: #1d4ed8; border-color: #dbe7ff; }
+    .ec-pill.grade  { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .ec-pill.school { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+    .ec-meta { font-size: 0.82rem; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+    .ec-meta-line { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .ec-meta-line svg { width: 13px; height: 13px; color: var(--ink-3); flex-shrink: 0; }
+    .ec-meta-line a {
+      color: var(--ink); text-decoration: none;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .ec-meta-line a:hover { color: var(--accent); text-decoration: underline; }
+    .ec-meta:empty { display: none; }
+    .ec-notes {
+      font-size: 0.8rem; color: var(--ink-2);
+      margin-top: 14px; line-height: 1.5;
+      padding: 10px 12px;
+      background: rgba(15,23,42,0.025);
+      border-radius: 8px;
+      border-left: 3px solid var(--kind-ink);
+    }
+
+    /* Top-right corner — linked badge + actions share this zone */
+    .ec-corner {
+      position: absolute; top: 14px; right: 14px;
+      display: flex; align-items: center; gap: 6px;
+      z-index: 3;
+    }
+    /* Linked badge — small "verified" tick attached to the avatar's
+       bottom-right corner (LinkedIn / Twitter pattern). Sits naturally
+       in the identity zone instead of competing with the header brand. */
+    .ec-linked-badge {
+      position: absolute;
+      bottom: -2px; right: -2px;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #10b981;
+      color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 0 3px #fff, 0 2px 4px rgba(15,23,42,0.18);
+      cursor: default;
+      z-index: 3;
+    }
+    .ec-linked-badge svg { width: 12px; height: 12px; }
+    .ec-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .14s; }
     .entry-card:hover .ec-actions { opacity: 1; }
-    .ec-icon-btn { width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .ec-icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .ec-icon-btn {
+      width: 24px; height: 24px; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.32);
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      color: rgba(255,255,255,0.92); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ec-icon-btn:hover { background: rgba(255,255,255,0.92); color: var(--ink); border-color: rgba(255,255,255,0.6); }
     .ec-icon-btn.danger:hover { color: #dc2626; border-color: #fecdd3; background: #fff1f2; }
+
+    /* === Chip-tag input (positions) === */
+    .chip-input-wrap {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--paper);
+      cursor: text;
+      transition: border-color .12s, background .12s;
+      min-height: 40px;
+    }
+    .chip-input-wrap:focus-within { border-color: var(--accent); background: var(--white); }
+    .chip-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 6px 4px 10px;
+      background: #ede9fe; color: #5b21b6;
+      border-radius: 6px;
+      font-size: 0.82rem; font-weight: 500;
+      max-width: 100%;
+    }
+    .chip-tag-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+    .chip-tag-remove {
+      width: 18px; height: 18px; border-radius: 4px;
+      border: none; background: transparent; color: #5b21b6;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1rem; line-height: 1; padding: 0;
+    }
+    .chip-tag-remove:hover { background: rgba(91,33,182,0.15); }
+    .chip-input {
+      flex: 1; min-width: 120px;
+      border: none; background: transparent; outline: none;
+      font-family: 'DM Sans', sans-serif; font-size: 0.86rem; color: var(--ink);
+      padding: 4px 2px;
+    }
+    .chip-input::placeholder { color: var(--ink-3); }
+
+    /* === Multi-subject toggle grid === */
+    .subj-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    }
+    .subj-toggle {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 10px;
+      background: var(--paper); color: var(--ink-2);
+      border: 1px solid var(--border); border-radius: 7px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 500;
+      cursor: pointer;
+      transition: all .12s;
+      user-select: none;
+    }
+    .subj-toggle:hover { border-color: var(--accent); color: var(--accent); }
+    .subj-toggle.active {
+      background: #ede9fe; color: #5b21b6; border-color: #c4b5fd;
+      font-weight: 600;
+    }
+    .subj-toggle.active::before {
+      content: '✓'; font-weight: 700;
+    }
 
     /* === Modal === */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
@@ -2043,12 +2304,17 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span class="nav-item-label">Directory</span>
         </a>
-        <div class="ch-dd-divider"></div>
-        <div class="ch-dd-col-header" style="padding-top:4px;">Department Resources</div>
         <a href="department-artifacts" class="ch-dd-item" data-nav-page="department-artifacts" data-nav-key="department-artifacts">
           <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
           <span class="nav-item-label">Artifacts</span>
+        </a>
+        <div class="ch-dd-divider"></div>
+        <div class="ch-dd-col-header" style="padding-top:4px;">Department Workspace</div>
+        <a href="department-workspace" class="ch-dd-item" data-nav-page="department-workspace" data-nav-key="department-workspace">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
+          <span class="nav-item-label">Departments</span>
         </a>
         <div class="ch-dd-divider"></div>
         <div class="ch-dd-col-header" style="padding-top:4px;">Workspace</div>
@@ -2383,8 +2649,9 @@
           <a href="coordinators-meetings"  class="mobile-nav-link" data-mob-page="coordinators-meetings"  data-mobile-nav-key="coordinators-meetings">Meetings</a>
           <a href="decisions-register"     class="mobile-nav-link" data-mob-page="decisions-register"     data-mobile-nav-key="decisions-register">Decisions</a>
           <a href="coordinators-directory" class="mobile-nav-link" data-mob-page="coordinators-directory" data-mobile-nav-key="coordinators-directory">Directory</a>
-          <div class="mob-nav-subheader">Department Resources</div>
           <a href="department-artifacts"   class="mobile-nav-link" data-mob-page="department-artifacts"   data-mobile-nav-key="department-artifacts">Artifacts</a>
+          <div class="mob-nav-subheader">Department Workspace</div>
+          <a href="department-workspace"   class="mobile-nav-link" data-mob-page="department-workspace"   data-mobile-nav-key="department-workspace">Departments</a>
           <div class="mob-nav-subheader">Workspace</div>
           <a href="activities"                class="mobile-nav-link" data-mob-page="activities"                data-mobile-nav-key="activities">Activities</a>
           <a href="my-school-visits"          class="mobile-nav-link" data-mob-page="my-school-visits"          data-mobile-nav-key="my-school-visits">School Visits</a>
@@ -2500,7 +2767,7 @@
                      'handbook-behaviour','handbook-anti-bullying',
                      'school-handbook-student','school-handbook-teacher','school-handbook-parent','school-handbook-staff-coc'],
         specialist: ['read-me-my-hub','learning-path','specialist-portfolio','specialist-certificates','my-induction'],
-        deptoffice: ['read-me-coordinator','handbook-specialist-90d','coordinators-meetings','decisions-register','coordinators-directory','department-artifacts','activities','my-school-visits','specialist-mentor-review','weekly-checklist'],
+        deptoffice: ['read-me-coordinator','handbook-specialist-90d','coordinators-meetings','decisions-register','coordinators-directory','department-artifacts','department-workspace','activities','my-school-visits','specialist-mentor-review','weekly-checklist'],
         admin:      ['console','page-access','rules-viewer','careers-admin-th',
                      'pilot-enrolment','network-health','principal-360-admin','ai-maturity-admin',
                      'mail-composer','survey-console','reports','feedback-management',
@@ -3482,7 +3749,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="main-header">
       <div>
         <h1>Coordinators Directory</h1>
-        <div class="subtitle">Executive Directors · Directors · Coordinators · per-school Subject Leaders · per-grade Grade Coordinators (e.g. EASE G7-G12).</div>
+        <div class="subtitle">Executive Directors · Directors · Consultants · Coordinators.</div>
       </div>
       <button class="cd-btn-add" id="btnAdd">+ New entry</button>
     </div>
@@ -3498,11 +3765,6 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <select class="cd-filter" id="filterSchool">
         <option value="">All schools</option>
       </select>
-      <select class="cd-filter" id="filterGrade">
-        <option value="">All grades</option>
-        <option value="7">G7</option><option value="8">G8</option><option value="9">G9</option>
-        <option value="10">G10</option><option value="11">G11</option><option value="12">G12</option>
-      </select>
       <select class="cd-filter" id="filterStatus">
         <option value="active">Active</option>
         <option value="archived">Archived</option>
@@ -3514,12 +3776,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <button class="cd-tab active" data-tab="all">All <span class="cd-tab-count" id="cntAll">0</span></button>
       <button class="cd-tab" data-tab="executive_director">Executive Directors <span class="cd-tab-count" id="cntEd">0</span></button>
       <button class="cd-tab" data-tab="director">Directors <span class="cd-tab-count" id="cntDir">0</span></button>
+      <button class="cd-tab" data-tab="consultant">Consultants <span class="cd-tab-count" id="cntCon">0</span></button>
       <button class="cd-tab" data-tab="hq_coordinator">Coordinators <span class="cd-tab-count" id="cntHq">0</span></button>
-      <button class="cd-tab" data-tab="school_subject_leader">School Subject Leaders <span class="cd-tab-count" id="cntSl">0</span></button>
-      <button class="cd-tab" data-tab="grade_coordinator">Grade Coordinators <span class="cd-tab-count" id="cntGc">0</span></button>
     </div>
 
-    <div class="entries-grid" id="entriesGrid"></div>
+    <div class="entries-wrap" id="entriesGrid"></div>
   </main>
 
   <!-- Add / Edit modal -->
@@ -3532,9 +3793,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <select class="form-select" id="eKind">
             <option value="executive_director">Executive Director (Eduversal)</option>
             <option value="director">Director (Eduversal)</option>
+            <option value="consultant">Consultant (Eduversal)</option>
             <option value="hq_coordinator">Coordinator (Eduversal)</option>
-            <option value="school_subject_leader">School Subject Leader (per-school)</option>
-            <option value="grade_coordinator">Grade Coordinator (e.g. EASE G7-G12)</option>
           </select>
         </div>
         <div class="form-group">
@@ -3542,9 +3802,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <input type="text" class="form-input" id="eName" placeholder="Full name">
         </div>
         <div class="form-group">
-          <label class="form-label">Position</label>
-          <input type="text" class="form-input" id="ePosition" placeholder="e.g. Director of Primary Schools · EASE Coordinator G7-G12 · Head of Math">
-          <div class="form-hint">Specific title — what exactly this person is responsible for.</div>
+          <label class="form-label">Position(s)</label>
+          <div class="chip-input-wrap" id="ePositionsWrap">
+            <input type="text" class="chip-input" id="ePositionInput" placeholder="Type a role and press Enter…" autocomplete="off">
+          </div>
+          <div class="form-hint">Add one or more roles. Press <strong>Enter</strong> or <strong>,</strong> to add. e.g. Director of Secondary Education · Math Coordinator · EASE Lead G7-G12.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Email</label>
@@ -3555,12 +3817,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <input type="tel" class="form-input" id="ePhone" placeholder="+62…">
         </div>
         <div class="form-group">
-          <label class="form-label">Subject</label>
-          <select class="form-select" id="eSubject">
-            <option value="">— None / cross-subject —</option>
-          </select>
+          <label class="form-label">Subject(s)</label>
+          <div class="subj-grid" id="eSubjGrid"></div>
+          <div class="form-hint">Click to toggle. Leave all unselected for cross-subject roles.</div>
         </div>
-        <div class="form-group" id="eSchoolGroup">
+        <div class="form-group" id="eSchoolGroup" style="display:none">
           <label class="form-label">School</label>
           <select class="form-select" id="eSchool">
             <option value="">— None —</option>
@@ -3612,14 +3873,21 @@ import {
   doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, limit
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion'];
-const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion' };
+const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion','edu_steam'];
+const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion', edu_steam:'Edu-STEAM' };
 const KIND_LABELS = {
   executive_director: 'Executive Director',
   director: 'Director',
+  consultant: 'Consultant',
   hq_coordinator: 'Coordinator',
-  school_subject_leader: 'School Subject Leader',
-  grade_coordinator: 'Grade Coordinator',
+};
+// Hierarchical rank — top to bottom, drives section ordering in renderGrid().
+const KIND_ORDER = ['executive_director', 'director', 'consultant', 'hq_coordinator'];
+const KIND_LABELS_PLURAL = {
+  executive_director: 'Executive Directors',
+  director: 'Directors',
+  consultant: 'Consultants',
+  hq_coordinator: 'Coordinators',
 };
 
 let db, currentUser, userProfile;
@@ -3629,6 +3897,11 @@ let allSchools = [];
 let allUsers = [];
 let activeTab = 'all';
 let editingId = null;
+
+// Form state for the chip-tag + multi-select editors.
+// Reset on openModal(), read by saveEntry().
+let editPositions = [];   // string[]
+let editSubjects = [];    // CH_SUBJECTS subset
 
 const $ = (id) => document.getElementById(id);
 const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3695,9 +3968,6 @@ function populateSubjectFilter() {
 }
 
 function populateModalDropdowns() {
-  $('eSubject').innerHTML = '<option value="">— None / cross-subject —</option>' +
-    CH_SUBJECTS.map(s => `<option value="${s}">${SUBJECT_LABELS[s]}</option>`).join('');
-
   $('eSchool').innerHTML = '<option value="">— None —</option>' +
     allSchools.map(s => `<option value="${s.id}">${escHtml(s.name || s.id)}</option>`).join('');
 
@@ -3710,6 +3980,51 @@ function populateModalDropdowns() {
       .sort((a, b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''))
       .map(u => `<option value="${u.uid}">${escHtml(u.displayName || u.email)}</option>`)
       .join('');
+
+  // Build the 8-subject toggle grid once; click flips editSubjects[].
+  const grid = $('eSubjGrid');
+  grid.innerHTML = CH_SUBJECTS.map(s =>
+    `<button type="button" class="subj-toggle" data-subj="${s}">${escHtml(SUBJECT_LABELS[s])}</button>`
+  ).join('');
+  grid.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.subj-toggle');
+    if (!btn) return;
+    const s = btn.dataset.subj;
+    const i = editSubjects.indexOf(s);
+    if (i === -1) editSubjects.push(s); else editSubjects.splice(i, 1);
+    btn.classList.toggle('active');
+  });
+}
+
+// === Position chip-tag input ===
+// Renders the current editPositions[] as chips. The trailing <input id="ePositionInput">
+// stays in the DOM (built into the HTML); we just rebuild the chips next to it.
+function renderPositionChips() {
+  const wrap = $('ePositionsWrap');
+  const input = $('ePositionInput');
+  // Wipe existing chips (everything except the input itself).
+  Array.from(wrap.querySelectorAll('.chip-tag')).forEach(n => n.remove());
+  editPositions.forEach((p, idx) => {
+    const tag = document.createElement('span');
+    tag.className = 'chip-tag';
+    tag.innerHTML = `<span class="chip-tag-text">${escHtml(p)}</span><button type="button" class="chip-tag-remove" data-idx="${idx}" title="Remove">&times;</button>`;
+    wrap.insertBefore(tag, input);
+  });
+}
+
+function syncSubjectGridFromState() {
+  $('eSubjGrid').querySelectorAll('.subj-toggle').forEach(btn => {
+    btn.classList.toggle('active', editSubjects.includes(btn.dataset.subj));
+  });
+}
+
+function addPositionFromInput() {
+  const input = $('ePositionInput');
+  const v = input.value.trim();
+  if (!v) return;
+  if (!editPositions.includes(v)) editPositions.push(v);
+  input.value = '';
+  renderPositionChips();
 }
 
 function wireUI() {
@@ -3726,14 +4041,44 @@ function wireUI() {
     });
   });
 
-  ['filterSearch','filterSubject','filterSchool','filterGrade','filterStatus'].forEach(id => {
+  ['filterSearch','filterSubject','filterSchool','filterStatus'].forEach(id => {
     $(id).addEventListener(id === 'filterSearch' ? 'input' : 'change', renderGrid);
   });
 
   $('eKind').addEventListener('change', () => {
-    const kind = $('eKind').value;
-    $('eGradeGroup').style.display = kind === 'grade_coordinator' ? 'block' : 'none';
-    $('eSchoolGroup').style.display = (kind === 'school_subject_leader' || kind === 'grade_coordinator') ? 'block' : 'none';
+    $('eGradeGroup').style.display = 'none';
+    $('eSchoolGroup').style.display = 'none';
+  });
+
+  // === Position chip-tag input wiring ===
+  const posInput = $('ePositionInput');
+  const posWrap = $('ePositionsWrap');
+  // Click anywhere in the wrap focuses the input.
+  posWrap.addEventListener('click', (ev) => {
+    if (ev.target === posWrap) posInput.focus();
+  });
+  // Enter or comma adds; Backspace on empty input removes the last chip.
+  posInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ',') {
+      ev.preventDefault();
+      addPositionFromInput();
+    } else if (ev.key === 'Backspace' && !posInput.value && editPositions.length) {
+      editPositions.pop();
+      renderPositionChips();
+    }
+  });
+  // Blur also commits any half-typed value (avoids "user saved but their last
+  // unsubmitted text got dropped" — a common pitfall for chip inputs).
+  posInput.addEventListener('blur', () => addPositionFromInput());
+  // Remove via the × button.
+  posWrap.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.chip-tag-remove');
+    if (!btn) return;
+    const i = parseInt(btn.dataset.idx, 10);
+    if (!isNaN(i)) {
+      editPositions.splice(i, 1);
+      renderPositionChips();
+    }
   });
 }
 
@@ -3756,11 +4101,10 @@ function renderGrid() {
   const search = ($('filterSearch').value || '').trim().toLowerCase();
   const subF = $('filterSubject').value;
   const schF = $('filterSchool').value;
-  const grdF = $('filterGrade').value;
   const statF = $('filterStatus').value;
 
   // Tab counts
-  const counts = { all: 0, executive_director: 0, director: 0, hq_coordinator: 0, school_subject_leader: 0, grade_coordinator: 0 };
+  const counts = { all: 0, executive_director: 0, director: 0, consultant: 0, hq_coordinator: 0 };
   for (const e of allEntries) {
     if ((e.status || 'active') !== 'active' && statF === 'active') continue;
     counts.all += 1;
@@ -3769,20 +4113,25 @@ function renderGrid() {
   $('cntAll').textContent = counts.all;
   $('cntEd').textContent = counts.executive_director;
   $('cntDir').textContent = counts.director;
+  $('cntCon').textContent = counts.consultant;
   $('cntHq').textContent = counts.hq_coordinator;
-  $('cntSl').textContent = counts.school_subject_leader;
-  $('cntGc').textContent = counts.grade_coordinator;
 
   const filtered = allEntries.filter(e => {
     const st = e.status || 'active';
     if (statF === 'active' && st !== 'active') return false;
     if (statF === 'archived' && st !== 'archived') return false;
     if (activeTab !== 'all' && e.entryKind !== activeTab) return false;
-    if (subF && e.subjectId !== subF) return false;
+    // Subject filter — array-aware with legacy singular fallback.
+    if (subF) {
+      const subs = Array.isArray(e.subjectIds) && e.subjectIds.length
+        ? e.subjectIds
+        : (e.subjectId ? [e.subjectId] : []);
+      if (!subs.includes(subF)) return false;
+    }
     if (schF && e.schoolId !== schF) return false;
-    if (grdF && String(e.gradeLevel || '') !== grdF) return false;
     if (search) {
-      const hay = `${e.displayName || ''} ${e.position || ''} ${e.email || ''} ${e.roleNotes || ''}`.toLowerCase();
+      const posBlob = Array.isArray(e.positions) ? e.positions.join(' ') : (e.position || '');
+      const hay = `${e.displayName || ''} ${posBlob} ${e.email || ''} ${e.roleNotes || ''}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -3793,7 +4142,38 @@ function renderGrid() {
     grid.innerHTML = `<div class="empty-state"><h3>No entries match</h3><p>Try clearing filters, or hit <strong>+ New entry</strong> to add one.</p></div>`;
     return;
   }
-  grid.innerHTML = filtered.map(renderCard).join('');
+
+  // Group by entryKind, ordered by KIND_ORDER (hierarchical rank), then
+  // sort each group's cards by displayName for stable in-group order.
+  // The "All" tab shows every populated section; a single-tab selection
+  // shows just one section (with no header, since the tab itself names it).
+  const byKind = {};
+  for (const e of filtered) {
+    const k = e.entryKind || 'hq_coordinator';
+    (byKind[k] ||= []).push(e);
+  }
+  for (const k of Object.keys(byKind)) {
+    byKind[k].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+  }
+
+  const sectionHtml = (k, idx) => {
+    const list = byKind[k] || [];
+    if (!list.length) return '';
+    const head = activeTab === 'all'
+      ? `<div class="kind-section-head">
+           <span class="kind-section-rank" aria-hidden="true">${idx + 1}</span>
+           <span class="kind-section-label">${escHtml(KIND_LABELS_PLURAL[k] || k)}</span>
+           <span class="kind-section-count">${list.length}</span>
+         </div>`
+      : '';
+    return `
+      <section class="kind-section" data-kind="${k}">
+        ${head}
+        <div class="kind-section-grid">${list.map(renderCard).join('')}</div>
+      </section>`;
+  };
+
+  grid.innerHTML = KIND_ORDER.map((k, idx) => sectionHtml(k, idx)).filter(Boolean).join('');
 
   grid.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openModal(b.dataset.edit)));
   grid.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', () => confirmDelete(b.dataset.delete, b)));
@@ -3803,55 +4183,97 @@ function renderCard(e) {
   const kind = e.entryKind || 'hq_coordinator';
   const status = e.status || 'active';
   const school = allSchools.find(s => s.id === e.schoolId);
-  const linkedUser = e.userId ? allUsers.find(u => u.uid === e.userId) : null;
+  // Resolve linked user: prefer explicit userId link, fall back to email match
+  // so an avatar shows up even before the admin has manually linked the entry.
+  const linkedUser = e.userId
+    ? allUsers.find(u => u.uid === e.userId)
+    : (e.email ? allUsers.find(u => (u.email || '').toLowerCase() === e.email.toLowerCase()) : null);
+  const photoURL = linkedUser?.photoURL || null;
+
+  // Multi-value canonical reads — fall back to legacy singular fields.
+  const positions = Array.isArray(e.positions) && e.positions.length
+    ? e.positions
+    : (e.position ? [e.position] : []);
+  const subjectIds = Array.isArray(e.subjectIds) && e.subjectIds.length
+    ? e.subjectIds
+    : (e.subjectId ? [e.subjectId] : []);
 
   const pills = [];
-  if (e.subjectId) pills.push(`<span class="ec-pill subj">${SUBJECT_LABELS[e.subjectId] || e.subjectId}</span>`);
+  subjectIds.forEach(s => pills.push(`<span class="ec-pill subj">${escHtml(SUBJECT_LABELS[s] || s)}</span>`));
   if (e.gradeLevel) pills.push(`<span class="ec-pill grade">G${e.gradeLevel}${e.gradeContext ? ` · ${escHtml(e.gradeContext)}` : ''}</span>`);
   if (school || e.schoolName) pills.push(`<span class="ec-pill school">${escHtml(school?.name || e.schoolName)}</span>`);
 
+  const mailSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 7 9-7"/></svg>`;
+  const phoneSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
   const meta = [];
-  if (e.email) meta.push(`<a href="mailto:${escHtml(e.email)}">${escHtml(e.email)}</a>`);
-  if (e.phone) meta.push(`<a href="tel:${escHtml(e.phone)}">${escHtml(e.phone)}</a>`);
-  if (linkedUser) meta.push(`<span style="color:var(--ink-3);font-size:0.72rem">✓ Linked to ${escHtml(linkedUser.displayName || linkedUser.email)}</span>`);
+  if (e.email) meta.push(`<span class="ec-meta-line">${mailSvg}<a href="mailto:${escHtml(e.email)}">${escHtml(e.email)}</a></span>`);
+  if (e.phone) meta.push(`<span class="ec-meta-line">${phoneSvg}<a href="tel:${escHtml(e.phone)}">${escHtml(e.phone)}</a></span>`);
+
+  const linkedBadge = linkedUser
+    ? `<span class="ec-linked-badge" title="Linked to ${escHtml(linkedUser.displayName || linkedUser.email)} — profile photo synced from their account">
+         <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
+       </span>`
+    : '';
+
+  const avatarInner = photoURL
+    ? `<img src="${escHtml(photoURL)}" alt="${escHtml(e.displayName || '')}" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:this.dataset.fallback}))" data-fallback="${escHtml(initials(e.displayName))}">`
+    : escHtml(initials(e.displayName));
 
   const actions = canEdit ? `
     <div class="ec-actions">
-      <button class="ec-icon-btn" data-edit="${e.id}" title="Edit">✎</button>
-      ${isAdmin ? `<button class="ec-icon-btn danger" data-delete="${e.id}" data-confirming="false" title="Delete">×</button>` : ''}
+      <button class="ec-icon-btn" data-edit="${e.id}" title="Edit">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      ${isAdmin ? `<button class="ec-icon-btn danger" data-delete="${e.id}" data-confirming="false" title="Delete">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+      </button>` : ''}
     </div>
   ` : '';
 
   return `
-    <div class="entry-card ${status}">
-      ${actions}
-      <div class="ec-row1">
-        <div class="ec-avatar ${kind}">${initials(e.displayName)}</div>
-        <div style="min-width:0;flex:1;">
-          <div class="ec-name">${escHtml(e.displayName || 'Unnamed')}</div>
-          ${e.position ? `<div class="ec-position">${escHtml(e.position)}</div>` : ''}
-          <div class="ec-kind">${KIND_LABELS[kind] || kind}</div>
+    <div class="entry-card kind-${kind} ${status}">
+      <div class="ec-header"></div>
+      ${actions ? `<div class="ec-corner">${actions}</div>` : ''}
+      <div class="ec-body">
+        <div class="ec-avatar-wrap">
+          <div class="ec-avatar">${avatarInner}</div>
+          ${linkedBadge}
         </div>
+        <div class="ec-name">${escHtml(e.displayName || 'Unnamed')}</div>
+        ${positions.length ? `<div class="ec-positions ${positions.length > 1 ? 'is-multi' : ''}">${positions.map(p => `<div class="ec-position">${escHtml(p)}</div>`).join('')}</div>` : ''}
+        <span class="ec-kind">${KIND_LABELS[kind] || kind}</span>
+        ${pills.length ? `<div class="ec-pills">${pills.join('')}</div>` : ''}
+        ${meta.length ? `<div class="ec-meta">${meta.join('')}</div>` : ''}
+        ${e.roleNotes ? `<div class="ec-notes">${escHtml(e.roleNotes)}</div>` : ''}
+        <div class="ec-wordmark" aria-hidden="true">Eduversal</div>
       </div>
-      ${pills.length ? `<div class="ec-pills">${pills.join('')}</div>` : ''}
-      <div class="ec-meta">${meta.join('') || '<span style="color:var(--ink-3);font-style:italic">No contact details on file</span>'}</div>
-      ${e.roleNotes ? `<div class="ec-notes">${escHtml(e.roleNotes)}</div>` : ''}
     </div>
   `;
 }
 
 function openModal(entryId) {
   editingId = entryId;
+  // Reset chip-tag + multi-select state on every open.
+  editPositions = [];
+  editSubjects = [];
+  $('ePositionInput').value = '';
+
   if (entryId) {
     const e = allEntries.find(x => x.id === entryId);
     if (!e) { showToast('Not found.'); return; }
     $('modalTitle').textContent = 'Edit entry';
     $('eKind').value = e.entryKind || 'hq_coordinator';
     $('eName').value = e.displayName || '';
-    $('ePosition').value = e.position || '';
+    // Positions: prefer the array, fall back to legacy singular.
+    editPositions = Array.isArray(e.positions) && e.positions.length
+      ? e.positions.slice()
+      : (e.position ? [e.position] : []);
     $('eEmail').value = e.email || '';
     $('ePhone').value = e.phone || '';
-    $('eSubject').value = e.subjectId || '';
+    // Subjects: prefer the array, fall back to legacy singular.
+    editSubjects = Array.isArray(e.subjectIds) && e.subjectIds.length
+      ? e.subjectIds.slice()
+      : (e.subjectId ? [e.subjectId] : []);
     $('eSchool').value = e.schoolId || '';
     $('eGrade').value = e.gradeLevel || '';
     $('eGradeContext').value = e.gradeContext || '';
@@ -3862,10 +4284,8 @@ function openModal(entryId) {
     $('modalTitle').textContent = 'New entry';
     $('eKind').value = 'executive_director';
     $('eName').value = '';
-    $('ePosition').value = '';
     $('eEmail').value = '';
     $('ePhone').value = '';
-    $('eSubject').value = '';
     $('eSchool').value = '';
     $('eGrade').value = '';
     $('eGradeContext').value = '';
@@ -3873,6 +4293,8 @@ function openModal(entryId) {
     $('eUser').value = '';
     $('eStatus').value = 'active';
   }
+  renderPositionChips();
+  syncSubjectGridFromState();
   // Sync conditional groups
   $('eKind').dispatchEvent(new Event('change'));
   $('modalEntry').classList.add('open');
@@ -3886,22 +4308,30 @@ function closeModal() {
 async function saveEntry() {
   const name = $('eName').value.trim();
   if (!name) { showToast('Display name required.'); return; }
-  const position = $('ePosition').value.trim();
-  if (!position) { showToast('Position required.'); return; }
+  // Commit any half-typed position before validating.
+  addPositionFromInput();
+  if (!editPositions.length) { showToast('At least one position is required.'); return; }
   const kind = $('eKind').value;
-  const subjectId = $('eSubject').value || null;
   const schoolId = $('eSchool').value || null;
   const gradeLevel = $('eGrade').value ? parseInt($('eGrade').value, 10) : null;
   const userId = $('eUser').value || null;
 
   const school = allSchools.find(s => s.id === schoolId);
+  const positions = editPositions.slice();   // array canonical
+  const subjectIds = editSubjects.slice();   // array canonical
   const payload = {
     entryKind: kind,
     displayName: name,
-    position,
+    // Canonical multi-value fields (2026-05-24):
+    positions,
+    subjectIds,
+    // Legacy singular fields kept in sync for back-compat with any callers
+    // still reading them (search index seeds, old report queries, etc.).
+    // Take the first entry of each array; null when empty.
+    position: positions[0] || null,
+    subjectId: subjectIds[0] || null,
     email: $('eEmail').value.trim(),
     phone: $('ePhone').value.trim(),
-    subjectId,
     schoolId,
     schoolName: school ? (school.name || schoolId) : null,
     gradeLevel,
@@ -3953,6 +4383,39 @@ async function confirmDelete(id, btn) {
   }, 3000);
 }
 </script>
+
+<footer class="page-footer" role="contentinfo">
+  <div class="page-footer__inner">
+    <div class="page-footer__cta">
+      <span class="page-footer__cta-eyebrow">Coordinators Workspace · Directory</span>
+      <h2 class="page-footer__cta-title">Know who to call before you need them.</h2>
+      <p class="page-footer__cta-desc">Subject coordinators across the network sit one click away. Reach out to a peer in another subject before raising a cross-cutting decision — agreement upstream saves rework downstream.</p>
+      <a href="/coordinators-meetings" class="page-footer__cta-btn">Add a coordinator to your next meeting <span aria-hidden="true">→</span></a>
+    </div>
+    <nav class="page-footer__nav" aria-label="Directory footer navigation">
+      <div class="page-footer__nav-group">
+        <span class="page-footer__nav-heading">Workspace</span>
+        <a href="/coordinators-meetings" class="page-footer__nav-link">Meetings</a>
+        <a href="/decisions-register" class="page-footer__nav-link">Decisions</a>
+        <a href="/department-artifacts" class="page-footer__nav-link">Artifacts</a>
+        <a href="/activities" class="page-footer__nav-link">Activities</a>
+        <a href="/weekly-checklist" class="page-footer__nav-link">Weekly Checklist</a>
+      </div>
+      <div class="page-footer__nav-group">
+        <span class="page-footer__nav-heading">References</span>
+        <a href="/read-me-coordinator" class="page-footer__nav-link">Read Me First</a>
+        <a href="/handbook?id=eduversal_subject_specialist_first_90_days_v1" class="page-footer__nav-link">Operational Guide</a>
+        <a href="/references" class="page-footer__nav-link">References &amp; Standards</a>
+        <a href="/staff" class="page-footer__nav-link">Network Staff</a>
+        <a href="/roles-positions" class="page-footer__nav-link">Roles &amp; Positions</a>
+      </div>
+    </nav>
+  </div>
+  <div class="page-footer__meta">
+    <span class="page-footer__meta-left">© Eduversal · Central Hub</span>
+    <span class="page-footer__meta-right">Directory entries are public to all coordinators — keep personal contact details in your own address book.</span>
+  </div>
+</footer>
 <script src="cambridge-crossref.js" defer></script>
 </body>
 </html>

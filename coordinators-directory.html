@@ -64,8 +64,6 @@
     .kind-section[data-kind="director"]              { --kind-grad: linear-gradient(135deg,#0e7490,#155e75); }
     .kind-section[data-kind="consultant"]            { --kind-grad: linear-gradient(135deg,#4f46e5,#3730a3); }
     .kind-section[data-kind="hq_coordinator"]        { --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2); }
-    .kind-section[data-kind="school_subject_leader"] { --kind-grad: linear-gradient(135deg,#10b981,#047857); }
-    .kind-section[data-kind="grade_coordinator"]     { --kind-grad: linear-gradient(135deg,#f59e0b,#b45309); }
 
     .entry-card {
       --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2);
@@ -153,8 +151,6 @@
     .entry-card.archived .ec-header { opacity: 0.55; }
     /* Kind-specific accent — gradient + soft tint + ink colour */
     .entry-card.kind-hq_coordinator        { --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2); --kind-soft: #ede9fe; --kind-ink: #5b21b6; --kind-tint: rgba(124,58,237,0.05); }
-    .entry-card.kind-school_subject_leader { --kind-grad: linear-gradient(135deg,#10b981,#047857); --kind-soft: #d1fae5; --kind-ink: #065f46; --kind-tint: rgba(16,185,129,0.05); }
-    .entry-card.kind-grade_coordinator     { --kind-grad: linear-gradient(135deg,#f59e0b,#b45309); --kind-soft: #fef3c7; --kind-ink: #92400e; --kind-tint: rgba(245,158,11,0.06); }
     .entry-card.kind-director              { --kind-grad: linear-gradient(135deg,#0e7490,#155e75); --kind-soft: #cffafe; --kind-ink: #0e7490; --kind-tint: rgba(14,116,144,0.05); }
     .entry-card.kind-consultant            { --kind-grad: linear-gradient(135deg,#4f46e5,#3730a3); --kind-soft: #e0e7ff; --kind-ink: #3730a3; --kind-tint: rgba(79,70,229,0.05); }
     .entry-card.kind-executive_director    { --kind-grad: linear-gradient(135deg,#1e3a8a,#0c4a6e); --kind-soft: #dbeafe; --kind-ink: #1e3a8a; --kind-tint: rgba(30,58,138,0.05); }
@@ -356,7 +352,7 @@
     <div class="main-header">
       <div>
         <h1>Coordinators Directory</h1>
-        <div class="subtitle">Executive Directors · Directors · Coordinators · per-school Subject Leaders · per-grade Grade Coordinators (e.g. EASE G7-G12).</div>
+        <div class="subtitle">Executive Directors · Directors · Consultants · Coordinators.</div>
       </div>
       <button class="cd-btn-add" id="btnAdd">+ New entry</button>
     </div>
@@ -372,11 +368,6 @@
       <select class="cd-filter" id="filterSchool">
         <option value="">All schools</option>
       </select>
-      <select class="cd-filter" id="filterGrade">
-        <option value="">All grades</option>
-        <option value="7">G7</option><option value="8">G8</option><option value="9">G9</option>
-        <option value="10">G10</option><option value="11">G11</option><option value="12">G12</option>
-      </select>
       <select class="cd-filter" id="filterStatus">
         <option value="active">Active</option>
         <option value="archived">Archived</option>
@@ -390,8 +381,6 @@
       <button class="cd-tab" data-tab="director">Directors <span class="cd-tab-count" id="cntDir">0</span></button>
       <button class="cd-tab" data-tab="consultant">Consultants <span class="cd-tab-count" id="cntCon">0</span></button>
       <button class="cd-tab" data-tab="hq_coordinator">Coordinators <span class="cd-tab-count" id="cntHq">0</span></button>
-      <button class="cd-tab" data-tab="school_subject_leader">School Subject Leaders <span class="cd-tab-count" id="cntSl">0</span></button>
-      <button class="cd-tab" data-tab="grade_coordinator">Grade Coordinators <span class="cd-tab-count" id="cntGc">0</span></button>
     </div>
 
     <div class="entries-wrap" id="entriesGrid"></div>
@@ -409,8 +398,6 @@
             <option value="director">Director (Eduversal)</option>
             <option value="consultant">Consultant (Eduversal)</option>
             <option value="hq_coordinator">Coordinator (Eduversal)</option>
-            <option value="school_subject_leader">School Subject Leader (per-school)</option>
-            <option value="grade_coordinator">Grade Coordinator (e.g. EASE G7-G12)</option>
           </select>
         </div>
         <div class="form-group">
@@ -437,7 +424,7 @@
           <div class="subj-grid" id="eSubjGrid"></div>
           <div class="form-hint">Click to toggle. Leave all unselected for cross-subject roles.</div>
         </div>
-        <div class="form-group" id="eSchoolGroup">
+        <div class="form-group" id="eSchoolGroup" style="display:none">
           <label class="form-label">School</label>
           <select class="form-select" id="eSchool">
             <option value="">— None —</option>
@@ -496,18 +483,14 @@ const KIND_LABELS = {
   director: 'Director',
   consultant: 'Consultant',
   hq_coordinator: 'Coordinator',
-  school_subject_leader: 'School Subject Leader',
-  grade_coordinator: 'Grade Coordinator',
 };
 // Hierarchical rank — top to bottom, drives section ordering in renderGrid().
-const KIND_ORDER = ['executive_director', 'director', 'consultant', 'hq_coordinator', 'school_subject_leader', 'grade_coordinator'];
+const KIND_ORDER = ['executive_director', 'director', 'consultant', 'hq_coordinator'];
 const KIND_LABELS_PLURAL = {
   executive_director: 'Executive Directors',
   director: 'Directors',
   consultant: 'Consultants',
   hq_coordinator: 'Coordinators',
-  school_subject_leader: 'School Subject Leaders',
-  grade_coordinator: 'Grade Coordinators',
 };
 
 let db, currentUser, userProfile;
@@ -661,14 +644,13 @@ function wireUI() {
     });
   });
 
-  ['filterSearch','filterSubject','filterSchool','filterGrade','filterStatus'].forEach(id => {
+  ['filterSearch','filterSubject','filterSchool','filterStatus'].forEach(id => {
     $(id).addEventListener(id === 'filterSearch' ? 'input' : 'change', renderGrid);
   });
 
   $('eKind').addEventListener('change', () => {
-    const kind = $('eKind').value;
-    $('eGradeGroup').style.display = kind === 'grade_coordinator' ? 'block' : 'none';
-    $('eSchoolGroup').style.display = (kind === 'school_subject_leader' || kind === 'grade_coordinator') ? 'block' : 'none';
+    $('eGradeGroup').style.display = 'none';
+    $('eSchoolGroup').style.display = 'none';
   });
 
   // === Position chip-tag input wiring ===
@@ -722,11 +704,10 @@ function renderGrid() {
   const search = ($('filterSearch').value || '').trim().toLowerCase();
   const subF = $('filterSubject').value;
   const schF = $('filterSchool').value;
-  const grdF = $('filterGrade').value;
   const statF = $('filterStatus').value;
 
   // Tab counts
-  const counts = { all: 0, executive_director: 0, director: 0, consultant: 0, hq_coordinator: 0, school_subject_leader: 0, grade_coordinator: 0 };
+  const counts = { all: 0, executive_director: 0, director: 0, consultant: 0, hq_coordinator: 0 };
   for (const e of allEntries) {
     if ((e.status || 'active') !== 'active' && statF === 'active') continue;
     counts.all += 1;
@@ -737,8 +718,6 @@ function renderGrid() {
   $('cntDir').textContent = counts.director;
   $('cntCon').textContent = counts.consultant;
   $('cntHq').textContent = counts.hq_coordinator;
-  $('cntSl').textContent = counts.school_subject_leader;
-  $('cntGc').textContent = counts.grade_coordinator;
 
   const filtered = allEntries.filter(e => {
     const st = e.status || 'active';
@@ -753,7 +732,6 @@ function renderGrid() {
       if (!subs.includes(subF)) return false;
     }
     if (schF && e.schoolId !== schF) return false;
-    if (grdF && String(e.gradeLevel || '') !== grdF) return false;
     if (search) {
       const posBlob = Array.isArray(e.positions) ? e.positions.join(' ') : (e.position || '');
       const hay = `${e.displayName || ''} ${posBlob} ${e.email || ''} ${e.roleNotes || ''}`.toLowerCase();
