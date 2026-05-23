@@ -19,9 +19,18 @@
       --tag-red-text: #dc2626;
     }
 
-    /* === Layout === */
-    .meetings-layout { display: grid; grid-template-columns: var(--panel-w) 1fr; height: calc(100vh - 64px); min-height: 0; }
-    @media (max-width: 1024px) { .meetings-layout { grid-template-columns: 1fr; height: auto; } }
+    /* === Layout ===
+       Hero takes top band; layout fills the remaining viewport below.
+       --hero-h is set by JS after authReady so the layout always tracks
+       the rendered hero height (KPI tile wrap pushes it past 200px on
+       narrow viewports). */
+    .meetings-layout {
+      display: grid;
+      grid-template-columns: var(--panel-w) 1fr;
+      height: calc(100vh - 64px - var(--hero-h, 200px));
+      min-height: 480px;
+    }
+    @media (max-width: 1024px) { .meetings-layout { grid-template-columns: 1fr; height: auto; min-height: 0; } }
 
     /* === Sidebar — meetings list === */
     .meetings-sidebar { background: var(--white); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
@@ -31,17 +40,21 @@
     .ms-new-btn { display: flex; align-items: center; gap: 5px; padding: 6px 11px; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; border-radius: 7px; font-size: 0.78rem; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: opacity .15s, transform .12s; }
     .ms-new-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .ms-filter-row { display: flex; gap: 6px; }
+    .ms-filter-row[hidden] { display: none; }
     .ms-filter { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 0.78rem; color: var(--ink); background: var(--paper); cursor: pointer; }
     .ms-filter:focus { outline: none; border-color: var(--accent); }
     .ms-search-wrap { position: relative; margin-top: 8px; }
+    .ms-search-wrap[hidden] { display: none; }
     .ms-search { width: 100%; padding: 6px 10px 6px 28px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.78rem; color: var(--ink); background: var(--paper); }
     .ms-search:focus { outline: none; border-color: var(--accent); background: var(--white); }
     .ms-search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
     .ms-list { flex: 1; overflow-y: auto; padding: 6px 0; }
     .ms-empty { padding: 28px 18px; text-align: center; color: var(--ink-3); font-size: 0.85rem; }
-    .ms-item { padding: 10px 18px; border-left: 3px solid transparent; cursor: pointer; transition: background .12s; }
+    .ms-item { padding: 10px 18px; border-left: 4px solid transparent; cursor: pointer; transition: background .12s, border-color .12s; }
     .ms-item:hover { background: var(--paper); }
-    .ms-item.active { background: #faf8ff; border-left-color: var(--accent); }
+    .ms-item.active { background: #f5f3ff; border-left-color: var(--accent); }
+    .ms-item.active .ms-item-title { color: var(--accent-dk, #5b21b6); }
+    .ms-item.active .ms-item-meta { color: var(--ink-2); }
     .ms-item-title { font-size: 0.88rem; font-weight: 600; color: var(--ink); margin-bottom: 3px; line-height: 1.3; }
     .ms-item-meta { font-size: 0.72rem; color: var(--ink-3); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .ms-item-pill { padding: 1px 7px; border-radius: 10px; font-size: 0.66rem; font-weight: 600; }
@@ -55,28 +68,37 @@
     .meeting-empty h2 { font-family: 'Lora', serif; font-size: 1.15rem; color: var(--ink); margin-bottom: 6px; }
     .meeting-empty p { font-size: 0.88rem; line-height: 1.5; max-width: 360px; }
 
-    /* === Meeting header === */
-    .mh-wrap { background: var(--white); border-bottom: 1px solid var(--border); padding: 20px 28px; }
-    .mh-row1 { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-    .mh-title { font-family: 'Lora', serif; font-size: 1.4rem; font-weight: 600; color: var(--ink); flex: 1; min-width: 200px; }
-    .mh-title[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-    .mh-status-pill { padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; }
+    /* === Meeting header ===
+       Eyebrow row: status pill + meta (last edited).
+       Title row: heading + primary actions.
+       Meta row: Date / Year / Semester as proper form-groups (label above input).
+       Attendees: own block, dashed separator. */
+    .mh-wrap { background: var(--white); border-bottom: 1px solid var(--border); padding: 18px 28px 16px; }
+    .mh-eyebrow-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; min-height: 22px; }
+    .mh-status-pill { padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
     .mh-status-pill.draft { background: #fef3c7; color: #92400e; }
     .mh-status-pill.published { background: #d1fae5; color: #065f46; }
-    .mh-actions { display: flex; gap: 8px; }
-    .mh-btn { padding: 6px 14px; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--white); color: var(--ink-2); cursor: pointer; transition: all .15s; }
+    .mh-eyebrow-meta { font-size: 0.72rem; color: var(--ink-3); }
+
+    .mh-row1 { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .mh-title { font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); flex: 1; min-width: 200px; line-height: 1.25; }
+    .mh-title[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+    .mh-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .mh-btn { padding: 7px 14px; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--white); color: var(--ink-2); cursor: pointer; transition: all .15s; }
     .mh-btn:hover { border-color: var(--accent); color: var(--accent); }
     .mh-btn.primary { background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; }
     .mh-btn.primary:hover { opacity: 0.9; }
     .mh-btn.danger { color: #dc2626; border-color: #fecdd3; }
     .mh-btn.danger:hover { background: #fff1f2; }
-    .mh-row2 { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.82rem; color: var(--ink-3); }
-    .mh-field { display: flex; align-items: center; gap: 5px; }
-    .mh-field label { font-weight: 500; }
-    .mh-input { padding: 4px 8px; border: 1px solid var(--border); border-radius: 5px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; color: var(--ink); background: var(--paper); }
-    .mh-input:focus { outline: none; border-color: var(--accent); background: var(--white); }
-    .mh-attendees-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
-    .mh-att-label { font-size: 0.75rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+
+    .mh-row2 { display: flex; gap: 14px; flex-wrap: wrap; }
+    .mh-field { display: flex; flex-direction: column; gap: 4px; min-width: 130px; }
+    .mh-field label { font-size: 0.68rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; }
+    .mh-input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: var(--ink); background: var(--white); }
+    .mh-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+
+    .mh-attendees-row { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); }
+    .mh-att-label { font-size: 0.68rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
     .mh-att-chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .att-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 16px; font-size: 0.78rem; background: var(--paper); border: 1px solid var(--border); cursor: pointer; user-select: none; transition: all .12s; }
     .att-chip.present { background: #e0e7ff; border-color: #818cf8; color: #3730a3; }
@@ -124,7 +146,37 @@
     .ai-sub-add:hover { border-style: solid; color: var(--accent); border-color: var(--accent); }
 
     /* === Tags + Subject chips === */
-    .ai-tags-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .ai-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    .ai-extras-toggle {
+      margin-left: auto;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--white);
+      color: var(--ink-3);
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all .12s;
+    }
+    .ai-extras-toggle:hover { color: var(--accent); border-color: var(--accent); }
+    .ai-extras-toggle .chev { transition: transform .15s; display: inline-block; }
+    .ai-extras-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+    .ai-extras-toggle .extras-count {
+      background: var(--paper-2);
+      color: var(--ink-2);
+      border-radius: 8px;
+      padding: 1px 6px;
+      font-size: 0.66rem;
+    }
+    .ai-extras { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .ai-extras[hidden] { display: none; }
+
+    .ai-tags-row { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
     .tag-toggle { padding: 3px 9px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; transition: all .12s; user-select: none; font-family: 'DM Sans', sans-serif; }
     .tag-toggle:hover { border-color: var(--ink-3); }
     .tag-toggle.active[data-tag="decision"]     { background: #fef3c7; color: #92400e; border-color: #f59e0b; }
@@ -133,11 +185,76 @@
     .tag-toggle.active[data-tag="announcement"] { background: #ede9fe; color: #5b21b6; border-color: #8b5cf6; }
     .tag-toggle.active[data-tag="red_text"]     { background: #fee2e2; color: #991b1b; border-color: #dc2626; }
 
-    .ai-subject-row { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+    .ai-subject-row { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
     .ai-subject-label { font-size: 0.7rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
-    .subj-chip { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 500; border: 1px solid var(--border); background: var(--white); color: var(--ink-3); cursor: pointer; transition: all .12s; font-family: 'DM Sans', sans-serif; }
-    .subj-chip:hover { border-color: var(--accent); }
-    .subj-chip.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+
+    /* Picked-only chips: just the subjects already selected.
+       Click to deselect (×) — same semantics as the old toggle, less noise. */
+    .subj-chip {
+      padding: 3px 8px 3px 10px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border: 1px solid #93c5fd;
+      background: #eff6ff;
+      color: #1d4ed8;
+      cursor: pointer;
+      transition: all .12s;
+      font-family: 'DM Sans', sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .subj-chip:hover { background: #dbeafe; border-color: #3b82f6; }
+    .subj-chip .subj-x { opacity: 0.6; font-weight: 700; }
+
+    /* "+ Subject" picker — native <details> for a11y + zero JS for outside-click. */
+    .subj-picker { position: relative; }
+    .subj-picker > summary {
+      list-style: none;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border: 1px dashed var(--border);
+      background: var(--white);
+      color: var(--ink-3);
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: all .12s;
+      user-select: none;
+    }
+    .subj-picker > summary::-webkit-details-marker { display: none; }
+    .subj-picker > summary:hover { color: var(--accent); border-color: var(--accent); border-style: solid; }
+    .subj-picker[open] > summary { background: var(--paper-2); border-style: solid; color: var(--ink-2); }
+    .subj-picker-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      z-index: 10;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow-lg);
+      padding: 8px;
+      min-width: 180px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+    }
+    .subj-picker-opt {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 0.78rem;
+      color: var(--ink-2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .subj-picker-opt:hover { background: var(--paper); }
+    .subj-picker-opt input { accent-color: var(--accent); width: 13px; height: 13px; }
 
     /* === Bridge bar (decision / action) === */
     .ai-bridge-bar { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -172,11 +289,41 @@
     }
   </style>
 </head>
-<body>
+<body data-page-accent="cyan">
   <script src="firebase-config.js"></script>
   <script type="module" src="auth-guard.js"></script>
 
   <!-- SHARED_NAVBAR -->
+
+  <header class="page-hero" data-accent="cyan" id="pageHero" aria-label="Coordinators meetings header">
+    <div class="page-hero__inner">
+      <div class="page-hero__icon" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <div class="page-hero__text">
+        <p class="page-hero__eyebrow">Department Office · CentralHub</p>
+        <h1 class="page-hero__title">Coordinators Meetings</h1>
+        <p class="page-hero__desc">Heads-of-Departments cadence — agendas, decisions, and follow-up activities, all in one record. Drafts auto-save as you type; published meetings feed the Decisions Register and Activities boards.</p>
+      </div>
+      <aside class="page-hero__kpis">
+        <div class="page-hero__kpi page-hero__kpi--primary">
+          <div class="page-hero__kpi-num" id="heroKpiTotal">—</div>
+          <div class="page-hero__kpi-lbl">Total</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="heroKpiDrafts">—</div>
+          <div class="page-hero__kpi-lbl">Drafts</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="heroKpiPublished">—</div>
+          <div class="page-hero__kpi-lbl">Published</div>
+        </div>
+      </aside>
+    </div>
+  </header>
 
   <main class="meetings-layout" id="mainRoot" style="display:none">
 
@@ -189,7 +336,7 @@
             New
           </button>
         </div>
-        <div class="ms-filter-row">
+        <div class="ms-filter-row" id="filterRow" hidden>
           <select class="ms-filter" id="filterYear"><option value="">All years</option></select>
           <select class="ms-filter" id="filterStatus">
             <option value="">All status</option>
@@ -197,7 +344,7 @@
             <option value="published">Published</option>
           </select>
         </div>
-        <div class="ms-search-wrap">
+        <div class="ms-search-wrap" id="searchWrap" hidden>
           <svg class="ms-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" class="ms-search" id="filterSearch" placeholder="Search title or agenda…">
         </div>
@@ -218,9 +365,12 @@
 
       <div id="meetingEditor" style="display:none; flex:1; display:flex; flex-direction:column; min-height:0;">
         <div class="mh-wrap">
+          <div class="mh-eyebrow-row">
+            <span class="mh-status-pill draft" id="meetingStatus">draft</span>
+            <span class="mh-eyebrow-meta" id="meetingEyebrowMeta"></span>
+          </div>
           <div class="mh-row1">
             <div class="mh-title" id="meetingTitle" contenteditable="true" spellcheck="false">Untitled meeting</div>
-            <span class="mh-status-pill draft" id="meetingStatus">draft</span>
             <div class="mh-actions">
               <button class="mh-btn" id="btnPrintExport" title="Export as PDF via browser print">Export</button>
               <button class="mh-btn primary" id="btnPublishToggle">Publish</button>
@@ -229,11 +379,11 @@
           </div>
           <div class="mh-row2">
             <div class="mh-field">
-              <label>Date:</label>
+              <label for="meetingDate">Date</label>
               <input type="date" class="mh-input" id="meetingDate">
             </div>
             <div class="mh-field">
-              <label>Year:</label>
+              <label for="meetingYear">Academic year</label>
               <select class="mh-input" id="meetingYear">
                 <option value="2024-2025">2024-2025</option>
                 <option value="2025-2026">2025-2026</option>
@@ -241,7 +391,7 @@
               </select>
             </div>
             <div class="mh-field">
-              <label>Semester:</label>
+              <label for="meetingSemester">Semester</label>
               <select class="mh-input" id="meetingSemester">
                 <option value="sem1">Sem 1</option>
                 <option value="sem2">Sem 2</option>
@@ -427,10 +577,56 @@ document.addEventListener('authReady', async () => {
   $('mainRoot').style.display = 'grid';
 
   wireUI();
+  trackHeroHeight();
+  wireSubjectPickerOutsideClose();
   subscribeMeetingsList();
   prefetchDeptOfficeUsers();
   prefetchActivityBoards();
 });
+
+/* Track hero height so .meetings-layout height = viewport - navbar - hero.
+   KPI tiles wrap on narrow viewports, so the height changes on resize. */
+function trackHeroHeight() {
+  const hero = $('pageHero');
+  if (!hero) return;
+  const apply = () => {
+    document.documentElement.style.setProperty('--hero-h', `${hero.offsetHeight}px`);
+  };
+  apply();
+  if (window.ResizeObserver) new ResizeObserver(apply).observe(hero);
+  else window.addEventListener('resize', apply);
+}
+
+/* Close any open <details class="subj-picker"> when the user clicks
+   anywhere outside of it. Re-render closes it implicitly on selection,
+   so this just handles "open then click elsewhere". */
+function wireSubjectPickerOutsideClose() {
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('details.subj-picker[open]').forEach(d => {
+      if (!d.contains(e.target)) d.removeAttribute('open');
+    });
+  });
+}
+
+function paintHeroKpis() {
+  const total = meetings.length;
+  const drafts = meetings.filter(m => (m.status || 'draft') === 'draft').length;
+  const published = meetings.filter(m => m.status === 'published').length;
+  $('heroKpiTotal').textContent = total;
+  $('heroKpiDrafts').textContent = drafts;
+  $('heroKpiPublished').textContent = published;
+}
+
+/* Filter row + search only appear once the collection grows past a small
+   threshold. Below that, the 3 widgets are pure visual noise. */
+const FILTER_REVEAL_THRESHOLD = 5;
+function paintSidebarFilters() {
+  const show = meetings.length >= FILTER_REVEAL_THRESHOLD;
+  const row = $('filterRow');
+  const wrap = $('searchWrap');
+  if (row) row.hidden = !show;
+  if (wrap) wrap.hidden = !show;
+}
 
 /* ───── Sidebar — meetings list ─────────────────────────────────── */
 function subscribeMeetingsList() {
@@ -442,6 +638,8 @@ function subscribeMeetingsList() {
   let didAutoSelect = false;
   onSnapshot(q, (snap) => {
     meetings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    paintHeroKpis();
+    paintSidebarFilters();
     populateYearFilter();
     renderMeetingsList();
     if (!didAutoSelect && !currentMeeting && meetings.length) {
@@ -590,6 +788,12 @@ function paintMeetingHeader() {
   pill.textContent = status;
   pill.className = 'mh-status-pill ' + status;
   $('btnPublishToggle').textContent = status === 'published' ? 'Unpublish' : 'Publish';
+  // Eyebrow meta: "Edited 25 May 2026" or "Created 25 May 2026" if never edited.
+  const meta = $('meetingEyebrowMeta');
+  if (meta) {
+    const ts = m.updatedAt || m.createdAt;
+    meta.textContent = ts ? `· Last edited ${fmtDate(ts)}` : '';
+  }
   paintAttendees();
 }
 
@@ -791,8 +995,19 @@ function renderAgendaItem(it, idx) {
     <button class="tag-toggle ${tags.includes(t) ? 'active' : ''}" data-tag="${t}" data-item="${it.id}">${TAG_LABELS[t]}</button>
   `).join('');
 
-  const subjBtns = CH_SUBJECTS.map(s => `
-    <button class="subj-chip ${subjects.includes(s) ? 'active' : ''}" data-subject="${s}" data-item="${it.id}">${SUBJECT_LABELS[s]}</button>
+  // Subject scope: render ONLY the already-picked chips (click to remove)
+  // + a "+ Subject" picker for adding. Reduces the 8-chip flat stripe to
+  // a per-item-specific minimum.
+  const subjPickedBtns = subjects.map(s => `
+    <button class="subj-chip" data-subject="${s}" data-item="${it.id}" title="Remove from scope">
+      ${SUBJECT_LABELS[s]}<span class="subj-x" aria-hidden="true">×</span>
+    </button>
+  `).join('');
+  const subjPickerOpts = CH_SUBJECTS.map(s => `
+    <label class="subj-picker-opt">
+      <input type="checkbox" data-subject-pick="${s}" ${subjects.includes(s) ? 'checked' : ''}>
+      ${SUBJECT_LABELS[s]}
+    </label>
   `).join('');
 
   const subRows = subItems.map((s, sIdx) => `
@@ -830,6 +1045,13 @@ function renderAgendaItem(it, idx) {
     bridgeBar = `<div class="ai-bridge-bar">${bits.join('')}</div>`;
   }
 
+  // Default-expand the extras block if it carries content; otherwise keep
+  // it collapsed to reduce visual noise on freshly-created items.
+  const extrasHasContent = subItems.length > 0 || subjects.length > 0;
+  const extrasCount = subItems.length + subjects.length;
+  const extrasHidden = extrasHasContent ? '' : 'hidden';
+  const extrasExpanded = extrasHasContent ? 'true' : 'false';
+
   return `
     <div class="${itemClasses}" data-item="${it.id}" data-idx="${idx}">
       <div class="ai-row1">
@@ -843,17 +1065,30 @@ function renderAgendaItem(it, idx) {
       </div>
       <textarea class="ai-body ${tags.includes('red_text') ? 'has-red-text' : ''}" data-field="body" placeholder="Body — context, decisions, sample text. Plain text only.">${escHtml(it.body || '')}</textarea>
 
-      <div class="ai-section">
-        <div class="ai-section-label">Sub-items / links</div>
-        <div class="ai-sub-list">${subRows}</div>
-        <button class="ai-sub-add" data-item="${it.id}">+ Add sub-item</button>
+      <div class="ai-meta-row">
+        <div class="ai-tags-row">${tagBtns}</div>
+        <button class="ai-extras-toggle" data-extras-toggle aria-expanded="${extrasExpanded}" type="button">
+          Details
+          ${extrasCount ? `<span class="extras-count">${extrasCount}</span>` : ''}
+          <span class="chev" aria-hidden="true">▾</span>
+        </button>
       </div>
 
-      <div class="ai-tags-row">${tagBtns}</div>
+      <div class="ai-extras" data-extras ${extrasHidden}>
+        <div class="ai-section">
+          <div class="ai-section-label">Sub-items / links</div>
+          <div class="ai-sub-list">${subRows}</div>
+          <button class="ai-sub-add" data-item="${it.id}">+ Add sub-item</button>
+        </div>
 
-      <div class="ai-subject-row">
-        <span class="ai-subject-label">Subject scope:</span>
-        ${subjBtns}
+        <div class="ai-subject-row">
+          <span class="ai-subject-label">Subject scope</span>
+          ${subjPickedBtns}
+          <details class="subj-picker">
+            <summary>+ Subject</summary>
+            <div class="subj-picker-panel">${subjPickerOpts}</div>
+          </details>
+        </div>
       </div>
 
       ${bridgeBar}
@@ -883,9 +1118,12 @@ function wireAgendaItem(it, idx) {
     btn.addEventListener('click', () => toggleTag(it.id, btn.dataset.tag));
   });
 
-  // Subject chips
+  // Subject chips (picked = click to remove) + picker checkboxes (toggle)
   root.querySelectorAll('.subj-chip').forEach(btn => {
     btn.addEventListener('click', () => toggleSubject(it.id, btn.dataset.subject));
+  });
+  root.querySelectorAll('[data-subject-pick]').forEach(cb => {
+    cb.addEventListener('change', () => toggleSubject(it.id, cb.dataset.subjectPick));
   });
 
   // Sub-items
@@ -903,6 +1141,19 @@ function wireAgendaItem(it, idx) {
   root.querySelectorAll('.bridge-btn[data-bridge="decision"]').forEach(btn => {
     btn.addEventListener('click', () => openPromoteDecisionModal(it));
   });
+
+  // Extras (sub-items + subject scope) collapse toggle
+  const extrasBtn = root.querySelector('[data-extras-toggle]');
+  const extrasBox = root.querySelector('[data-extras]');
+  if (extrasBtn && extrasBox) {
+    extrasBtn.addEventListener('click', () => {
+      const open = extrasBtn.getAttribute('aria-expanded') === 'true';
+      const next = !open;
+      extrasBtn.setAttribute('aria-expanded', String(next));
+      if (next) extrasBox.removeAttribute('hidden');
+      else extrasBox.setAttribute('hidden', '');
+    });
+  }
 }
 
 /* ───── Agenda item CRUD ────────────────────────────────────────── */
