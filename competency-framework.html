@@ -686,12 +686,11 @@ function nextRecommendedLevel(c) {
   return null;
 }
 
-// Per-user earned levels — matches AH pattern (let earned = {} loaded
-// from user_competencies/{uid}.earned_central). Shape: { [compId]: { level } }.
-// saScores is the AH-parity self-assessment map (key: `${compId}/${itemId}`,
-// value: 1-4). CH does not yet write to saScores from any surface — the
-// Avg Self-Assessment KPI tile will gracefully degrade to "No self-assessments
-// yet" until a CH SA form lands. Field-shape parity with AH/TH is intentional.
+// Per-user earned levels: user_competencies/{uid}.earned_central.
+// Shape: { [compId]: { level } }.
+// saScores: user_competencies/{uid}.saScores_central, written by /learning-path
+// modal SA picker. Shape: { `${compId}/${lvl}/${itemIdx}`: 1-4 }.
+// Tile degrades to "No self-assessments yet" when empty.
 let earned = {};
 let saScores = {};
 
@@ -713,7 +712,7 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
 
   if (uSnap.exists()) {
     earned = uSnap.data().earned_central || {};
-    saScores = uSnap.data().saScores || {};
+    saScores = uSnap.data().saScores_central || {};
   }
 
   const fw = fwSnap.data();
@@ -796,8 +795,8 @@ window.toggleTakeaways = (toggleEl) => {
   toggleEl.closest('.domain-card').classList.toggle('tk-open');
 };
 
-// Per-user SA-score helpers — same shape as AH (key `${compId}/${itemId}`,
-// 1-4 scale). CH does not yet write to saScores; tiles degrade gracefully.
+// Per-user SA-score helpers — key `${compId}/${lvl}/${itemIdx}`, 1-4 scale.
+// Empty map → tiles degrade to "No self-assessments yet".
 function avgSaScore(compId) {
   const vals = Object.entries(saScores)
     .filter(([k]) => k.startsWith(compId + '/'))
@@ -819,8 +818,7 @@ function domainAvgSa(comps) {
 
 // 5-card "My Progress" overview — Overall % · Earned · Domain Certs ·
 // Remaining · Avg Self-Assessment. Direct port of AH renderProgressOverview
-// adjusted for CH's earned_central + Specialist track. Avg SA falls back
-// to "No self-assessments yet" until a CH SA form writes to saScores.
+// adjusted for CH's earned_central + saScores_central + Specialist track.
 function renderProgressOverview(fw) {
   const comps = fw.competencies || [];
   const domains = fw.domains || [];
