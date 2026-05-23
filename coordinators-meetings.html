@@ -249,8 +249,8 @@
        text from legacy items). After mount: Quill takes over. */
     .ai-body-wrap { margin-top: 4px; }
     .ai-body-preview {
-      min-height: 44px;
-      padding: 10px 14px;
+      min-height: 96px;
+      padding: 14px 16px;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: var(--white);
@@ -293,16 +293,17 @@
       font-size: 0.92rem;
     }
     .ai-body-quill .ql-editor {
-      min-height: 100px;
-      padding: 12px 14px;
-      line-height: 1.6;
+      min-height: 260px;
+      padding: 16px 18px;
+      line-height: 1.65;
+      font-size: 0.96rem;
       color: var(--ink);
     }
     .ai-body-quill .ql-editor.ql-blank::before {
       color: var(--ink-3);
       font-style: italic;
-      left: 14px;
-      right: 14px;
+      left: 18px;
+      right: 18px;
     }
 
     /* Red-text tag tints the preview text the same way the old textarea did. */
@@ -1143,9 +1144,45 @@ let itemsUnsub = null;
 const agendaQuills = new Map();
 
 // Debounced re-render — snapshot fires after every per-keystroke save.
-// Without this, the active Quill instance would be torn down on every
-// 700ms save cycle, losing focus + selection.
-const renderAgendaDebounced = debounce(() => renderAgenda(), 350);
+// Without this, every save cycle would touch the DOM and Quill's
+// selection/cursor would drift even with surgical reconciliation
+// (appendChild on a contenteditable node collapses its selection).
+//
+// Behaviour: if ANY Quill is open, the render is queued for AFTER the
+// user closes that editor (see flushPendingRender on blur). This makes
+// typing feel like Word — zero DOM churn while the cursor is active.
+let _pendingRender = false;
+let _lastRenderedItemSig = '';
+const renderAgendaSoon = debounce(() => renderAgenda(), 200);
+
+// Item-set signature: id+order list. Changes when items are added,
+// removed, or reordered. Field-only changes (body text, tags, subjects)
+// produce the same signature.
+function itemSetSig() {
+  return currentItems.map(it => `${it.id}:${it.order || 0}`).join('|');
+}
+
+function scheduleAgendaRender() {
+  const sig = itemSetSig();
+  const structuralChange = sig !== _lastRenderedItemSig;
+  // Structural changes always render — user just added or deleted an
+  // item and expects to see it instantly. Field-only changes defer if a
+  // Quill is open so the cursor stays put.
+  if (!structuralChange && agendaQuills.size > 0) {
+    _pendingRender = true;
+    return;
+  }
+  renderAgendaSoon();
+}
+
+// Called from Quill blur — flushes any render that was queued while the
+// user was editing. Safe to call even when nothing is pending.
+function flushPendingRender() {
+  if (!_pendingRender) return;
+  _pendingRender = false;
+  // Tiny delay so blur fully settles before the DOM patch runs.
+  setTimeout(() => renderAgenda(), 50);
+}
 
 function subscribeAgendaItems() {
   if (itemsUnsub) { itemsUnsub(); itemsUnsub = null; }
@@ -1160,7 +1197,7 @@ function subscribeAgendaItems() {
   );
   itemsUnsub = onSnapshot(q, (snap) => {
     currentItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderAgendaDebounced();
+    scheduleAgendaRender();
   }, (err) => {
     console.error('[agenda-items]', err);
     $('agendaList').innerHTML = `<div style="text-align:center;padding:30px;color:var(--ink-3);font-size:0.86rem;">Could not load items: ${escHtml(err.code || err.message)}</div>`;
@@ -1174,6 +1211,7 @@ function renderAgenda() {
     agendaQuills.forEach((q) => { try { q.disable(); } catch {} });
     agendaQuills.clear();
     wrap.innerHTML = `<div style="text-align:center;padding:30px;color:var(--ink-3);font-size:0.86rem;">No agenda items yet. Hit "Add agenda item" to start.</div>`;
+    _lastRenderedItemSig = '';
     return;
   }
 
@@ -1221,6 +1259,7 @@ function renderAgenda() {
   currentItems.forEach((it, idx) => {
     if (!agendaQuills.has(it.id)) wireAgendaItem(it, idx);
   });
+  _lastRenderedItemSig = itemSetSig();
 }
 
 /* HTML allowlist for the body editor. Quill emits clean HTML by default
@@ -1318,16 +1357,25 @@ function mountAgendaQuill(it, preview, mount) {
   // Cursor at end of content.
   q.setSelection(q.getLength(), 0);
 
-  // Debounced save — text-change fires per keystroke. Save both fields:
-  // body (plain text, used by Activities task description + Decision body)
-  // + bodyHtml (sanitised rich text, used by the reader).
+  // Debounced save — text-change fires per keystroke. Longer debounce
+  // (1.2s) so we hit Firestore once per "thinking pause" instead of once
+  // per keystroke. Plain body + sanitised bodyHtml saved together so
+  // downstream bridges (Activities task description, Decision body) keep
+  // working off plain text.
   const save = debounce(() => {
     const html = q.root.innerHTML;
     const cleanHtml = sanitiseAgendaHtml(html);
     const plain = q.getText().replace(/\n+$/, ''); // Quill always appends a trailing \n
     persistItem(it.id, { body: plain, bodyHtml: cleanHtml });
-  }, 700);
+  }, 1200);
   q.on('text-change', save);
+
+  // When the user clicks out of Quill (range === null), any agenda render
+  // that was deferred while they were typing now flushes. While they're
+  // inside Quill, the DOM is frozen — Word-like stability.
+  q.on('selection-change', (range) => {
+    if (range === null) flushPendingRender();
+  });
 
   agendaQuills.set(it.id, q);
   return q;
