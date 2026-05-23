@@ -9,22 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="firebase-config.js"></script>
 <style>
+/* My Portfolio belongs to My Work family — dark accent.
+   Hero markup uses canonical <header class="page-hero" data-accent="dark">.
+   Canonical hero CSS lives in shared-styles.css; see
+   docs/architecture/DESIGN_SYSTEM.md "Page families". */
 :root { --accent: #6c5ce7; --accent-dk: #5a4bd1; --accent-2: #ede9fe; }
 
-.hero {
-  background: linear-gradient(135deg, #0a0a1a 0%, #1a1438 55%, #0c1028 100%);
-  padding: 36px 0 32px; position: relative; overflow: hidden;
-}
-.hero::before {
-  content: ''; position: absolute; inset: 0;
-  background: radial-gradient(circle at 12% 80%, rgba(108,92,231,0.22) 0%, transparent 48%);
-}
-.hero-inner { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 40px; }
-.hero-eyebrow { font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.5); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
-.hero-title { font-family: 'Lora', serif; font-size: 1.6rem; font-weight: 600; color: #fff; margin-bottom: 4px; line-height: 1.3; }
-.hero-sub { font-size: 0.85rem; color: rgba(255,255,255,0.5); }
-
-.page-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 40px 80px; }
+.page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 24px 40px 80px; }
 
 .submit-card {
   background: var(--white); border: 1px solid var(--border); border-radius: 18px;
@@ -130,10 +121,7 @@
 .page-intro-dismiss:hover { background: #fff; }
 
 @media (max-width: 720px) {
-  .hero { padding: 28px 0 26px; }
-  .hero-inner { padding: 0 22px; }
-  .hero-title { font-size: 1.3rem; }
-  .page-wrap { padding: 22px 18px 60px; }
+  .page-wrap { padding: 20px 20px 60px; }
   .submit-card { padding: 22px 18px; }
   .submit-btn { width: 100%; justify-content: center; }
   .drop-zone { padding: 22px 16px; }
@@ -175,13 +163,29 @@
 
 <!-- SHARED_NAVBAR -->
 
-<div class="hero">
-  <div class="hero-inner">
-    <p class="hero-eyebrow">Eduversal · HQ Subject Specialist · Portfolio</p>
-    <h1 class="hero-title">My Evidence Portfolio</h1>
-    <p class="hero-sub">Submit evidence claiming a competency at a level. Reviewed by central_admin via Competency Admin.</p>
+<header class="page-hero" data-accent="dark" aria-label="My Portfolio header">
+  <div class="page-hero__inner">
+    <div class="page-hero__text">
+      <p class="page-hero__eyebrow">CentralHub · HQ Subject Specialist · Portfolio</p>
+      <h1 class="page-hero__title">My Evidence Portfolio</h1>
+      <p class="page-hero__desc">Submit evidence claiming a competency at a level. Reviewed by central_admin via Competency Admin.</p>
+    </div>
+    <aside class="page-hero__kpis">
+      <div class="page-hero__kpi page-hero__kpi--primary">
+        <div class="page-hero__kpi-num" id="heroKpiSubmitted">0</div>
+        <div class="page-hero__kpi-lbl">Submitted</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="heroKpiReview">0</div>
+        <div class="page-hero__kpi-lbl">Under Review</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="heroKpiApproved">0</div>
+        <div class="page-hero__kpi-lbl">Approved</div>
+      </div>
+    </aside>
   </div>
-</div>
+</header>
 
 <div class="page-wrap">
 
@@ -483,6 +487,18 @@ async function loadSubmissions() {
     orderBy('createdAt', 'desc')
   );
   const snap = await getDocs(q);
+
+  let kSubmitted = 0, kReview = 0, kApproved = 0;
+  snap.forEach(d => {
+    const st = d.data().status || 'pending';
+    kSubmitted++;
+    if (st === 'under-review' || st === 'pending') kReview++;
+    if (st === 'approved') kApproved++;
+  });
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+  set('heroKpiSubmitted', kSubmitted);
+  set('heroKpiReview', kReview);
+  set('heroKpiApproved', kApproved);
 
   if (snap.empty) {
     list.innerHTML = `
