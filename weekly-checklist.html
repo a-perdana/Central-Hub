@@ -29,12 +29,17 @@
     .ring-text  { font-size: 18px; font-weight: 800; fill: #fff; dominant-baseline: middle; text-anchor: middle; }
     .ring-sub   { font-size: 9px; font-weight: 600; fill: rgba(255,255,255,0.55); dominant-baseline: middle; text-anchor: middle; }
 
-    /* ── WEEK-NAV ROLE GROUP (left side of week-nav) ──
-       Sub-role tabs + paired-handbook pill sit on the left of the week-nav
-       bar; Prev / centred week label / select / Next stay on the right. */
+    /* ── ROLE GROUP (right side of category-filter row) ──
+       Sub-role tabs + paired-handbook pill sit on the right of the
+       category-filter row, opposite the filter chips. Drops out of the
+       DOM tree on weeks with no tasks (cat-filter only renders when tasks
+       exist). */
     .wn-role-group {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-left: auto;
     }
+    .wn-role-group[hidden] { display: none; }
+    .cat-filter { align-items: center; justify-content: flex-start; }
     .hero-tabs [data-tab="director"]   { --tc: #6c5ce7; --tc-bg: rgba(108,92,231,0.10); }
     .hero-tabs [data-tab="coordinator"]{ --tc: #d97706; --tc-bg: rgba(217,119,6,0.10); }
     .hero-tabs {
@@ -519,23 +524,25 @@
 <!-- ── MAIN ── -->
 <main class="page-wrap">
 
-  <!-- Week Navigator (role tabs + handbook pill on left; Prev/center/select/Next on right) -->
+  <!-- Persistent role group — appended to the category-filter row on render(). -->
+  <div class="wn-role-group" id="wnRoleGroup" hidden>
+    <nav class="hero-tabs" id="checklistTabs" style="display:none">
+      <button class="checklist-tab active" data-tab="director">Director</button>
+      <button class="checklist-tab" data-tab="coordinator" id="coordinatorTab" style="display:none">Coordinator</button>
+    </nav>
+    <!-- Cross-link to the matching 90-day handbook for the active tab.
+         Updated by JS whenever currentPlatform changes; hidden when no
+         handbook exists for the active platform. -->
+    <a id="pairedHandbookLink" href="handbook" target="_self"
+       class="paired-handbook-link" style="display:none">
+      <span aria-hidden="true">📕</span>
+      <span id="pairedHandbookLabel">Open paired 90-day handbook</span>
+      <span aria-hidden="true" style="opacity:.7;">↗</span>
+    </a>
+  </div>
+
+  <!-- Week Navigator -->
   <div class="week-nav">
-    <div class="wn-role-group">
-      <nav class="hero-tabs" id="checklistTabs" style="display:none">
-        <button class="checklist-tab active" data-tab="director">Director</button>
-        <button class="checklist-tab" data-tab="coordinator" id="coordinatorTab" style="display:none">Coordinator</button>
-      </nav>
-      <!-- Cross-link to the matching 90-day handbook for the active tab.
-           Updated by JS whenever currentPlatform changes; hidden when no
-           handbook exists for the active platform. -->
-      <a id="pairedHandbookLink" href="handbook" target="_self"
-         class="paired-handbook-link" style="display:none">
-        <span aria-hidden="true">📕</span>
-        <span id="pairedHandbookLabel">Open paired 90-day handbook</span>
-        <span aria-hidden="true" style="opacity:.7;">↗</span>
-      </a>
-    </div>
     <button class="btn-nav" id="prevWeekBtn">← Prev</button>
     <div class="week-nav-center">
       <div class="week-num" id="weekLabel">Week —</div>
@@ -1383,6 +1390,14 @@ function renderCatFilter(row) {
   row.querySelectorAll('.cat-btn').forEach(btn => {
     btn.addEventListener('click', () => { activeFilter = btn.dataset.cat; render(); });
   });
+  // Slot the persistent role-group (sub-role tabs + handbook pill) into
+  // the right side of the cat-filter row. The wrapper stays mounted in the
+  // DOM across renders so JS listeners + onSnapshot bindings survive.
+  const roleGroup = document.getElementById('wnRoleGroup');
+  if (roleGroup) {
+    roleGroup.hidden = false;
+    row.appendChild(roleGroup);
+  }
 }
 
 const expandedTasks = new Set();
