@@ -953,7 +953,7 @@ if (fs.existsSync("eduversal-logo-white.png")) {
 // -- Copy partials/*.js shared modules + shared partial CSS
 const partialsDistDir = path.join("dist", "partials");
 if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
-const partialsAssets = ["pacing-core.js", "syllabus-core.js", "syllabus-styles.css", "question-editor.js"];
+const partialsAssets = ["pacing-core.js", "syllabus-core.js", "syllabus-styles.css", "question-editor.js", "subject-config.js", "department-core.js"];
 for (const fname of partialsAssets) {
   const src = path.join("partials", fname);
   if (fs.existsSync(src)) {

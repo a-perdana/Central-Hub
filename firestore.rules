@@ -2905,6 +2905,58 @@ service cloud.firestore {
                               if isAdmin() || isCentralUser();
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Department Workspace free-text notes (2026-05-24)
+    //
+    // department_notes/{subjectId}/sections/{sectionId}
+    //   - subjectId  ∈ ch_subjects enum
+    //                  (math, biology, chemistry, physics, science,
+    //                   english, bahasa, religion, edu_steam)
+    //   - sectionId  free-text section key — first one shipped is
+    //                'discussion_topics' (Coordinator's running list
+    //                of items to raise with school subject leaders).
+    //
+    // Boundary:
+    //   - Read: loose — any signed-in central_user can read any
+    //     department's notes (network transparency, matches the four
+    //     existing Department Office cross-views).
+    //   - Write: subject-scoped — admin + director bypass; otherwise
+    //     the caller's users/{uid}.ch_subjects[] must include the
+    //     subjectId in the path. Plain central_user without the
+    //     subject cannot edit; they get the read-only view in UI.
+    function isSubjectOwner(subjectId) {
+      return isCentralUser()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && (
+            ('ch_sub_roles' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+             && 'director' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ch_sub_roles)
+            ||
+            ('ch_subjects' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+             && subjectId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ch_subjects)
+          );
+    }
+
+    match /department_notes/{subjectId} {
+      // Parent doc is optional — used as a flat aggregate stamp if anything
+      // ever needs a quick "any notes touched on this subject" probe.
+      allow get, list: if isDeptOfficeMember();
+      allow create, update: if isAdmin() || isSubjectOwner(subjectId);
+      allow delete: if isAdmin();
+
+      match /sections/{sectionId} {
+        allow get, list: if isDeptOfficeMember();
+        // CREATE pins subjectId + sectionId to the path so a coordinator
+        // can't shadow someone else's section.
+        allow create: if (isAdmin() || isSubjectOwner(subjectId))
+                         && request.resource.data.subjectId == subjectId
+                         && request.resource.data.sectionId == sectionId;
+        allow update: if (isAdmin() || isSubjectOwner(subjectId))
+                         && request.resource.data.subjectId == subjectId
+                         && request.resource.data.sectionId == sectionId;
+        allow delete: if isAdmin();
+      }
+    }
+
     // ═════════════════════════════════════════════════════════════
     // ACADEMIC HUB SCHOOL LEADERSHIP WORKSPACE (2026-05-21)
     // ─────────────────────────────────────────────────────────────
