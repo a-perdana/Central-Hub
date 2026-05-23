@@ -918,10 +918,15 @@ function renderDomains(fw) {
       const aicfRefs = Array.isArray(c.aicfRefs)             ? c.aicfRefs              : [];
       const pedRefs  = Array.isArray(c.pedagogyRefs)         ? c.pedagogyRefs          : [];
 
-      // Pedagogy chip short-form: "Robinson 2008 — Student-Centred Leadership"
-      // → "Robinson 2008". Full text preserved in title attribute.
+      // Pedagogy chip short-form: smart truncation.
+      //   "Robinson 2008 — Student-Centred Leadership"     → "Robinson 2008"
+      //   "EASE growth model (Rasch-lite scoring)"          → "EASE growth model"
+      //   "Cambridge candidate-tracker authentication 2024" → "Cambridge candidate-tracker…"
+      // Priority: strip em/en-dash suffix, strip parentheses, then ellipsize.
+      // Full text preserved in title attribute.
       const shortPed = (s) => {
-        const cleaned = String(s).split(/[—–-]\s/)[0].trim();
+        let cleaned = String(s).split(/[—–]\s/)[0].trim();          // em/en-dash suffix
+        cleaned = cleaned.replace(/\s*\([^)]*\)\s*$/, '').trim();   // trailing parenthetical
         return cleaned.length > 22 ? cleaned.slice(0, 20) + '…' : cleaned;
       };
 
@@ -930,9 +935,13 @@ function renderDomains(fw) {
       //   Group B — Indonesian + Eduversal + AI (PMD + ES + AICF, secondary)
       //   Group C — Research bibliography (Pedagogy, tertiary, outlined)
       const ctsChips = refs.map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('');
-      // Capitalize PMD label + prettify AICF refIds for chip text.
+      // Capitalize PMD label + compact AICF chip text.
       const capPmd = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
-      const prettyAicf = (s) => {
+      // AICF compact display: refId "teacher.foundation.domainA" → "Domain A"
+      //   (audience + level demoted to title attribute to keep chip width
+      //   manageable — full breakdown still surfaces on hover/popover).
+      //   Unknown shapes fall through to the original prettified middot trail.
+      const prettyAicfFull = (s) => {
         const parts = String(s).split('.');
         return parts.map(part => {
           const m = part.match(/^domain([A-Z])$/i);
@@ -940,9 +949,17 @@ function renderDomains(fw) {
           return part.charAt(0).toUpperCase() + part.slice(1).replace(/_/g, ' ');
         }).join(' · ');
       };
+      const compactAicf = (s) => {
+        const parts = String(s).split('.');
+        const last = parts[parts.length - 1] || '';
+        const domainMatch = last.match(/^domain([A-Z])$/i);
+        if (domainMatch) return 'Domain ' + domainMatch[1].toUpperCase();
+        // Non-domain suffix (e.g. unesco_aicft.acquire, appendix.A_*) → capitalize last segment only
+        return last.charAt(0).toUpperCase() + last.slice(1).replace(/_/g, ' ');
+      };
       const permChips = perms.map(p => `<span class="perm-pill" data-pmd-ref="${esc(p)}" title="Permendiknas No.16/2007 — Kompetensi ${esc(capPmd(p))}">${esc(capPmd(p))}</span>`).join('');
       const esChips = esRefs.map(e => `<span class="es-pill" data-es-ref="${esc(e)}" title="Eduversal Academic Standards madde ${esc(e)}">ES ${esc(e)}</span>`).join('');
-      const aicfChips = aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF · ${esc(a)}">AICF · ${esc(prettyAicf(a))}</span>`).join('');
+      const aicfChips = aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF · ${esc(prettyAicfFull(a))} (${esc(a)})">AICF · ${esc(compactAicf(a))}</span>`).join('');
       const pedChips = pedRefs.map(p => `<span class="ped-pill" title="${esc(p)}">📖 ${esc(shortPed(p))}</span>`).join('');
 
       const groupA = ctsChips;
