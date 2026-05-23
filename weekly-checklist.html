@@ -774,8 +774,12 @@ document.addEventListener('authReady', ({ detail: { user, profile } }) => {
     return;
   }
 
-  // Show/hide tabs
+  // Show/hide tabs (and the parent role-group wrapper that contains them
+  // + the paired-handbook link). render() will later move this wrapper
+  // into the cat-filter row.
   tabsEl.style.display = '';
+  const roleGroupEl = document.getElementById('wnRoleGroup');
+  if (roleGroupEl) roleGroupEl.hidden = false;
   if (!canSeeDirector) {
     // Only coordinator — hide director tab, activate coordinator
     document.querySelector('[data-tab="director"]').style.display = 'none';
@@ -1359,6 +1363,12 @@ function render() {
   document.getElementById('taskArea').style.display   = '';
 
   const taskArea = document.getElementById('taskArea');
+  // Park the persistent role-group on <main> before wiping taskArea, so
+  // the innerHTML reset doesn't destroy it. renderCatFilter() then moves
+  // it into the cat-filter row. insertBefore() is a move, not a clone —
+  // event listeners and id references stay intact.
+  const roleGroup = document.getElementById('wnRoleGroup');
+  if (roleGroup) taskArea.parentNode.insertBefore(roleGroup, taskArea);
   taskArea.innerHTML = '';
 
   const filterDiv = document.createElement('div');
@@ -1391,8 +1401,8 @@ function renderCatFilter(row) {
     btn.addEventListener('click', () => { activeFilter = btn.dataset.cat; render(); });
   });
   // Slot the persistent role-group (sub-role tabs + handbook pill) into
-  // the right side of the cat-filter row. The wrapper stays mounted in the
-  // DOM across renders so JS listeners + onSnapshot bindings survive.
+  // the right side of the cat-filter row. render() parks the node on
+  // <main> before wiping taskArea, so it always exists here.
   const roleGroup = document.getElementById('wnRoleGroup');
   if (roleGroup) {
     roleGroup.hidden = false;
