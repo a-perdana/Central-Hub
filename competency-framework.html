@@ -183,7 +183,7 @@ body::before {
 .comp-body { flex: 1; min-width: 0; }
 .comp-name { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; }
 .comp-intent { font-size: 11.5px; color: var(--ink-2); line-height: 1.5; margin-top: 2px; }
-.comp-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.comp-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; margin-bottom: 2px; flex-wrap: wrap; }
 .comp-level-badge { display: inline-flex; padding: 2px 8px; border-radius: 50px; font-size: 10px; font-weight: 700; }
 .comp-arrow { color: var(--ink-3); flex-shrink: 0; padding-top: 4px; }
 .comp-arrow svg { width: 14px; height: 14px; }
@@ -206,22 +206,30 @@ body::before {
   padding-left: 58px; /* align with comp-name (id min-width 48 + gap 10) */
 }
 .comp-chips {
-  display: flex; flex-wrap: wrap; gap: 4px 5px;
+  display: flex; flex-wrap: wrap; gap: 6px 0;
   padding-left: 58px;
 }
+/* 3-group chip organisation (2026-05-23 AH parity port) */
+.chip-group { display: inline-flex; flex-wrap: wrap; gap: 4px 5px; align-items: center; }
+.chip-group-divider {
+  padding-right: 10px; margin-right: 6px;
+  border-right: 1px dashed #e2e8f0;
+}
 
-/* Cambridge ref pill */
-.cts-pill { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 6px; background: #ede9fe; color: #5b21b6; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+/* Group A — Cambridge anchor (primary, bold, solid) */
+.cts-pill { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; background: #ede9fe; color: #5b21b6; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+/* Group B — Indonesian + Eduversal + AI (secondary, normal weight) */
 .perm-pill { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 6px; background: #fef3c7; color: #92400e; border-radius: 4px; font-weight: 600; white-space: nowrap; }
 .es-pill   { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 6px; background: #cffafe; color: #0e7490; border-radius: 4px; font-weight: 600; white-space: nowrap; }
 .aicf-pill { font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 6px; background: #ffedd5; color: #c2410c; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+/* Group C — Research bibliography (tertiary, outlined/ghost; short-form rendered) */
 .ped-pill  {
-  font-size: 10px; padding: 2px 6px; background: #e2e8f0; color: #475569;
+  font-size: 10px; padding: 2px 6px; background: transparent; color: #64748b;
+  border: 1px solid #cbd5e1;
   border-radius: 4px; font-weight: 500;
-  max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  cursor: help;
+  white-space: nowrap; cursor: help;
 }
-.ped-pill:hover { max-width: none; }
+.ped-pill:hover { background: #f1f5f9; color: #334155; border-color: #94a3b8; }
 
 /* ─── GROUNDED-IN BAND (provenance — hero-continuation) ─── */
 .grounded-band {
@@ -653,12 +661,31 @@ function renderDomains(fw) {
       const esRefs  = Array.isArray(c.eduversalStandardRefs) ? c.eduversalStandardRefs : [];
       const aicfRefs = Array.isArray(c.aicfRefs)             ? c.aicfRefs              : [];
       const pedRefs  = Array.isArray(c.pedagogyRefs)         ? c.pedagogyRefs          : [];
-      const chips =
-        refs.map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('') +
-        perms.map(p => `<span class="perm-pill" title="Permendiknas No.16/2007 pillar — ${esc(p)}">${esc(p)}</span>`).join('') +
-        esRefs.map(e => `<span class="es-pill" data-es-ref="${esc(e)}" title="Eduversal Academic Standards madde ${esc(e)}">ES ${esc(e)}</span>`).join('') +
-        aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF block ${esc(a)}">AICF</span>`).join('') +
-        pedRefs.map(p => `<span class="ped-pill" title="${esc(p)}">📖 ${esc(p)}</span>`).join('');
+
+      // Pedagogy chip short-form: "Robinson 2008 — Student-Centred Leadership"
+      // → "Robinson 2008". Full text preserved in title attribute.
+      const shortPed = (s) => {
+        const cleaned = String(s).split(/[—–-]\s/)[0].trim();
+        return cleaned.length > 22 ? cleaned.slice(0, 20) + '…' : cleaned;
+      };
+
+      // 3-group chip organisation (2026-05-23):
+      //   Group A — Cambridge anchor (CTS, primary, bold)
+      //   Group B — Indonesian + Eduversal + AI (PMD + ES + AICF, secondary)
+      //   Group C — Research bibliography (Pedagogy, tertiary, outlined)
+      const ctsChips = refs.map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('');
+      const permChips = perms.map(p => `<span class="perm-pill" title="Permendiknas No.16/2007 pillar — ${esc(p)}">${esc(p)}</span>`).join('');
+      const esChips = esRefs.map(e => `<span class="es-pill" data-es-ref="${esc(e)}" title="Eduversal Academic Standards madde ${esc(e)}">ES ${esc(e)}</span>`).join('');
+      const aicfChips = aicfRefs.map(a => `<span class="aicf-pill" data-aicf-ref="${esc(a)}" title="AICF block ${esc(a)}">AICF</span>`).join('');
+      const pedChips = pedRefs.map(p => `<span class="ped-pill" title="${esc(p)}">📖 ${esc(shortPed(p))}</span>`).join('');
+
+      const groupA = ctsChips;
+      const groupB = permChips + esChips + aicfChips;
+      const groupC = pedChips;
+      const groupArr = [groupA, groupB, groupC].filter(Boolean);
+      const chips = groupArr
+        .map((g, i) => `<span class="chip-group${i < groupArr.length - 1 ? ' chip-group-divider' : ''}">${g}</span>`)
+        .join('');
 
       const checkSvg = `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M10 3L5 9 2 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
       const arrowSvg = `<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>`;
