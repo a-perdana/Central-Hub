@@ -1,5 +1,5 @@
 /**
- * cambridge-crossref.js
+ * cambridge-crossref.js  (build: 2026-05-23r2 — switched fetch to no-cache)
  *
  * Click-to-expand popover runtime for five chip families that surface
  * across induction handbooks, KPI / appraisal / competency UIs, and the
@@ -108,7 +108,12 @@
 
     cache[inflightKey] = (async () => {
       try {
-        const res = await fetch(path, { cache: 'force-cache' });
+        // 'no-cache' = always revalidate with the server (still uses cached
+        // body if 304 Not Modified). Required because earlier deploys 404'd
+        // on no-16-2007.json + school-leader-standards-2023.json, and any
+        // browser that cached those failures with the previous 'force-cache'
+        // semantics would keep returning the cached 404 forever. 2026-05-23.
+        const res = await fetch(path, { cache: 'no-cache' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         cache[cacheKey] = await res.json();
       } catch (err) {
