@@ -420,9 +420,23 @@
 
   <script type="module">
     import { initDepartmentWorkspace } from './partials/department-core.js';
-    document.addEventListener('authReady', () => {
-      initDepartmentWorkspace();
-    });
+    // CH auth-guard dispatches authReady on `document` (Common Mistake #13).
+    // Module scripts evaluate asynchronously, so the event may have already
+    // fired before we attach the listener — guard against the race by
+    // checking window.currentUser too.
+    function safeInit() {
+      try { initDepartmentWorkspace(); }
+      catch (err) {
+        console.error('[department-workspace init]', err);
+        const host = document.getElementById('workspaceRoot');
+        if (host) host.innerHTML = '<div class="dw-empty"><div class="dw-empty-title">Could not start workspace.</div><div class="dw-empty-desc">' + String(err && (err.message || err)) + '</div></div>';
+      }
+    }
+    if (window.currentUser && window.userProfile && window.db) {
+      safeInit();
+    } else {
+      document.addEventListener('authReady', safeInit, { once: true });
+    }
   </script>
 </body>
 </html>
