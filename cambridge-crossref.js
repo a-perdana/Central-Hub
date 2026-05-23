@@ -70,6 +70,12 @@
     inflightAicfAppendices: null,
     aicfUnesco: null,         // unesco-ai-cft-2024.json
     inflightAicfUnesco: null,
+    // CSLS — Cambridge School Leader Standards 2023 (AH only)
+    csls: null,
+    inflightCsls: null,
+    // PMD — Permendiknas No.16/2007 four-pillar competency definitions
+    pmd: null,
+    inflightPmd: null,
     popover: null,
   };
 
@@ -120,6 +126,13 @@
   const loadSkl        = () => loadJson('/research/permendiknas/no-10-2025-skl.json',  'skl',  'inflightSkl');
   const loadEsManifest = () => loadJson('/research/eduversal/academic-standards/manifest.json',     'esManifest', 'inflightEsManifest');
   const loadEsBlurbs   = () => loadJson('/research/eduversal/academic-standards/search-blurbs.json', 'esBlurbs',   'inflightEsBlurbs');
+  // CSLS — Cambridge School Leader Standards 2023 (AH leadership track anchor).
+  // Same JSON shape as CTS but separate file. AH framework + appraisal chips
+  // carry CSLS X.Y pattern.
+  const loadCsls       = () => loadJson('/research/cambridge/school-leader-standards-2023.json', 'csls', 'inflightCsls');
+  // PMD — Permendiknas No.16/2007 Four Pillars (kompetensi pedagogik, profesional,
+  // sosial, kepribadian). Static lookup; small JSON, single fetch caches all four.
+  const loadPmd        = () => loadJson('/research/permendiknas/no-16-2007.json',  'pmd',  'inflightPmd');
 
   // AICF loaders — 5 reference files in docs/research/eduversal/ai-competency-framework/reference/
   // build.js copies these to dist/research/eduversal/ai-competency-framework/reference/
@@ -153,7 +166,7 @@
     document.addEventListener('mousedown', (e) => {
       if (el.style.display === 'none') return;
       if (!el.contains(e.target) &&
-          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref],[data-aicf-ref]')) {
+          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref],[data-aicf-ref],[data-csls-ref],[data-pmd-ref],[data-ped-ref]')) {
         closePopover();
       }
     });
@@ -645,6 +658,164 @@
   }
 
   // ──────────────────────────────────────────────────────────────────
+  // CSLS popover — Cambridge School Leader Standards 2023 (AH track)
+  // Mirrors openCtsCrossref but pulls from school-leader-standards-2023.json
+  // instead of the CTS Firestore index. Same chip click → verbatim standard
+  // text + Cambridge link pattern.
+  // ──────────────────────────────────────────────────────────────────
+
+  async function openCslsCrossref(ref, anchorEl) {
+    const pop = ensurePopoverEl();
+    pop.innerHTML = `<div style="color:#8888a8;font-size:12px;">Loading Cambridge School Leader Standard <code>${escHtml(ref)}</code>…</div>`;
+    pop.style.display = 'block';
+    positionPopover(pop, anchorEl);
+
+    const data = await loadCsls();
+    if (!data || data.__loadError) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">CSLS · ${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">Cambridge School Leader Standards JSON is not available offline.</div>
+      `;
+      return;
+    }
+
+    // ref format: "1.1", "4.6" — first digit = domain id, rest = standard id.
+    const domainId = String(ref).split('.')[0];
+    const domain = (data.domains || []).find(d => d.id === domainId);
+    const standard = domain ? (domain.standards || []).find(s => s.id === ref) : null;
+
+    if (!domain || !standard) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">CSLS · ${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">
+          Standard <code>${escHtml(ref)}</code> not found in Cambridge School Leader Standards 2023.
+          Check the tag spelling — valid forms look like <code>CSLS 1.1</code>, <code>CSLS 4.6</code>.
+        </div>
+      `;
+      return;
+    }
+
+    pop.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:#0f766e;font-weight:700;letter-spacing:.05em;">CAMBRIDGE SCHOOL LEADER STANDARDS 2023 · CSLS ${escHtml(ref)}</div>
+          <div style="font-size:11px;color:#8888a8;margin-top:2px;">Domain ${escHtml(domain.id)} · ${escHtml(domain.name)}</div>
+        </div>
+        ${closeBtn()}
+      </div>
+      <div style="border-top:1px solid #e5e0d8;padding-top:8px;">
+        <div style="font-size:13px;color:#1c1c2e;line-height:1.55;font-weight:500;">${escHtml(standard.text)}</div>
+        ${domain.summary ? `<div style="font-size:11.5px;color:#64748b;line-height:1.5;margin-top:8px;font-style:italic;">Domain ${escHtml(domain.id)} summary: ${escHtml(domain.summary)}</div>` : ''}
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:#8888a8;line-height:1.5;">
+        Cambridge International, ${escHtml(data.edition || 'School Leader Standards 2023')}. ${escHtml(data.publisher || 'Cambridge Assessment International Education')}.
+      </div>
+    `;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // PMD popover — Permendiknas No.16/2007 Four Pillars
+  // Static lookup against fourPillars map. Chip text is the pillar label
+  // (e.g. "Kompetensi Pedagogik"); we slug it to the JSON key.
+  // ──────────────────────────────────────────────────────────────────
+
+  function slugifyPillar(s) {
+    // "Kompetensi Pedagogik" → "pedagogik"; "kepribadian" → "kepribadian"
+    const last = String(s).toLowerCase().trim().split(/\s+/).pop();
+    return last.replace(/[^a-z]/g, '');
+  }
+
+  async function openPmdCrossref(ref, anchorEl) {
+    const pop = ensurePopoverEl();
+    pop.innerHTML = `<div style="color:#8888a8;font-size:12px;">Loading Permendiknas pillar <code>${escHtml(ref)}</code>…</div>`;
+    pop.style.display = 'block';
+    positionPopover(pop, anchorEl);
+
+    const data = await loadPmd();
+    if (!data || data.__loadError) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">Permendiknas · ${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">Permendiknas No.16/2007 source JSON is not available offline.</div>
+      `;
+      return;
+    }
+
+    const key = slugifyPillar(ref);
+    const pillar = (data.fourPillars || {})[key];
+
+    if (!pillar) {
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">Permendiknas · ${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">
+          Pillar <code>${escHtml(key)}</code> not found. Expected one of: pedagogik, profesional, sosial, kepribadian.
+        </div>
+      `;
+      return;
+    }
+
+    pop.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:#92400e;font-weight:700;letter-spacing:.05em;">PERMENDIKNAS NO.16/2007 · PILLAR</div>
+          <div style="font-size:13px;font-weight:700;color:#1c1c2e;margin-top:4px;">${escHtml(pillar.label)}</div>
+        </div>
+        ${closeBtn()}
+      </div>
+      <div style="border-top:1px solid #f1ece4;padding-top:8px;">
+        <div style="font-size:12.5px;color:#44445a;line-height:1.55;">${escHtml(pillar.definition)}</div>
+        ${Array.isArray(pillar.competencies) && pillar.competencies.length ? `
+          <div style="margin-top:10px;font-size:11px;color:#8888a8;">
+            ${pillar.competencies.length} core competencies + indicators (full text in /references → Permendiknas 16/2007).
+          </div>
+        ` : ''}
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:#8888a8;line-height:1.5;">
+        Standar Kualifikasi Akademik dan Kompetensi Guru (Indonesian teacher academic qualifications + four-pillar competency standard, promulgated ${escHtml(data.datePromulgated || '2007')}).
+      </div>
+    `;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // PED popover — Research bibliography (free-text citation chips)
+  // No structured JSON source — the chip's title attribute carries the
+  // full citation, the chip text carries the short form ("Robinson 2008").
+  // Popover shows the full citation + a one-line "what this is" hint.
+  // Primary value: kills click bubbling to the card AND surfaces the
+  // full citation for the ESL audience that may not recognise the short form.
+  // ──────────────────────────────────────────────────────────────────
+
+  function openPedCrossref(ref, anchorEl) {
+    const pop = ensurePopoverEl();
+    // ref is the FULL citation text passed at wire time (from title attribute).
+    pop.style.display = 'block';
+    pop.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:#475569;font-weight:700;letter-spacing:.05em;">📖 RESEARCH ANCHOR</div>
+          <div style="font-size:13px;font-weight:600;color:#1c1c2e;margin-top:4px;line-height:1.4;">${escHtml(ref)}</div>
+        </div>
+        ${closeBtn()}
+      </div>
+      <div style="border-top:1px solid #e5e0d8;padding-top:8px;font-size:11.5px;color:#64748b;line-height:1.55;">
+        Bibliographic reference anchoring this competency to research, regulation, or framework. The framework lists this as evidence the level descriptor draws on — open the relevant CPD reading in the Learning Path modal for the full Eduversal interpretation.
+      </div>
+    `;
+    positionPopover(pop, anchorEl);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   // Auto-wire chips
   // ──────────────────────────────────────────────────────────────────
 
@@ -724,13 +895,55 @@
     //     <span data-aicf-ref="unesco_aicft.acquire">UNESCO · Acquire</span>
     //   refId pattern is more structured than ES/CTS so text-pattern matching is unreliable.
     //   The chip MUST carry data-aicf-ref explicitly — text-only chips are NOT auto-wired.
-    scope.querySelectorAll('.hb-tag.aicf, [data-aicf-ref]').forEach(el => {
+    scope.querySelectorAll('.hb-tag.aicf, [data-aicf-ref], .aicf-pill').forEach(el => {
       if (el.dataset.aicfWired === '1') return;
       const ref = el.dataset.aicfRef;
       if (!ref) return; // no text fallback for AICF
       el.dataset.aicfWired = '1';
       el.title = el.title || 'Eduversal AI Competency Framework v1.0 — click for verbatim canonical content.';
       makeClickable(el, ref, openAicfCrossref);
+    });
+
+    // CSLS chips — Cambridge School Leader Standards 2023 (AH leadership track).
+    //   Accepted forms: ".csls-pill" + data-csls-ref OR "CSLS X.Y" text pattern.
+    scope.querySelectorAll('.csls-pill, [data-csls-ref]').forEach(el => {
+      if (el.dataset.cslsWired === '1') return;
+      let ref = el.dataset.cslsRef;
+      if (!ref) {
+        const m = (el.textContent || '').match(/CSLS\s+([0-9]+\.[0-9]+)/);
+        if (!m) return;
+        ref = m[1];
+        el.dataset.cslsRef = ref;
+      }
+      el.dataset.cslsWired = '1';
+      el.title = el.title || `Cambridge School Leader Standard ${ref} — click for verbatim text.`;
+      makeClickable(el, ref, openCslsCrossref);
+    });
+
+    // PMD chips — Permendiknas No.16/2007 four-pillar competency labels.
+    //   Chip text is the pillar label ("Kompetensi Pedagogik" / "Kompetensi Profesional"
+    //   / "Kompetensi Sosial" / "Kompetensi Kepribadian"); we slugify to JSON key.
+    scope.querySelectorAll('.perm-pill, [data-pmd-ref]').forEach(el => {
+      if (el.dataset.pmdWired === '1') return;
+      const ref = el.dataset.pmdRef || (el.textContent || '').trim();
+      if (!ref) return;
+      el.dataset.pmdWired = '1';
+      el.title = el.title || `Permendiknas No.16/2007 four-pillar competency — click for verbatim definition.`;
+      makeClickable(el, ref, openPmdCrossref);
+    });
+
+    // PED chips — free-text research bibliography. No structured JSON source;
+    //   the chip's title attribute carries the FULL citation (chip text shows
+    //   short form "Robinson 2008"). Wire so the chip click opens a popover
+    //   with the full citation AND kills bubbling to the parent comp-row card.
+    scope.querySelectorAll('.ped-pill, [data-ped-ref]').forEach(el => {
+      if (el.dataset.pedWired === '1') return;
+      // Prefer data-ped-ref, then existing title attribute, then text content.
+      const ref = el.dataset.pedRef || el.getAttribute('title') || (el.textContent || '').replace(/^📖\s*/, '').trim();
+      if (!ref) return;
+      el.dataset.pedWired = '1';
+      el.dataset.pedRef   = ref;
+      makeClickable(el, ref, openPedCrossref);
     });
   }
 
@@ -752,12 +965,18 @@
   window.openPigpCrossref = openPigpCrossref;
   window.openEsCrossref   = openEsCrossref;
   window.openAicfCrossref = openAicfCrossref;
+  window.openCslsCrossref = openCslsCrossref;
+  window.openPmdCrossref  = openPmdCrossref;
+  window.openPedCrossref  = openPedCrossref;
   window.__ctsCrossref = {
     open:     openCtsCrossref,
     openSkl:  openSklCrossref,
     openPigp: openPigpCrossref,
     openEs:   openEsCrossref,
     openAicf: openAicfCrossref,
+    openCsls: openCslsCrossref,
+    openPmd:  openPmdCrossref,
+    openPed:  openPedCrossref,
     close:    closePopover,
   };
 })();
