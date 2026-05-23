@@ -36,7 +36,35 @@
     .cd-tab.active .cd-tab-count { background: #ede9fe; color: var(--accent); }
 
     /* === Cards grid === */
-    .entries-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+    .entries-wrap { display: flex; flex-direction: column; gap: 28px; }
+    .kind-section { display: flex; flex-direction: column; gap: 14px; }
+    .kind-section-head {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .kind-section-rank {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 6px;
+      background: var(--kind-grad);
+      color: #fff; font-size: 0.7rem; font-weight: 700;
+      box-shadow: 0 2px 4px rgba(15,23,42,0.10);
+      font-family: 'DM Mono', monospace;
+    }
+    .kind-section-label {
+      font-family: 'Lora', serif; font-size: 1rem; font-weight: 600; color: var(--ink);
+    }
+    .kind-section-count {
+      background: var(--paper-2); padding: 1px 9px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; color: var(--ink-3);
+    }
+    .kind-section-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+    /* Per-kind section accent — same colour scale as the cards inside */
+    .kind-section[data-kind="executive_director"]    { --kind-grad: linear-gradient(135deg,#1e3a8a,#0c4a6e); }
+    .kind-section[data-kind="director"]              { --kind-grad: linear-gradient(135deg,#0e7490,#155e75); }
+    .kind-section[data-kind="hq_coordinator"]        { --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2); }
+    .kind-section[data-kind="school_subject_leader"] { --kind-grad: linear-gradient(135deg,#10b981,#047857); }
+    .kind-section[data-kind="grade_coordinator"]     { --kind-grad: linear-gradient(135deg,#f59e0b,#b45309); }
 
     .entry-card {
       --kind-grad: linear-gradient(135deg,#7c3aed,#0891b2);
@@ -363,7 +391,7 @@
       <button class="cd-tab" data-tab="grade_coordinator">Grade Coordinators <span class="cd-tab-count" id="cntGc">0</span></button>
     </div>
 
-    <div class="entries-grid" id="entriesGrid"></div>
+    <div class="entries-wrap" id="entriesGrid"></div>
   </main>
 
   <!-- Add / Edit modal -->
@@ -465,6 +493,15 @@ const KIND_LABELS = {
   hq_coordinator: 'Coordinator',
   school_subject_leader: 'School Subject Leader',
   grade_coordinator: 'Grade Coordinator',
+};
+// Hierarchical rank — top to bottom, drives section ordering in renderGrid().
+const KIND_ORDER = ['executive_director', 'director', 'hq_coordinator', 'school_subject_leader', 'grade_coordinator'];
+const KIND_LABELS_PLURAL = {
+  executive_director: 'Executive Directors',
+  director: 'Directors',
+  hq_coordinator: 'Coordinators',
+  school_subject_leader: 'School Subject Leaders',
+  grade_coordinator: 'Grade Coordinators',
 };
 
 let db, currentUser, userProfile;
@@ -723,7 +760,38 @@ function renderGrid() {
     grid.innerHTML = `<div class="empty-state"><h3>No entries match</h3><p>Try clearing filters, or hit <strong>+ New entry</strong> to add one.</p></div>`;
     return;
   }
-  grid.innerHTML = filtered.map(renderCard).join('');
+
+  // Group by entryKind, ordered by KIND_ORDER (hierarchical rank), then
+  // sort each group's cards by displayName for stable in-group order.
+  // The "All" tab shows every populated section; a single-tab selection
+  // shows just one section (with no header, since the tab itself names it).
+  const byKind = {};
+  for (const e of filtered) {
+    const k = e.entryKind || 'hq_coordinator';
+    (byKind[k] ||= []).push(e);
+  }
+  for (const k of Object.keys(byKind)) {
+    byKind[k].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+  }
+
+  const sectionHtml = (k, idx) => {
+    const list = byKind[k] || [];
+    if (!list.length) return '';
+    const head = activeTab === 'all'
+      ? `<div class="kind-section-head">
+           <span class="kind-section-rank" aria-hidden="true">${idx + 1}</span>
+           <span class="kind-section-label">${escHtml(KIND_LABELS_PLURAL[k] || k)}</span>
+           <span class="kind-section-count">${list.length}</span>
+         </div>`
+      : '';
+    return `
+      <section class="kind-section" data-kind="${k}">
+        ${head}
+        <div class="kind-section-grid">${list.map(renderCard).join('')}</div>
+      </section>`;
+  };
+
+  grid.innerHTML = KIND_ORDER.map((k, idx) => sectionHtml(k, idx)).filter(Boolean).join('');
 
   grid.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openModal(b.dataset.edit)));
   grid.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', () => confirmDelete(b.dataset.delete, b)));
