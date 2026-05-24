@@ -155,18 +155,47 @@ function renderPicker() {
     const isMine = userSubjects.includes(s);
     const writable = isAdmin || isDirector || isMine;
     const writeChip = writable
-      ? '<span class="dw-pick-chip dw-pick-chip--write">Write access</span>'
+      ? '<span class="dw-pick-chip dw-pick-chip--write">Write</span>'
       : '<span class="dw-pick-chip dw-pick-chip--read">Read-only</span>';
+
+    // Cambridge stage chips — derived from SUBJECT_PACING_LINKS so the
+    // card surfaces *at a glance* which Cambridge stages this department
+    // owns. Dedupe + preserve canonical Y1-6 → Y11-12 order.
+    const pacingLinks = SUBJECT_PACING_LINKS[s] || [];
+    const stageOrder = ['Y1–6', 'Y7–8', 'Y9–10', 'Y11–12'];
+    const stages = stageOrder.filter(st => pacingLinks.some(l => l.stage === st));
+    const stagesHtml = stages.length
+      ? stages.map(st => `<span class="dw-pick-stage">${escHtml(st)}</span>`).join('')
+      : '<span class="dw-pick-stages-empty">Network-defined scope</span>';
+
+    // Cambridge subject code line — fixed two-letter mono code under
+    // the name, gives the card a Cambridge-syllabus feel without
+    // claiming a specific 4-digit code (those live on the pacing pages).
+    const subjectCode = SUBJECT_BADGE[s] || '';
+
     return `
       <a class="dw-pick-card${isMine ? ' dw-pick-card--mine' : ''}"
          href="?subject=${encodeURIComponent(s)}"
-         data-subject="${escHtml(s)}">
-        <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}" aria-hidden="true">
-          <span class="dw-pick-emoji">${SUBJECT_EMOJI[s] || SUBJECT_BADGE[s]}</span>
+         data-subject="${escHtml(s)}"
+         style="--pick-grad:${SUBJECT_ACCENT[s]}">
+        ${isMine ? '<span class="dw-pick-yours">★ Yours</span>' : ''}
+        <div class="dw-pick-head">
+          <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}" aria-hidden="true">
+            <span class="dw-pick-emoji">${SUBJECT_EMOJI[s] || SUBJECT_BADGE[s]}</span>
+          </div>
+          <div class="dw-pick-head-text">
+            <div class="dw-pick-name">${escHtml(SUBJECT_LABELS[s])}</div>
+            <div class="dw-pick-subject-code">Department · ${escHtml(subjectCode)}</div>
+          </div>
         </div>
-        <div class="dw-pick-body">
-          <div class="dw-pick-name">${escHtml(SUBJECT_LABELS[s])}</div>
+        <div class="dw-pick-stages" aria-label="Cambridge stages">
+          ${stagesHtml}
+        </div>
+        <div class="dw-pick-foot">
           ${writeChip}
+          <span class="dw-pick-arrow" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </span>
         </div>
       </a>
     `;
