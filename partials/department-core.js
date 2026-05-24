@@ -254,6 +254,10 @@ function renderPicker() {
             <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="plan">—</span>
             <span class="dw-pick-stat-lbl">Annual Plan</span>
           </div>
+          <div class="dw-pick-stat dw-pick-stat--detailed">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="last">—</span>
+            <span class="dw-pick-stat-lbl">Last Activity</span>
+          </div>
         </div>
         <div class="dw-pick-foot">
           ${writeChip}
@@ -269,9 +273,22 @@ function renderPicker() {
     `;
   }).join('');
 
+  // Resolve the saved density preference (defaults to 'comfortable').
+  // Stored in localStorage so admins/directors who curate the 9-card
+  // view don't have to re-pick on every visit.
+  const initialDensity = readDensityPref();
+
   host.innerHTML = `
     <div class="dw-pick-context">${escHtml(ctxLine)}</div>
-    <div class="dw-pick-grid">${cards}</div>
+    <div class="dw-pick-toolbar" role="toolbar" aria-label="Card density">
+      <span class="dw-pick-toolbar-lbl">View</span>
+      <div class="dw-pick-density" role="group" aria-label="Density">
+        <button type="button" class="dw-pick-density-btn" data-density="compact" aria-pressed="${initialDensity === 'compact'}">Compact</button>
+        <button type="button" class="dw-pick-density-btn" data-density="comfortable" aria-pressed="${initialDensity === 'comfortable'}">Comfortable</button>
+        <button type="button" class="dw-pick-density-btn" data-density="detailed" aria-pressed="${initialDensity === 'detailed'}">Detailed</button>
+      </div>
+    </div>
+    <div class="dw-pick-grid" id="dwPickGrid" data-density="${escHtml(initialDensity)}">${cards}</div>
     <div class="dw-pick-footnote">
       A department workspace gathers that subject's Annual Plan, school subject leaders,
       Coordinator's running notes, and recent activity in one canvas. The cross-subject
@@ -282,12 +299,51 @@ function renderPicker() {
     </div>
   `;
 
+  wireDensityToggle();
+
   // Fire-and-forget live KPI population. Two batched reads cover all
   // 9 cards (instead of 18 per-card queries). Failures degrade
   // silently — cards keep the "—" placeholder.
   populatePickerKpis().catch(err => console.warn('[picker kpis]', err));
 
   wirePickerClicks();
+}
+
+// ---------------------------------------------------------------------------
+// Density toggle — persisted in localStorage so admin's view choice
+// survives reloads. Only the grid container's data-density changes;
+// each card has CSS overrides per density value.
+// ---------------------------------------------------------------------------
+
+const DENSITY_PREF_KEY = 'ch-dw-pick-density';
+const VALID_DENSITIES = ['compact', 'comfortable', 'detailed'];
+
+function readDensityPref() {
+  try {
+    const v = localStorage.getItem(DENSITY_PREF_KEY);
+    if (VALID_DENSITIES.includes(v)) return v;
+  } catch (e) { /* private mode / disabled storage — fall through */ }
+  return 'comfortable';
+}
+
+function writeDensityPref(v) {
+  if (!VALID_DENSITIES.includes(v)) return;
+  try { localStorage.setItem(DENSITY_PREF_KEY, v); } catch (e) { /* ignore */ }
+}
+
+function wireDensityToggle() {
+  const grid = $('dwPickGrid');
+  if (!grid) return;
+  const btns = document.querySelectorAll('.dw-pick-density-btn[data-density]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const next = btn.getAttribute('data-density');
+      if (!VALID_DENSITIES.includes(next)) return;
+      grid.setAttribute('data-density', next);
+      btns.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+      writeDensityPref(next);
+    });
+  });
 }
 
 // Each .dw-pick-card is a <div role="link"> because it nests real
@@ -355,18 +411,36 @@ async function populatePickerKpis() {
     return;
   }
 
-  // Group leaders by subjectId → { leaderCount, schoolCount }.
+  // Group leaders + plans by subjectId. lastActivity = max updatedAt
+  // across both sources (no extra Firestore read — the timestamps come
+  // free with each doc we already fetched).
   const bySubject = new Map();
+  const noteLastActivity = (subjectId, ts) => {
+    if (!subjectId || !ts) return;
+    const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+    if (!d) return;
+    const bucket = bySubject.get(subjectId);
+    if (!bucket) return;
+    if (!bucket.lastActivity || d > bucket.lastActivity) {
+      bucket.lastActivity = d;
+    }
+  };
+  const ensureBucket = (subjectId) => {
+    let bucket = bySubject.get(subjectId);
+    if (!bucket) {
+      bucket = { leaders: 0, schools: new Set(), hasPlan: false, lastActivity: null };
+      bySubject.set(subjectId, bucket);
+    }
+    return bucket;
+  };
+
   leaderSnap.forEach(d => {
     const e = d.data();
     if (!e?.subjectId) return;
-    let bucket = bySubject.get(e.subjectId);
-    if (!bucket) {
-      bucket = { leaders: 0, schools: new Set(), hasPlan: false };
-      bySubject.set(e.subjectId, bucket);
-    }
+    const bucket = ensureBucket(e.subjectId);
     bucket.leaders += 1;
     if (e.schoolId) bucket.schools.add(e.schoolId);
+    noteLastActivity(e.subjectId, e.updatedAt || e.createdAt);
   });
 
   // Mark which subjects have a current Annual Plan artifact. "current"
@@ -375,21 +449,18 @@ async function populatePickerKpis() {
   planSnap.forEach(d => {
     const a = d.data();
     if (!a?.subjectId) return;
-    let bucket = bySubject.get(a.subjectId);
-    if (!bucket) {
-      bucket = { leaders: 0, schools: new Set(), hasPlan: false };
-      bySubject.set(a.subjectId, bucket);
-    }
+    const bucket = ensureBucket(a.subjectId);
     // Treat any non-archived annual_plan as "present"; the green check
     // is about whether the slot is filled, not lifecycle nuance.
     if (a.status !== 'archived') bucket.hasPlan = true;
+    noteLastActivity(a.subjectId, a.updatedAt || a.createdAt);
   });
 
   // Paint each card's stat row. Subjects with no entries get a
   // muted "0" — informative on its own (signals "no leader yet").
   document.querySelectorAll('[data-subject-stats]').forEach(host => {
     const s = host.getAttribute('data-subject-stats');
-    const b = bySubject.get(s) || { leaders: 0, schools: new Set(), hasPlan: false };
+    const b = bySubject.get(s) || { leaders: 0, schools: new Set(), hasPlan: false, lastActivity: null };
     paintPickerStat(host, 'leaders', b.leaders, b.leaders > 0 ? null : 'muted');
     paintPickerStat(host, 'schools', b.schools.size, b.schools.size > 0 ? null : 'muted');
     if (b.hasPlan) {
@@ -397,7 +468,26 @@ async function populatePickerKpis() {
     } else {
       paintPickerStat(host, 'plan', '—', 'warn');
     }
+    if (b.lastActivity) {
+      paintPickerStat(host, 'last', fmtRelativeCompact(b.lastActivity), null);
+    } else {
+      paintPickerStat(host, 'last', '—', 'muted');
+    }
   });
+}
+
+// Compact relative-date formatter for the picker's Last Activity
+// cell — fits inside a ~50px mono span. "2d" / "3w" / "Mar 4" /
+// "·" for null. Keeps the 4-cell grid readable in Detailed mode.
+function fmtRelativeCompact(d) {
+  if (!d) return '—';
+  const diffMs = Date.now() - d.getTime();
+  const day = 24 * 60 * 60 * 1000;
+  if (diffMs < day) return 'today';
+  if (diffMs < 2 * day) return '1d';
+  if (diffMs < 7 * day) return `${Math.floor(diffMs / day)}d`;
+  if (diffMs < 30 * day) return `${Math.floor(diffMs / (7 * day))}w`;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
 function paintPickerStat(hostEl, kpi, value, variant) {
