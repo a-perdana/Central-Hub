@@ -66,12 +66,22 @@ export const SUBJECT_EMOJI = {
 // loud overdesign. Each pattern uses currentColor; the rendered hue
 // is set via the .dw-pick-head's `color` (driven by --pick-pattern-color).
 //
+// IMPORTANT: The SVG body is encoded with encodeURIComponent before
+// being baked into the data URI. The card threads --pick-pattern into
+// an inline style="..." attribute. If literal '<' / '>' / '"' leaks
+// into that attribute, the browser closes the style="" early and
+// dumps the rest as text into the DOM. Past incident 2026-05-24:
+// the unencoded version rendered '"); --pick-pattern-color:#1d4ed8">'
+// as visible text inside every card. encodeURIComponent fully
+// neutralises this — % escapes survive the inline style boundary +
+// remain a valid data: URI when the browser fetches it.
+//
 // All patterns sized for `background-size: 60px 60px` repeat. Single-
-// line SVG strings (data: URIs choke on raw newlines). No literal `#`
-// characters inside the SVG body — currentColor everywhere — so the
-// data URI never fragments, no %23 escaping needed.
-const SVG = (body) =>
-  `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60' fill='none' stroke='currentColor' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>")`;
+// line SVG strings (data: URIs choke on raw newlines).
+const SVG = (body) => {
+  const raw = `<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60' fill='none' stroke='currentColor' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>`;
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(raw)}")`;
+};
 
 export const SUBJECT_PATTERN = {
   // Math — graph paper grid (calculus / linear algebra notebook feel)
