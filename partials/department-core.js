@@ -609,10 +609,31 @@ function openSubject(subjectId) {
         <h3 class="dw-section-title">Overview</h3>
       </div>
       <div class="dw-kpi-grid" id="dwKpiGrid">
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Artifacts</div><div class="dw-kpi-val" id="kpiArtifacts">—</div><div class="dw-kpi-sub">of 4 core types</div></div>
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Subject Leaders</div><div class="dw-kpi-val" id="kpiLeaders">—</div><div class="dw-kpi-sub">across the network</div></div>
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Schools Covered</div><div class="dw-kpi-val" id="kpiSchools">—</div><div class="dw-kpi-sub">with a named leader</div></div>
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Last Meeting</div><div class="dw-kpi-val" id="kpiLastMeeting">—</div><div class="dw-kpi-sub" id="kpiLastMeetingSub">no minutes yet</div></div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiArtifacts">—</div>
+          <div class="dw-kpi-lbl">Artifacts</div>
+          <div class="dw-kpi-sub">of 4 core types</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiLeaders">—</div>
+          <div class="dw-kpi-lbl">Subject Leaders</div>
+          <div class="dw-kpi-sub">across the network</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiSchools">—</div>
+          <div class="dw-kpi-lbl">Schools Covered</div>
+          <div class="dw-kpi-sub">with a named leader</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val dw-kpi-val--ok">${filledCount}/4</div>
+          <div class="dw-kpi-lbl">Stage Coverage</div>
+          <div class="dw-kpi-sub">Cambridge curriculum</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiLastMeeting">—</div>
+          <div class="dw-kpi-lbl">Last Meeting</div>
+          <div class="dw-kpi-sub" id="kpiLastMeetingSub">no minutes yet</div>
+        </div>
       </div>
     </section>
 
@@ -831,9 +852,9 @@ function bindSubjectLeaders(subjectId) {
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
     renderLeaders(slot, subjectId, entries);
-    updateKpi('kpiLeaders', entries.length);
+    updateKpi('kpiLeaders', entries.length, null, entries.length === 0 ? 'muted' : null);
     const schools = new Set(entries.map(e => e.schoolId).filter(Boolean));
-    updateKpi('kpiSchools', schools.size);
+    updateKpi('kpiSchools', schools.size, null, schools.size === 0 ? 'muted' : null);
   }, (err) => {
     console.warn('[bindSubjectLeaders]', err);
     slot.innerHTML = `<div class="dw-empty">Could not load subject leaders (${escHtml(err.code || err.message || 'error')}).</div>`;
@@ -1227,9 +1248,15 @@ function renderDiscussion(slot, subjectId, ref, data) {
 // Section: Overview KPI strip
 // ---------------------------------------------------------------------------
 
-function updateKpi(id, val, subText) {
+function updateKpi(id, val, subText, variant) {
   const el = $(id);
-  if (el) el.textContent = String(val);
+  if (el) {
+    el.textContent = String(val);
+    el.classList.remove('dw-kpi-val--ok', 'dw-kpi-val--warn', 'dw-kpi-val--muted');
+    if (variant === 'ok') el.classList.add('dw-kpi-val--ok');
+    else if (variant === 'warn') el.classList.add('dw-kpi-val--warn');
+    else if (variant === 'muted') el.classList.add('dw-kpi-val--muted');
+  }
   if (subText != null) {
     const sub = $(id + 'Sub');
     if (sub) sub.textContent = subText;
@@ -1248,10 +1275,14 @@ function bindOverviewKpi(subjectId) {
     const docs = snap.docs.map(d => d.data());
     const coreTypes = ['annual_plan', 'dtp_report', 'department_handbook', 'subject_policy'];
     const have = new Set(docs.filter(d => coreTypes.includes(d.artifactType)).map(d => d.artifactType));
-    updateKpi('kpiArtifacts', `${have.size}/4`);
+    // Variant: 4/4 → ok (green), 0/4 → warn (amber), partial → neutral.
+    let variant = null;
+    if (have.size === 4) variant = 'ok';
+    else if (have.size === 0) variant = 'warn';
+    updateKpi('kpiArtifacts', `${have.size}/4`, null, variant);
   }, (err) => {
     console.warn('[kpi artifacts]', err);
-    updateKpi('kpiArtifacts', '—');
+    updateKpi('kpiArtifacts', '—', null, 'muted');
   });
   unsubFns.push(unsubA);
 
@@ -1265,13 +1296,13 @@ function bindOverviewKpi(subjectId) {
   );
   const unsubM = onSnapshot(qMeetings, (snap) => {
     if (snap.empty) {
-      updateKpi('kpiLastMeeting', '—', 'no minutes yet');
+      updateKpi('kpiLastMeeting', '—', 'no minutes yet', 'muted');
       return;
     }
     const m = snap.docs[0].data();
     const d = m.meetingDate?.toDate ? m.meetingDate.toDate() : null;
     if (!d) {
-      updateKpi('kpiLastMeeting', '—', 'no minutes yet');
+      updateKpi('kpiLastMeeting', '—', 'no minutes yet', 'muted');
       return;
     }
     const diff = Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000));
@@ -1279,10 +1310,12 @@ function bindOverviewKpi(subjectId) {
               : diff === 1 ? '1d ago'
               : diff < 30 ? `${diff}d ago`
               : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-    updateKpi('kpiLastMeeting', lbl, m.title ? escHtml(m.title).slice(0, 64) : 'most recent meeting');
+    // Fresh meeting (≤ 14d) reads as ok (green). Older → neutral.
+    const variant = diff <= 14 ? 'ok' : null;
+    updateKpi('kpiLastMeeting', lbl, m.title ? escHtml(m.title).slice(0, 64) : 'most recent meeting', variant);
   }, (err) => {
     console.warn('[kpi meetings]', err);
-    updateKpi('kpiLastMeeting', '—', 'could not load');
+    updateKpi('kpiLastMeeting', '—', 'could not load', 'muted');
   });
   unsubFns.push(unsubM);
 }
