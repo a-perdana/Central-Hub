@@ -182,10 +182,47 @@ function renderPicker() {
     // claiming a specific 4-digit code (those live on the pacing pages).
     const subjectCode = SUBJECT_BADGE[s] || '';
 
+    // Cambridge stage coverage bar — 4 segments (Y1-6, Y7-8, Y9-10,
+    // Y11-12). A segment is "filled" if the subject ships a Cambridge
+    // pacing page at that stage. Zero Firestore cost — pure derivation
+    // from SUBJECT_PACING_LINKS. Math owns 4/4, English 2/4, Bahasa
+    // 0/4, etc. Filled stages use the subject's accent gradient so
+    // the bar reads as part of the card's identity.
+    const filledCount = stages.length;
+    const coverageHtml = stageOrder.map(stage => {
+      const filled = pacingLinks.some(l => l.stage === stage);
+      return `<span class="dw-pick-coverage-seg${filled ? ' dw-pick-coverage-seg--filled' : ''}" title="${escHtml(stage)} ${filled ? '· covered' : '· no Cambridge pacing'}"></span>`;
+    }).join('');
+
+    // Hover-reveal pacing jump strip — lets a coordinator dive
+    // straight to a Cambridge pacing page from the picker without
+    // opening the workspace first. Each chip is its own <a> with
+    // stopPropagation so the card-level link doesn't swallow the
+    // click. Subjects with no Cambridge pacing pages get a small
+    // empty-state pointing back at the workspace.
+    const jumpsHtml = pacingLinks.length
+      ? pacingLinks.map(l => `
+          <a href="${escHtml(l.slug)}"
+             class="dw-pick-jump"
+             title="${escHtml(l.label)} · Cambridge ${escHtml(l.code || '')}"
+             onclick="event.stopPropagation()">
+            ${escHtml(l.stage)}
+            ${l.code ? `<span class="dw-pick-jump-code">${escHtml(l.code)}</span>` : ''}
+          </a>
+        `).join('')
+      : '<span class="dw-pick-jumps-empty">No Cambridge pacing for this department.</span>';
+
+    // Card is a <div role="link"> (not <a>) because it nests <a>
+    // jump chips for direct pacing-page navigation. Nested anchors
+    // are invalid HTML. Click + keyboard handlers below route
+    // empty-area clicks to the workspace href.
     return `
-      <a class="dw-pick-card${isMine ? ' dw-pick-card--mine' : ''}"
-         href="?subject=${encodeURIComponent(s)}"
+      <div class="dw-pick-card${isMine ? ' dw-pick-card--mine' : ''}"
+         role="link"
+         tabindex="0"
          data-subject="${escHtml(s)}"
+         data-href="?subject=${encodeURIComponent(s)}"
+         aria-label="Open ${escHtml(SUBJECT_LABELS[s])} department workspace"
          style="--pick-grad:${SUBJECT_ACCENT[s]}">
         ${isMine ? '<span class="dw-pick-yours">★ Yours</span>' : ''}
         <div class="dw-pick-head">
@@ -196,6 +233,10 @@ function renderPicker() {
             <div class="dw-pick-name">${escHtml(SUBJECT_LABELS[s])}</div>
             <div class="dw-pick-subject-code">Department · ${escHtml(subjectCode)}</div>
           </div>
+        </div>
+        <div class="dw-pick-coverage" aria-label="Cambridge stage coverage ${filledCount} of 4">
+          <div class="dw-pick-coverage-track">${coverageHtml}</div>
+          <span class="dw-pick-coverage-lbl">${filledCount}/4</span>
         </div>
         <div class="dw-pick-stages" aria-label="Cambridge stages">
           ${stagesHtml}
@@ -220,7 +261,11 @@ function renderPicker() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </span>
         </div>
-      </a>
+        <div class="dw-pick-jumps" aria-label="Jump to Cambridge pacing pages">
+          <div class="dw-pick-jumps-lbl">Jump to pacing →</div>
+          <div class="dw-pick-jumps-row">${jumpsHtml}</div>
+        </div>
+      </div>
     `;
   }).join('');
 
@@ -241,6 +286,38 @@ function renderPicker() {
   // 9 cards (instead of 18 per-card queries). Failures degrade
   // silently — cards keep the "—" placeholder.
   populatePickerKpis().catch(err => console.warn('[picker kpis]', err));
+
+  wirePickerClicks();
+}
+
+// Each .dw-pick-card is a <div role="link"> because it nests real
+// <a> tags (the Cambridge pacing jump chips). We forward empty-area
+// clicks + Enter/Space keypresses to the workspace href, and let
+// the inner <a> chips handle their own navigation untouched.
+function wirePickerClicks() {
+  const cards = document.querySelectorAll('.dw-pick-card[data-href]');
+  cards.forEach(card => {
+    const href = card.getAttribute('data-href');
+    if (!href) return;
+
+    card.addEventListener('click', (e) => {
+      // If the click landed inside (or on) a real anchor, let it
+      // navigate normally — that's a jump chip doing its job.
+      if (e.target.closest('a')) return;
+      window.location.href = href;
+    });
+
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        // Same rule for keyboard — focused chips own their own
+        // activation, only the card-body Enter/Space opens the
+        // workspace.
+        if (e.target.closest('a')) return;
+        e.preventDefault();
+        window.location.href = href;
+      }
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
