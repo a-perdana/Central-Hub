@@ -561,14 +561,45 @@ function openSubject(subjectId) {
     ? '<span class="dw-write-badge dw-write-badge--yes">You can edit</span>'
     : '<span class="dw-write-badge dw-write-badge--no">Read-only · not your subject</span>';
 
+  // Cambridge syllabus codes for the subtitle row — same source as
+  // the picker card stage chips (SUBJECT_PACING_LINKS). Renders as
+  // a one-line mono strip "0096 · 0862 · 0580 · 9709" with hover
+  // titles for the stage label. Coverage badge "n/4" matches the
+  // picker's coverage bar exactly.
+  const pacingLinks = SUBJECT_PACING_LINKS[subjectId] || [];
+  const stageOrder = ['Y1–6', 'Y7–8', 'Y9–10', 'Y11–12'];
+  const orderedStages = stageOrder
+    .map(st => pacingLinks.find(l => l.stage === st))
+    .filter(Boolean);
+  const filledCount = orderedStages.length;
+  const codesHtml = orderedStages.length
+    ? orderedStages.map(l => `
+        <span class="dw-subject-code-chip" title="${escHtml(l.label)} · Cambridge ${escHtml(l.code || '')}">
+          <span class="dw-subject-code-stage">${escHtml(l.stage)}</span>
+          ${l.code ? `<span class="dw-subject-code-num">${escHtml(l.code)}</span>` : ''}
+        </span>
+      `).join('')
+    : '<span class="dw-subject-codes-empty">Network-defined scope — no Cambridge syllabus</span>';
+
   host.innerHTML = `
-    <div class="dw-subject-head">
+    <div class="dw-subject-head"
+         style="--subj-grad:${accent}; --subj-pattern:${SUBJECT_PATTERN[subjectId] || 'none'}; --subj-pattern-color:${SUBJECT_PATTERN_COLOR[subjectId] || '#6c5ce7'}">
+      <a href="department-workspace" class="dw-subject-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        All Departments
+      </a>
       <div class="dw-subject-id-row">
-        <div class="dw-subject-badge" style="background:${accent}" aria-hidden="true"><span>${badge}</span></div>
+        <div class="dw-subject-badge" style="background:${accent}" aria-hidden="true">
+          <span>${badge}</span>
+        </div>
         <div class="dw-subject-title-block">
           <h2 class="dw-subject-title">${escHtml(label)} Department</h2>
-          <div class="dw-subject-sub">${writeBadge}</div>
+          <div class="dw-subject-codes" aria-label="Cambridge syllabus codes">
+            ${codesHtml}
+            <span class="dw-subject-coverage-badge" aria-label="Cambridge stage coverage ${filledCount} of 4">${filledCount}/4 stages</span>
+          </div>
         </div>
+        <div class="dw-subject-write-slot">${writeBadge}</div>
       </div>
     </div>
 
