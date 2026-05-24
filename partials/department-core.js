@@ -158,14 +158,23 @@ function renderPicker() {
       ? '<span class="dw-pick-chip dw-pick-chip--write">Write</span>'
       : '<span class="dw-pick-chip dw-pick-chip--read">Read-only</span>';
 
-    // Cambridge stage chips — derived from SUBJECT_PACING_LINKS so the
-    // card surfaces *at a glance* which Cambridge stages this department
-    // owns. Dedupe + preserve canonical Y1-6 → Y11-12 order.
+    // Cambridge stage chips with official syllabus codes — derived
+    // from SUBJECT_PACING_LINKS. Each chip shows the stage marker
+    // (Y1-6 / Y7-8 / Y9-10 / Y11-12) above the 4-digit Cambridge
+    // syllabus code (e.g. 0580 for IGCSE Math). Codes cited from
+    // curriculum-map.html SUBJECT_CONFIGS — single source of truth.
     const pacingLinks = SUBJECT_PACING_LINKS[s] || [];
     const stageOrder = ['Y1–6', 'Y7–8', 'Y9–10', 'Y11–12'];
-    const stages = stageOrder.filter(st => pacingLinks.some(l => l.stage === st));
+    const stages = stageOrder
+      .map(st => pacingLinks.find(l => l.stage === st))
+      .filter(Boolean);
     const stagesHtml = stages.length
-      ? stages.map(st => `<span class="dw-pick-stage">${escHtml(st)}</span>`).join('')
+      ? stages.map(st => `
+          <span class="dw-pick-stage" title="${escHtml(st.label)} · Cambridge ${escHtml(st.code || '')}">
+            ${escHtml(st.stage)}
+            ${st.code ? `<span class="dw-pick-stage-code">${escHtml(st.code)}</span>` : ''}
+          </span>
+        `).join('')
       : '<span class="dw-pick-stages-empty">Network-defined scope</span>';
 
     // Cambridge subject code line — fixed two-letter mono code under
@@ -191,6 +200,20 @@ function renderPicker() {
         <div class="dw-pick-stages" aria-label="Cambridge stages">
           ${stagesHtml}
         </div>
+        <div class="dw-pick-stats" data-subject-stats="${escHtml(s)}">
+          <div class="dw-pick-stat">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="leaders">—</span>
+            <span class="dw-pick-stat-lbl">Leaders</span>
+          </div>
+          <div class="dw-pick-stat">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="schools">—</span>
+            <span class="dw-pick-stat-lbl">Schools</span>
+          </div>
+          <div class="dw-pick-stat">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="plan">—</span>
+            <span class="dw-pick-stat-lbl">Annual Plan</span>
+          </div>
+        </div>
         <div class="dw-pick-foot">
           ${writeChip}
           <span class="dw-pick-arrow" aria-hidden="true">
@@ -213,6 +236,105 @@ function renderPicker() {
       <a href="department-artifacts">Artifacts</a>) remain for HQ-wide views.
     </div>
   `;
+
+  // Fire-and-forget live KPI population. Two batched reads cover all
+  // 9 cards (instead of 18 per-card queries). Failures degrade
+  // silently — cards keep the "—" placeholder.
+  populatePickerKpis().catch(err => console.warn('[picker kpis]', err));
+}
+
+// ---------------------------------------------------------------------------
+// Picker live KPIs — 2 batched reads cover all 9 subject cards
+// ---------------------------------------------------------------------------
+
+async function populatePickerKpis() {
+  if (!db) return;
+
+  // Query 1: every school subject leader in the network. Network is
+  // ~14 schools × 9 subjects = 126 max — well within Firestore single-
+  // query limits. Cap at 500 for safety.
+  const qLeaders = query(
+    collection(db, 'coordinators_directory_entries'),
+    where('entryKind', '==', 'school_subject_leader'),
+    limit(500)
+  );
+
+  // Query 2: every annual-plan artifact across all subjects. Capped
+  // at 9 subjects × small N versions each — typically ≤ 50 docs.
+  const qPlans = query(
+    collection(db, 'department_artifacts'),
+    where('artifactType', '==', 'annual_plan'),
+    limit(200)
+  );
+
+  let leaderSnap, planSnap;
+  try {
+    [leaderSnap, planSnap] = await Promise.all([
+      getDocs(qLeaders),
+      getDocs(qPlans),
+    ]);
+  } catch (err) {
+    console.warn('[populatePickerKpis] read failed:', err);
+    return;
+  }
+
+  // Group leaders by subjectId → { leaderCount, schoolCount }.
+  const bySubject = new Map();
+  leaderSnap.forEach(d => {
+    const e = d.data();
+    if (!e?.subjectId) return;
+    let bucket = bySubject.get(e.subjectId);
+    if (!bucket) {
+      bucket = { leaders: 0, schools: new Set(), hasPlan: false };
+      bySubject.set(e.subjectId, bucket);
+    }
+    bucket.leaders += 1;
+    if (e.schoolId) bucket.schools.add(e.schoolId);
+  });
+
+  // Mark which subjects have a current Annual Plan artifact. "current"
+  // matches the existing department_artifacts pill convention — a
+  // status field of 'current' (others are 'draft' / 'archived').
+  planSnap.forEach(d => {
+    const a = d.data();
+    if (!a?.subjectId) return;
+    let bucket = bySubject.get(a.subjectId);
+    if (!bucket) {
+      bucket = { leaders: 0, schools: new Set(), hasPlan: false };
+      bySubject.set(a.subjectId, bucket);
+    }
+    // Treat any non-archived annual_plan as "present"; the green check
+    // is about whether the slot is filled, not lifecycle nuance.
+    if (a.status !== 'archived') bucket.hasPlan = true;
+  });
+
+  // Paint each card's stat row. Subjects with no entries get a
+  // muted "0" — informative on its own (signals "no leader yet").
+  document.querySelectorAll('[data-subject-stats]').forEach(host => {
+    const s = host.getAttribute('data-subject-stats');
+    const b = bySubject.get(s) || { leaders: 0, schools: new Set(), hasPlan: false };
+    paintPickerStat(host, 'leaders', b.leaders, b.leaders > 0 ? null : 'muted');
+    paintPickerStat(host, 'schools', b.schools.size, b.schools.size > 0 ? null : 'muted');
+    if (b.hasPlan) {
+      paintPickerStat(host, 'plan', '✓', 'ok');
+    } else {
+      paintPickerStat(host, 'plan', '—', 'warn');
+    }
+  });
+}
+
+function paintPickerStat(hostEl, kpi, value, variant) {
+  const el = hostEl.querySelector(`[data-kpi="${kpi}"]`);
+  if (!el) return;
+  el.textContent = String(value);
+  el.classList.remove(
+    'dw-pick-stat-val--muted',
+    'dw-pick-stat-val--ok',
+    'dw-pick-stat-val--warn'
+  );
+  if (variant === 'muted') el.classList.add('dw-pick-stat-val--muted');
+  else if (variant === 'ok') el.classList.add('dw-pick-stat-val--ok');
+  else if (variant === 'warn') el.classList.add('dw-pick-stat-val--warn');
 }
 
 // ---------------------------------------------------------------------------

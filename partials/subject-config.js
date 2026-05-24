@@ -83,39 +83,43 @@ export const SUBJECT_ACCENT = {
 //   - slug:   canonical URL slug (matches the .html basename minus .html)
 //   - label:  display string (kept terse for the link strip)
 //   - stage:  short marker for the stage chip ("Y1–6", "Y7–8", "Y9–10", "Y11–12")
+//   - code:   official Cambridge syllabus code (e.g. "0580" for IGCSE Math).
+//             Cited verbatim from curriculum-map.html SUBJECT_CONFIGS +
+//             primary-checkpoint-syllabus.html — single source of truth
+//             for the 4-digit syllabus codes used network-wide.
 //
 // Subjects with no Cambridge pacing pages (Bahasa / Religion / Edu-STEAM)
 // have an empty array — the UI renders an empty-state pointing the
 // coordinator at the Annual Strategy slot below.
 export const SUBJECT_PACING_LINKS = {
   math: [
-    { slug: 'primary-math-pacing',    label: 'Primary Math',      stage: 'Y1–6'   },
-    { slug: 'checkpoint-math-pacing', label: 'Checkpoint Math',   stage: 'Y7–8'   },
-    { slug: 'igcse-math-pacing',      label: 'IGCSE Math',        stage: 'Y9–10'  },
-    { slug: 'as-alevel-math-pacing',  label: 'AS/A-Level Math',   stage: 'Y11–12' },
+    { slug: 'primary-math-pacing',    label: 'Primary Math',      stage: 'Y1–6',   code: '0096' },
+    { slug: 'checkpoint-math-pacing', label: 'Checkpoint Math',   stage: 'Y7–8',   code: '0862' },
+    { slug: 'igcse-math-pacing',      label: 'IGCSE Math',        stage: 'Y9–10',  code: '0580' },
+    { slug: 'as-alevel-math-pacing',  label: 'AS/A-Level Math',   stage: 'Y11–12', code: '9709' },
   ],
   biology: [
-    { slug: 'primary-science-pacing',    label: 'Primary Science (general)', stage: 'Y1–6'   },
-    { slug: 'igcse-biology-pacing',      label: 'IGCSE Biology',             stage: 'Y9–10'  },
-    { slug: 'as-alevel-biology-pacing',  label: 'AS/A-Level Biology',        stage: 'Y11–12' },
+    { slug: 'primary-science-pacing',    label: 'Primary Science (general)', stage: 'Y1–6',   code: '0097' },
+    { slug: 'igcse-biology-pacing',      label: 'IGCSE Biology',             stage: 'Y9–10',  code: '0610' },
+    { slug: 'as-alevel-biology-pacing',  label: 'AS/A-Level Biology',        stage: 'Y11–12', code: '9700' },
   ],
   chemistry: [
-    { slug: 'primary-science-pacing',     label: 'Primary Science (general)', stage: 'Y1–6'   },
-    { slug: 'igcse-chemistry-pacing',     label: 'IGCSE Chemistry',           stage: 'Y9–10'  },
-    { slug: 'as-alevel-chemistry-pacing', label: 'AS/A-Level Chemistry',      stage: 'Y11–12' },
+    { slug: 'primary-science-pacing',     label: 'Primary Science (general)', stage: 'Y1–6',   code: '0097' },
+    { slug: 'igcse-chemistry-pacing',     label: 'IGCSE Chemistry',           stage: 'Y9–10',  code: '0620' },
+    { slug: 'as-alevel-chemistry-pacing', label: 'AS/A-Level Chemistry',      stage: 'Y11–12', code: '9701' },
   ],
   physics: [
-    { slug: 'primary-science-pacing',   label: 'Primary Science (general)', stage: 'Y1–6'   },
-    { slug: 'igcse-physics-pacing',     label: 'IGCSE Physics',             stage: 'Y9–10'  },
-    { slug: 'as-alevel-physics-pacing', label: 'AS/A-Level Physics',        stage: 'Y11–12' },
+    { slug: 'primary-science-pacing',   label: 'Primary Science (general)', stage: 'Y1–6',   code: '0097' },
+    { slug: 'igcse-physics-pacing',     label: 'IGCSE Physics',             stage: 'Y9–10',  code: '0625' },
+    { slug: 'as-alevel-physics-pacing', label: 'AS/A-Level Physics',        stage: 'Y11–12', code: '9702' },
   ],
   science: [
-    { slug: 'primary-science-pacing',    label: 'Primary Science',    stage: 'Y1–6' },
-    { slug: 'checkpoint-science-pacing', label: 'Checkpoint Science', stage: 'Y7–8' },
+    { slug: 'primary-science-pacing',    label: 'Primary Science',    stage: 'Y1–6', code: '0097' },
+    { slug: 'checkpoint-science-pacing', label: 'Checkpoint Science', stage: 'Y7–8', code: '0893' },
   ],
   english: [
-    { slug: 'primary-english-pacing',    label: 'Primary English',    stage: 'Y1–6' },
-    { slug: 'checkpoint-english-pacing', label: 'Checkpoint English', stage: 'Y7–8' },
+    { slug: 'primary-english-pacing',    label: 'Primary English',    stage: 'Y1–6', code: '0844' },
+    { slug: 'checkpoint-english-pacing', label: 'Checkpoint English', stage: 'Y7–8', code: '1111' },
   ],
   bahasa:    [],
   religion:  [],
