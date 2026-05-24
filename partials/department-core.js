@@ -26,7 +26,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 import {
-  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, SUBJECT_PACING_LINKS, isValidSubject, subjectLabel
+  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, SUBJECT_PATTERN, SUBJECT_PATTERN_COLOR, SUBJECT_PACING_LINKS, isValidSubject, subjectLabel
 } from './subject-config.js';
 
 // ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ function renderPicker() {
          data-subject="${escHtml(s)}"
          data-href="?subject=${encodeURIComponent(s)}"
          aria-label="Open ${escHtml(SUBJECT_LABELS[s])} department workspace"
-         style="--pick-grad:${SUBJECT_ACCENT[s]}">
+         style="--pick-grad:${SUBJECT_ACCENT[s]}; --pick-pattern:${SUBJECT_PATTERN[s] || 'none'}; --pick-pattern-color:${SUBJECT_PATTERN_COLOR[s] || '#6c5ce7'}">
         ${isMine ? '<span class="dw-pick-yours">★ Yours</span>' : ''}
         <div class="dw-pick-head">
           <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}" aria-hidden="true">

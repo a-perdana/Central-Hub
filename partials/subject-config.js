@@ -60,6 +60,40 @@ export const SUBJECT_EMOJI = {
   edu_steam: '🚀',  // rocket (Edu-STEAM = science + tech + engineering + arts + math)
 };
 
+// Per-subject SVG identity pattern, served as a data:image/svg+xml URL.
+// Applied at low opacity inside the card head as a background-image —
+// gives every department a subtle subject-themed texture without
+// loud overdesign. Each pattern uses currentColor; the rendered hue
+// is set via the .dw-pick-head's `color` (driven by --pick-pattern-color).
+//
+// All patterns sized for `background-size: 60px 60px` repeat. Single-
+// line SVG strings (data: URIs choke on raw newlines). No literal `#`
+// characters inside the SVG body — currentColor everywhere — so the
+// data URI never fragments, no %23 escaping needed.
+const SVG = (body) =>
+  `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60' fill='none' stroke='currentColor' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>")`;
+
+export const SUBJECT_PATTERN = {
+  // Math — graph paper grid (calculus / linear algebra notebook feel)
+  math: SVG(`<path d='M0 15h60M0 30h60M0 45h60M15 0v60M30 0v60M45 0v60' stroke-opacity='0.5'/>`),
+  // Biology — DNA double helix (sine waves out of phase)
+  biology: SVG(`<path d='M5 10 Q15 20 25 10 T45 10 T65 10'/><path d='M5 30 Q15 20 25 30 T45 30 T65 30'/><path d='M5 50 Q15 40 25 50 T45 50 T65 50'/><line x1='10' y1='15' x2='10' y2='25'/><line x1='20' y1='15' x2='20' y2='25'/><line x1='30' y1='15' x2='30' y2='25'/><line x1='40' y1='15' x2='40' y2='25'/><line x1='50' y1='15' x2='50' y2='25'/>`),
+  // Chemistry — benzene/hex tiling (organic chemistry vibe)
+  chemistry: SVG(`<polygon points='15,5 25,5 30,15 25,25 15,25 10,15' stroke-width='1.2'/><polygon points='45,5 55,5 60,15 55,25 45,25 40,15' stroke-width='1.2'/><polygon points='30,30 40,30 45,40 40,50 30,50 25,40' stroke-width='1.2'/><polygon points='0,30 10,30 15,40 10,50 0,50 -5,40' stroke-width='1.2'/>`),
+  // Physics — atomic orbits (3 ellipses rotated for nucleus halo)
+  physics: SVG(`<ellipse cx='30' cy='30' rx='25' ry='8' transform='rotate(0 30 30)'/><ellipse cx='30' cy='30' rx='25' ry='8' transform='rotate(60 30 30)'/><ellipse cx='30' cy='30' rx='25' ry='8' transform='rotate(-60 30 30)'/><circle cx='30' cy='30' r='3' fill='currentColor' stroke='none'/>`),
+  // Science (combined) — circuit board traces (microscope/lab-equipment shorthand)
+  science: SVG(`<path d='M5 30h15v-15h10v15h15v10h10v-10h5'/><circle cx='20' cy='15' r='2'/><circle cx='45' cy='40' r='2'/><circle cx='30' cy='30' r='2' fill='currentColor' stroke='none'/>`),
+  // English — typeset lines + caret (printed page / typography hint)
+  english: SVG(`<path d='M10 12h40M10 22h35M10 32h40M10 42h28M10 52h40' stroke-opacity='0.55'/><path d='M48 38l4 4 -4 4' stroke-width='1.4'/>`),
+  // Bahasa — Indonesian batik-inspired dot-and-loop motif
+  bahasa: SVG(`<circle cx='15' cy='15' r='3'/><circle cx='45' cy='15' r='3'/><circle cx='30' cy='30' r='3'/><circle cx='15' cy='45' r='3'/><circle cx='45' cy='45' r='3'/><path d='M15 15 Q22 8 30 15 T45 15' stroke-opacity='0.5'/><path d='M15 45 Q22 38 30 45 T45 45' stroke-opacity='0.5'/>`),
+  // Religion — 8-pointed star (Islamic geometric pattern, common in Indonesian school context)
+  religion: SVG(`<g transform='translate(30 30)'><polygon points='0,-18 5,-5 18,0 5,5 0,18 -5,5 -18,0 -5,-5' transform='rotate(0)'/><polygon points='0,-18 5,-5 18,0 5,5 0,18 -5,5 -18,0 -5,-5' transform='rotate(22.5)' stroke-opacity='0.5'/></g>`),
+  // Edu-STEAM — interconnected dots (network / integration of disciplines)
+  edu_steam: SVG(`<circle cx='10' cy='10' r='2' fill='currentColor' stroke='none'/><circle cx='50' cy='10' r='2' fill='currentColor' stroke='none'/><circle cx='30' cy='30' r='2' fill='currentColor' stroke='none'/><circle cx='10' cy='50' r='2' fill='currentColor' stroke='none'/><circle cx='50' cy='50' r='2' fill='currentColor' stroke='none'/><path d='M10 10 L30 30 L50 10 M10 50 L30 30 L50 50 M10 10 L10 50 M50 10 L50 50' stroke-opacity='0.35'/>`),
+};
+
 // Per-subject gradient. Reuses the same hues as department-artifacts.html
 // so the two surfaces feel like one system.
 export const SUBJECT_ACCENT = {
@@ -72,6 +106,21 @@ export const SUBJECT_ACCENT = {
   bahasa:    'linear-gradient(135deg,#f43f5e,#9f1239)',
   religion:  'linear-gradient(135deg,#6366f1,#3730a3)',
   edu_steam: 'linear-gradient(135deg,#7c3aed,#0891b2)',
+};
+
+// Single tint colour per subject, used by the pattern SVG via
+// currentColor inheritance. Picks the DEEPER stop of each gradient
+// so the pattern reads on a white card head without washing out.
+export const SUBJECT_PATTERN_COLOR = {
+  math:      '#1d4ed8',
+  biology:   '#047857',
+  chemistry: '#b45309',
+  physics:   '#5b21b6',
+  science:   '#0e7490',
+  english:   '#9d174d',
+  bahasa:    '#9f1239',
+  religion:  '#3730a3',
+  edu_steam: '#5b21b6',
 };
 
 // Per-subject Cambridge pacing pages — the live "annual plan" of what
