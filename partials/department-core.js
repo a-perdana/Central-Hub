@@ -458,22 +458,61 @@ async function populatePickerKpis() {
 
   // Paint each card's stat row. Subjects with no entries get a
   // muted "0" — informative on its own (signals "no leader yet").
+  // For users who CAN write to a subject (own / admin / director),
+  // turn the zero/empty value into an inline "+ Add" mini-link
+  // that deep-links to the workspace + scrolls to the matching
+  // section. Read-only viewers see the muted placeholder.
   document.querySelectorAll('[data-subject-stats]').forEach(host => {
     const s = host.getAttribute('data-subject-stats');
     const b = bySubject.get(s) || { leaders: 0, schools: new Set(), hasPlan: false, lastActivity: null };
-    paintPickerStat(host, 'leaders', b.leaders, b.leaders > 0 ? null : 'muted');
+    const writable = isAdmin || isDirector || userSubjects.includes(s);
+
+    // Leaders — "+ Add" deep-link when zero (and user can write).
+    if (b.leaders > 0) {
+      paintPickerStat(host, 'leaders', b.leaders, null);
+    } else if (writable) {
+      paintPickerStatAction(host, 'leaders', '+ Add', `?subject=${encodeURIComponent(s)}#subject-leaders`);
+    } else {
+      paintPickerStat(host, 'leaders', '0', 'muted');
+    }
+
     paintPickerStat(host, 'schools', b.schools.size, b.schools.size > 0 ? null : 'muted');
+
+    // Annual Plan — "+ Add" deep-link when missing (and user can write).
     if (b.hasPlan) {
       paintPickerStat(host, 'plan', '✓', 'ok');
+    } else if (writable) {
+      paintPickerStatAction(host, 'plan', '+ Add', `?subject=${encodeURIComponent(s)}#annual-plan`);
     } else {
       paintPickerStat(host, 'plan', '—', 'warn');
     }
+
     if (b.lastActivity) {
       paintPickerStat(host, 'last', fmtRelativeCompact(b.lastActivity), null);
     } else {
       paintPickerStat(host, 'last', '—', 'muted');
     }
   });
+}
+
+// Replaces the stat cell's <span> with an inline <a> CTA. Inherits
+// the cell's flex layout; click bubbles up but the wirePickerClicks
+// handler skips card-routing when the click lands on an <a>.
+function paintPickerStatAction(hostEl, kpi, label, href) {
+  const el = hostEl.querySelector(`[data-kpi="${kpi}"]`);
+  if (!el) return;
+  // Already converted? (rare — defensive against duplicate calls.)
+  if (el.tagName === 'A') {
+    el.textContent = label;
+    el.setAttribute('href', href);
+    return;
+  }
+  const a = document.createElement('a');
+  a.className = 'dw-pick-stat-val dw-pick-stat-val--cta';
+  a.setAttribute('data-kpi', kpi);
+  a.setAttribute('href', href);
+  a.textContent = label;
+  el.replaceWith(a);
 }
 
 // Compact relative-date formatter for the picker's Last Activity
@@ -599,6 +638,18 @@ function openSubject(subjectId) {
   bindSubjectLeaders(subjectId);
   bindDiscussion(subjectId);
   bindOverviewKpi(subjectId);
+
+  // If the page was deep-linked with a section hash (e.g. picker's
+  // zero-state CTA → #subject-leaders), scroll the matching section
+  // into view once data has had a tick to mount. Section nodes use
+  // data-section="..."; no <a name="..."> needed.
+  const targetHash = window.location.hash.replace(/^#/, '');
+  if (targetHash) {
+    setTimeout(() => {
+      const target = document.querySelector(`[data-section="${CSS.escape(targetHash)}"]`);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  }
 }
 
 // ---------------------------------------------------------------------------
