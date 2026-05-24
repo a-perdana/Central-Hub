@@ -554,6 +554,12 @@ function openSubject(subjectId) {
   const host = $('workspaceRoot');
   if (!host) return;
 
+  // Set subject CSS vars on workspaceRoot so descendant sections can
+  // pull the per-subject accent (section left-bar, etc) without each
+  // one needing an inline style attribute.
+  host.style.setProperty('--subj-grad', SUBJECT_ACCENT[subjectId] || '');
+  host.style.setProperty('--subj-pattern-color', SUBJECT_PATTERN_COLOR[subjectId] || '#6c5ce7');
+
   const accent = SUBJECT_ACCENT[subjectId];
   const label = SUBJECT_LABELS[subjectId];
   const badge = SUBJECT_EMOJI[subjectId] || SUBJECT_BADGE[subjectId];
@@ -722,8 +728,11 @@ function renderPacingStrip(subjectId) {
     return;
   }
   slot.innerHTML = links.map(L => `
-    <a class="dw-pacing-link" href="${escHtml(L.slug)}">
-      <span class="dw-pacing-stage">${escHtml(L.stage)}</span>
+    <a class="dw-pacing-link" href="${escHtml(L.slug)}" title="${escHtml(L.label)} · Cambridge ${escHtml(L.code || '')}">
+      <span class="dw-pacing-stage">
+        ${escHtml(L.stage)}
+        ${L.code ? `<span class="dw-pacing-stage-code">${escHtml(L.code)}</span>` : ''}
+      </span>
       <span class="dw-pacing-label">${escHtml(L.label)}</span>
       <svg class="dw-pacing-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
     </a>
