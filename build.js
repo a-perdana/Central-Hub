@@ -549,114 +549,75 @@ if (fs.existsSync("cambridge-crossref.js")) {
   }
 });
 
-// -- Indonesian statutory references for the cross-ref runtime. Fetched
-//    on-demand when the user clicks an SKL / PIGP / PMD chip. Source
-//    JSONs live in monorepo-root docs/research/permendiknas/. CH's
-//    Vercel deploy checks out the parent (monorepo) so the relative
-//    `..` path resolves at build time without a local mirror.
-//    NOTE 2026-05-23: explicit log + count to confirm the block ran on
-//    Vercel — previous build failed silently and PMD popovers 404'd.
-const researchSrcDir  = path.join("..", "docs", "research", "permendiknas");
-const researchDestDir = path.join("dist", "research", "permendiknas");
-if (fs.existsSync(researchSrcDir)) {
-  fs.mkdirSync(researchDestDir, { recursive: true });
-  ["no-27-2010-pigp.json", "no-10-2025-skl.json", "no-16-2007.json"].forEach(name => {
-    const src = path.join(researchSrcDir, name);
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(researchDestDir, name));
-      console.log(`Copied: dist/research/permendiknas/${name}`);
-    } else {
-      console.warn(`WARNING: ${name} not found in docs/research/permendiknas/`);
-    }
-  });
+// Research-archive copy blocks (Permendiknas / Cambridge / ES / AICF) —
+// drives the chip popovers in cambridge-crossref.js + AICF reader pages.
+// Source-of-truth lives in monorepo docs/research/. CH's Vercel deploy
+// checks out the monorepo (CH project root), so `..` resolves directly;
+// no local mirror is needed (unlike AH+TH).
+//
+// Since 2026-05-25 (architecture pass step 6) — replaces ~110 lines of
+// near-identical "iterate-list-and-copyFileSync" boilerplate with one
+// declarative call per subtree via the shared copy-tree helper.
+const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
+
+// Permendiknas (SKL / PIGP / PMD chip popovers)
+{
+  const src = path.join("..", "docs", "research", "permendiknas");
+  if (fs.existsSync(src)) copyFiles(
+    src,
+    path.join("dist", "research", "permendiknas"),
+    ["no-27-2010-pigp.json", "no-10-2025-skl.json", "no-16-2007.json"],
+    "dist/research/permendiknas"
+  );
 }
 
-// -- Cambridge research archive (CSLS chip popovers — used by AH
-//    leadership track but also surfaced cross-hub via /references
-//    reader). Same source path pattern.
-const cambridgeSrcDir  = path.join("..", "docs", "research", "cambridge");
-const cambridgeDestDir = path.join("dist", "research", "cambridge");
-if (fs.existsSync(cambridgeSrcDir)) {
-  fs.mkdirSync(cambridgeDestDir, { recursive: true });
-  ["school-leader-standards-2023.json"].forEach(name => {
-    const src = path.join(cambridgeSrcDir, name);
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(cambridgeDestDir, name));
-      console.log(`Copied: dist/research/cambridge/${name}`);
-    } else {
-      console.warn(`WARNING: ${name} not found in docs/research/cambridge/`);
-    }
-  });
+// Cambridge research archive (CSLS chip popovers — also surfaced cross-hub
+// via /references reader)
+{
+  const src = path.join("..", "docs", "research", "cambridge");
+  if (fs.existsSync(src)) copyFiles(
+    src,
+    path.join("dist", "research", "cambridge"),
+    ["school-leader-standards-2023.json"],
+    "dist/research/cambridge"
+  );
 }
 
-// -- Eduversal Academic Standards (23-section network-wide manual) for
-//    the ES chip family in cambridge-crossref.js. Only the manifest +
-//    blurb files are needed by the runtime — full section JSONs ship
-//    via the references-data tree below for the /references reader.
-//    Source: monorepo-root docs/research/eduversal/academic-standards/.
-//    Build the manifest before this step via:
-//      node scripts/eduversal-standards/build-academic-standards.js --apply
-const eduStdSrcDir  = path.join("..", "docs", "research", "eduversal", "academic-standards");
-const eduStdDestDir = path.join("dist", "research", "eduversal", "academic-standards");
-if (fs.existsSync(eduStdSrcDir)) {
-  fs.mkdirSync(eduStdDestDir, { recursive: true });
-  ["manifest.json", "search-blurbs.json"].forEach(name => {
-    const src = path.join(eduStdSrcDir, name);
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(eduStdDestDir, name));
-      console.log(`Copied: dist/research/eduversal/academic-standards/${name}`);
-    } else {
-      console.warn(`WARNING: ${name} not found in docs/research/eduversal/academic-standards/ — run build-academic-standards.js --apply first.`);
-    }
-  });
+// Eduversal Academic Standards (ES chip popovers — manifest + blurbs only;
+// full section JSONs ship via references-data tree below for the reader)
+{
+  const src = path.join("..", "docs", "research", "eduversal", "academic-standards");
+  if (fs.existsSync(src)) copyFiles(
+    src,
+    path.join("dist", "research", "eduversal", "academic-standards"),
+    ["manifest.json", "search-blurbs.json"],
+    "dist/research/eduversal/academic-standards"
+  );
 }
 
-// -- Eduversal AI Competency Framework v1.0 (manifest + practical + reference
-//    layers) for the AICF chip family in cambridge-crossref.js and the 3
-//    reader pages: /ai-framework-teacher, /ai-framework-student,
-//    /ai-framework-institutional. Reader pages and chip popovers fetch from
-//    /research/eduversal/ai-competency-framework/{reference,practical}/.
-//    Source: monorepo-root docs/research/eduversal/ai-competency-framework/.
-const aicfSrcDir  = path.join("..", "docs", "research", "eduversal", "ai-competency-framework");
-const aicfDestDir = path.join("dist", "research", "eduversal", "ai-competency-framework");
-if (fs.existsSync(aicfSrcDir)) {
-  // Manifest at the root
-  fs.mkdirSync(aicfDestDir, { recursive: true });
-  const manifestSrc = path.join(aicfSrcDir, "manifest.json");
-  if (fs.existsSync(manifestSrc)) {
-    fs.copyFileSync(manifestSrc, path.join(aicfDestDir, "manifest.json"));
-    console.log(`Copied: dist/research/eduversal/ai-competency-framework/manifest.json`);
+// Eduversal AI Competency Framework v1.0 (manifest + practical + reference
+// layers) — AICF chip family + 3 reader pages /ai-framework-{teacher,
+// student,institutional}
+{
+  const src = path.join("..", "docs", "research", "eduversal", "ai-competency-framework");
+  if (fs.existsSync(src)) {
+    const destDir = path.join("dist", "research", "eduversal", "ai-competency-framework");
+    copyFiles(src, destDir, ["manifest.json"], "dist/research/eduversal/ai-competency-framework");
+    const practicalSrc = path.join(src, "practical");
+    if (fs.existsSync(practicalSrc)) {
+      copyDir(practicalSrc, path.join(destDir, "practical"), "dist/research/eduversal/ai-competency-framework/practical");
+    } else {
+      console.warn(`WARNING: practical/ subdir not found in ${src}`);
+    }
+    const referenceSrc = path.join(src, "reference");
+    if (fs.existsSync(referenceSrc)) {
+      copyDir(referenceSrc, path.join(destDir, "reference"), "dist/research/eduversal/ai-competency-framework/reference");
+    } else {
+      console.warn(`WARNING: reference/ subdir not found in ${src} — chip popovers will degrade gracefully but reader pages will be empty.`);
+    }
   } else {
-    console.warn(`WARNING: manifest.json not found in docs/research/eduversal/ai-competency-framework/`);
+    console.warn(`WARNING: docs/research/eduversal/ai-competency-framework/ not found — AICF chip family and reader pages will not function.`);
   }
-
-  // Practical layer — 8 playbook + library files (read by reader pages' sources blocks)
-  const aicfPracticalSrc  = path.join(aicfSrcDir,  "practical");
-  const aicfPracticalDest = path.join(aicfDestDir, "practical");
-  if (fs.existsSync(aicfPracticalSrc)) {
-    fs.mkdirSync(aicfPracticalDest, { recursive: true });
-    fs.readdirSync(aicfPracticalSrc).filter(n => n.endsWith(".json")).forEach(name => {
-      fs.copyFileSync(path.join(aicfPracticalSrc, name), path.join(aicfPracticalDest, name));
-      console.log(`Copied: dist/research/eduversal/ai-competency-framework/practical/${name}`);
-    });
-  } else {
-    console.warn(`WARNING: practical/ subdir not found in docs/research/eduversal/ai-competency-framework/`);
-  }
-
-  // Reference layer — 6 verbatim canonical files (read by chip popovers + reader pages)
-  const aicfReferenceSrc  = path.join(aicfSrcDir,  "reference");
-  const aicfReferenceDest = path.join(aicfDestDir, "reference");
-  if (fs.existsSync(aicfReferenceSrc)) {
-    fs.mkdirSync(aicfReferenceDest, { recursive: true });
-    fs.readdirSync(aicfReferenceSrc).filter(n => n.endsWith(".json")).forEach(name => {
-      fs.copyFileSync(path.join(aicfReferenceSrc, name), path.join(aicfReferenceDest, name));
-      console.log(`Copied: dist/research/eduversal/ai-competency-framework/reference/${name}`);
-    });
-  } else {
-    console.warn(`WARNING: reference/ subdir not found in docs/research/eduversal/ai-competency-framework/ — chip popovers will degrade gracefully but reader pages will be empty.`);
-  }
-} else {
-  console.warn(`WARNING: docs/research/eduversal/ai-competency-framework/ not found — AICF chip family and reader pages will not function.`);
 }
 
 // -- References & Standards data tree.
