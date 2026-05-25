@@ -882,9 +882,16 @@ if (fs.existsSync("eduversal-logo-white.png")) {
   console.log("Copied: eduversal-logo-white.png");
 }
 
-// references-viewer schema-aware modal renderer — local-then-shared
-// fallback pattern (mirrors nav-edit-simple). Used by references.html.
-['references-viewer.js', 'references-viewer.css'].forEach(name => {
+// references-viewer schema-aware modal renderer + references-shell
+// runtime (shared CSS + ES module) — local-then-shared fallback pattern
+// (mirrors nav-edit-simple). Used by references.html. Local hub copies
+// are auto-synced from shared-design/ via `npm run sync:tokens --apply`.
+[
+  'references-viewer.js',
+  'references-viewer.css',
+  'references-shell.js',
+  'references-shell.css',
+].forEach(name => {
   const local  = name;
   const shared = path.join('..', 'shared-design', name);
   const src    = fs.existsSync(local) ? local : (fs.existsSync(shared) ? shared : null);

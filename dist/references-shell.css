@@ -1,0 +1,1015 @@
+/*
+ * shared-design/references-shell/references-shell.css
+ *
+ * Canonical CSS for the cross-hub /references reader.
+ * Same stylesheet ships in CH, AH, and TH — UI parity surface.
+ * Sync via 'npm run sync:tokens --apply'.
+ *
+ * Source-of-truth promoted from Central Hub/references.html on 2026-05-25
+ * (system architecture pass — /references UI parity work).
+ */
+
+    /* References belongs to Knowledge family — mor accent.
+       Hero markup lives below as <header class="page-hero" data-accent="mor">.
+       Canonical hero CSS lives in shared-styles.css; see
+       docs/architecture/DESIGN_SYSTEM.md "Page families". */
+    :root { --accent: var(--brand); --accent-dk: var(--brand-dk); --accent-2: var(--brand-2); }
+    body { background: var(--paper); }
+
+    /* Page-specific helper: <code> inline in hero description stays tinted */
+    .page-hero p code { background: rgba(255,255,255,.12); padding: 1px 6px; border-radius: 3px; color: #ddd6fe; font-family: 'DM Mono', monospace; font-size: 11.5px; }
+
+    /* ── Friendly hero decoration ───────────────────────────────────
+       Sayfa "banal" hissini kıran iki şey: (1) hero'ya kategori
+       paletini yansıtan yumuşak çoklu-renk noktaları (8 farklı kategori,
+       her biri kendi rengiyle 16px orb şeklinde dağılmış); (2) eyebrow'a
+       canlı emoji + animasyonlu vurgu. Mevcut canonical .page-hero
+       gradient'i intact — sadece decorative üst-katman. */
+    .page-hero { position: relative; overflow: hidden; }
+    .page-hero::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(14px 14px at 8%  22%, rgba(124,58,237,0.55), transparent 70%),  /* induction mor */
+        radial-gradient(12px 12px at 18% 78%, rgba(219,39,119,0.50), transparent 70%),  /* roleop / cambridge pink */
+        radial-gradient(13px 13px at 28% 38%, rgba( 14,165,233,0.50), transparent 70%), /* framework cyan */
+        radial-gradient(11px 11px at 38% 84%, rgba(217,119,  6,0.55), transparent 70%), /* audit amber */
+        radial-gradient(15px 15px at 52% 30%, rgba(  5,150,105,0.45), transparent 70%), /* permen green */
+        radial-gradient(10px 10px at 62% 76%, rgba( 14,116,144,0.55), transparent 70%), /* ES cyan-deep */
+        radial-gradient(13px 13px at 72% 34%, rgba(234, 88, 12,0.55), transparent 70%), /* AICF orange */
+        radial-gradient(12px 12px at 84% 70%, rgba( 29, 78,216,0.50), transparent 70%); /* organization blue */
+      opacity: 0.85;
+      animation: heroOrbsDrift 22s ease-in-out infinite alternate;
+    }
+    @keyframes heroOrbsDrift {
+      0%   { transform: translate3d(0,0,0) scale(1); }
+      50%  { transform: translate3d(-6px,4px,0) scale(1.03); }
+      100% { transform: translate3d(4px,-3px,0) scale(0.98); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .page-hero::after { animation: none; }
+    }
+    /* Lift hero inner above the orb layer */
+    .page-hero__inner { position: relative; z-index: 1; }
+
+    /* Eyebrow gets a sparkle emoji prefix */
+    .page-hero__eyebrow::before {
+      content: '✨ '; margin-right: 4px;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+    }
+
+    /* Friendly section header chrome — kategori rengini header'a yansıt
+       (ince üst şerit + emoji + sayaç chip'i kategoriye boyandı). Hover
+       wash da kategoriye göre değişir. CSS değişkeni `--sec-stripe` her
+       bir section için inline-defined (HTML'den geliyor). */
+    .ref-section {
+      position: relative;
+      transition: border-color .15s, transform .15s, box-shadow .2s;
+    }
+    .ref-section::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+      background: var(--sec-stripe, var(--accent));
+      opacity: 0.85;
+      transition: opacity .15s;
+    }
+    .ref-section[open]::before { opacity: 1; }
+    .ref-section[open] {
+      border-color: var(--sec-border, var(--accent-2)) !important;
+      box-shadow: 0 8px 22px -16px var(--sec-stripe, rgba(108,92,231,0.4));
+    }
+    .ref-section-head:hover {
+      background: var(--sec-wash, #fafbfc) !important;
+    }
+    /* Emoji sits after the caret, before the title — order: 0 (caret) →
+       1 (emoji ::before)? No: ::before is the very first flex child by
+       default. Use `order` to push it between caret and title. */
+    .ref-section-head::before {
+      content: var(--sec-emoji, '📚');
+      font-size: 18px; line-height: 1;
+      flex-shrink: 0;
+      order: 1; /* caret stays at 0 (default), title at default 0 — emoji slides in */
+      align-self: center;
+    }
+    .ref-section-title { order: 2; }
+    .ref-section-count { order: 3; }
+    .ref-section-blurb { order: 4; }
+    .ref-section-caret { color: var(--sec-stripe, var(--accent)) !important; }
+    .ref-section-count {
+      background: var(--sec-wash, var(--accent-2)) !important;
+      color: var(--sec-stripe, var(--accent-dk)) !important;
+      border: 1px solid var(--sec-border, transparent);
+    }
+
+    /* Per-section palette tokens — match the card cat-* palette so
+       headers and the cards inside agree at a glance. */
+    .ref-section[data-cat="handbooks"]          { --sec-stripe: #7c3aed; --sec-wash: #faf5ff; --sec-border: #ddd6fe; --sec-emoji: '📕'; }
+    .ref-section[data-cat="frameworks"]         { --sec-stripe: #0891b2; --sec-wash: #ecfeff; --sec-border: #a5f3fc; --sec-emoji: '🧭'; }
+    .ref-section[data-cat="audits"]             { --sec-stripe: #d97706; --sec-wash: #fffbeb; --sec-border: #fde68a; --sec-emoji: '🔍'; }
+    .ref-section[data-cat="cambridge"]          { --sec-stripe: #db2777; --sec-wash: #fdf2f8; --sec-border: #fbcfe8; --sec-emoji: '🎓'; }
+    .ref-section[data-cat="permen"]             { --sec-stripe: #059669; --sec-wash: #ecfdf5; --sec-border: #a7f3d0; --sec-emoji: '⚖️'; }
+    .ref-section[data-cat="schemas"]            { --sec-stripe: #475569; --sec-wash: #f8fafc; --sec-border: #cbd5e1; --sec-emoji: '🗂️'; }
+    .ref-section[data-cat="organization"]       { --sec-stripe: #1d4ed8; --sec-wash: #eff6ff; --sec-border: #bfdbfe; --sec-emoji: '🏢'; }
+    .ref-section[data-cat="eduversalStandards"] { --sec-stripe: #0e7490; --sec-wash: #ecfeff; --sec-border: #a5f3fc; --sec-emoji: '⭐'; }
+    .ref-section[data-cat="aiFramework"]        { --sec-stripe: #ea580c; --sec-wash: #fff7ed; --sec-border: #fed7aa; --sec-emoji: '🤖'; }
+
+    /* Friendly facet chips — active chip picks up its category palette
+       instead of the generic mor accent. Idle chips get a subtle
+       hover-tint based on the same palette so the eye sees the relation
+       between the chip and its results. Sayaç chip'i de boyanıyor. */
+    .ref-facet[data-cat="all"]                { --fc: #6c5ce7; --fc-wash: #f3f1ff; }
+    .ref-facet[data-cat="handbooks"]          { --fc: #7c3aed; --fc-wash: #faf5ff; }
+    .ref-facet[data-cat="frameworks"]         { --fc: #0891b2; --fc-wash: #ecfeff; }
+    .ref-facet[data-cat="audits"]             { --fc: #d97706; --fc-wash: #fffbeb; }
+    .ref-facet[data-cat="cambridge"]          { --fc: #db2777; --fc-wash: #fdf2f8; }
+    .ref-facet[data-cat="permen"]             { --fc: #059669; --fc-wash: #ecfdf5; }
+    .ref-facet[data-cat="schemas"]            { --fc: #475569; --fc-wash: #f8fafc; }
+    .ref-facet[data-cat="organization"]       { --fc: #1d4ed8; --fc-wash: #eff6ff; }
+    .ref-facet[data-cat="eduversalStandards"] { --fc: #0e7490; --fc-wash: #ecfeff; }
+    .ref-facet[data-cat="aiFramework"]        { --fc: #ea580c; --fc-wash: #fff7ed; }
+
+    /* Idle facet — light tint of its category for a subtle "this is
+       what this filter does" cue. Hover saturates. */
+    .ref-facet:not(.active) {
+      background: var(--fc-wash, var(--white));
+      border-color: color-mix(in srgb, var(--fc, var(--border)) 22%, var(--border));
+    }
+    .ref-facet:not(.active) .count {
+      background: color-mix(in srgb, var(--fc, var(--accent)) 18%, white);
+      color: var(--fc, var(--accent-dk));
+    }
+    .ref-facet:not(.active):hover {
+      background: color-mix(in srgb, var(--fc, var(--accent)) 16%, white);
+      border-color: var(--fc, var(--accent));
+      color: var(--fc, var(--ink));
+    }
+    .ref-facet.active {
+      background: var(--fc, var(--accent)) !important;
+      border-color: var(--fc, var(--accent)) !important;
+      box-shadow: 0 6px 16px -10px var(--fc, rgba(108,92,231,0.5));
+    }
+
+    /* Card icon — biraz büyüt + emoji'ye yer ver. Hover'da hafifçe pop. */
+    .ref-card-icon {
+      font-size: 18px;
+      transition: transform .18s ease-out;
+    }
+    .ref-card:hover .ref-card-icon {
+      transform: rotate(-4deg) scale(1.08);
+    }
+    /* Sayaç chip'leri – tabular-nums + tiny pulse on data load */
+    @keyframes countPop {
+      0%   { transform: scale(0.9); opacity: 0.5; }
+      60%  { transform: scale(1.06); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .ref-facet .count[data-loaded="1"] { animation: countPop .25s ease-out; }
+
+    /* Hero KPI — vivid gradient halka */
+    .page-hero__kpi--primary .page-hero__kpi-num {
+      background: linear-gradient(135deg, #fff 0%, #ffd6f6 50%, #c4b5fd 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ── Sticky toolbar: search-first ──────────────────────────────
+       Replaces hero+rails+tabs+search+recent-bar with one cohesive
+       header that follows scroll. Layout: search row on top, facet
+       chips below. Facet chips REPLACE the old tabs — they filter the
+       single grid in-place instead of switching panels. */
+    .ref-toolbar {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--paper);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .15s, background .15s;
+    }
+    .ref-toolbar.is-stuck {
+      background: rgba(248,250,252,0.94);
+      backdrop-filter: saturate(160%) blur(8px);
+      box-shadow: 0 6px 16px -16px rgba(15,23,42,0.4);
+    }
+    .ref-toolbar-inner {
+      max-width: var(--container-max); margin: 0 auto; padding: 16px 40px 12px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    /* Search row */
+    .ref-search-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .ref-search {
+      flex: 1; min-width: 260px; max-width: 560px; position: relative;
+      display: flex; align-items: center;
+    }
+    .ref-search svg {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      width: 18px; height: 18px; color: var(--ink-3); pointer-events: none;
+    }
+    .ref-search input {
+      width: 100%; padding: 11px 36px 11px 42px;
+      font-family: inherit; font-size: 14px; font-weight: 500;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--white); color: var(--ink);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    .ref-search input::placeholder { color: var(--ink-3); font-weight: 400; }
+    .ref-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+    .ref-search-clear {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--ink-3);
+      font-size: 18px; padding: 2px 8px; border-radius: 6px; line-height: 1;
+    }
+    .ref-search-clear:hover { color: var(--ink); background: #f3f4f6; }
+    .ref-search-info { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+    /* Facet chips — primary filter. Single-select; clicking the active
+       one returns to All. Laid out in a 4-column grid so chips align in
+       neat rows/columns instead of free-wrapping at random widths. 8
+       chips → 2 rows × 4 cols on desktop, 4 rows × 2 cols on tablet,
+       1 col on mobile. Equal column widths give the eye a clean grid to
+       scan; chip labels truncate with ellipsis on the rare narrow row.
+       Style mirrors the badge family from shared-styles.css but tuned
+       for picker affordance (border + background swap on active rather
+       than just color). */
+    .ref-facets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+    .ref-facet {
+      padding: 9px 14px; font-size: 13px; font-weight: 600;
+      color: var(--ink-2); background: var(--white);
+      border: 1px solid var(--border); border-radius: 9px;
+      cursor: pointer; user-select: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      transition: background .12s, border-color .12s, color .12s;
+      text-align: left; min-width: 0;
+      font-family: inherit;
+    }
+    .ref-facet > span:first-child {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+    }
+    .ref-facet:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--ink); }
+    .ref-facet.active {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .ref-facet .count {
+      display: inline-block; padding: 1px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums; flex-shrink: 0;
+    }
+    .ref-facet.active .count { background: rgba(255,255,255,0.22); color: #fff; }
+    .ref-facet.is-empty { opacity: 0.5; }
+    .ref-facet.is-empty .count { background: #f3f4f6; color: var(--ink-3); }
+    .ref-facet.active.is-empty .count { background: rgba(255,255,255,0.22); color: #fff; }
+    @media (max-width: 960px) {
+      .ref-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Recently opened + Quick-access (For your role) — collapsed below
+       toolbar. Both are inline rows; quick-access uses <details> so the
+       user can hide it. Recent stays auto-shown (matches Linear/Notion
+       pattern: latest doc is the strongest re-entry signal). */
+    .ref-shelf { max-width: var(--container-max); margin: 8px auto 0; padding: 0 40px; }
+    /* Shelf rows (Recently opened + For your role chip strips).
+       Two-line layout: label header on top, chips below in the SAME
+       4-col grid as the facet bar — every aligned column lines up across
+       facets / recents / role-pins / section heads. The eye scans one
+       vertical rule down the page instead of staggered chip widths. */
+    .ref-shelf-row {
+      display: flex; flex-direction: column; gap: 8px;
+      font-size: 12px; padding: 6px 0;
+    }
+    .ref-shelf-label {
+      font-size: 10.5px; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .ref-shelf-chips {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+    .ref-shelf-chip {
+      cursor: pointer; padding: 7px 12px; border-radius: 8px;
+      background: var(--white); color: var(--ink-2);
+      border: 1px solid var(--border); font-size: 12px; font-weight: 500;
+      display: flex; align-items: center; gap: 6px;
+      min-width: 0;   /* allow ellipsis inside grid track */
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: background .12s, border-color .12s, color .12s;
+      font-family: inherit; text-align: left;
+    }
+    /* Inner label span gets the ellipsis treatment so the leading icon
+       (::before pseudo) doesn't get clipped when titles overflow. */
+    .ref-shelf-chip > span {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+    }
+    .ref-shelf-chip:hover { background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk); }
+    .ref-shelf-chip::before { font-size: 11px; flex-shrink: 0; }
+    .ref-shelf-chip.recent::before { content: '↻'; color: var(--accent); }
+    .ref-shelf-chip.role::before { content: '★'; color: var(--accent); }
+    @media (max-width: 960px) {
+      .ref-shelf-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    .ref-quick {
+      max-width: var(--container-max); margin: 4px auto 0; padding: 0 40px;
+    }
+    .ref-quick summary {
+      list-style: none; cursor: pointer; display: inline-flex; align-items: center;
+      gap: 6px; padding: 4px 8px; border-radius: 6px;
+      font-size: 11px; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      user-select: none;
+    }
+    .ref-quick summary::-webkit-details-marker { display: none; }
+    .ref-quick summary:hover { color: var(--ink-2); background: #f3f4f6; }
+    .ref-quick summary::before {
+      content: '▸'; font-size: 9px; transition: transform .15s;
+      color: var(--accent);
+    }
+    .ref-quick[open] summary::before { transform: rotate(90deg); }
+
+    /* ── Single results grid ───────────────────────────────────────
+       One unified grid for all categories. Category dividers (h2-style
+       row) separate sections; both dividers and cards toggle off when
+       facet/search filters them out. Replaces the 7 ref-panel siblings. */
+    .ref-results { max-width: var(--container-max); margin: 0 auto; padding: 22px 40px 80px; }
+    .ref-results-empty {
+      display: none; padding: 60px 20px; text-align: center;
+      color: var(--ink-3); font-size: 13px;
+    }
+    .ref-results-empty.visible { display: block; }
+    .ref-results-empty strong { color: var(--ink-2); display: block; margin-bottom: 6px; font-size: 14px; }
+    .ref-results-empty code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12px; font-family: 'DM Mono', monospace; }
+
+    /* Sections are <details> accordions — closed by default so the page
+       opens compact and the user expands on demand. Search auto-opens
+       any section with matches (handled in applySearch). Facet click
+       on a specific category auto-opens that single section. Caret on
+       the right rotates 90° when open (CSS-only via [open] selector). */
+    .ref-section {
+      margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: var(--white); overflow: hidden;
+    }
+    .ref-section.is-hidden { display: none; }
+    .ref-section[open] { box-shadow: 0 4px 14px -10px rgba(15,23,42,0.18); }
+    .ref-section-head {
+      list-style: none; cursor: pointer;
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid transparent;
+      transition: background .12s, border-color .15s;
+      user-select: none;
+    }
+    .ref-section-head::-webkit-details-marker { display: none; }
+    .ref-section[open] .ref-section-head { border-bottom-color: var(--border); }
+    .ref-section-head:hover { background: #fafbfc; }
+    .ref-section-caret {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; margin-right: 4px;
+      color: var(--accent); font-size: 11px; font-weight: 700;
+      transition: transform .15s;
+      align-self: center;
+    }
+    .ref-section[open] .ref-section-caret { transform: rotate(90deg); }
+    .ref-section-title {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: var(--ink); margin: 0;
+    }
+    .ref-section-count {
+      font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-variant-numeric: tabular-nums;
+    }
+    .ref-section-blurb { font-size: 12px; color: var(--ink-3); margin-left: auto; max-width: 540px; line-height: 1.5; text-align: right; }
+    .ref-section-blurb code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'DM Mono', monospace; }
+    .ref-section > .ref-grid { padding: 18px 20px 22px; }
+
+    .ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+    .ref-intro { display: none; } /* legacy intro paragraphs hidden — content moved into section blurbs */
+
+    /* ── Card grid ───────────────────────────────────────────────── */
+    .ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+    .ref-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 18px 20px; transition: border-color .15s, transform .12s, box-shadow .15s;
+      display: flex; flex-direction: column; gap: 10px;
+      text-decoration: none; color: inherit;
+    }
+    .ref-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 6px 18px -10px rgba(108,92,231,0.28); }
+    .ref-card[data-disabled="1"] { opacity: 0.55; cursor: not-allowed; }
+    .ref-card[data-disabled="1"]:hover { border-color: var(--border); transform: none; box-shadow: none; }
+    .ref-card-head { display: flex; align-items: flex-start; gap: 10px; }
+    .ref-card-icon {
+      flex: 0 0 36px; width: 36px; height: 36px; border-radius: 9px;
+      background: var(--accent-2); color: var(--accent-dk);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; font-family: 'DM Mono', monospace;
+    }
+    .ref-card-title { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+    .ref-card-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+    .ref-card-meta {
+      margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--border);
+      display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--ink-3);
+    }
+    .ref-card-meta .pill { padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: var(--ink-2); font-weight: 500; }
+    .ref-card-meta .pill.live { background: #d1fae5; color: #065f46; }
+    .ref-card-meta .pill.json { background: #e0e7ff; color: #3730a3; font-family: 'DM Mono', monospace; }
+    .ref-card-meta .pill.md { background: #fef3c7; color: #92400e; font-family: 'DM Mono', monospace; }
+    .ref-card-meta .pill.firestore { background: #ddd6fe; color: #5b21b6; }
+    .ref-card-meta .pill.warn { background: #fee2e2; color: #991b1b; }
+
+    /* Concept tags (NN3, F3, mentor-cert, ...). Visible + searchable.
+       Sits between meta pills (passive type info) and connected-docs strip
+       (cross-references). Renders as monospace gray chips so a quick scan
+       reads like "what concepts does this card touch". */
+    .ref-tags {
+      margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+    }
+    .ref-tag {
+      padding: 1px 7px; border-radius: 4px;
+      background: #f1f5f9; color: #475569;
+      font-family: 'DM Mono', monospace; font-size: 10.5px; font-weight: 500;
+      letter-spacing: 0.01em;
+      border: 1px solid #e2e8f0;
+      cursor: pointer; user-select: none;
+      transition: filter .12s, transform .1s;
+    }
+    .ref-tag:hover { filter: brightness(0.94); transform: translateY(-1px); }
+    .ref-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* Tag families share a color cue so the eye groups concepts at a glance. */
+    .ref-tag.fam-nn   { background: #fef2f2; color: #991b1b; border-color: #fecaca; } /* NN1-NN5 */
+    .ref-tag.fam-cts  { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; } /* CTS-anchored */
+    .ref-tag.fam-skl  { background: #d1fae5; color: #065f46; border-color: #a7f3d0; } /* Indonesian SKL */
+    .ref-tag.fam-pigp { background: #fef3c7; color: #92400e; border-color: #fde68a; } /* PIGP */
+    .ref-tag.fam-f    { background: #cffafe; color: #155e75; border-color: #a5f3fc; } /* F1-F5, F_LEAD */
+
+    /* Connected-docs strip (cross-reference visualisation at index level).
+       Kept visually distinct from meta pills (passive tags) and sub-item
+       chips (sub-resources within the same card) — these chips navigate to
+       a *different* doc, so the arrow + dotted top border signal "follow". */
+    .ref-conn {
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px dotted var(--border);
+      display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+    }
+    .ref-conn-label {
+      font-size: 10px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.06em; text-transform: uppercase; margin-right: 2px;
+    }
+    .ref-conn-chip {
+      padding: 3px 9px; border-radius: 6px;
+      background: #f8fafc; color: var(--ink-2);
+      font-size: 11px; font-weight: 500; line-height: 1.3;
+      border: 1px solid var(--border); cursor: pointer;
+      text-decoration: none;
+      transition: background .12s, border-color .12s, color .12s;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .ref-conn-chip::before {
+      content: '↗'; color: var(--ink-3); font-weight: 600; font-size: 10px;
+    }
+    .ref-conn-chip:hover {
+      background: var(--accent-2); border-color: var(--accent);
+      color: var(--accent-dk);
+    }
+    .ref-conn-chip:hover::before { color: var(--accent); }
+
+    /* Sub-item chips inside index cards (e.g. Weekly Checklists × 8 sub-roles).
+       Visually distinct from meta pills above so the user reads them as
+       "click me" actions rather than passive tags. */
+    .ref-sub-list { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .ref-sub-chip {
+      padding: 5px 11px; border-radius: 8px;
+      background: #faf5ff; color: var(--accent-dk);
+      font-size: 12px; font-weight: 500; line-height: 1.2;
+      border: 1px solid var(--accent-2);
+      text-decoration: none; cursor: pointer;
+      transition: background .12s, border-color .12s, transform .1s;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .ref-sub-chip::before {
+      content: '→'; color: var(--accent); font-weight: 600;
+      transition: transform .15s;
+    }
+    .ref-sub-chip:hover {
+      background: var(--accent-2); border-color: var(--accent);
+      color: var(--accent-dk); text-decoration: none; transform: translateY(-1px);
+    }
+    .ref-sub-chip:hover::before { transform: translateX(2px); }
+
+    /* Per-category palettes — used by both the icon chip AND a 4px left
+       stripe + hover wash that lets the eye scan a tab and pick out the
+       category each card belongs to without reading the title.
+       Each row defines: icon-bg / icon-fg / stripe / hover-wash. */
+    .ref-card.cat-induction { --cat-stripe: #7c3aed; --cat-wash: #faf5ff; --cat-border: #ddd6fe; }
+    .ref-card.cat-induction .ref-card-icon { background: #ede9fe; color: #5b21b6; }
+
+    /* Role-operational handbook variant — pink so the eye distinguishes
+       Charter-bound Year-1 induction tracks (mor 📕) from 90-day role
+       onboarding (pink 🛡). Mirrors /handbook browser palette. */
+    .ref-card.cat-handbook-roleop { --cat-stripe: #db2777; --cat-wash: #fdf2f8; --cat-border: #fbcfe8; }
+    .ref-card.cat-handbook-roleop .ref-card-icon { background: #fce7f3; color: #9d174d; }
+
+    .ref-card.cat-framework { --cat-stripe: #0891b2; --cat-wash: #f0fdff; --cat-border: #a5f3fc; }
+    .ref-card.cat-framework .ref-card-icon { background: #cffafe; color: #0e7490; }
+
+    .ref-card.cat-audit     { --cat-stripe: #d97706; --cat-wash: #fffbeb; --cat-border: #fde68a; }
+    .ref-card.cat-audit     .ref-card-icon { background: #fef3c7; color: #92400e; }
+
+    .ref-card.cat-cambridge { --cat-stripe: #db2777; --cat-wash: #fdf2f8; --cat-border: #fbcfe8; }
+    .ref-card.cat-cambridge .ref-card-icon { background: #fce7f3; color: #9d174d; }
+
+    .ref-card.cat-permen    { --cat-stripe: #059669; --cat-wash: #ecfdf5; --cat-border: #a7f3d0; }
+    .ref-card.cat-permen    .ref-card-icon { background: #d1fae5; color: #065f46; }
+
+    .ref-card.cat-schema    { --cat-stripe: #475569; --cat-wash: #f8fafc; --cat-border: #cbd5e1; }
+    .ref-card.cat-schema    .ref-card-icon { background: #f3f4f6; color: #374151; }
+
+    .ref-card.cat-organization { --cat-stripe: #1d4ed8; --cat-wash: #eff6ff; --cat-border: #bfdbfe; }
+    .ref-card.cat-organization .ref-card-icon { background: #dbeafe; color: #1e3a8a; }
+
+    /* Eduversal Standards — cyan-deep (matches the ES chip family in
+       cambridge-crossref.js — Eduversal's 2nd brand). */
+    .ref-card.cat-eduversalStandards { --cat-stripe: #0e7490; --cat-wash: #ecfeff; --cat-border: #a5f3fc; }
+    .ref-card.cat-eduversalStandards .ref-card-icon { background: #cffafe; color: #155e75; }
+
+    /* AI Framework — orange (matches the AICF chip family).
+       Wraps AICF wrappers + AICF-Companion handbook entries. */
+    .ref-card.cat-aiFramework { --cat-stripe: #ea580c; --cat-wash: #fff7ed; --cat-border: #fed7aa; }
+    .ref-card.cat-aiFramework .ref-card-icon { background: #ffedd5; color: #9a3412; }
+
+    /* "When to consult" trigger line — terse hint for Claude / human readers
+       on the situation that warrants opening this doc. Sits between the
+       description and the meta pills. Italic + dimmer than the description
+       so the eye treats it as a side-note. Searchable via DOM-text so the
+       existing applySearch() picks it up automatically. */
+    .ref-card-consult {
+      font-size: 11.5px; color: var(--ink-3); line-height: 1.45;
+      padding: 6px 8px 6px 10px; border-left: 2px solid var(--accent-2);
+      background: #fafbfc; border-radius: 4px;
+      margin-top: 2px;
+    }
+    .ref-card-consult .ref-card-consult-label {
+      font-size: 9.5px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.06em; text-transform: uppercase; margin-right: 6px;
+    }
+
+    /* Apply the palette to every card. Left stripe via box-shadow inset
+       (no layout shift), hover wash via background-color, hover border
+       via cat-border. Inset shadow stacks with the existing 18px 20px
+       padding by widening padding-left to 22px so the stripe doesn't
+       overlap content. Hover swaps to per-category accent so each tab's
+       palette dominates. */
+    .ref-card {
+      padding: 18px 20px 18px 22px;
+      box-shadow: inset 4px 0 0 var(--cat-stripe, transparent);
+    }
+    .ref-card:hover {
+      transform: translateY(-1px);
+      background: var(--cat-wash, #fff);
+      border-color: var(--cat-border, var(--accent));
+      /* Single shadow fallback: stripe stays put, generic mor halo for
+         older browsers. */
+      box-shadow:
+        inset 4px 0 0 var(--cat-stripe, var(--accent)),
+        0 6px 18px -10px rgba(108,92,231,0.28);
+    }
+    /* Modern browsers: tint the halo to match each card's category. */
+    @supports (color: color-mix(in srgb, red 50%, blue)) {
+      .ref-card:hover {
+        box-shadow:
+          inset 4px 0 0 var(--cat-stripe, var(--accent)),
+          0 6px 18px -10px color-mix(in srgb, var(--cat-stripe, var(--accent)) 40%, transparent);
+      }
+    }
+
+    /* ── Document viewer modal ───────────────────────────────────── */
+    .doc-modal-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200; padding: 24px;
+    }
+    .doc-modal-overlay.open { display: flex; }
+    .doc-modal {
+      background: #fff; border-radius: 16px; max-width: 1100px; width: 100%;
+      max-height: 92vh; display: flex; flex-direction: column;
+      box-shadow: 0 30px 60px -20px rgba(15,23,42,0.4);
+    }
+    .doc-modal-head {
+      padding: 18px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px;
+    }
+    .doc-modal-title { font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; color: var(--ink); flex: 1; }
+    .doc-modal-meta { font-size: 11px; color: var(--ink-3); }
+    .doc-modal-close { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--ink-3); padding: 4px 10px; border-radius: 6px; }
+    .doc-modal-close:hover { color: var(--ink); background: #f3f4f6; }
+    .doc-modal-body { padding: 24px 28px; overflow: auto; flex: 1; }
+
+    /* Modal nav buttons — cycle through the visible (post-filter) cards in
+       the active panel. Keyboard ←/→ wired to the same handlers. */
+    .doc-modal-nav {
+      display: inline-flex; align-items: center; gap: 6px; margin-right: 8px;
+    }
+    .doc-modal-nav-btn {
+      background: #f3f4f6; border: 1px solid var(--border); color: var(--ink-2);
+      cursor: pointer; padding: 4px 10px; border-radius: 6px;
+      font-size: 12px; font-weight: 600; line-height: 1.2;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .doc-modal-nav-btn:hover:not([disabled]) {
+      background: var(--accent-2); border-color: var(--accent); color: var(--accent-dk);
+    }
+    .doc-modal-nav-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+    .doc-modal-nav-pos {
+      font-size: 11px; color: var(--ink-3); font-weight: 500;
+      font-variant-numeric: tabular-nums; padding: 0 4px;
+    }
+
+    /* Markdown rendering */
+    .md-render h1, .md-render h2, .md-render h3, .md-render h4 { font-family: 'Lora', serif; color: var(--ink); margin: 18px 0 10px; line-height: 1.3; }
+    .md-render h1 { font-size: 1.7rem; border-bottom: 2px solid var(--accent-2); padding-bottom: 8px; }
+    .md-render h2 { font-size: 1.3rem; }
+    .md-render h3 { font-size: 1.1rem; }
+    .md-render h4 { font-size: 1rem; }
+    .md-render p, .md-render li { font-size: 14px; line-height: 1.65; color: var(--ink-2); }
+    .md-render p { margin: 10px 0; }
+    .md-render ul, .md-render ol { margin: 10px 0; padding-left: 26px; }
+    .md-render code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; font-family: 'DM Mono', monospace; color: #4c1d95; }
+    .md-render pre { background: #0f172a; color: #e2e8f0; padding: 14px 18px; border-radius: 10px; overflow: auto; font-size: 12.5px; }
+    .md-render pre code { background: none; color: inherit; padding: 0; }
+    .md-render blockquote { border-left: 4px solid var(--accent-2); padding: 6px 16px; color: var(--ink-2); font-style: italic; margin: 12px 0; background: #faf5ff; border-radius: 0 8px 8px 0; }
+    .md-render table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    .md-render th, .md-render td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    .md-render th { background: #faf5ff; color: var(--ink); font-weight: 600; }
+    .md-render hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .md-render a { color: var(--accent-dk); }
+
+    /* Schema-aware document viewer — turns recognised JSON top-level keys
+       (design_principles, regulatory_alignment, weights, scoring_scale,
+       nonNegotiables, etc.) into prose-style cards instead of raw JSON.
+       Anything unrecognised falls through to .json-render below.
+       Together: 'document mode' for the human-readable bits, 'JSON mode'
+       for the rest — both inside the same modal body. */
+    .doc-view { display: flex; flex-direction: column; gap: 18px; }
+
+    /* Header block: title, version/date, description */
+    .doc-view-header {
+      padding: 16px 20px; border-radius: 12px;
+      background: linear-gradient(135deg, #faf5ff 0%, #f0fdff 100%);
+      border: 1px solid var(--accent-2);
+    }
+    .doc-view-header h2 {
+      font-family: 'Lora', serif; font-size: 1.35rem; font-weight: 600;
+      color: var(--ink); margin: 0 0 6px;
+    }
+    .doc-view-header .meta {
+      font-size: 11.5px; color: var(--ink-3); display: flex;
+      flex-wrap: wrap; gap: 14px; margin-bottom: 10px;
+    }
+    .doc-view-header .meta strong { color: var(--ink-2); font-weight: 600; }
+    .doc-view-header p { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; margin: 6px 0 0; }
+
+    /* Section wrapper */
+    .doc-view-section { padding: 0 4px; }
+    .doc-view-section > h3 {
+      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600;
+      color: var(--ink); margin: 0 0 12px;
+      display: flex; align-items: baseline; gap: 8px;
+    }
+    .doc-view-section > h3 .count {
+      font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600;
+      color: var(--accent-dk); background: var(--accent-2);
+      padding: 1px 8px; border-radius: 999px;
+    }
+
+    /* Bullet list (string arrays — design_principles, principles, ...) */
+    .doc-view-bullets { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    .doc-view-bullets li {
+      padding: 10px 14px 10px 32px; position: relative;
+      background: #fafbfc; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13px; line-height: 1.55; color: var(--ink-2);
+    }
+    .doc-view-bullets li::before {
+      content: ''; position: absolute; left: 14px; top: 16px;
+      width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    }
+
+    /* Reference card (regulatory_alignment / framework_anchors entries) */
+    .doc-view-refs { display: flex; flex-direction: column; gap: 8px; }
+    .doc-view-ref {
+      padding: 12px 14px; background: #fff;
+      border: 1px solid var(--border); border-radius: 10px;
+      border-left: 3px solid var(--accent);
+    }
+    .doc-view-ref .code {
+      display: inline-block; font-family: 'DM Mono', monospace;
+      font-size: 11px; font-weight: 600; color: var(--accent-dk);
+      background: var(--accent-2); padding: 2px 8px; border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    .doc-view-ref .title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+    .doc-view-ref .body { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+
+    /* Generic object array (e.g. scoring_scale) — auto-render 2-3 fields */
+    .doc-view-objects { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+    .doc-view-object {
+      padding: 10px 12px; background: #fafbfc;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-size: 12.5px;
+    }
+    .doc-view-object .field { margin-bottom: 4px; }
+    .doc-view-object .field:last-child { margin-bottom: 0; }
+    .doc-view-object .field-label { font-size: 10.5px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; }
+    .doc-view-object .field-value { color: var(--ink); }
+
+    /* Flat object → 2-column key/value table (weights, predicate_bands) */
+    .doc-view-kv {
+      display: grid; grid-template-columns: max-content 1fr;
+      gap: 6px 14px; font-size: 13px;
+    }
+    .doc-view-kv dt { color: var(--ink-3); font-weight: 600; font-family: 'DM Mono', monospace; font-size: 12px; }
+    .doc-view-kv dd { color: var(--ink); margin: 0; }
+    /* Compact summary chip used inside doc-view-kv when a value is itself
+       a small nested object/array — avoids the entire row falling through
+       to raw JSON just because one sub-key is non-primitive. */
+    .doc-view-kv-nested {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 6px; font-size: 11px;
+      background: var(--accent-2); color: var(--accent-dk); font-weight: 600;
+    }
+
+    /* Document Metadata strip — chip-row of flat metadata fields
+       (schema_version, version, edition, publisher, status, language,
+       academic_year, etc.). Sits directly under the header so the reader
+       can see version/effective-date/source at a glance instead of
+       hunting for them inside Raw JSON. */
+    .doc-view-meta-strip {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 12px 16px; border-radius: 10px;
+      background: linear-gradient(135deg, #faf5ff 0%, #f0fdff 100%);
+      border: 1px solid var(--accent-2);
+      margin-top: -8px; /* hug the header */
+    }
+    .doc-view-meta-chip {
+      display: inline-flex; align-items: baseline; gap: 6px;
+      padding: 4px 10px; border-radius: 8px;
+      background: var(--white); border: 1px solid var(--border);
+      font-size: 11.5px; line-height: 1.4;
+    }
+    .doc-view-meta-chip .label {
+      font-size: 9.5px; font-weight: 700; color: var(--ink-3);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .doc-view-meta-chip .value {
+      font-size: 12px; color: var(--ink); font-weight: 500;
+      max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .doc-view-meta-chip a.value {
+      color: var(--accent-dk); text-decoration: none;
+    }
+    .doc-view-meta-chip a.value:hover { text-decoration: underline; }
+
+    /* Provenance footer-strip — generation/build metadata. Sits at the
+       very bottom (just before Raw JSON) in muted styling. */
+    .doc-view-provenance {
+      padding: 10px 14px; border-radius: 8px;
+      background: #fafbfc; border: 1px dashed var(--border);
+      font-size: 11.5px; color: var(--ink-3);
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: baseline;
+    }
+    .doc-view-provenance::before {
+      content: '◷'; color: var(--ink-3); font-size: 14px;
+    }
+    .doc-view-provenance b { color: var(--ink-2); font-weight: 600; }
+    .doc-view-provenance code {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      background: var(--white); border: 1px solid var(--border);
+      padding: 1px 5px; border-radius: 3px; color: var(--ink-2);
+    }
+
+    /* Theory basis — primary statement plus citations underneath */
+    .doc-view-theory {
+      padding: 14px 16px; border-radius: 10px;
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+    }
+    .doc-view-theory .primary {
+      font-size: 13.5px; color: var(--ink); font-weight: 500; line-height: 1.55;
+    }
+    .doc-view-theory .refs {
+      list-style: none; margin: 10px 0 0; padding: 0;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .doc-view-theory .refs li {
+      font-size: 12px; color: var(--ink-2); line-height: 1.5;
+      padding-left: 14px; position: relative;
+    }
+    .doc-view-theory .refs li::before {
+      content: '↳'; position: absolute; left: 0; top: 0;
+      color: var(--ink-3); font-size: 11px;
+    }
+
+    /* Weights — percentage chip row */
+    .doc-view-weights {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 12px 14px; border-radius: 10px;
+      background: var(--white); border: 1px solid var(--border);
+    }
+    .doc-view-weights .w-chip {
+      display: inline-flex; align-items: baseline; gap: 6px;
+      padding: 6px 12px; border-radius: 8px;
+      background: var(--accent-2); color: var(--accent-dk);
+      font-size: 12px; font-weight: 600;
+    }
+    .doc-view-weights .w-chip .w-key {
+      font-family: 'DM Mono', monospace; font-size: 11px;
+    }
+    .doc-view-weights .w-chip .w-val {
+      font-size: 13px; font-weight: 700;
+    }
+
+    /* Level Visibility — note + ordered chip flow */
+    .doc-view-levels-note {
+      font-size: 12.5px; color: var(--ink-2); line-height: 1.55;
+      margin-bottom: 10px;
+    }
+    .doc-view-levels-flow {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      font-family: 'DM Mono', monospace; font-size: 12px;
+    }
+    .doc-view-levels-flow .lvl {
+      padding: 5px 12px; border-radius: 6px;
+      background: var(--accent-2); color: var(--accent-dk); font-weight: 600;
+    }
+    .doc-view-levels-flow .arrow {
+      color: var(--ink-3); font-size: 14px;
+    }
+
+    /* Frameworks/domains array — large card grid */
+    .doc-view-fw-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .doc-view-fw-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+      border-left: 3px solid var(--accent);
+      transition: box-shadow .15s, transform .15s;
+    }
+    .doc-view-fw-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+    .doc-view-fw-card-head {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .doc-view-fw-card-id {
+      font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700;
+      padding: 3px 9px; border-radius: 5px;
+      background: var(--accent-2); color: var(--accent-dk); flex-shrink: 0;
+    }
+    .doc-view-fw-card-title {
+      font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.3;
+    }
+    .doc-view-fw-card-desc {
+      font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+    }
+    .doc-view-fw-card-stats {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+    }
+    .doc-view-fw-card-stat {
+      font-size: 11px; padding: 3px 9px; border-radius: 5px;
+      background: var(--paper); color: var(--ink-2); font-weight: 500;
+      border: 1px solid var(--border);
+    }
+    .doc-view-fw-card-stat strong { color: var(--accent-dk); font-weight: 700; }
+
+    /* Raw JSON fallback section — collapsed by default, click to expand */
+    .doc-view-raw {
+      border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    }
+    .doc-view-raw summary {
+      padding: 10px 14px; cursor: pointer; user-select: none;
+      font-size: 12px; color: var(--ink-3); font-weight: 600;
+      background: #f8fafc; list-style: none;
+    }
+    .doc-view-raw summary::-webkit-details-marker { display: none; }
+    .doc-view-raw summary::before { content: '▸ '; color: var(--ink-3); display: inline-block; transition: transform .15s; }
+    .doc-view-raw[open] summary::before { transform: rotate(90deg); }
+    .doc-view-raw summary:hover { background: var(--accent-2); color: var(--accent-dk); }
+    .doc-view-raw .json-render { border-radius: 0; border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* JSON pretty-render — light theme with syntax highlight.
+       Replaces the previous terminal-style dark block; far easier to read
+       alongside the rest of the page (which is already light). Tokens are
+       wrapped in <span class="jh-*"> by formatJsonHtml() at runtime. */
+    .json-render {
+      background: #fafbfc; color: #1f2937;
+      padding: 18px 22px; border-radius: 10px;
+      font-family: 'DM Mono', monospace; font-size: 12.5px; line-height: 1.65;
+      white-space: pre-wrap; word-break: break-word;
+      border: 1px solid #e5e7eb;
+    }
+    .json-render .jh-key  { color: #5b21b6; font-weight: 600; }   /* purple keys */
+    .json-render .jh-str  { color: #166534; }                      /* green strings */
+    .json-render .jh-num  { color: #b45309; font-weight: 500; }    /* amber numbers */
+    .json-render .jh-bool { color: #b91c1c; font-weight: 600; }    /* red bool/null */
+    .json-render .jh-null { color: #9ca3af; font-style: italic; }
+    .json-render .jh-punc { color: #9ca3af; }                      /* { } [ ] , : */
+    .json-render .jh-quote { color: #cbd5e1; }                     /* faded quotes */
+
+    /* Cross-ref chips inside JSON viewer — clickable inline tokens for
+       CTS / SKL / PIGP refs. Light-theme variants. */
+    .json-render .task-chip.cts {
+      display: inline-block; padding: 0 6px; margin: 0 1px; border-radius: 4px;
+      background: #ede9fe; color: #5b21b6; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .json-render .task-chip.cts:hover { background: #ddd6fe; }
+    .json-render .hb-tag.skl, .json-render .hb-tag.pigp {
+      display: inline-block; padding: 0 6px; margin: 0 1px; border-radius: 4px;
+      cursor: pointer; font-weight: 600; transition: background 0.15s;
+    }
+    .json-render .hb-tag.skl  { background: #d1fae5; color: #065f46; }
+    .json-render .hb-tag.pigp { background: #fee2e2; color: #991b1b; }
+    .json-render .hb-tag.skl:hover  { background: #a7f3d0; }
+    .json-render .hb-tag.pigp:hover { background: #fecaca; }
+    /* MD render — same idea for prose-style audit docs */
+    .md-render .task-chip.cts {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      background: #ede9fe; color: #4c1d95; font-weight: 600;
+      font-family: 'DM Mono', monospace; font-size: 12px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .md-render .task-chip.cts:hover { background: #ddd6fe; }
+    .md-render .hb-tag.skl, .md-render .hb-tag.pigp {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      cursor: pointer; font-weight: 600; font-family: 'DM Mono', monospace; font-size: 12px;
+    }
+    .md-render .hb-tag.skl  { background: #d1fae5; color: #065f46; }
+    .md-render .hb-tag.pigp { background: #fee2e2; color: #991b1b; }
+
+    /* Reverse-index: 'Referenced by' strip rendered above doc body so the
+       reader sees inbound connections before reading the doc itself. Same
+       visual language as outbound .ref-conn but a different label + icon
+       direction (↘ in instead of ↗ out). */
+    .doc-back {
+      margin: -8px 0 18px; padding: 10px 14px;
+      background: #faf5ff; border: 1px solid var(--accent-2); border-radius: 10px;
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+    .doc-back-label {
+      font-size: 11px; font-weight: 700; color: var(--accent-dk);
+      letter-spacing: 0.04em; text-transform: uppercase; margin-right: 4px;
+    }
+    .doc-back-chip {
+      padding: 3px 10px; border-radius: 6px;
+      background: #fff; color: var(--accent-dk);
+      font-size: 11.5px; font-weight: 500;
+      border: 1px solid var(--accent-2); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 4px;
+      transition: background .12s, border-color .12s;
+    }
+    .doc-back-chip::before {
+      content: '↘'; color: var(--accent); font-weight: 600; font-size: 10.5px;
+    }
+    .doc-back-chip:hover { background: var(--accent-2); border-color: var(--accent); }
+
+    /* Loading + error states */
+    .doc-loading { text-align: center; padding: 60px 20px; color: var(--ink-3); font-size: 13px; }
+    .doc-error { background: #fee2e2; color: #991b1b; padding: 14px 18px; border-radius: 10px; font-size: 13px; }
+
+    /* Print */
+    @media print {
+      .navbar, .ref-toolbar, .ref-shelf, .ref-quick, .doc-modal-close { display: none !important; }
+      .doc-modal-overlay { position: static !important; background: none !important; padding: 0 !important; }
+      .doc-modal { box-shadow: none !important; max-height: none !important; max-width: 100% !important; }
+      body { background: #fff !important; }
+    }
+
+    /* Hidden state for filtered cards (drives both search + facet hide) */
+    .ref-card.filtered-out { display: none !important; }
+
+    @media (max-width: 720px) {
+      .ref-toolbar-inner { padding: 12px 14px 8px; }
+      .ref-shelf { padding: 0 14px; }
+      .ref-quick { padding: 0 14px; }
+      .ref-results { padding: 16px 14px 60px; }
+      .ref-grid { grid-template-columns: 1fr; }
+      .ref-facets { grid-template-columns: 1fr; }  /* stack facets on phone */
+      .ref-shelf-chips { grid-template-columns: 1fr; }  /* stack recents + role pins */
+      .ref-section-blurb { display: none; }  /* free vertical space — title + count carry the section identity */
+      .ref-search { max-width: none; }
+
+      /* Modal: shrink overlay padding + body padding so we don't waste
+         ~15% of a 360-wide screen on margins. */
+      .doc-modal-overlay { padding: 12px; }
+      .doc-modal-head { padding: 14px 16px; }
+      .doc-modal-body { padding: 18px 16px; }
+      .doc-modal-title { font-size: 1.05rem; }
+      .doc-back { padding: 8px 12px; margin: -4px 0 14px; }
+
+      /* Larger tap targets on mobile (WCAG 2.5.5 min ~24px target).
+         Desktop chip is 14px tall — bumping vertical padding gets us to
+         ~24px without breaking the desktop aesthetic. */
+      .ref-tag { padding: 4px 9px; font-size: 11px; }
+      .ref-conn-chip { padding: 5px 11px; font-size: 11.5px; }
+      .doc-back-chip { padding: 5px 12px; font-size: 12px; }
+    }
