@@ -383,6 +383,31 @@ function bootBrowserMode() {
   const schoolGrid = document.getElementById('hbGridSchool');
   if (schoolGrid) renderCardGrid('hbGridSchool', school);
 
+  // Bookshelf strip (2026-05-26) — semantic book-metaphor layer above the
+  // card grid. Each shelf rail renders its bucket's handbooks as vertical
+  // spines so the eye reads "N books across 3 categories" at a glance.
+  // Rails are absent on hubs that don't carry the markup (older clones),
+  // so render is best-effort + skips missing nodes.
+  renderShelfRail('hbShelfInduction', induction);
+  renderShelfRail('hbShelfRole', role);
+  renderShelfRail('hbShelfSchool', school);
+  const setShelfCount = (id, n) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = n;
+  };
+  setShelfCount('shelfCntInduction', induction.length);
+  setShelfCount('shelfCntRole', role.length);
+  setShelfCount('shelfCntSchool', school.length);
+  // Empty shelves hide entirely so we don't render a wood-edge with no
+  // books on it.
+  document.querySelectorAll('.hb-shelf').forEach(shelf => {
+    const railId = shelf.querySelector('.hb-shelf-rail')?.id;
+    const n = railId === 'hbShelfInduction' ? induction.length
+            : railId === 'hbShelfRole'      ? role.length
+            : railId === 'hbShelfSchool'    ? school.length : 0;
+    shelf.classList.toggle('is-empty', n === 0);
+  });
+
   // Seed counts (chip + section count badge for each cat)
   document.getElementById('cntAll').textContent = allHandbooks.length;
   document.getElementById('cntInduction').textContent = induction.length;
@@ -422,6 +447,122 @@ function bootBrowserMode() {
       { threshold: 0 }
     ).observe(sentinel);
   } catch (_) { /* IO unsupported — no shadow, harmless */ }
+}
+
+/* ── Bookshelf spine rendering (2026-05-26) ───────────────────────────
+   Each handbook is rendered as a vertical "spine" — kind-coloured cloth
+   band on the left + Lora vertical title + audience subline + thickness
+   pill + up-to-3 chip-family hints (CTS / AICF / ES / NN). The spine
+   anchor uses the same href contract as .hb-card so click semantics
+   stay identical. Empty rails are rendered as a single muted line so
+   the wood-shelf edge below still reads as a real shelf rather than a
+   stray border. */
+function renderShelfRail(railId, handbooks) {
+  const rail = document.getElementById(railId);
+  if (!rail) return;
+  if (!handbooks.length) {
+    rail.innerHTML = '<div style="padding:8px 4px;color:var(--ink-3);font-size:11px;font-style:italic;">No books on this shelf yet.</div>';
+    return;
+  }
+  rail.innerHTML = handbooks.map(hb => {
+    const kind = hb.handbookKind || 'induction';
+    // Bucket spine-band colour by the same partition the grid uses:
+    // role-operational + aicf-companion share the role band; school-facing
+    // + policy-topic share the school band. Specific kinds keep their own
+    // band when they need to read distinctly (policy-topic amber, aicf
+    // orange) — CSS [data-kind] selectors above pick the right hue.
+    const dataKind = (kind === 'role-operational' || kind === 'aicf-companion') ? 'role'
+                   : (kind === 'school-facing' || kind === 'policy-topic') ? 'school'
+                   : 'induction';
+    const kindEmoji = kind === 'aicf-companion' ? '🤖'
+                    : kind === 'policy-topic'   ? '📜'
+                    : kind === 'school-facing'  ? '🧭'
+                    : kind === 'role-operational' ? '🛡' : '📕';
+    // Audience: prefer subRole label (terse) over platform — spine real
+    // estate is tight. Falls back to primaryReader, then platform.
+    const audienceShort =
+      hb.audience?.subRole
+      || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues[0] : null)
+      || hb.audience?.primaryReader
+      || hb.audience?.platform
+      || '';
+    // Thickness: stages for induction+role; sections for the rest.
+    const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
+    const sections = Array.isArray(hb.sections) ? hb.sections.length : 0;
+    const hasSections = dataKind === 'school' || kind === 'aicf-companion';
+    const thickness = hasSections
+      ? (sections ? `${sections} sec` : '')
+      : (stages ? `${stages} stages` : '');
+    const chips = detectSpineChips(hb).slice(0, 3);
+    const title = hb.title || hb.id;
+    return `
+      <a class="hb-spine" data-kind="${dataKind}" href="handbook?id=${encodeURIComponent(hb.id)}" title="${escapeHtml(title)}">
+        <span class="hb-spine-kind">${kindEmoji}</span>
+        <span class="hb-spine-title">${escapeHtml(title)}</span>
+        <span class="hb-spine-audience">${escapeHtml(audienceShort)}</span>
+        ${thickness ? `<span class="hb-spine-thickness">${escapeHtml(thickness)}</span>` : ''}
+        ${chips.length
+          ? `<span class="hb-spine-chips">${chips.map(c =>
+              `<span class="hb-spine-chip" data-chip="${c.k}" title="${escapeHtml(c.t)}">${c.label}</span>`
+            ).join('')}</span>`
+          : ''}
+      </a>
+    `;
+  }).join('');
+}
+
+/* Detect which chip families this handbook actually anchors to by
+   walking its stages/sections/tasks/items for the canonical ref-field
+   names. Each detected family contributes ONE chip, capped at 3 to
+   protect spine real estate. Pure data inspection — no Firestore reads. */
+function detectSpineChips(hb) {
+  const chips = [];
+  if (handbookHasField(hb, 'cambridge_standard_refs')
+      || handbookHasField(hb, 'cambridgeStandardRefs')
+      || hb.linkedFrameworks?.cts) {
+    chips.push({ k: 'cts', label: 'CTS', t: 'Cambridge Teacher Standards' });
+  }
+  if (handbookHasField(hb, 'aicfRefs')) {
+    chips.push({ k: 'aicf', label: 'AICF', t: 'AI Competency Framework' });
+  }
+  if (handbookHasField(hb, 'eduversalStandardRefs')) {
+    chips.push({ k: 'es', label: 'ES', t: 'Eduversal Academic Standards' });
+  }
+  if (handbookHasField(hb, 'charterNonNegotiables')) {
+    chips.push({ k: 'nn', label: 'NN', t: 'Charter Non-Negotiables' });
+  }
+  if (handbookHasField(hb, 'skl_refs') || handbookHasField(hb, 'sklRefs')) {
+    chips.push({ k: 'skl', label: 'SKL', t: 'Standar Kompetensi Lulusan' });
+  }
+  if (handbookHasField(hb, 'pigp_refs') || handbookHasField(hb, 'pigpRefs')) {
+    chips.push({ k: 'pigp', label: 'PIGP', t: 'Permendiknas 27/2010 PIGP' });
+  }
+  return chips;
+}
+
+/* Recursive any-node-carries-field check. Walks stages[].tasks[] and
+   sections[].items[] and any nested arrays of objects looking for a
+   truthy value on the named field. Stops at the first hit (chip
+   detection doesn't need counts). */
+function handbookHasField(hb, fieldName) {
+  const seen = new WeakSet();
+  function walk(node) {
+    if (!node || typeof node !== 'object') return false;
+    if (seen.has(node)) return false;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) if (walk(item)) return true;
+      return false;
+    }
+    const v = node[fieldName];
+    if (Array.isArray(v) ? v.length > 0 : !!v) return true;
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (child && typeof child === 'object') if (walk(child)) return true;
+    }
+    return false;
+  }
+  return walk(hb);
 }
 
 /* Render an array of handbook docs into a target #grid as cards.
@@ -505,6 +646,13 @@ function applyBrowserFacet(cat) {
     // get the same auto-open-on-pick treatment as /references.
     sec.open = show;
   });
+  // Bookshelf strip mirrors facet — non-matching shelves dim to grey so
+  // the "selected category" reads at a glance, but stays visible so the
+  // user can still scan the whole collection.
+  document.querySelectorAll('.hb-shelf').forEach(shelf => {
+    const inFacet = _browserActiveFacet === 'all' || shelf.dataset.cat === _browserActiveFacet;
+    shelf.classList.toggle('is-dimmed', !inFacet);
+  });
   const sInput = document.getElementById('hbBrowserSearch');
   applyBrowserSearch(sInput ? sInput.value : '');
 }
@@ -533,6 +681,21 @@ function applyBrowserSearch(qRaw) {
     const countEl = sec.querySelector('[data-count-for]');
     if (countEl) countEl.textContent = sectionMatches;
     if (inFacet) totalMatches += sectionMatches;
+  });
+
+  // Bookshelf spines mirror the same filtered-out semantics as cards.
+  // Whole shelf gets dimmed when its category is out-of-facet; individual
+  // spines hide when they don't match the search token.
+  document.querySelectorAll('.hb-shelf').forEach(shelf => {
+    const shelfCat = shelf.dataset.cat;
+    const inFacet = _browserActiveFacet === 'all' || _browserActiveFacet === shelfCat;
+    shelf.classList.toggle('is-dimmed', !inFacet);
+    shelf.querySelectorAll('.hb-spine').forEach(spine => {
+      if (!inFacet) { spine.classList.add('filtered-out'); return; }
+      if (!q) { spine.classList.remove('filtered-out'); return; }
+      const text = (spine.textContent || '').toLowerCase();
+      spine.classList.toggle('filtered-out', !text.includes(q));
+    });
   });
 
   const emptyState = document.getElementById('hbResultsEmpty');
