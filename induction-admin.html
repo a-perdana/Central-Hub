@@ -212,16 +212,6 @@
       line-height: 1.5;
     }
 
-    /* Hub sub-group */
-    .hub-subgroup { margin-bottom: 16px; }
-    .hub-subgroup:last-child { margin-bottom: 0; }
-    .hub-subgroup-label {
-      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-      color: var(--ink-3); padding: 0 12px 8px; display: flex; align-items: center; gap: 8px;
-    }
-    .hub-subgroup-label::after {
-      content: ''; flex: 1; height: 1px; background: var(--border);
-    }
 
     /* ===== BOOKSHELF GRID ===== */
     .bookshelf-row {
@@ -352,11 +342,40 @@
 
     .book-side-pill {
       position: absolute; top: 10px; right: 10px;
-      padding: 2px 7px; border-radius: 999px;
-      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-      background: rgba(255,255,255,0.22); color: #fff;
-      border: 1px solid rgba(255,255,255,0.35);
+      padding: 3px 9px; border-radius: 999px;
+      font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      background: rgba(255,255,255,0.96);
+      box-shadow: 0 2px 6px -1px rgba(0,0,0,0.18);
+      /* colour set per-class below */
     }
+
+    /* Shelf label sits below the book cover — like a library spine tag.
+       Same colour family as the side-pill so hub/reader identity is reinforced. */
+    .book-shelf-label {
+      margin-top: 8px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 9.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      text-align: center;
+      width: fit-content; max-width: 100%;
+      margin-left: auto; margin-right: auto;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* Hub + reader colour families — used by both .book-side-pill and .book-shelf-label */
+    .shelf-pill-hub-th               { background: #dbeafe; color: #1e40af; }
+    .shelf-pill-hub-ah               { background: #dcfce7; color: #166534; }
+    .shelf-pill-hub-ch               { background: #fef3c7; color: #92400e; }
+    .shelf-pill-hub-net              { background: #f1f5f9; color: #475569; }
+    .shelf-pill-hub-ps               { background: #cffafe; color: #155e75; }
+    .shelf-pill-reader-student       { background: #fef3c7; color: #92400e; }
+    .shelf-pill-reader-teacher       { background: #dbeafe; color: #1e40af; }
+    .shelf-pill-reader-parent        { background: #fce7f3; color: #9d174d; }
+    .shelf-pill-reader-staff         { background: #f1f5f9; color: #475569; }
+    .shelf-pill-reader-school-principal { background: #dcfce7; color: #166534; }
+    .shelf-pill-reader-coordinator   { background: #ede9fe; color: #5b21b6; }
 
     .book-footer {
       margin-top: auto;
@@ -991,12 +1010,7 @@
       const meta = KIND_META[kind];
       const total = Object.values(grouped[kind]).reduce((sum, arr) => sum + arr.length, 0);
       const isCollapsed = collapsedGroups.has(kind);
-      const order = PARTNER_SCHOOL_KINDS.has(kind) ? READER_ORDER : HUB_ORDER;
-      // Anything not in the canonical order gets appended at the end so nothing drops on the floor.
-      const knownKeys = order.filter(s => grouped[kind][s]);
-      const extraKeys = Object.keys(grouped[kind]).filter(s => !order.includes(s));
-      const allKeys = [...knownKeys, ...extraKeys];
-      const subgroups = allKeys.map(s => renderSubgroup(kind, s, grouped[kind][s])).join('');
+      const subgroups = renderKindShelf(kind, grouped[kind]);
       return `
         <div class="kind-group" data-kind="${kind}" data-collapsed="${isCollapsed}">
           <div class="kind-group-header" onclick="toggleKindGroup('${kind}')">
@@ -1028,22 +1042,27 @@
     return HUB_META[subKey]?.label || subKey;
   }
 
-  function renderSubgroup(kind, subKey, programs) {
-    const label = subgroupLabel(kind, subKey);
-    const books = programs.map(p => renderBook(p, kind, subKey)).join('');
-    // Each expanded card renders a full-width drawer after the grid cell — so we
-    // emit a separate after-grid container at the subgroup level for any expanded
-    // book in this subgroup. (Each subgroup has its own grid line, so drawers
-    // anchor to the right row visually.)
-    const expandedInSubgroup = programs.filter(p => expandedCards.has(p.id));
-    const drawers = expandedInSubgroup.map(p => renderBookDrawer(p, kind, subKey)).join('');
+  // Render all programs in a single shelf per kind. Hub/reader identity
+  // is conveyed via the side-pill + bottom shelf-label on each book, not
+  // via a separate sub-section divider — keeps the row dense.
+  function renderKindShelf(kind, subgroupedMap) {
+    // Flatten: walk sub-keys in canonical order, then any leftovers.
+    const order = PARTNER_SCHOOL_KINDS.has(kind) ? READER_ORDER : HUB_ORDER;
+    const knownKeys = order.filter(s => subgroupedMap[s]);
+    const extraKeys = Object.keys(subgroupedMap).filter(s => !order.includes(s));
+    const allKeys = [...knownKeys, ...extraKeys];
+    const allPrograms = allKeys.flatMap(s => subgroupedMap[s].map(p => ({ p, subKey: s })));
+
+    const books = allPrograms.map(({ p, subKey }) => renderBook(p, kind, subKey)).join('');
+    const drawers = allPrograms
+      .filter(({ p }) => expandedCards.has(p.id))
+      .map(({ p, subKey }) => renderBookDrawer(p, kind, subKey))
+      .join('');
+
     return `
-      <div class="hub-subgroup">
-        <div class="hub-subgroup-label">${escapeHtml(label)} · ${programs.length}</div>
-        <div class="bookshelf-row">
-          ${books}
-          ${drawers}
-        </div>
+      <div class="bookshelf-row">
+        ${books}
+        ${drawers}
       </div>
     `;
   }
@@ -1057,6 +1076,12 @@
     const sidePillLabel = isPartnerSchool
       ? (READER_META[subKey]?.short || subKey)
       : (HUB_META[subKey]?.short || subKey);
+    const shelfLabel = isPartnerSchool
+      ? (READER_META[subKey]?.label || `${subKey}-facing`)
+      : (HUB_META[subKey]?.label || subKey);
+    const shelfPillClass = isPartnerSchool
+      ? `shelf-pill-reader-${subKey.replace(/_/g, '-')}`
+      : `shelf-pill-hub-${(HUB_META[subKey]?.short || subKey).toLowerCase().replace(/_/g, '-')}`;
     const isExpanded = expandedCards.has(p.id);
     const isBrowseOnly = stages.length === 0 && sections.length === 0;
     return `
@@ -1066,7 +1091,7 @@
           <div class="book-band">
             <span class="book-band-icon">${KIND_META[kind].icon}</span>
             <span class="book-band-kind">${escapeHtml(kindShortLabel(kind))}</span>
-            <span class="book-side-pill">${escapeHtml(sidePillLabel)}</span>
+            <span class="book-side-pill ${shelfPillClass}">${escapeHtml(sidePillLabel)}</span>
           </div>
           <div class="book-body">
             <h3 class="book-title">${escapeHtml(p.title || p.id)}</h3>
@@ -1087,6 +1112,7 @@
             </div>
           </div>
         </div>
+        <div class="book-shelf-label ${shelfPillClass}">${escapeHtml(shelfLabel)}</div>
       </div>
     `;
   }
