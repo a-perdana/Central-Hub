@@ -134,7 +134,7 @@ The legacy `sidebar_config/order` doc + the `dsb-*` CSS / `SIDEBAR_*` JS / `dash
 **Dropdown layout (2026-05-26):** 7 dropdowns — Communications · Curriculum · Coordinators · Operations · Admin · Teacher Programs · My Hub. Three reshuffles landed mid-May 2026 (see root CLAUDE.md Common Mistake #56 for the full timeline):
 - **Network dropdown removed** (2026-05-20) — Partner Schools + Hubs sections folded into Communications (top). Global Search moved to `/index` hero.
 - **Coordinators dropdown split into 3 sections** (2026-05-19/24):
-  - **Departments Workspace** — `department-workspace` (per-subject command centre for HQ Coordinators) + `department-artifacts` (slate archive theme distinguishing it from the live workspace) + `specialist-mentor-review`
+  - **Departments Workspace** — `department-workspace` (per-subject command centre for HQ Coordinators) + `department-artifacts` (slate archive theme distinguishing it from the live workspace) + `walkthroughs` + `walkthrough-review`
   - **Coordinators Workspace** — `coordinators-meetings` + `coordinators-directory` + `coordinators-decisions` + `activities` + `weekly-checklist`
   - **Coordinators Office** — `induction-admin` + `competency-admin` + `ai-maturity-admin` + `orientation-admin` + `checklist-admin` + `page-access` + `console` (admin-only configuration surfaces)
 - **Teacher Programs** dropdown reordered (2026-05-20): Orientation → Induction → Competency → AI Maturity (reflects new-hire timeline).
@@ -223,7 +223,7 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 **Coordinators dropdown — Departments Workspace (2026-05-24):**
 - `department-workspace?subject=<id>` — Subject-scoped command centre for HQ Coordinators. One HTML + a shared JS module (`partials/department-core.js` + `subject-config.js`) renders any of 9 `ch_subjects` (incl. `edu_steam` added 2026-05-25). 4 MVP sections: Overview KPI (5 tiles including Stage Coverage) + Annual Plan bound to `activities` + Subject Leaders live cards + Discussion Topics free-text. Canonical subject hero matches picker-card identity (subject SVG pattern on card head). Cambridge-aligned subject card redesign + live KPIs + coverage bar with hover pacing jumps + density toggle (Compact/Comfortable/Detailed). Backed by `department_notes/{subjectId}/sections/{sectionId}` + the existing department_office collections. Rule helper: `isSubjectOwner()`.
 - `department-artifacts` — Slate archive theme (visually distinguished from the live workspace) for the per-subject artifact repo. Cambridge-syllabus-card parity with workspace.
-- `specialist-mentor-review` — Canonical Knowledge/mor hero (replacing the prior sidebar layout, 2026-05-25).
+- `walkthrough-review` (renamed from `specialist-mentor-review` 2026-05-26) — Canonical Knowledge/mor hero (replacing the prior sidebar layout, 2026-05-25).
 
 **Coordinators dropdown — Coordinators Workspace:**
 - `coordinators-meetings` — Meetings + agenda items. About-strip moved below the search bar (2026-05-24). Hero icon dropped + about-strip widened to match crumb-bar width.
@@ -306,7 +306,7 @@ Every CH feature page (user-facing content surface — NOT dashboard, NOT admin 
 **Adopted (24+, current pace ~5/week):**
 - **Communication / cyan:** notifications, messageboard, announcements, console, survey-console
 - **Knowledge / mor:** references, roles-positions, library (partial — Featured Bookshelf embedded), handbook (post-2026-05-25 spine-modal redesign), competency-framework, learning-path (renamed from specialist-path), coordinators-meetings, coordinators-directory, coordinators-decisions, certificates, certificate-verify, department-artifacts (slate archive variant)
-- **My Work / dark:** my-induction, my-school-visits, activities, weekly-checklist, induction-admin, ai-maturity-admin, orientation-admin, competency-admin, competency-portfolio, department-workspace, specialist-mentor-review
+- **My Work / dark:** my-induction, walkthroughs, activities, weekly-checklist, induction-admin, ai-maturity-admin, orientation-admin, competency-admin, competency-portfolio, department-workspace, walkthrough-review
 
 **Adoption-batch patterns:**
 - Most admin tools picked up canonical hero + info strip + canonical footer together (single design-system pass). 2026-05-19/26: induction-admin, competency-{admin,framework,portfolio}, ai-maturity-admin, orientation-admin all migrated in one trajectory.

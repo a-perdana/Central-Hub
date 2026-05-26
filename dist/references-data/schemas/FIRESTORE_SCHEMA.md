@@ -344,9 +344,6 @@ Bypass list is identical to the rule layer (admin / coordinator / director). Emp
 **Writers:** `central_admin` (any field); AH admin / AH user with same `schoolId` (own school's ratings/evidence/strengths/improvements).
 **Read:** any Central Hub or Academic Hub user.
 
-#### `school_appraisals_archive_v1/{docId}` ✅ retired 2026-05-03
-The legacy school-appraisals collection (pre-`_v2`) was retired. It held a single misplaced doc (`main_handbook`, a handbook record that belonged in `ease_system/main_handbook`); no client code read or wrote it. The doc was moved here as `school_appraisals_archive_v1/main_handbook` (with `__archivedAt` + `__archivedFrom` markers) for historical reference, and the source collection was dropped from Firestore + rules. **Read/write: central_admin only.** No new code should reference this; it's a tombstone. Migration script: `scripts/school-appraisals-cleanup/inspect-and-archive.js`.
-
 #### `appraisal_cycles/{docId}`
 **PK:** auto-id.
 **Fields:** `name`, `startDate`, `endDate`, `status`, `createdAt`.
@@ -566,14 +563,14 @@ Reusable newsletter templates saved from `mail-composer.html` ("Save as Template
 
 Single collection backing **two surfaces** (discriminated by `visitType`):
 - `/school-visits` (Operations dropdown, HQ-aggregate lens) — institutional visits across all schools, all visitors. `visitType ∈ {'introductory', 'monitoring_onsite', 'midyear_online', 'validation_onsite', 'followup', 'coordinator_note'}`.
-- `/my-school-visits` (Department Office > Workspace, Specialist lens, 2026-05-19) — CH coordinator's own 15-school appraisal walkthrough log (Window 2-4 of specialist induction). `visitType: 'specialist_walkthrough'`.
+- `/walkthroughs` (Department Office > Workspace, Specialist lens, 2026-05-19) — CH coordinator's own 15-school appraisal walkthrough log (Window 2-4 of specialist induction). `visitType: 'specialist_walkthrough'`.
 
 **PK:** auto-id.
 **Fields (common):** `schoolId →partner_schools.id`, `visitDate` (YYYY-MM-DD string), `visitType` (enum above), `outcome` (`'on_track'`/`'needs_support'`/`'critical_attention'`/null), `purpose`, `visitedBy` (free-text name), `followUpDate`, `strengths`, `areasImprovement`, `observations`, `actionItems[]`, `createdBy` (email), `createdAt`, `updatedAt`.
 **Fields (specialist_walkthrough only):** `specialistUid →users.uid`, `subjectArea ⊂ ch_subjects[] enum`, `windowPhase` (`'W2_apprenticeship'` / `'W3_solo'` / `'W4_initiative'`), `walkthroughType` (`'observe_mentor'` / `'co_led'` / `'solo_mentor_present'` / `'solo_with_review'` / `'solo'` / `'initiative_pilot'`), `mentorPresent` (boolean), `notesState` (`'draft'`/`'submitted'`/`'mentor_reviewed'`/`'finalized'`), `actionItemsText` (free-text Go/next-step from the specialist), `mentorUid →users.uid?` (Window 2).
-**Mentor-review fields** (written by `/specialist-mentor-review`, NN2-confidential): `mentorReviewNote` (free-text coaching feedback shown back to specialist in `/my-school-visits` modal), `mentorReviewBy` (mentor display name), `mentorReviewUid →users.uid`, `mentorReviewAt` (serverTimestamp).
-**Writers:** any `isCentralUser()` — page UI restricts editing to own docs (own `specialistUid`); `central_admin` override. Mentor review fields written exclusively from `/specialist-mentor-review` (director-gated).
-**Read scope:** any `isCentralUser()` — Operations view (`/school-visits`) masks confidential fields (`observations` / `strengths` / `areasImprovement` / `actionItemsText` hidden, replaced by NN2 banner) when `visitType == 'specialist_walkthrough'`; Specialist view (`/my-school-visits`) filters `where('specialistUid', '==', currentUid)` client-side; Mentor view (`/specialist-mentor-review`) sees all walkthroughs across the network.
+**Mentor-review fields** (written by `/walkthrough-review`, NN2-confidential): `mentorReviewNote` (free-text coaching feedback shown back to specialist in `/walkthroughs` modal), `mentorReviewBy` (mentor display name), `mentorReviewUid →users.uid`, `mentorReviewAt` (serverTimestamp).
+**Writers:** any `isCentralUser()` — page UI restricts editing to own docs (own `specialistUid`); `central_admin` override. Mentor review fields written exclusively from `/walkthrough-review` (director-gated).
+**Read scope:** any `isCentralUser()` — Operations view (`/school-visits`) masks confidential fields (`observations` / `strengths` / `areasImprovement` / `actionItemsText` hidden, replaced by NN2 banner) when `visitType == 'specialist_walkthrough'`; Specialist view (`/walkthroughs`) filters `where('specialistUid', '==', currentUid)` client-side; Mentor view (`/walkthrough-review`) sees all walkthroughs across the network.
 **Indexes:** `(specialistUid ASC, visitType ASC, visitDate DESC)` for specialist lens; `(visitType ASC, visitDate DESC)` for mentor review queue + Operations type filter.
 **Notes:** Phase 2 plan in [`Central Hub/firestore.rules`](../../Central Hub/firestore.rules:1742) — tighten to "owner-only update + admin override" once `createdByUid` is universally populated. Charter NN1+NN2 — Window 2-4 walkthrough records belong to specialist's induction journey and are CONFIDENTIAL between specialist ↔ mentor ↔ HQ Director. The 3-surface boundary is rule-enforced today only by client-side UI masking (NOT by Firestore rules — adding field-level rules would require splitting the collection or adding rule-level resource.data checks; Phase 2 candidate).
 
@@ -1734,7 +1731,7 @@ Things this schema knows are inconsistent. Prioritise these in upcoming refactor
 | Pair | Issue |
 |---|---|
 | ~~`feedback` + `feedbacks`~~ | ✅ **Consolidated 2026-05-03.** All hubs now write to `feedbacks` with `__src` discriminator; old `feedback` rule removed; data migrated by `scripts/feedback-merge/merge-feedback-into-feedbacks.js`. |
-| ~~legacy school appraisals collection~~ | ✅ **Retired 2026-05-03.** The legacy collection (pre-`_v2`) had a single misplaced doc (a handbook); archived to `school_appraisals_archive_v1` and source deleted. Only `school_appraisals_v2` remains in active use. |
+| ~~legacy school appraisals collection~~ | ✅ **Retired 2026-05-03, archive dropped 2026-05-26.** The legacy collection (pre-`_v2`) had a single misplaced doc (a handbook); archived to `school_appraisals_archive_v1` 2026-05-03 and source deleted. The archive itself was dropped 2026-05-26 (1 doc, no readers) — only `school_appraisals_v2` remains. |
 | `central_documents` + `documents` | Different purposes (HQ docs vs. AH docs) but the name overlap is confusing — consider renaming `documents` to `academic_documents`. |
 | `competency_certificates` + `central_certificates` | Different purposes; names invite confusion. |
 

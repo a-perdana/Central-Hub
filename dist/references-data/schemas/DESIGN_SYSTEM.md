@@ -234,13 +234,13 @@ If you need `z-index: 9999`, you're fighting the system. Stop and check whether 
 
 Feature pages (user-facing content surfaces — NOT dashboards, NOT admin/authoring tools) belong to one of **four families**. The family chooses the hero gradient + accent; the page does not pick its own colour scheme.
 
-**Why this exists:** the 2026-05-19 audit found 6 hero gradients across 6 hero-bearing CH pages (notifications cyan, library dark-purple, references mor, handbook mor, my-induction dark-card, roles-positions dark-card, my-school-visits 3-window). Each carried 50-300 lines of bespoke hero CSS. The families collapse that to 3 canonical gradients consumed via `data-accent` on `.page-hero`.
+**Why this exists:** the 2026-05-19 audit found 6 hero gradients across 6 hero-bearing CH pages (notifications cyan, library dark-purple, references mor, handbook mor, my-induction dark-card, roles-positions dark-card, walkthroughs 3-window). Each carried 50-300 lines of bespoke hero CSS. The families collapse that to 3 canonical gradients consumed via `data-accent` on `.page-hero`.
 
 | Family | Accent | Pages | Hero variant |
 |---|---|---|---|
 | **Communication** — feeds, threads, broadcast | cyan `#0891b2` | `message-board`, `announcements`, `notifications` | `data-accent="cyan"` → `--hero-grad-cyan` |
 | **Knowledge** — read/browse content, reference, taxonomy | mor `#6c5ce7` | `references`, `handbook`, `library`, `roles-positions` | `data-accent="mor"` → `--hero-grad-mor` |
-| **My Work** — per-uid CPD / induction / personal surfaces | mor on dark | `my-induction`, `my-school-visits` | `data-accent="dark"` → `--hero-grad-dark` |
+| **My Work** — per-uid CPD / induction / personal surfaces | mor on dark | `my-induction`, `walkthroughs` | `data-accent="dark"` → `--hero-grad-dark` |
 | **Operations** — record-keeping, inventory, logs | neutral (no hero accent stripe) | `documents` / `inventory` | no hero — plain `<h1 class="page-title">` |
 
 **Canonical markup** (in any feature page that has a hero):

@@ -456,16 +456,18 @@ const htmlFiles = [
   // Single page renders any of 9 ch_subjects via ?subject= query;
   // shared JS lives in partials/department-core.js + subject-config.js.
   "department-workspace.html",
-  // Specialist appraisal walkthrough lens (2026-05-19) — Department Office >
-  // Workspace. Coordinator-gated own 15-school visit + Window 2/3/4 progress.
-  // Shares school_visits collection with /school-visits (Operations) via
-  // visitType: 'specialist_walkthrough' discriminator.
-  "my-school-visits.html",
-  // Mentor review queue (2026-05-19) — Department Office > Workspace. Director-
-  // only. HQ Director sees submitted specialist walkthroughs, leaves NN2-
-  // confidential coaching feedback, flips notesState 'submitted' →
-  // 'mentor_reviewed' (or back to 'draft' for revision).
-  "specialist-mentor-review.html",
+  // Specialist appraisal walkthrough log (2026-05-19; renamed from
+  // my-school-visits 2026-05-26) — Department Office > Workspace. Coordinator-
+  // gated own 15-school visit + Window 2/3/4 progress. Shares school_visits
+  // collection with /school-visits (Operations) via visitType:
+  // 'specialist_walkthrough' discriminator.
+  "walkthroughs.html",
+  // Walkthrough review queue (2026-05-19; renamed from specialist-mentor-review
+  // 2026-05-26) — Department Office > Workspace. Director-only. HQ Director
+  // sees submitted specialist walkthroughs, leaves NN2-confidential coaching
+  // feedback, flips notesState 'submitted' → 'mentor_reviewed' (or back to
+  // 'draft' for revision).
+  "walkthrough-review.html",
 ];
 
 htmlFiles.forEach((file) => {
