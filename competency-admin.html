@@ -555,8 +555,8 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
 });
 
 // `competency-admin?track=teachers|leaders|specialists` → preselect the
-// matching platform filter chip + show a banner explaining we're standing
-// in for a dedicated framework viewer page (which is on the roadmap).
+// matching platform filter chip + show a banner with a deep-link to the
+// dedicated framework viewer page (live since 2026-05-22 / 2026-05-23).
 // Track → competency_evidence.platform mapping:
 //   teachers    → 'teachers'   (TH subject_teacher / subject_leader)
 //   leaders     → 'academic'   (AH leadership sub-roles)
@@ -566,7 +566,14 @@ function applyTrackParamFromUrl() {
   const track = params.get('track');
   if (!track) return;
   const TRACK_TO_PLATFORM = { teachers: 'teachers', leaders: 'academic', specialists: 'central' };
-  const TRACK_LABEL = { teachers: 'Teachers Framework (CTS 2023)', leaders: 'Leaders Framework (CSL 2023)', specialists: 'Specialist Framework (hybrid)' };
+  const TRACK_LABEL = { teachers: 'Teachers Framework (CTS 2023)', leaders: 'Leaders Framework (CSLS 2023)', specialists: 'Specialist Framework (hybrid)' };
+  // Per-track deep-link into the framework viewer + learning-path page
+  // (shared slugs across hubs via page_access_config.platforms[]).
+  const TRACK_VIEWER = {
+    teachers:    { framework: 'https://teachershub.eduversal.org/competency-framework', path: 'https://teachershub.eduversal.org/learning-path' },
+    leaders:     { framework: 'https://academichub.eduversal.org/CompetencyFramework', path: 'https://academichub.eduversal.org/LearningPath' },
+    specialists: { framework: '/competency-framework',                                   path: '/learning-path' },
+  };
   const platform = TRACK_TO_PLATFORM[track];
   if (!platform) return;
   platFilter = platform;
@@ -579,14 +586,18 @@ function applyTrackParamFromUrl() {
     }
   });
   // Banner — sits at the top of the page main, dismissable per session.
+  const viewer = TRACK_VIEWER[track];
+  const isCrossHub = track !== 'specialists';
   const banner = document.createElement('div');
   banner.style.cssText = 'background:linear-gradient(135deg,#6c5ce7 0%,#0891b2 100%);color:#fff;padding:14px 20px;margin:0 0 20px;border-radius:10px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 12px rgba(108,92,231,0.18)';
   banner.innerHTML = `
     <div style="font-size:22px;line-height:1">🎯</div>
     <div style="flex:1">
       <div style="font-weight:600;font-size:15px;margin-bottom:2px">${TRACK_LABEL[track]}</div>
-      <div style="font-size:13px;opacity:0.92">Showing evidence for the ${track} track. A dedicated framework viewer page is on the roadmap; until then this filtered Competency Admin view stands in.</div>
+      <div style="font-size:13px;opacity:0.92">Filtered to the ${track} track. Open the framework viewer or learning path to see what the user sees — this page is the HQ-side review queue.</div>
     </div>
+    <a href="${viewer.framework}"${isCrossHub ? ' target="_blank" rel="noopener"' : ''} style="background:rgba(255,255,255,0.18);border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">Framework →</a>
+    <a href="${viewer.path}"${isCrossHub ? ' target="_blank" rel="noopener"' : ''} style="background:rgba(255,255,255,0.18);border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">Learning Path →</a>
     <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1" aria-label="Dismiss">×</button>
   `;
   const main = document.querySelector('main') || document.body;
