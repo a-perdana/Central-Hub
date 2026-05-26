@@ -127,9 +127,20 @@ const isAdmin = profile?.role_centralhub === 'central_admin';
 
 ## Navigation
 
-`index.html` has **no sidebar** — the shared navbar (`partials/navbar.html`) is the sole navigation surface. Removed 2026-05-05 because navbar dropdowns (Network / Communications / Curriculum / Operations / Admin / My Specialist CPD) already cover every page; the sidebar duplicated them.
+`index.html` has **no sidebar** — the shared navbar (`partials/navbar.html`) is the sole navigation surface. Removed 2026-05-05 because navbar dropdowns already cover every page; the sidebar duplicated them.
 
 The legacy `sidebar_config/order` doc + the `dsb-*` CSS / `SIDEBAR_*` JS / `dash-sidebar` markup are gone. Page-access gating still happens through navbar `[data-nav-key]` / `[data-nav-page]` attributes; auth-guard's `.dsb-section-wrap` / `.dsb-section-label` handling was removed at the same time.
+
+**Dropdown layout (2026-05-26):** 7 dropdowns — Communications · Curriculum · Coordinators · Operations · Admin · Teacher Programs · My Hub. Three reshuffles landed mid-May 2026 (see root CLAUDE.md Common Mistake #56 for the full timeline):
+- **Network dropdown removed** (2026-05-20) — Partner Schools + Hubs sections folded into Communications (top). Global Search moved to `/index` hero.
+- **Coordinators dropdown split into 3 sections** (2026-05-19/24):
+  - **Departments Workspace** — `department-workspace` (per-subject command centre for HQ Coordinators) + `department-artifacts` (slate archive theme distinguishing it from the live workspace) + `specialist-mentor-review`
+  - **Coordinators Workspace** — `coordinators-meetings` + `coordinators-directory` + `coordinators-decisions` + `activities` + `weekly-checklist`
+  - **Coordinators Office** — `induction-admin` + `competency-admin` + `ai-maturity-admin` + `orientation-admin` + `checklist-admin` + `page-access` + `console` (admin-only configuration surfaces)
+- **Teacher Programs** dropdown reordered (2026-05-20): Orientation → Induction → Competency → AI Maturity (reflects new-hire timeline).
+- **Performance Management moved into Network Insights column** (2026-05-20) — semantic regrouping.
+
+The `groupKeys` map at the bottom of `partials/navbar.html` is the canonical inventory of which slugs belong to which dropdown for trigger-highlight purposes. Search there before assuming a slug's parent dropdown.
 
 ---
 
@@ -208,7 +219,19 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 
 **Curriculum:** `igcse-syllabus`, `as-alevel-syllabus`, `primary-checkpoint-syllabus`, `secondary-checkpoint-syllabus`, `curriculum-map`, `national-alignment` (Cambridge ↔ KM), `igcse-{math,biology,chemistry,physics}-pacing` (IGCSE), `checkpoint-{math,english,science}-pacing` (Lower Secondary, also has Progression Grid tab), `as-alevel-{math,biology,chemistry,physics}-pacing`, `teaching-progress` (real-time across all 11 subjects)
 
-**Operations:** `appraisals`, `school-appraisals`, `teacher-appraisals`, `activities` (kanban), `school-visits`, `kpi-admin`, `reports`. **Legacy / retired:** `ease-system` (4-cycle handbook, kept as historical reference — superseded 2026-05-11 by EASE Growth + chapter tests); `assessments` (retired landing-page stub, redirects to `index`). **Moved to Curriculum:** `assessment-management` → "Pacing Assessments" (lives under Curriculum > Pacing Assessments since 2026-05-11).
+**Operations:** `appraisals`, `school-appraisals`, `teacher-appraisals`, `activities` (kanban, sidebar dropped 2026-05-25, canonical My Work hero + board pills row), `school-visits`, `kpi-admin`, `reports`. **Legacy / retired:** `ease-system` (4-cycle handbook, kept as historical reference — superseded 2026-05-11 by EASE Growth + chapter tests); `assessments` (retired landing-page stub, redirects to `index`). **Moved to Curriculum:** `assessment-management` → "Pacing Assessments" (lives under Curriculum > Pacing Assessments since 2026-05-11).
+
+**Coordinators dropdown — Departments Workspace (2026-05-24):**
+- `department-workspace?subject=<id>` — Subject-scoped command centre for HQ Coordinators. One HTML + a shared JS module (`partials/department-core.js` + `subject-config.js`) renders any of 9 `ch_subjects` (incl. `edu_steam` added 2026-05-25). 4 MVP sections: Overview KPI (5 tiles including Stage Coverage) + Annual Plan bound to `activities` + Subject Leaders live cards + Discussion Topics free-text. Canonical subject hero matches picker-card identity (subject SVG pattern on card head). Cambridge-aligned subject card redesign + live KPIs + coverage bar with hover pacing jumps + density toggle (Compact/Comfortable/Detailed). Backed by `department_notes/{subjectId}/sections/{sectionId}` + the existing department_office collections. Rule helper: `isSubjectOwner()`.
+- `department-artifacts` — Slate archive theme (visually distinguished from the live workspace) for the per-subject artifact repo. Cambridge-syllabus-card parity with workspace.
+- `specialist-mentor-review` — Canonical Knowledge/mor hero (replacing the prior sidebar layout, 2026-05-25).
+
+**Coordinators dropdown — Coordinators Workspace:**
+- `coordinators-meetings` — Meetings + agenda items. About-strip moved below the search bar (2026-05-24). Hero icon dropped + about-strip widened to match crumb-bar width.
+- `coordinators-directory` — Canonical Knowledge / mor hero (2026-05-24).
+- `coordinators-decisions` — Decisions register. Info strip on every Coordinators-menu page (2026-05-25).
+- `activities` — kanban (see Operations above; same canonical hero refactor 2026-05-25 — sidebar dropped, board pills row + section card + table chrome polished, `.page-wrap` clamped to 1200 px).
+- `weekly-checklist` — Canonical My Work / dark hero (2026-05-25). Sub-role tabs + handbook pill folded into the week-nav strip (out of the hero) so the hero stays clean. `cat-filter` row slots the role tabs + handbook pill together.
 
 **Survey + Certificates:** `surveys`, `survey-console`, `certificates`, `certificate-verify` (no auth guard)
 
@@ -216,7 +239,10 @@ CH is the **rules host + cross-platform admin tool**. It touches almost every co
 
 **Specialist CPD (4-page set for HQ Subject Specialists):** `competency-framework`, `learning-path`, `specialist-portfolio`, `specialist-certificates`. The framework + path pages were renamed from `specialist-framework` → `competency-framework` (2026-05-22) and `specialist-path` → `learning-path` (2026-05-23) for cross-hub parity with AH; CH owns the Specialist track, AH owns the Leadership track, both surfaced on the same two slugs via `page_access_config.platforms[]`.
 
-**Induction (HQ-side):** `induction-admin`, `my-induction`, `handbook` — `handbook` is **dual-mode** (2026-05-14): `/handbook` no-params is the browser catalogue of all 10 docs (3 induction `docs/induction/` + 7 role-operational `docs/handbooks/`) with handbookKind / hub / sub-role filter chips; `/handbook?id=<programId>` is the reader (sticky TOC + scroll-spy + 5 chip families: CTS / SKL / PIGP / CL / NN). NN chips load from [`docs/induction/INDUCTION_CHARTER.json`](../docs/induction/INDUCTION_CHARTER.json). See root CLAUDE.md "Handbook Ecosystem" for cross-link discipline.
+**Induction (HQ-side):** `induction-admin`, `my-induction`, `handbook`.
+- `induction-admin` — central_admin only; canonical `.page-hero` (My Work / dark) + info strip + canonical footer (2026-05-25). **Programs tab redesign (2026-05-25):** replaced flat list with a **bookshelf grid** — one shelf per `handbookKind` (induction · role-operational · school-facing), spine cards per handbook. Director scope (2026-05-25): only `director` sub-role sees ALL programs; coordinators see only the 3 induction handbooks. Semantic grouping reads `handbookKind > primaryReader` rather than the prior `platform` discriminator — `partner-school` platform handbooks (~19 docs) were silently dropped by the old subgroup logic until fixed.
+- `my-induction` — Specialist mentee dashboard with 4-window timeline + 10-walkthrough cycle.
+- `handbook` — dual-mode (2026-05-14, redesigned 2026-05-25): browser (`/handbook` no params) shows the bookshelf strip + spine modal + filter chips + card grid; reader (`/handbook?id=<programId>`) is sticky TOC + scroll-spy + 5 chip families (CTS / SKL / PIGP / CL / NN). NN chips load from [`docs/induction/INDUCTION_CHARTER.json`](../docs/induction/INDUCTION_CHARTER.json). See root CLAUDE.md "Handbook Ecosystem" for cross-link discipline.
 
 **Activities + Cambridge:** `cambridge-calendar`, `cambridge-standards`
 
@@ -274,18 +300,33 @@ All pages share **`shared-styles.css`** (build-injected before the first `<style
 - `display: none` overrides for admin-only elements
 - **NEVER** override `.page-hero` background, `.page-hero__inner` layout, or `.page-hero__kpi*` chrome — those come from tokens. Page-local extras (a title stripe, a custom pill in the eyebrow row) must use page-local class names.
 
-### Page Hero Standard (2026-05-19)
+### Page Hero Standard (2026-05-19, expanded through 2026-05-26)
 
 Every CH feature page (user-facing content surface — NOT dashboard, NOT admin tool) belongs to one of four families and uses the canonical `.page-hero` markup. See root [`CLAUDE.md`](../CLAUDE.md) "Design System — Page Families" + [`docs/architecture/DESIGN_SYSTEM.md`](../docs/architecture/DESIGN_SYSTEM.md) "Page families & canonical hero" for the family table + markup snippet.
 
-**Adopted (7):** notifications, references, roles-positions, messageboard, announcements, my-induction, my-school-visits.
+**Adopted (24+, current pace ~5/week):**
+- **Communication / cyan:** notifications, messageboard, announcements, console, survey-console
+- **Knowledge / mor:** references, roles-positions, library (partial — Featured Bookshelf embedded), handbook (post-2026-05-25 spine-modal redesign), competency-framework, learning-path (renamed from specialist-path), coordinators-meetings, coordinators-directory, coordinators-decisions, certificates, certificate-verify, department-artifacts (slate archive variant)
+- **My Work / dark:** my-induction, my-school-visits, activities, weekly-checklist, induction-admin, ai-maturity-admin, orientation-admin, competency-admin, competency-portfolio, department-workspace, specialist-mentor-review
 
-**Intentionally skipped (3):**
-- `handbook.html` — `handbook-reader.css` is shared with AH+TH via [`shared-design/`](../shared-design/), so swapping `.hero` → `.page-hero` here breaks AH+TH handbook rendering. Cross-hub refactor required (sync canonical CSS into all 3 hubs' handbook-reader.css first).
+**Adoption-batch patterns:**
+- Most admin tools picked up canonical hero + info strip + canonical footer together (single design-system pass). 2026-05-19/26: induction-admin, competency-{admin,framework,portfolio}, ai-maturity-admin, orientation-admin all migrated in one trajectory.
+- Coordinators-menu pages got the same treatment in a batch (2026-05-24/25) including info strips that explain the page's scope inside the Coordinators dropdown reshuffle.
+- `console` adopted the canonical Communication-family hero 2026-05-25, dropping a custom hero clamp + replacing the rows-per-page toolbar layout.
+
+**Intentionally skipped:**
 - `library.html` — Featured Bookshelf is embedded *inside* the hero block. Canonical `.page-hero__inner` is a flex container with title + KPI slots; the bookshelf grid doesn't fit. Either extract the shelf to a separate section (UX change) or extend the canonical with a `.page-hero__extras` slot first.
 - `inventory.html` — Already Operations-family compliant (no hero, plain `<h1>` in `.main-header`). No refactor needed.
 
-**When adding a new feature page**, default to the canonical hero. The only legitimate reason to skip is one of the three above (cross-hub coupling, embedded non-canonical content, Operations family). Inventing a new gradient in a page `<style>` block is a regression — see root CLAUDE.md Common Mistake #50.
+**When adding a new feature page**, default to the canonical hero. Inventing a new gradient in a page `<style>` block is a regression — see root CLAUDE.md Common Mistake #50.
+
+### Info Strip (2026-05-25/26)
+
+Admin tools, framework pages, and the handbook browser now consistently ship a `<section class="page-info-strip">` block between the hero and the toolbar. Structure: flow line + pills row + optional callout. Tells the reader what the page is for, who can do what, and any Charter / confidentiality boundary. See root CLAUDE.md "Info Strip Pattern" for the cross-hub spec. CH-specific accent: Coordinators-dropdown pages get a cyan-deep variant (`.is-coordinators-strip`) matching the Coordinators-dropdown identity.
+
+### Canonical `.page-footer` (2026-05-23/25)
+
+The 4 Communications pages, the Competency suite (admin + framework + portfolio), the AI Maturity Admin, Induction Admin, Orientation Admin, /handbook, /references, and the Coordinators-menu pages all adopted the canonical `<footer class="page-footer">` block in a sequence of design-system passes. CTA button gradient is overridden per-page to match the family accent (cyan / mor / dark). See root CLAUDE.md Common Mistakes #54 (`body:has(> .page-footer)` flex trap) + #55 (3-part contract).
 
 **Legacy 3-wrapper pages** (`.hero` + `.hero-inner` + `.page-wrap` — currently `checklist-admin`, `kpi-admin`, and a handful of older admin tools) must keep horizontal padding on the INNER wrappers, NOT on the outer `.hero`. If `.hero` carries `padding: X 40px 0` and `.hero-inner` is just `max-width:1200; margin:0 auto`, the hero text sits 40 px left of the `.page-wrap` content column on viewports > 1280 px — the clamp-then-pad order is asymmetric (hero pads BEFORE clamping the inner box, page-wrap pads INSIDE its clamp). Past incident 2026-05-21 on `/checklist-admin`. Fix pattern: `.hero { padding: 36px 0 0; }` + `.hero-inner { max-width:1200; margin:0 auto; padding: 0 40px; }` + `.page-wrap { max-width:1200; margin:0 auto; padding: 28px 40px 72px; }`. See `docs/architecture/DESIGN_SYSTEM.md` "Hero ↔ page-wrap alignment" for the full rule.
 
