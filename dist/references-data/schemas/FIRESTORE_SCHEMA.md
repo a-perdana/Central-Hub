@@ -451,13 +451,15 @@ Single-doc aggregator (Phase 4). For every Cambridge Teacher Standards (2023) ID
 #### `user_competencies/{uid}`
 **PK:** `uid`.
 **Fields (per-track namespace):**
-- TH (`teachers` track): `earned{compId: {level, date}}`, `matDone{matId: bool}`, `saScores{"${compId}/${lvl}/${itemIdx}": 1-4}`.
+- TH (`teachers` track): `earned{compId: {level, date}}`, `matDone{matId: bool}`, `saScores_teacher{"${compId}/${lvl}/${itemIdx}": 1-4}` (renamed from bare `saScores` 2026-05-26 for cross-hub symmetry — see "Renamed fields" note below).
 - AH (`leaders` track): `earned_academic{}`, `matDone_academic{}`, `saScores_academic{}`.
 - CH (`specialists` track): `earned_central{}`, `saScores_central{}` (no `matDone_central` — Specialist learning-path does not yet ship the MAT-done step).
 
-`saScores*` is the per-user self-assessment map written by each hub's `/learning-path` modal SA picker and read by the matching `/competency-framework` page's "Avg Self-Assessment" KPI tile. Key shape `${compId}/${lvl}/${itemIdx}` where `itemIdx` is the 0-indexed position in the level's `selfAssessment[]` statements; value is 1-4 (Awareness/Practitioner/Advanced/Lead). Empty map → KPI tile degrades to "No self-assessments yet".
+`saScores_*` is the per-user self-assessment map written by each hub's `/learning-path` modal SA picker and read by the matching `/competency-framework` page's "Avg Self-Assessment" KPI tile. Key shape `${compId}/${lvl}/${itemIdx}` where `itemIdx` is the 0-indexed position in the level's `selfAssessment[]` statements; value is 1-4 (Awareness/Practitioner/Advanced/Lead). Empty map → KPI tile degrades to "No self-assessments yet".
 
-**Writers:** owner only (each hub writes only its own track's namespace); `central_admin` + CH reviewers may write any field for `/competency-admin` approval flows. Field-name namespace per hub is load-bearing — CH writing `saScores` (bare) would silently shadow the TH user's data on the same uid. See root CLAUDE.md "Role Architecture" for the precedent.
+**Writers:** owner only (each hub writes only its own track's namespace); `central_admin` + CH reviewers may write any field for `/competency-admin` approval flows. Field-name namespace per hub is load-bearing — every hub must read/write only its own namespaced field. Past pre-rename incident (CH writing bare `saScores` shadowed the TH user's data on the same uid) drove the rename: TH now uses `saScores_teacher`, symmetric with `saScores_academic` / `saScores_central`. See root CLAUDE.md "Role Architecture" for the precedent.
+
+**Renamed fields (2026-05-26):** TH `saScores` → `saScores_teacher`. The pre-pilot data was dummy, so no migration script ran — code in `Teachers Hub/competency-framework.html` + `learning-path.html` was point-rewritten and any user who had a `saScores` map on `user_competencies/{uid}` will read it as "empty" after the rename (fine for pre-pilot). If real TH SA data ever exists in production at rename-time again, ship a one-shot script that copies `saScores` → `saScores_teacher` + `FieldValue.delete()` the old field per doc.
 
 #### `competency_evidence/{evId}`
 **PK:** auto-id.
