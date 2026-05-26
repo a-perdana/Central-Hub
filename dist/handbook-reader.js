@@ -486,13 +486,16 @@ function renderShelfRail(railId, handbooks) {
       || hb.audience?.primaryReader
       || hb.audience?.platform
       || '';
-    // Thickness: stages for induction+role; sections for the rest.
+    // Thickness pill: stages for induction+role; sections for the rest.
+    // Glyph + count reads as a content-volume cue ("how thick is this
+    // book?") at a glance — much clearer than the earlier "13 sec" which
+    // some readers parsed as "13 seconds".
     const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
     const sections = Array.isArray(hb.sections) ? hb.sections.length : 0;
     const hasSections = dataKind === 'school' || kind === 'aicf-companion';
     const thickness = hasSections
-      ? (sections ? `${sections} sec` : '')
-      : (stages ? `${stages} stages` : '');
+      ? (sections ? `📑 ${sections}` : '')
+      : (stages ? `📚 ${stages}` : '');
     const chips = detectSpineChips(hb).slice(0, 3);
     const title = hb.title || hb.id;
     return `
