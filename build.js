@@ -400,6 +400,8 @@ const htmlFiles = [
   "national-chemistry-alignment.html",
   "national-physics-alignment.html",
   "kpi-admin.html",
+  "school-kpi-admin.html",
+  "teacher-kpi-admin.html",
   "reports.html",
   "school-visits.html",
   "notifications.html",
