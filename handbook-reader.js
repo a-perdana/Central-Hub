@@ -98,11 +98,12 @@
       } catch (err) {
         console.error('boot', err);
         // Surface error in whichever container is visible — reader mode
-        // by default since that's the legacy code-path. Browser mode users
-        // see the empty grid plus this banner.
+        // by default since that's the legacy code-path. Browser mode
+        // users get the banner injected into the first bookshelf rail
+        // (which is always present in the shipped HTML shell).
         const errBanner = `<div class="hb-loading" style="color:#991b1b;">Could not load: ${escapeHtml(err.message || err.code || 'unknown')}</div>`;
         const readerEl = document.getElementById('hbContent');
-        const browserEl = document.getElementById('hbGridInduction');
+        const browserEl = document.getElementById('hbShelfInduction');
         if (readerEl) readerEl.innerHTML = errBanner;
         if (browserEl) browserEl.innerHTML = errBanner;
       }
@@ -371,23 +372,20 @@ function bootBrowserMode() {
   if (heroKpiSchool) heroKpiSchool.textContent = school.length;
 
   if (!allHandbooks.length) {
-    const msg = '<div class="hb-loading" style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-3);font-size:13px;">No handbooks indexed yet. Run <code>scripts/induction/seed-induction-programs.js</code>.</div>';
-    document.getElementById('hbGridInduction').innerHTML = msg;
-    document.getElementById('hbGridRole').innerHTML = msg;
-    const schoolGrid = document.getElementById('hbGridSchool');
-    if (schoolGrid) schoolGrid.innerHTML = msg;
+    // Empty-bank case — bookshelf rails get a single muted "no books"
+    // line via renderShelfRail's own empty branch. No accordion to fill.
+    document.querySelectorAll('.hb-shelf-rail').forEach(r => {
+      r.innerHTML = '<div style="padding:12px 4px;color:var(--ink-3);font-size:12px;font-style:italic;">No handbooks indexed yet. Run <code>scripts/induction/seed-induction-programs.js</code>.</div>';
+    });
     return;
   }
-  renderCardGrid('hbGridInduction', induction);
-  renderCardGrid('hbGridRole', role);
-  const schoolGrid = document.getElementById('hbGridSchool');
-  if (schoolGrid) renderCardGrid('hbGridSchool', school);
 
-  // Bookshelf strip (2026-05-26) — semantic book-metaphor layer above the
-  // card grid. Each shelf rail renders its bucket's handbooks as vertical
-  // spines so the eye reads "N books across 3 categories" at a glance.
-  // Rails are absent on hubs that don't carry the markup (older clones),
-  // so render is best-effort + skips missing nodes.
+  // Bookshelf strip (2026-05-26) — sole browse surface since the
+  // accordion+card grid was retired. Each shelf rail renders its
+  // bucket's handbooks as vertical spines so the eye reads "N books
+  // across 3 categories" at a glance. Spine click opens the preview
+  // modal (openSpineModal); modal's "Open handbook" CTA opens the full
+  // reader in a new tab.
   renderShelfRail('hbShelfInduction', induction);
   renderShelfRail('hbShelfRole', role);
   renderShelfRail('hbShelfSchool', school);
@@ -408,16 +406,14 @@ function bootBrowserMode() {
     shelf.classList.toggle('is-empty', n === 0);
   });
 
-  // Seed counts (chip + section count badge for each cat)
+  // Seed facet chip counts. Section-count badges (data-count-for) are
+  // gone with the accordion — bookshelf carries its own per-shelf count
+  // (#shelfCnt*) seeded above.
   document.getElementById('cntAll').textContent = allHandbooks.length;
   document.getElementById('cntInduction').textContent = induction.length;
   document.getElementById('cntRole').textContent = role.length;
   const cntSchool = document.getElementById('cntSchool');
   if (cntSchool) cntSchool.textContent = school.length;
-  document.querySelector('[data-count-for="induction"]').textContent = induction.length;
-  document.querySelector('[data-count-for="role"]').textContent = role.length;
-  const schoolCountBadge = document.querySelector('[data-count-for="school"]');
-  if (schoolCountBadge) schoolCountBadge.textContent = school.length;
   // Dim facet chip when its category is empty (defensive — if role
   // section is empty during early Round 2 transitions).
   document.querySelectorAll('.hb-facet').forEach(b => {
@@ -447,6 +443,119 @@ function bootBrowserMode() {
       { threshold: 0 }
     ).observe(sentinel);
   } catch (_) { /* IO unsupported — no shadow, harmless */ }
+
+  // Spine click → preview modal (2026-05-26). Delegated handler so spines
+  // re-rendered after filter changes still wire up automatically. Anchor
+  // preventDefault keeps "open in new tab" working via middle-click +
+  // ctrl/cmd-click (the anchor's own href takes over for those).
+  document.querySelectorAll('.hb-shelf-rail').forEach(rail => {
+    rail.addEventListener('click', ev => {
+      const spine = ev.target.closest('.hb-spine');
+      if (!spine) return;
+      // Honour ctrl/cmd/middle-click + shift = native browser navigation.
+      if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1) return;
+      ev.preventDefault();
+      const id = new URL(spine.href, window.location.href).searchParams.get('id');
+      if (id) openSpineModal(id);
+    });
+  });
+
+  // Modal close wiring — close button, backdrop click, Escape key.
+  const modal = document.getElementById('hbModal');
+  if (modal) {
+    const closeIds = ['hbModalClose', 'hbModalCloseBtn'];
+    closeIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', closeSpineModal);
+    });
+    modal.addEventListener('click', ev => {
+      if (ev.target === modal) closeSpineModal();
+    });
+    document.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape' && !modal.hasAttribute('hidden')) closeSpineModal();
+    });
+  }
+}
+
+/* ── Spine preview modal (2026-05-26) ────────────────────────────────
+   Click on a bookshelf spine opens this modal pre-populated with the
+   handbook's metadata; the "Open handbook" anchor opens the full reader
+   in a new tab so the modal stays available for cross-handbook
+   comparison (Compact spec per user request). */
+function openSpineModal(handbookId) {
+  const hb = allHandbooks.find(h => h.id === handbookId);
+  const modal = document.getElementById('hbModal');
+  if (!hb || !modal) return;
+
+  const kind = hb.handbookKind || 'induction';
+  const dataKind = (kind === 'role-operational' || kind === 'aicf-companion') ? 'role'
+                 : (kind === 'school-facing' || kind === 'policy-topic') ? 'school'
+                 : 'induction';
+  // Use the SPECIFIC kind for modal accent so a policy-topic doc gets
+  // the amber palette + a aicf-companion gets the orange one — the spine
+  // band on the shelf already uses the specific kind, modal mirrors it.
+  modal.querySelector('.hb-modal').setAttribute('data-kind',
+    kind === 'aicf-companion' ? 'aicf-companion'
+    : kind === 'policy-topic' ? 'policy-topic'
+    : dataKind);
+
+  const kindEmoji = kind === 'aicf-companion' ? '🤖'
+                  : kind === 'policy-topic'   ? '📜'
+                  : kind === 'school-facing'  ? '🧭'
+                  : kind === 'role-operational' ? '🛡' : '📕';
+  const kindLabel = kind === 'aicf-companion' ? 'AICF Companion'
+                  : kind === 'policy-topic'   ? 'Policy / Topic'
+                  : kind === 'school-facing'  ? 'School-facing'
+                  : kind === 'role-operational' ? 'Role / Operational' : 'Induction';
+
+  document.getElementById('hbModalIcon').textContent = kindEmoji;
+  document.getElementById('hbModalEyebrow').textContent = kindLabel;
+  document.getElementById('hbModalTitle').textContent = hb.title || hb.id;
+  document.getElementById('hbModalDesc').textContent = hb.subtitle || '';
+
+  // Meta pills — audience + version + thickness + Firestore collection.
+  // Same data the old .hb-card-meta showed; modal has more room so we
+  // can lean on the longer audience string (platform · subRole) instead
+  // of the spine's tight subRole-only fallback.
+  const audience = [
+    hb.audience?.platform,
+    hb.audience?.subRole
+      || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(', ') : null)
+      || hb.audience?.primaryReader,
+  ].filter(Boolean).join(' · ');
+  const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
+  const sections = Array.isArray(hb.sections) ? hb.sections.length : 0;
+  const hasSections = dataKind === 'school' || kind === 'aicf-companion';
+  const thicknessLabel = hasSections
+    ? (sections ? `${sections} sections` : '')
+    : (stages ? `${stages} stages` : '');
+  const metaParts = [];
+  if (audience)       metaParts.push(`<span class="pill">${escapeHtml(audience)}</span>`);
+  if (hb.version)     metaParts.push(`<span class="pill">v${escapeHtml(hb.version)}</span>`);
+  if (thicknessLabel) metaParts.push(`<span class="pill">${escapeHtml(thicknessLabel)}</span>`);
+  metaParts.push(`<span class="pill firestore">induction_programs</span>`);
+  document.getElementById('hbModalMeta').innerHTML = metaParts.join('');
+
+  // Chip-family hints — same detection the spine uses, no cap so the
+  // modal shows every applicable family (spine truncates to 3).
+  const chips = detectSpineChips(hb);
+  document.getElementById('hbModalChips').innerHTML = chips.map(c =>
+    `<span class="hb-modal-chip" data-chip="${c.k}" title="${escapeHtml(c.t)}">${c.label}</span>`
+  ).join('');
+
+  // Open-in-new-tab CTA — full reader URL.
+  const openLink = document.getElementById('hbModalOpen');
+  if (openLink) openLink.href = `handbook?id=${encodeURIComponent(hb.id)}`;
+
+  modal.removeAttribute('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSpineModal() {
+  const modal = document.getElementById('hbModal');
+  if (!modal) return;
+  modal.setAttribute('hidden', '');
+  document.body.style.overflow = '';
 }
 
 /* ── Bookshelf spine rendering (2026-05-26) ───────────────────────────
@@ -568,70 +677,6 @@ function handbookHasField(hb, fieldName) {
   return walk(hb);
 }
 
-/* Render an array of handbook docs into a target #grid as cards.
-   DSL handbook (and future role-operational docs) get a different
-   icon + accent stripe so they read as a separate genre at a glance. */
-function renderCardGrid(gridId, handbooks) {
-  const grid = document.getElementById(gridId);
-  if (!grid) return;
-  if (!handbooks.length) {
-    grid.innerHTML = '<div class="hb-loading" style="grid-column:1/-1;padding:24px;text-align:center;color:var(--ink-3);font-size:12.5px;font-style:italic;">No handbooks in this category yet.</div>';
-    return;
-  }
-  grid.innerHTML = handbooks.map(hb => {
-    const audience = [
-      hb.audience?.platform,
-      hb.audience?.subRole
-        || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(',') : null)
-        || hb.audience?.primaryReader,
-    ].filter(Boolean).join(' · ');
-    const stages = Array.isArray(hb.stages) ? hb.stages.length : 0;
-    const sections = Array.isArray(hb.sections) ? hb.sections.length : 0;
-    const kind = hb.handbookKind || 'induction';
-    const isRoleOps = kind === 'role-operational';
-    const isSchoolFacing = kind === 'school-facing';
-    const isPolicyTopic = kind === 'policy-topic';
-    const isAicfCompanion = kind === 'aicf-companion';
-    // AICF companions ship sections[] just like school-facing + policy-topic.
-    const hasSections = isSchoolFacing || isPolicyTopic || isAicfCompanion;
-    // Card icon by handbookKind:
-    //   📕 induction         — year-long mentee journey
-    //   🛡 role-operational  — DSL/AC/CC etc. protection/readiness ramp
-    //   🧭 school-facing     — compass for the partner-school community
-    //   📜 policy-topic      — deep-dive policy (Safeguarding, Behaviour, etc.)
-    //   🤖 aicf-companion    — AI operational guide (paired with AICF v1.0)
-    const icon = isAicfCompanion ? '🤖'
-      : (isPolicyTopic ? '📜'
-        : (isSchoolFacing ? '🧭'
-          : (isRoleOps ? '🛡' : '📕')));
-    const cardCls = isAicfCompanion ? 'hb-card hb-card-aicf'
-      : (isPolicyTopic ? 'hb-card hb-card-policy-topic'
-        : (isSchoolFacing ? 'hb-card hb-card-school'
-          : (isRoleOps ? 'hb-card hb-card-role' : 'hb-card')));
-    // Counts pill: stages for induction + role-operational; sections for the rest.
-    const countsPill = hasSections
-      ? (sections ? `<span class="pill">${sections} sections</span>` : '')
-      : (stages ? `<span class="pill">${stages} stages</span>` : '');
-    return `
-      <a class="${cardCls}" href="handbook?id=${encodeURIComponent(hb.id)}">
-        <div class="hb-card-head">
-          <div class="hb-card-icon">${icon}</div>
-          <div>
-            <div class="hb-card-title">${escapeHtml(hb.title || hb.id)}</div>
-          </div>
-        </div>
-        <div class="hb-card-desc">${escapeHtml(hb.subtitle || '')}</div>
-        <div class="hb-card-meta">
-          ${audience ? `<span class="pill">${escapeHtml(audience)}</span>` : ''}
-          ${hb.version ? `<span class="pill">v${escapeHtml(hb.version)}</span>` : ''}
-          ${countsPill}
-          <span class="pill firestore">induction_programs</span>
-        </div>
-      </a>
-    `;
-  }).join('');
-}
-
 let _browserActiveFacet = 'all';
 
 function applyBrowserFacet(cat) {
@@ -641,17 +686,11 @@ function applyBrowserFacet(cat) {
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  document.querySelectorAll('.hb-section').forEach(sec => {
-    const show = _browserActiveFacet === 'all' || sec.dataset.cat === _browserActiveFacet;
-    sec.classList.toggle('is-hidden', !show);
-    // Round 1: induction is the only category and starts open. Picking
-    // 'all' or 'induction' both keep it open; future categories will
-    // get the same auto-open-on-pick treatment as /references.
-    sec.open = show;
-  });
-  // Bookshelf strip mirrors facet — non-matching shelves dim to grey so
-  // the "selected category" reads at a glance, but stays visible so the
-  // user can still scan the whole collection.
+  // Bookshelf is the sole browse surface — non-matching shelves dim to
+  // grey so the "selected category" reads at a glance, but stay visible
+  // so the user can still scan the whole collection. (Accordion +
+  // .hb-section visibility logic retired 2026-05-26 along with the
+  // card grid.)
   document.querySelectorAll('.hb-shelf').forEach(shelf => {
     const inFacet = _browserActiveFacet === 'all' || shelf.dataset.cat === _browserActiveFacet;
     shelf.classList.toggle('is-dimmed', !inFacet);
@@ -666,42 +705,27 @@ function applyBrowserSearch(qRaw) {
   const sInfo  = document.getElementById('hbBrowserSearchInfo');
   sClear.style.display = q ? '' : 'none';
 
+  // Bookshelf-only filter: count visible spines per shelf, dim out-of-
+  // facet shelves, toggle .filtered-out on individual spines when the
+  // search term doesn't match their text content.
   let totalMatches = 0;
-  document.querySelectorAll('.hb-section').forEach(sec => {
-    const sectionCat = sec.dataset.cat;
-    const inFacet = _browserActiveFacet === 'all' || _browserActiveFacet === sectionCat;
-    let sectionMatches = 0;
-    sec.querySelectorAll('.hb-card').forEach(card => {
-      if (!inFacet) { card.classList.add('filtered-out'); return; }
-      if (!q) { card.classList.remove('filtered-out'); sectionMatches++; return; }
-      const text = (card.textContent || '').toLowerCase();
-      const match = text.includes(q);
-      card.classList.toggle('filtered-out', !match);
-      if (match) sectionMatches++;
-    });
-    const hideSection = !inFacet || (q && sectionMatches === 0);
-    sec.classList.toggle('is-hidden', hideSection);
-    const countEl = sec.querySelector('[data-count-for]');
-    if (countEl) countEl.textContent = sectionMatches;
-    if (inFacet) totalMatches += sectionMatches;
-  });
-
-  // Bookshelf spines mirror the same filtered-out semantics as cards.
-  // Whole shelf gets dimmed when its category is out-of-facet; individual
-  // spines hide when they don't match the search token.
   document.querySelectorAll('.hb-shelf').forEach(shelf => {
     const shelfCat = shelf.dataset.cat;
     const inFacet = _browserActiveFacet === 'all' || _browserActiveFacet === shelfCat;
     shelf.classList.toggle('is-dimmed', !inFacet);
+    let shelfMatches = 0;
     shelf.querySelectorAll('.hb-spine').forEach(spine => {
       if (!inFacet) { spine.classList.add('filtered-out'); return; }
-      if (!q) { spine.classList.remove('filtered-out'); return; }
+      if (!q) { spine.classList.remove('filtered-out'); shelfMatches++; return; }
       const text = (spine.textContent || '').toLowerCase();
-      spine.classList.toggle('filtered-out', !text.includes(q));
+      const match = text.includes(q);
+      spine.classList.toggle('filtered-out', !match);
+      if (match) shelfMatches++;
     });
+    if (inFacet) totalMatches += shelfMatches;
   });
 
-  const emptyState = document.getElementById('hbResultsEmpty');
+  const emptyState = document.getElementById('hbShelvesEmpty');
   if (emptyState) emptyState.classList.toggle('visible', q !== '' && totalMatches === 0);
 
   if (!q) {
