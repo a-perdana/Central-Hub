@@ -257,8 +257,16 @@ function applySubjectGating(profile) {
   };
 
   // 1. Navbar links by data-nav-key (CH navbar uses these)
-  document.querySelectorAll('[data-nav-key], [data-nav-page]').forEach(el => {
-    const key = (el.getAttribute('data-nav-key') || el.getAttribute('data-nav-page') || '').toLowerCase();
+  //    [data-mobile-nav-key] mirrors data-nav-key on the mobile drawer
+  //    (drawer items are not clones of the desktop dropdown — they're
+  //    a separate hand-authored block — so each link gets the attribute
+  //    directly). Without this branch the mobile drawer ignores
+  //    subject-specialty gating entirely.
+  document.querySelectorAll('[data-nav-key], [data-nav-page], [data-mobile-nav-key]').forEach(el => {
+    const key = (el.getAttribute('data-nav-key')
+               || el.getAttribute('data-nav-page')
+               || el.getAttribute('data-mobile-nav-key')
+               || '').toLowerCase();
     if (!key || SUBJECT_GATE_BYPASS.has(key)) return;
     if (slugHidden(key)) el.setAttribute('data-ch-hidden', '1');
   });
@@ -384,8 +392,15 @@ function applyPageAccessGating(configs, userSubRoles) {
     return userSubRoles.some(r => vt.includes(r));
   };
 
-  document.querySelectorAll('[data-nav-key], [data-nav-page]').forEach(el => {
-    const key = (el.getAttribute('data-nav-key') || el.getAttribute('data-nav-page') || '').toLowerCase();
+  // [data-mobile-nav-key] mirrors data-nav-key on the mobile drawer
+  // (drawer items are separate hand-authored anchors, not clones of the
+  // desktop dropdown). Without this branch the hamburger menu shows every
+  // link regardless of sub-role — a silent page-access bypass.
+  document.querySelectorAll('[data-nav-key], [data-nav-page], [data-mobile-nav-key]').forEach(el => {
+    const key = (el.getAttribute('data-nav-key')
+               || el.getAttribute('data-nav-page')
+               || el.getAttribute('data-mobile-nav-key')
+               || '').toLowerCase();
     if (!key || PAGE_ACCESS_BYPASS.has(key)) return;
     if (!configs.has(key)) return;
     if (!isAllowed(configs.get(key))) el.setAttribute('data-pa-hidden', '1');
@@ -442,6 +457,46 @@ function applyPageAccessGating(configs, userSubRoles) {
     }
     if (any && allHidden) header.setAttribute('data-pa-hidden', '1');
     else                  header.removeAttribute('data-pa-hidden');
+  });
+
+  // Mobile drawer subheaders (.mob-nav-subheader) — same forward-walk
+  // pattern as the desktop .ch-dd-col-header above. Each subheader groups
+  // a run of .mobile-nav-link anchors that follow it until the next
+  // subheader (or the end of the section body). If every internally-gated
+  // anchor in that run is hidden, hide the subheader too — otherwise the
+  // user sees a category label with no items underneath.
+  document.querySelectorAll('.mob-nav-subheader').forEach(header => {
+    let allHidden = true;
+    let any = false;
+    let n = header.nextElementSibling;
+    while (n && !n.classList.contains('mob-nav-subheader')) {
+      if (n.matches?.('[data-mobile-nav-key], [data-nav-key], [data-nav-page]')) {
+        any = true;
+        const hidden = n.getAttribute('data-pa-hidden') === '1' || n.getAttribute('data-ch-hidden') === '1';
+        if (!hidden) { allHidden = false; break; }
+      }
+      n = n.nextElementSibling;
+    }
+    if (any && allHidden) header.setAttribute('data-pa-hidden', '1');
+    else                  header.removeAttribute('data-pa-hidden');
+  });
+
+  // Mobile drawer section wrappers (.mob-nav-section) — hide the whole
+  // dropdown section + its toggle if every gated link inside is hidden.
+  // Mirrors the .ch-dd-wrap empty-collapse rule for the desktop dropdowns.
+  // External cross-hub links (no data-mobile-nav-key) are never
+  // page-access-gated, so a section that holds only external links
+  // ('Hubs', 'Dashboards' subheaders carry only `↗` anchors) stays
+  // visible — querySelectorAll returns an empty NodeList for those and we
+  // bail at `!items.length`.
+  document.querySelectorAll('.mob-nav-section').forEach(section => {
+    const items = section.querySelectorAll('[data-mobile-nav-key]');
+    if (!items.length) return;
+    const allHidden = [...items].every(it =>
+      it.getAttribute('data-pa-hidden') === '1' || it.getAttribute('data-ch-hidden') === '1'
+    );
+    if (allHidden) section.setAttribute('data-pa-hidden', '1');
+    else            section.removeAttribute('data-pa-hidden');
   });
 }
 
@@ -967,8 +1022,8 @@ onAuthStateChanged(auth, async (user) => {
     const interesting = muts.some(m =>
       [...m.addedNodes].some(n =>
         n.nodeType === 1 && (
-          n.matches?.('[data-nav-key], [data-nav-page], a.card[href]') ||
-          n.querySelector?.('[data-nav-key], [data-nav-page], a.card[href]')
+          n.matches?.('[data-nav-key], [data-nav-page], [data-mobile-nav-key], a.card[href]') ||
+          n.querySelector?.('[data-nav-key], [data-nav-page], [data-mobile-nav-key], a.card[href]')
         )
       )
     );
@@ -995,8 +1050,8 @@ onAuthStateChanged(auth, async (user) => {
       const interesting = muts.some(m =>
         [...m.addedNodes].some(n =>
           n.nodeType === 1 && (
-            n.matches?.('[data-nav-key], [data-nav-page], a.card[href]') ||
-            n.querySelector?.('[data-nav-key], [data-nav-page], a.card[href]')
+            n.matches?.('[data-nav-key], [data-nav-page], [data-mobile-nav-key], a.card[href]') ||
+            n.querySelector?.('[data-nav-key], [data-nav-page], [data-mobile-nav-key], a.card[href]')
           )
         )
       );
