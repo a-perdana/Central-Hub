@@ -3576,6 +3576,24 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       font-size: 12px; color: var(--ink-3); font-weight: 500;
     }
 
+    /* Director-only toggle — reveals the 27 non-induction handbooks */
+    .director-toggle {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 12px; border-radius: 8px;
+      border: 1px dashed #c4b5fd;
+      background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+      cursor: pointer; user-select: none;
+      transition: border-color .15s, background .15s;
+    }
+    .director-toggle:hover { border-color: var(--accent); }
+    .director-toggle input[type="checkbox"] { accent-color: var(--accent); margin: 0; cursor: pointer; }
+    .director-toggle-text { font-size: 12px; font-weight: 500; color: var(--ink-2); display: inline-flex; align-items: center; gap: 8px; }
+    .director-toggle-badge {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 2px 7px; border-radius: 999px;
+      background: var(--accent); color: #fff;
+    }
+
     /* Kind-group section (collapsible) */
     .kind-group { margin-bottom: 24px; }
     .kind-group-header {
@@ -3890,19 +3908,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="info-strip-title">What lives in this hub</div>
       <p class="info-strip-text">
         Eduversal's induction module pairs every new hire with a certified mentor and tracks their year-1
-        journey against role-specific handbooks. <strong>Programs</strong> shows all <em>30 handbook
-        templates</em> (year-1 induction · role-operational first-90-days · partner-school policies ·
-        school-facing handbooks · AICF companions) — read-only, seeded from <code>docs/induction/</code>
-        + <code>docs/handbooks/</code>. <strong>Active Assignments</strong> manages live mentee assignments
-        (Charter NN3 enforces active Mentor Certification; NN4 requires three named parties).
-        <strong>Mentor Certifications</strong> issues + tracks the 24-month base + endorsements.
+        journey against role-specific handbooks. <strong>Induction Handbooks</strong> shows the
+        <em>3 year-1 induction tracks</em> wired into mentor assignments (Subject Teacher · Principal ·
+        Specialist) — these are the only handbooks Charter NN3/NN4 reference. <strong>Active Assignments</strong>
+        manages live mentee assignments (NN3 enforces active Mentor Certification; NN4 requires three
+        named parties). <strong>Mentor Certifications</strong> issues + tracks the 24-month base + endorsements.
+        Browse the full <a href="handbook" style="color:var(--accent-dk);font-weight:600;">network handbook library</a>
+        (role-operational · policy · school-facing · AICF) on <code>/handbook</code>.
       </p>
     </div>
   </div>
 
   <!-- TABS -->
   <div class="tab-bar">
-    <div class="tab active" onclick="switchTab('programs', this)">Programs</div>
+    <div class="tab active" onclick="switchTab('programs', this)">Induction Handbooks</div>
     <div class="tab" onclick="switchTab('assignments', this)">Active Assignments</div>
     <div class="tab" onclick="switchTab('certifications', this)">Mentor Certifications</div>
   </div>
@@ -3942,17 +3961,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   <!-- TAB: PROGRAMS -->
   <div id="tab-programs">
     <p style="font-size:13px;color:var(--ink-3);margin-bottom:18px;">
-      Read-only view of all handbook templates seeded from <code>docs/induction/</code> + <code>docs/handbooks/</code>.
-      To edit a handbook, edit the JSON file, bump <code>version</code>, and re-run
-      <code>node scripts/induction/seed-induction-programs.js</code> from the monorepo root.
+      The 3 year-1 induction tracks wired into mentor assignments. Source-of-truth at
+      <code>docs/induction/handbook-*.json</code> → seed via
+      <code>node scripts/induction/seed-induction-programs.js</code>.
     </p>
 
     <div class="programs-toolbar">
       <div class="programs-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="programsSearch" placeholder="Search by title, audience, or platform...">
+        <input type="text" id="programsSearch" placeholder="Search by title or audience...">
       </div>
       <span class="programs-count" id="programsCount"></span>
+      <label class="director-toggle" id="directorToggle" hidden>
+        <input type="checkbox" id="showAllKindsChk">
+        <span class="director-toggle-text">Show all 5 handbook kinds <span class="director-toggle-badge">Director view</span></span>
+      </label>
     </div>
 
     <div id="programList">
@@ -4083,6 +4106,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   let allSchools = [];
   let statusFilter = 'all';
   let isAdminUser = false;
+  let isDirectorUser = false;
+  let showAllKinds = false;        // director-only toggle; default off (induction-only view)
 
   // ──────────────────────────────────────────────────────────
   // BOOT
@@ -4090,6 +4115,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   // Page-access is the sole auth gate since 2026-05-20.
   document.addEventListener('authReady', async ({ detail: { profile } }) => {
     isAdminUser = profile?.role_centralhub === 'central_admin';
+    // Director sub-role OR admin can see the full handbook library on this page.
+    // Everyone else sees just the 3 induction tracks that mentor assignments
+    // actually reference. (The complete library is always at /handbook for the
+    // people who can reach it via page-access.)
+    isDirectorUser = isAdminUser || (Array.isArray(profile?.ch_sub_roles) && profile.ch_sub_roles.includes('director'));
+
     document.getElementById('btnNewAssignment').addEventListener('click', openAssignModal);
     document.getElementById('btnIssueCert').addEventListener('click', openCertModal);
     const progSearch = document.getElementById('programsSearch');
@@ -4098,6 +4129,18 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         programsSearchTerm = e.target.value;
         renderPrograms();
       });
+    }
+    // Reveal the director-only toggle when applicable
+    if (isDirectorUser) {
+      const toggleEl = document.getElementById('directorToggle');
+      const chk = document.getElementById('showAllKindsChk');
+      if (toggleEl) toggleEl.hidden = false;
+      if (chk) {
+        chk.addEventListener('change', (e) => {
+          showAllKinds = e.target.checked;
+          renderPrograms();
+        });
+      }
     }
     setupSearchTypeahead('assignMenteeSearch', 'assignMenteeUid');
     setupSearchTypeahead('assignMentorSearch', 'assignMentorUid', { requireCertification: true });
@@ -4378,12 +4421,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     const q = programsSearchTerm.trim().toLowerCase();
-    const filtered = allPrograms.filter(p => programMatchesSearch(p, q));
+    // Two gates: search query AND kind-visibility (induction-only unless director opted in).
+    const kindAllowed = (p) => {
+      if (showAllKinds && isDirectorUser) return true;
+      return programKind(p) === 'induction';
+    };
+    const filtered = allPrograms.filter(p => kindAllowed(p) && programMatchesSearch(p, q));
 
+    // Total reflects what the current view scope allows (induction-only vs all).
+    const scopedTotal = allPrograms.filter(kindAllowed).length;
     if (countEl) {
       countEl.textContent = q
-        ? `${filtered.length} of ${allPrograms.length} handbook${allPrograms.length === 1 ? '' : 's'}`
-        : `${allPrograms.length} handbook${allPrograms.length === 1 ? '' : 's'}`;
+        ? `${filtered.length} of ${scopedTotal} handbook${scopedTotal === 1 ? '' : 's'}`
+        : `${scopedTotal} handbook${scopedTotal === 1 ? '' : 's'}`;
     }
 
     if (filtered.length === 0) {
