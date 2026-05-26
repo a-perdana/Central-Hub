@@ -20,82 +20,528 @@
     .dw-pick-context {
       font-size: 0.92rem;
       color: var(--ink-2);
-      margin: 4px 4px 18px;
+      margin: 4px 4px 14px;
       line-height: 1.55;
+    }
+
+    /* Density toolbar — segmented control above the grid that lets
+       admins/directors pick Compact / Comfortable / Detailed.
+       Preference persists via localStorage. */
+    .dw-pick-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap;
+      margin: 4px 4px 16px;
+    }
+    .dw-pick-toolbar-lbl {
+      font-size: 0.78rem;
+      color: var(--ink-3);
+      letter-spacing: 0.02em;
+    }
+    .dw-pick-density {
+      display: inline-flex;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .dw-pick-density-btn {
+      padding: 5px 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem; font-weight: 500;
+      color: var(--ink-2);
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .14s, color .14s, box-shadow .14s;
+    }
+    .dw-pick-density-btn:hover {
+      color: var(--ink);
+      background: rgba(255,255,255,0.6);
+    }
+    .dw-pick-density-btn[aria-pressed="true"] {
+      background: var(--white);
+      color: var(--accent);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.08), 0 0 0 1px var(--border);
+    }
+    .dw-pick-density-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
     .dw-pick-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 14px;
+      /* 340px min-track keeps 3 cards per row inside the 1200px
+         page-wrap (1120px usable - 2×16px gap = 1088px / 3 ≈ 362px
+         per cell). Drops to 2 around 760px viewport, 1 below 380px. */
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
       margin-bottom: 26px;
     }
+
+    /* === Density overrides ===
+       Compact   = badge + name + write chip only (single row, tight)
+       Comfortable = full layout (default)
+       Detailed  = full layout + jump strip always-visible + 4th KPI cell */
+
+    /* Compact density — dense grid, hide everything except essentials.
+       260px min-track keeps 4-up at 1200px container (1088px / 4 = 272px
+       per cell). Still meaningfully denser than Comfortable's 3-up. */
+    .dw-pick-grid[data-density="compact"] {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-card {
+      border-radius: 10px;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-card::before {
+      height: 3px;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-head {
+      padding: 10px 12px 8px;
+      gap: 10px;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-badge {
+      width: 38px; height: 38px;
+      border-radius: 9px;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-emoji {
+      font-size: 1.2rem;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-name {
+      font-size: 0.95rem;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-subject-code {
+      display: none;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-coverage,
+    .dw-pick-grid[data-density="compact"] .dw-pick-stages,
+    .dw-pick-grid[data-density="compact"] .dw-pick-stats {
+      display: none;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-foot {
+      padding: 6px 12px 8px;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-jumps {
+      /* Hidden in compact even on hover — keep the mode genuinely
+         dense; coordinators pick the card and go. */
+      display: none;
+    }
+    .dw-pick-grid[data-density="compact"] .dw-pick-yours {
+      top: 8px; right: 8px;
+      font-size: 0.6rem;
+      padding: 2px 6px;
+    }
+
+    /* Detailed density — pacing jumps always visible, 4th KPI cell
+       (last activity) shows up. Keeps 3-up at 1200px container
+       (same 340px min-track as Comfortable; the 4-cell stat row
+       fits fine at 360px+ actual card width). */
+    .dw-pick-grid[data-density="detailed"] {
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 18px;
+    }
+    .dw-pick-grid[data-density="detailed"] .dw-pick-stats {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .dw-pick-grid[data-density="detailed"] .dw-pick-stat--detailed {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      text-align: center;
+    }
+    .dw-pick-grid[data-density="detailed"] .dw-pick-jumps {
+      position: static;
+      transform: none;
+      opacity: 1;
+      pointer-events: auto;
+      background: var(--paper);
+      border-top: 1px solid var(--paper-2);
+      border-radius: 0 0 13px 13px;
+    }
+    /* Cambridge-curriculum-aligned subject card. Larger badge,
+       per-subject accent bar, Cambridge stage chips, pacing-count
+       footer. Hover lift + arrow for affordance. */
     .dw-pick-card {
-      display: flex; gap: 12px; align-items: center;
-      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
       background: var(--white);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 14px;
       text-decoration: none;
       color: inherit;
-      transition: transform .14s, box-shadow .14s, border-color .14s;
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
       position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .dw-pick-card:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .dw-pick-card::before {
+      /* Subject-coloured accent bar across the top. The runtime sets
+         --pick-grad inline from SUBJECT_ACCENT so every card carries
+         its own Cambridge subject identity. */
+      content: '';
+      display: block;
+      height: 4px;
+      background: var(--pick-grad, linear-gradient(135deg,#7c3aed,#0891b2));
     }
     .dw-pick-card:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 14px rgba(15,23,42,0.06);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.04);
       border-color: #c4b5fd;
+    }
+    .dw-pick-card:hover .dw-pick-arrow {
+      color: var(--accent);
+      transform: translateX(3px);
     }
     .dw-pick-card--mine {
       border-color: #c4b5fd;
-      background: linear-gradient(180deg, #faf8ff 0%, var(--white) 60%);
     }
-    .dw-pick-card--mine::after {
-      content: "★ Yours";
+    .dw-pick-card--mine .dw-pick-head {
+      background: linear-gradient(180deg, #faf8ff 0%, var(--white) 80%);
+    }
+    .dw-pick-yours {
       position: absolute;
-      top: 8px; right: 10px;
-      font-size: 0.66rem; font-weight: 700;
+      top: 12px; right: 12px;
+      font-size: 0.64rem; font-weight: 700;
       color: #6d28d9;
-      letter-spacing: 0.04em;
+      background: #ede9fe;
+      padding: 3px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      z-index: 2;
+    }
+    .dw-pick-head {
+      display: flex; gap: 14px; align-items: center;
+      padding: 16px 16px 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    /* Subject-themed SVG pattern as a subtle backdrop behind the
+       badge + name. Pattern colour driven by --pick-pattern-color
+       (the deeper stop of each subject's gradient) and inherited
+       via currentColor inside the SVG. Opacity kept low so the
+       pattern reads as texture, not signal — name + badge remain
+       the focus. Fades out to the right so the head-text area is
+       always clean. */
+    .dw-pick-head::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: var(--pick-pattern, none);
+      background-repeat: repeat;
+      background-size: 60px 60px;
+      color: var(--pick-pattern-color, #6c5ce7);
+      opacity: 0.07;
+      -webkit-mask-image: linear-gradient(110deg, #000 0%, #000 35%, transparent 70%);
+              mask-image: linear-gradient(110deg, #000 0%, #000 35%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .dw-pick-head > * {
+      position: relative;
+      z-index: 1;
+    }
+    /* On hover bump the pattern slightly so the card feels alive
+       but stays calm — 0.07 → 0.11 is just enough to register. */
+    .dw-pick-card:hover .dw-pick-head::before {
+      opacity: 0.11;
     }
     .dw-pick-badge {
-      width: 52px; height: 52px;
-      border-radius: 12px;
+      width: 56px; height: 56px;
+      border-radius: 13px;
       display: flex; align-items: center; justify-content: center;
       color: #fff; font-weight: 700; font-size: 0.92rem;
       font-family: 'DM Mono', monospace;
       flex-shrink: 0;
-      box-shadow: 0 2px 6px rgba(15,23,42,0.12);
+      box-shadow: 0 4px 12px rgba(15,23,42,0.14), inset 0 0 0 1px rgba(255,255,255,0.18);
       position: relative;
       overflow: hidden;
     }
     .dw-pick-badge::before {
-      /* subtle inner sheen for premium feel */
       content: '';
       position: absolute; inset: 0;
-      background: radial-gradient(ellipse 60% 80% at 100% 0%, rgba(255,255,255,0.22) 0%, transparent 60%);
+      background: radial-gradient(ellipse 60% 80% at 100% 0%, rgba(255,255,255,0.28) 0%, transparent 60%);
       pointer-events: none;
     }
     .dw-pick-emoji {
-      font-size: 1.55rem;
+      font-size: 1.7rem;
       line-height: 1;
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18));
-      position: relative; /* sit above the ::before sheen */
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.22));
+      position: relative;
     }
-    .dw-pick-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .dw-pick-head-text {
+      display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1;
+    }
     .dw-pick-name {
       font-family: 'Lora', serif;
-      font-size: 1rem; font-weight: 600;
+      font-size: 1.12rem; font-weight: 600;
       color: var(--ink);
+      line-height: 1.2;
+    }
+    .dw-pick-subject-code {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .dw-pick-stages {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 0 16px 10px;
+      min-height: 26px;
+    }
+    /* Stage chip carries the Cambridge syllabus code as a 2nd line of
+       mono text underneath the stage label — gives the card a
+       Cambridge-syllabus-card feel without claiming the whole 4-digit
+       code as the title. */
+    .dw-pick-stage {
+      display: inline-flex; flex-direction: column;
+      align-items: center;
+      gap: 0;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.66rem; font-weight: 600;
+      color: var(--ink-2);
+      background: var(--paper);
+      border: 1px solid var(--border);
+      padding: 3px 7px 2px;
+      border-radius: 6px;
+      letter-spacing: 0.02em;
+      line-height: 1.15;
+    }
+    .dw-pick-stage-code {
+      font-size: 0.58rem;
+      font-weight: 500;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      margin-top: 1px;
+    }
+    .dw-pick-stages-empty {
+      font-size: 0.72rem;
+      color: var(--ink-3);
+      font-style: italic;
+    }
+    /* Cambridge stage coverage bar — 4 segments (Y1-6, Y7-8, Y9-10,
+       Y11-12). Filled segment = subject has a Cambridge pacing page
+       at that stage; empty = network-defined (Bahasa, Religion,
+       Edu-STEAM) or partial (English Y9+, Biology Y1-6). Zero
+       Firestore cost — derived from SUBJECT_PACING_LINKS at render
+       time. Sits between subject head and stage chips. */
+    .dw-pick-coverage {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 16px 10px;
+    }
+    .dw-pick-coverage-track {
+      display: flex; gap: 3px;
+      flex: 1;
+    }
+    .dw-pick-coverage-seg {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--paper-2);
+      transition: background .15s;
+    }
+    .dw-pick-coverage-seg--filled {
+      /* Per-subject accent so the bar feels like part of the card's
+         identity, not a generic grey-and-mor strip. */
+      background: var(--pick-grad, linear-gradient(135deg,#7c3aed,#0891b2));
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.6) inset;
+    }
+    .dw-pick-coverage-lbl {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.66rem; font-weight: 600;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+
+    /* Inline KPI strip — 3 mini stats between stages and footer.
+       Numbers populated by populatePickerKpis() after the cards mount.
+       Dim "—" while loading so layout doesn't shift. */
+    .dw-pick-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+      padding: 10px 8px;
+      margin: 0 8px;
+      border-top: 1px dashed var(--border);
+      border-bottom: 1px dashed var(--border);
+    }
+    .dw-pick-stat {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 2px;
+      text-align: center;
+    }
+    /* Hide the 4th KPI cell unless detailed mode is on. Rule MUST
+       sit after .dw-pick-stat to win the cascade (same specificity,
+       later wins). Past 2026-05-24 incident: same-specificity rule
+       placed earlier in the stylesheet was silently overridden,
+       4-cell stats appeared in Comfortable mode too. */
+    .dw-pick-stat--detailed { display: none; }
+    .dw-pick-grid[data-density="detailed"] .dw-pick-stat--detailed {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      text-align: center;
+    }
+    .dw-pick-stat + .dw-pick-stat { border-left: 1px solid var(--paper-2); }
+    .dw-pick-stat-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.92rem; font-weight: 700;
+      color: var(--ink);
+      line-height: 1.1;
+    }
+    .dw-pick-stat-val--ok { color: #047857; }
+    .dw-pick-stat-val--warn { color: #b45309; }
+    .dw-pick-stat-val--muted { color: var(--ink-3); font-weight: 500; }
+    /* Inline CTA variant — replaces the "0" / "—" value with a
+       writable user's quick-add link. Stays inside the stat cell
+       grid so the row doesn't shift; reads as actionable, not
+       passive. */
+    .dw-pick-stat-val--cta {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: none;
+      background: #ede9fe;
+      padding: 1px 7px;
+      border-radius: 5px;
+      letter-spacing: 0.01em;
+      transition: background .14s, color .14s, transform .12s;
+    }
+    .dw-pick-stat-val--cta:hover {
+      background: var(--accent);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .dw-pick-stat-lbl {
+      font-size: 0.62rem;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .dw-pick-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px 12px;
+      border-top: 1px solid var(--paper-2);
+      background: var(--paper);
     }
     .dw-pick-chip {
       font-size: 0.66rem; font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 9px;
-      align-self: flex-start;
-      letter-spacing: 0.02em;
+      padding: 3px 9px;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+      display: inline-flex; align-items: center; gap: 4px;
     }
-    .dw-pick-chip--write { background: #ede9fe; color: #5b21b6; }
-    .dw-pick-chip--read { background: var(--paper-2); color: var(--ink-3); }
+    .dw-pick-chip--write { background: #d1fae5; color: #047857; }
+    .dw-pick-chip--read { background: #e5e7eb; color: #4b5563; }
+    .dw-pick-chip::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.7;
+    }
+    .dw-pick-arrow {
+      color: var(--ink-3);
+      flex-shrink: 0;
+      transition: color .14s, transform .14s;
+      display: inline-flex;
+    }
+
+    /* Hover-reveal pacing jump strip — sits at the bottom of every
+       card, hidden by default, slides up on card hover. Lets a
+       coordinator jump straight to a Cambridge pacing page without
+       opening the full workspace. Each chip is its own <a>, so
+       clicking one navigates straight to that pacing page instead
+       of opening the workspace. Card-level <a> is the workspace
+       fallback when the user clicks anywhere outside the chips. */
+    .dw-pick-jumps {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      display: flex; flex-direction: column;
+      gap: 4px;
+      padding: 10px 14px 12px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.0) 0%, var(--white) 30%, var(--white) 100%);
+      transform: translateY(calc(100% - 0px));
+      opacity: 0;
+      transition: transform .22s ease, opacity .18s ease;
+      pointer-events: none;
+      z-index: 3;
+      border-top: 1px solid var(--paper-2);
+      border-radius: 0 0 13px 13px;
+    }
+    .dw-pick-card:hover .dw-pick-jumps,
+    .dw-pick-card:focus-within .dw-pick-jumps {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .dw-pick-jumps-lbl {
+      font-size: 0.6rem; font-weight: 700;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 2px;
+    }
+    .dw-pick-jumps-row {
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .dw-pick-jump {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 9px;
+      font-size: 0.72rem; font-weight: 500;
+      color: var(--ink);
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      text-decoration: none;
+      transition: border-color .12s, color .12s, background .12s;
+    }
+    .dw-pick-jump:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #faf8ff;
+    }
+    .dw-pick-jump-code {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.62rem;
+      color: var(--ink-3);
+    }
+    .dw-pick-jump:hover .dw-pick-jump-code { color: var(--accent); opacity: 0.8; }
+    .dw-pick-jumps-empty {
+      font-size: 0.72rem;
+      color: var(--ink-3);
+      font-style: italic;
+      padding: 2px 0;
+    }
+    @media (hover: none) {
+      /* Touch devices can't hover — keep the jumps strip permanently
+         visible but compact at the very bottom. Card-level link still
+         covers most of the card. */
+      .dw-pick-jumps {
+        position: static;
+        transform: none;
+        opacity: 1;
+        pointer-events: auto;
+        background: var(--paper);
+      }
+    }
     .dw-pick-footnote {
       font-size: 0.82rem;
       color: var(--ink-3);
@@ -108,27 +554,75 @@
     .dw-pick-footnote a { color: var(--accent); text-decoration: none; }
     .dw-pick-footnote a:hover { text-decoration: underline; }
 
-    /* === Subject head === */
-    .dw-subject-head { margin-bottom: 18px; }
-    .dw-back {
-      display: inline-flex; align-items: center;
-      font-size: 0.82rem;
+    /* === Subject head — canonical subject hero ===
+       Matches the picker card design language: accent bar across
+       the top, subject-themed pattern subtly behind the badge,
+       larger badge, Cambridge syllabus code chips in the subtitle
+       row, breadcrumb back to picker. Write badge floats right. */
+    .dw-subject-head {
+      position: relative;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 20px 20px;
+      margin-bottom: 22px;
+      overflow: hidden;
+      isolation: isolate;
+      box-shadow: var(--shadow-sm);
+    }
+    /* Top accent bar — same gradient as the matching picker card. */
+    .dw-subject-head::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 5px;
+      background: var(--subj-grad, linear-gradient(135deg,#7c3aed,#0891b2));
+      z-index: 1;
+    }
+    /* Subject-themed SVG pattern, faded diagonally so the title
+       column on the right stays clean. */
+    .dw-subject-head::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: var(--subj-pattern, none);
+      background-repeat: repeat;
+      background-size: 60px 60px;
+      color: var(--subj-pattern-color, #6c5ce7);
+      opacity: 0.06;
+      -webkit-mask-image: linear-gradient(110deg, #000 0%, #000 30%, transparent 65%);
+              mask-image: linear-gradient(110deg, #000 0%, #000 30%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .dw-subject-head > * { position: relative; z-index: 2; }
+
+    .dw-subject-back {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.78rem;
       color: var(--ink-3);
       text-decoration: none;
-      margin-bottom: 14px;
+      padding: 4px 0;
+      margin-bottom: 12px;
+      transition: color .14s, transform .12s;
     }
-    .dw-back:hover { color: var(--accent); }
+    .dw-subject-back:hover {
+      color: var(--accent);
+      transform: translateX(-2px);
+    }
+    .dw-subject-back svg { flex-shrink: 0; }
+
     .dw-subject-id-row {
-      display: flex; align-items: center; gap: 14px;
+      display: flex; align-items: flex-start; gap: 16px;
     }
     .dw-subject-badge {
-      width: 60px; height: 60px;
+      width: 64px; height: 64px;
       border-radius: 14px;
       display: flex; align-items: center; justify-content: center;
-      color: #fff; font-weight: 700; font-size: 1.85rem;
+      color: #fff; font-weight: 700; font-size: 1.9rem;
       font-family: 'DM Mono', monospace;
       flex-shrink: 0;
-      box-shadow: 0 3px 10px rgba(15,23,42,0.16);
+      box-shadow: 0 4px 12px rgba(15,23,42,0.16), inset 0 0 0 1px rgba(255,255,255,0.18);
       position: relative;
       overflow: hidden;
       line-height: 1;
@@ -136,50 +630,132 @@
     .dw-subject-badge::before {
       content: '';
       position: absolute; inset: 0;
-      background: radial-gradient(ellipse 60% 80% at 100% 0%, rgba(255,255,255,0.22) 0%, transparent 60%);
+      background: radial-gradient(ellipse 60% 80% at 100% 0%, rgba(255,255,255,0.28) 0%, transparent 60%);
       pointer-events: none;
     }
-    .dw-subject-badge > * { position: relative; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18)); }
+    .dw-subject-badge > * {
+      position: relative;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.22));
+    }
+    .dw-subject-title-block {
+      flex: 1;
+      min-width: 0;
+      padding-top: 2px;
+    }
     .dw-subject-title {
       font-family: 'Lora', serif;
-      font-size: 1.45rem; font-weight: 600;
+      font-size: 1.55rem; font-weight: 600;
       color: var(--ink); line-height: 1.2;
-      margin: 0;
+      margin: 0 0 8px;
     }
-    .dw-subject-sub { margin-top: 4px; }
-    .dw-write-badge {
-      font-size: 0.7rem; font-weight: 600;
-      padding: 3px 9px;
-      border-radius: 10px;
+    .dw-subject-codes {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 6px;
+    }
+    .dw-subject-code-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px 3px 6px;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--ink-2);
+    }
+    .dw-subject-code-stage {
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+    .dw-subject-code-num {
+      font-weight: 500;
+      color: var(--ink-3);
       letter-spacing: 0.02em;
     }
+    .dw-subject-coverage-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem; font-weight: 600;
+      color: var(--accent);
+      background: #ede9fe;
+      padding: 3px 9px;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+      margin-left: 4px;
+    }
+    .dw-subject-codes-empty {
+      font-size: 0.78rem;
+      color: var(--ink-3);
+      font-style: italic;
+    }
+    .dw-subject-write-slot {
+      flex-shrink: 0;
+      padding-top: 4px;
+    }
+    .dw-write-badge {
+      font-size: 0.7rem; font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      letter-spacing: 0.02em;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .dw-write-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.7;
+    }
     .dw-write-badge--yes { background: #d1fae5; color: #047857; }
-    .dw-write-badge--no { background: var(--paper-2); color: var(--ink-3); }
+    .dw-write-badge--no { background: #e5e7eb; color: #4b5563; }
+    @media (max-width: 640px) {
+      .dw-subject-id-row { flex-wrap: wrap; }
+      .dw-subject-write-slot { flex-basis: 100%; padding-top: 0; }
+    }
 
     /* === Sections === */
     .dw-section {
+      position: relative;
       background: var(--white);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 18px 20px;
       margin-bottom: 18px;
       box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    /* Tiny subject-accent left bar — picks up --subj-grad set on
+       workspaceRoot. 4px wide, full height, soft inner shadow.
+       Ties every section visually to the subject identity at the
+       top of the page. */
+    .dw-section::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 4px;
+      background: var(--subj-grad, linear-gradient(180deg,#7c3aed,#0891b2));
+      opacity: 0.85;
     }
     .dw-section-head {
-      display: flex; align-items: baseline; justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between;
       gap: 10px; flex-wrap: wrap;
       margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--paper-2);
     }
     .dw-section-title {
       font-family: 'Lora', serif;
-      font-size: 1.12rem; font-weight: 600;
+      font-size: 1.15rem; font-weight: 600;
       color: var(--ink); margin: 0;
+      display: inline-flex; align-items: center; gap: 8px;
     }
     .dw-section-mode {
-      font-size: 0.7rem; font-weight: 600;
+      font-size: 0.68rem; font-weight: 600;
       color: var(--ink-3);
       text-transform: uppercase;
       letter-spacing: 0.06em;
+      background: var(--paper);
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
     }
     .dw-loading {
       color: var(--ink-3);
@@ -202,35 +778,46 @@
     }
     .dw-empty-desc { font-size: 0.84rem; }
 
-    /* === KPI strip === */
+    /* === KPI strip — same tile aesthetic as the picker's .dw-pick-stats:
+       mono number on top, lowercase letter-spaced label below, tiny
+       hint underneath. Compact, scannable, no heavy mor wash. === */
     .dw-kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
     }
     .dw-kpi {
       padding: 14px 16px;
-      background: linear-gradient(180deg, #faf8ff 0%, var(--white) 70%);
-      border: 1px solid #ede9fe;
+      background: var(--white);
+      border: 1px solid var(--border);
       border-radius: 10px;
+      display: flex; flex-direction: column;
+      gap: 4px;
+      transition: border-color .14s, transform .12s, box-shadow .14s;
     }
-    .dw-kpi-lbl {
-      font-size: 0.7rem; font-weight: 600;
-      color: var(--ink-3);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 6px;
+    .dw-kpi:hover {
+      border-color: #c4b5fd;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(15,23,42,0.05);
     }
     .dw-kpi-val {
       font-family: 'DM Mono', monospace;
-      font-size: 1.45rem; font-weight: 600;
+      font-size: 1.5rem; font-weight: 700;
       color: var(--ink);
-      line-height: 1.1;
+      line-height: 1.05;
+    }
+    .dw-kpi-val--ok { color: #047857; }
+    .dw-kpi-val--warn { color: #b45309; }
+    .dw-kpi-val--muted { color: var(--ink-3); font-weight: 500; }
+    .dw-kpi-lbl {
+      font-size: 0.72rem; font-weight: 600;
+      color: var(--ink-2);
+      letter-spacing: 0.02em;
     }
     .dw-kpi-sub {
-      font-size: 0.74rem;
+      font-size: 0.7rem;
       color: var(--ink-3);
-      margin-top: 4px;
+      letter-spacing: 0.02em;
     }
 
     /* === Annual Plan two-block (Pacing strip + Strategy artifact) === */
@@ -278,18 +865,31 @@
       box-shadow: 0 3px 10px rgba(124,58,237,0.10);
       background: #faf8ff;
     }
+    /* Stage chip — two-line mono (stage marker top, syllabus code
+       under), matches the picker stage chip + jump chip exactly so
+       the visual language carries from picker → workspace. */
     .dw-pacing-stage {
+      display: inline-flex; flex-direction: column;
+      align-items: center;
+      gap: 0;
       font-family: 'DM Mono', monospace;
-      font-size: 0.7rem; font-weight: 600;
+      font-size: 0.68rem; font-weight: 600;
       color: var(--accent);
       background: #ede9fe;
-      padding: 2px 7px;
+      padding: 3px 8px 2px;
       border-radius: 6px;
       flex-shrink: 0;
       letter-spacing: 0.02em;
+      line-height: 1.15;
+    }
+    .dw-pacing-stage-code {
+      font-size: 0.6rem;
+      font-weight: 500;
+      opacity: 0.78;
+      margin-top: 1px;
     }
     .dw-pacing-label {
-      font-size: 0.88rem;
+      font-size: 0.9rem;
       font-weight: 500;
       flex: 1;
       min-width: 0;
@@ -2253,7 +2853,7 @@
             <a href="handbook?id=aicf_specialist_playbook_v1" class="ch-dd-item" data-nav-page="handbook-aicf-specialist" data-nav-key="handbook-aicf-specialist">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2"/></svg>
-              <span class="nav-item-label">Specialist AI Playbook</span>
+              <span class="nav-item-label">AI Playbook - Coordinators</span>
             </a>
             <a href="competency-framework" class="ch-dd-item" data-nav-page="competency-framework" data-nav-key="competency-framework">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
@@ -2339,7 +2939,7 @@
             <a href="handbook?id=aicf_leader_playbook_v1" class="ch-dd-item" data-nav-page="handbook-aicf-leader" data-nav-key="handbook-aicf-leader">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2"/></svg>
-              <span class="nav-item-label">AI Leader Playbook</span>
+              <span class="nav-item-label">AI Playbook - Subject Leaders</span>
             </a>
             <div class="ch-dd-divider"></div>
             <div class="ch-dd-col-header" style="padding-top:4px;">Featured for Teachers</div>
@@ -2386,7 +2986,7 @@
             <a href="handbook?id=aicf_teacher_playbook_v1" class="ch-dd-item" data-nav-page="handbook-aicf-teacher" data-nav-key="handbook-aicf-teacher">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2"/></svg>
-              <span class="nav-item-label">AI Teacher Playbook</span>
+              <span class="nav-item-label">AI Playbook - Teachers</span>
             </a>
           </div>
 
@@ -2471,15 +3071,26 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
               <span class="nav-item-label">Reports &amp; Export</span>
             </a>
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Performance Management</div>
+            <a href="checklist-admin" class="ch-dd-item" data-nav-page="checklist-admin" data-nav-key="checklist-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              <span class="nav-item-label">Checklist Management</span>
+            </a>
+            <a href="kpi-admin" class="ch-dd-item" data-nav-page="kpi-admin" data-nav-key="kpi-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              <span class="nav-item-label">KPI -Based Performance</span>
+            </a>
           </div>
 
           <div class="ch-dd-col-divider"></div>
 
-          <!-- Column 2 — Appraisals + Programs (Leadership + Performance + Teacher)
-               Four subheaders, audience-first:
+          <!-- Column 2 — Appraisals + Programs (Leadership + Teacher)
+               Three subheaders, audience-first:
                Appraisals = ongoing HQ appraisal touchpoints (school visits + the 3 appraisal modules).
                Leadership Programs = leadership-track cycles (principal 360, coaching, annual appraisal).
-               Performance Management = network-wide KPI scorecard.
                Teacher Programs = teacher-track CPD admin (induction, orientation, competency, AI maturity). -->
           <div class="ch-dd-col">
             <div class="ch-dd-col-header">Appraisals</div>
@@ -2521,28 +3132,16 @@
               <span class="nav-item-label">Principal Annual Appraisal</span>
             </a>
             <div class="ch-dd-divider"></div>
-            <div class="ch-dd-col-header" style="padding-top:4px;">Performance Management</div>
-            <a href="checklist-admin" class="ch-dd-item" data-nav-page="checklist-admin" data-nav-key="checklist-admin">
-              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-              <span class="nav-item-label">Checklist Management</span>
-            </a>
-            <a href="kpi-admin" class="ch-dd-item" data-nav-page="kpi-admin" data-nav-key="kpi-admin">
-              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              <span class="nav-item-label">KPI -Based Performance</span>
-            </a>
-            <div class="ch-dd-divider"></div>
             <div class="ch-dd-col-header" style="padding-top:4px;">Teacher Programs</div>
-            <a href="induction-admin" class="ch-dd-item" data-nav-page="induction-admin" data-nav-key="induction-admin">
-              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-              <span class="nav-item-label">Induction Admin</span>
-            </a>
             <a href="orientation-admin" class="ch-dd-item" data-nav-page="orientation-admin" data-nav-key="orientation-admin">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
               <span class="nav-item-label">Orientation Admin</span>
+            </a>
+            <a href="induction-admin" class="ch-dd-item" data-nav-page="induction-admin" data-nav-key="induction-admin">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              <span class="nav-item-label">Induction Admin</span>
             </a>
             <a href="competency-admin" class="ch-dd-item" data-nav-page="competency-admin" data-nav-key="competency-admin">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
@@ -2947,7 +3546,7 @@
           <div class="mob-nav-subheader">Featured for HQ</div>
           <a href="handbook?id=eduversal_director_first_90_days_v1" class="mobile-nav-link" data-mob-page="handbook-director-90d">Director 90 Days</a>
           <a href="handbook?id=eduversal_subject_specialist_first_90_days_v1" class="mobile-nav-link" data-mob-page="handbook-specialist-90d">Specialist 90 Days</a>
-          <a href="handbook?id=aicf_specialist_playbook_v1"        class="mobile-nav-link" data-mob-page="handbook-aicf-specialist">Specialist AI Playbook</a>
+          <a href="handbook?id=aicf_specialist_playbook_v1"        class="mobile-nav-link" data-mob-page="handbook-aicf-specialist">AI Playbook - Coordinators</a>
           <a href="competency-framework"                           class="mobile-nav-link" data-mob-page="competency-framework">Competency Framework</a>
           <div class="mob-nav-subheader">Policy &amp; AI</div>
           <a href="handbook?id=eduversal_ai_use_policy_v1"         class="mobile-nav-link" data-mob-page="handbook-ai-use">AI Use Policy</a>
@@ -2960,7 +3559,7 @@
           <a href="handbook?id=eduversal_principal_v1"                          class="mobile-nav-link" data-mob-page="handbook-principal-induction">Principal Induction</a>
           <a href="handbook?id=eduversal_foundation_rep_first_90_days_v1"       class="mobile-nav-link" data-mob-page="handbook-fr-90d">Foundation Rep 90 Days</a>
           <a href="handbook?id=eduversal_academic_coordinator_first_90_days_v1" class="mobile-nav-link" data-mob-page="handbook-ac-90d">Academic Coord 90 Days</a>
-          <a href="handbook?id=aicf_leader_playbook_v1"                         class="mobile-nav-link" data-mob-page="handbook-aicf-leader">AI Leader Playbook</a>
+          <a href="handbook?id=aicf_leader_playbook_v1"                         class="mobile-nav-link" data-mob-page="handbook-aicf-leader">AI Playbook - Subject Leaders</a>
           <div class="mob-nav-subheader">Featured for Teachers</div>
           <a href="handbook?id=eduversal_subject_leader_first_90_days_v1"       class="mobile-nav-link" data-mob-page="handbook-sl-90d">Subject Leader 90 Days</a>
           <a href="handbook?id=handbook_subject_teacher_v2"                     class="mobile-nav-link" data-mob-page="handbook-subject-teacher-induction">Subject Teacher Induction</a>
@@ -2970,7 +3569,7 @@
           <a href="handbook?id=aicf_decision_trees_v1"                          class="mobile-nav-link" data-mob-page="handbook-aicf-decisions">AI Decision Trees</a>
           <a href="handbook?id=aicf_weekly_tips_v1"                             class="mobile-nav-link" data-mob-page="handbook-aicf-tips">AI Weekly Tips</a>
           <a href="handbook?id=aicf_classroom_activities_v1"                    class="mobile-nav-link" data-mob-page="handbook-aicf-activities">AI Classroom Activities</a>
-          <a href="handbook?id=aicf_teacher_playbook_v1"                        class="mobile-nav-link" data-mob-page="handbook-aicf-teacher">AI Teacher Playbook</a>
+          <a href="handbook?id=aicf_teacher_playbook_v1"                        class="mobile-nav-link" data-mob-page="handbook-aicf-teacher">AI Playbook - Teachers</a>
           <div class="mob-nav-subheader">School-facing handbooks</div>
           <a href="handbook?id=eduversal_staff_code_of_conduct_v1" class="mobile-nav-link" data-mob-page="school-handbook-staff-coc">Code of Conduct</a>
           <a href="handbook?id=eduversal_student_handbook_v1"      class="mobile-nav-link" data-mob-page="school-handbook-student">Student Handbook</a>
@@ -2995,6 +3594,9 @@
           <a href="network-health"  class="mobile-nav-link" data-mob-page="network-health">Network Health</a>
           <a href="pilot-enrolment" class="mobile-nav-link" data-mob-page="pilot-enrolment">Pilot Enrolment</a>
           <a href="reports"         class="mobile-nav-link" data-mob-page="reports">Reports &amp; Export</a>
+          <div class="mob-nav-subheader">Performance Management</div>
+          <a href="checklist-admin"  class="mobile-nav-link" data-mob-page="checklist-admin">Checklist Management</a>
+          <a href="kpi-admin"        class="mobile-nav-link" data-mob-page="kpi-admin">KPI -Based Performance</a>
           <div class="mob-nav-subheader">Appraisals</div>
           <a href="school-visits"      class="mobile-nav-link" data-mob-page="school-visits">School Visits</a>
           <a href="appraisals"         class="mobile-nav-link" data-mob-page="appraisals">Manage Appraisals</a>
@@ -3004,12 +3606,9 @@
           <a href="principal-360-admin"              class="mobile-nav-link" data-mob-page="principal-360-admin">Principal 360°</a>
           <a href="principal-coaching-hub"           class="mobile-nav-link" data-mob-page="principal-coaching-hub">Principal Coaching</a>
           <a href="appraisals?type=principal-annual" class="mobile-nav-link" data-mob-page="appraisals-principal-annual">Principal Annual Appraisal</a>
-          <div class="mob-nav-subheader">Performance Management</div>
-          <a href="checklist-admin"  class="mobile-nav-link" data-mob-page="checklist-admin">Checklist Management</a>
-          <a href="kpi-admin"        class="mobile-nav-link" data-mob-page="kpi-admin">KPI -Based Performance</a>
           <div class="mob-nav-subheader">Teacher Programs</div>
-          <a href="induction-admin"    class="mobile-nav-link" data-mob-page="induction-admin">Induction Admin</a>
           <a href="orientation-admin"  class="mobile-nav-link" data-mob-page="orientation-admin">Orientation Admin</a>
+          <a href="induction-admin"    class="mobile-nav-link" data-mob-page="induction-admin">Induction Admin</a>
           <a href="competency-admin"   class="mobile-nav-link" data-mob-page="competency-admin">Competency Admin</a>
           <a href="ai-maturity-admin"  class="mobile-nav-link" data-mob-page="ai-maturity-admin">AI Maturity Admin</a>
           <div class="mob-nav-subheader">Communications</div>

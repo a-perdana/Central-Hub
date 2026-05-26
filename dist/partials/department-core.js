@@ -26,7 +26,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 import {
-  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, SUBJECT_PACING_LINKS, isValidSubject, subjectLabel
+  SUBJECTS, SUBJECT_LABELS, SUBJECT_BADGE, SUBJECT_EMOJI, SUBJECT_ACCENT, SUBJECT_PATTERN, SUBJECT_PATTERN_COLOR, SUBJECT_PACING_LINKS, isValidSubject, subjectLabel
 } from './subject-config.js';
 
 // ---------------------------------------------------------------------------
@@ -155,26 +155,140 @@ function renderPicker() {
     const isMine = userSubjects.includes(s);
     const writable = isAdmin || isDirector || isMine;
     const writeChip = writable
-      ? '<span class="dw-pick-chip dw-pick-chip--write">Write access</span>'
+      ? '<span class="dw-pick-chip dw-pick-chip--write">Write</span>'
       : '<span class="dw-pick-chip dw-pick-chip--read">Read-only</span>';
+
+    // Cambridge stage chips with official syllabus codes — derived
+    // from SUBJECT_PACING_LINKS. Each chip shows the stage marker
+    // (Y1-6 / Y7-8 / Y9-10 / Y11-12) above the 4-digit Cambridge
+    // syllabus code (e.g. 0580 for IGCSE Math). Codes cited from
+    // curriculum-map.html SUBJECT_CONFIGS — single source of truth.
+    const pacingLinks = SUBJECT_PACING_LINKS[s] || [];
+    const stageOrder = ['Y1–6', 'Y7–8', 'Y9–10', 'Y11–12'];
+    const stages = stageOrder
+      .map(st => pacingLinks.find(l => l.stage === st))
+      .filter(Boolean);
+    const stagesHtml = stages.length
+      ? stages.map(st => `
+          <span class="dw-pick-stage" title="${escHtml(st.label)} · Cambridge ${escHtml(st.code || '')}">
+            ${escHtml(st.stage)}
+            ${st.code ? `<span class="dw-pick-stage-code">${escHtml(st.code)}</span>` : ''}
+          </span>
+        `).join('')
+      : '<span class="dw-pick-stages-empty">Network-defined scope</span>';
+
+    // Cambridge subject code line — fixed two-letter mono code under
+    // the name, gives the card a Cambridge-syllabus feel without
+    // claiming a specific 4-digit code (those live on the pacing pages).
+    const subjectCode = SUBJECT_BADGE[s] || '';
+
+    // Cambridge stage coverage bar — 4 segments (Y1-6, Y7-8, Y9-10,
+    // Y11-12). A segment is "filled" if the subject ships a Cambridge
+    // pacing page at that stage. Zero Firestore cost — pure derivation
+    // from SUBJECT_PACING_LINKS. Math owns 4/4, English 2/4, Bahasa
+    // 0/4, etc. Filled stages use the subject's accent gradient so
+    // the bar reads as part of the card's identity.
+    const filledCount = stages.length;
+    const coverageHtml = stageOrder.map(stage => {
+      const filled = pacingLinks.some(l => l.stage === stage);
+      return `<span class="dw-pick-coverage-seg${filled ? ' dw-pick-coverage-seg--filled' : ''}" title="${escHtml(stage)} ${filled ? '· covered' : '· no Cambridge pacing'}"></span>`;
+    }).join('');
+
+    // Hover-reveal pacing jump strip — lets a coordinator dive
+    // straight to a Cambridge pacing page from the picker without
+    // opening the workspace first. Each chip is its own <a> with
+    // stopPropagation so the card-level link doesn't swallow the
+    // click. Subjects with no Cambridge pacing pages get a small
+    // empty-state pointing back at the workspace.
+    const jumpsHtml = pacingLinks.length
+      ? pacingLinks.map(l => `
+          <a href="${escHtml(l.slug)}"
+             class="dw-pick-jump"
+             title="${escHtml(l.label)} · Cambridge ${escHtml(l.code || '')}"
+             onclick="event.stopPropagation()">
+            ${escHtml(l.stage)}
+            ${l.code ? `<span class="dw-pick-jump-code">${escHtml(l.code)}</span>` : ''}
+          </a>
+        `).join('')
+      : '<span class="dw-pick-jumps-empty">No Cambridge pacing for this department.</span>';
+
+    // Card is a <div role="link"> (not <a>) because it nests <a>
+    // jump chips for direct pacing-page navigation. Nested anchors
+    // are invalid HTML. Click + keyboard handlers below route
+    // empty-area clicks to the workspace href.
     return `
-      <a class="dw-pick-card${isMine ? ' dw-pick-card--mine' : ''}"
-         href="?subject=${encodeURIComponent(s)}"
-         data-subject="${escHtml(s)}">
-        <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}" aria-hidden="true">
-          <span class="dw-pick-emoji">${SUBJECT_EMOJI[s] || SUBJECT_BADGE[s]}</span>
+      <div class="dw-pick-card${isMine ? ' dw-pick-card--mine' : ''}"
+         role="link"
+         tabindex="0"
+         data-subject="${escHtml(s)}"
+         data-href="?subject=${encodeURIComponent(s)}"
+         aria-label="Open ${escHtml(SUBJECT_LABELS[s])} department workspace"
+         style="--pick-grad:${SUBJECT_ACCENT[s]}; --pick-pattern:${SUBJECT_PATTERN[s] || 'none'}; --pick-pattern-color:${SUBJECT_PATTERN_COLOR[s] || '#6c5ce7'}">
+        ${isMine ? '<span class="dw-pick-yours">★ Yours</span>' : ''}
+        <div class="dw-pick-head">
+          <div class="dw-pick-badge" style="background:${SUBJECT_ACCENT[s]}" aria-hidden="true">
+            <span class="dw-pick-emoji">${SUBJECT_EMOJI[s] || SUBJECT_BADGE[s]}</span>
+          </div>
+          <div class="dw-pick-head-text">
+            <div class="dw-pick-name">${escHtml(SUBJECT_LABELS[s])}</div>
+            <div class="dw-pick-subject-code">Department · ${escHtml(subjectCode)}</div>
+          </div>
         </div>
-        <div class="dw-pick-body">
-          <div class="dw-pick-name">${escHtml(SUBJECT_LABELS[s])}</div>
+        <div class="dw-pick-coverage" aria-label="Cambridge stage coverage ${filledCount} of 4">
+          <div class="dw-pick-coverage-track">${coverageHtml}</div>
+          <span class="dw-pick-coverage-lbl">${filledCount}/4</span>
+        </div>
+        <div class="dw-pick-stages" aria-label="Cambridge stages">
+          ${stagesHtml}
+        </div>
+        <div class="dw-pick-stats" data-subject-stats="${escHtml(s)}">
+          <div class="dw-pick-stat">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="leaders">—</span>
+            <span class="dw-pick-stat-lbl">Leaders</span>
+          </div>
+          <div class="dw-pick-stat">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="schools">—</span>
+            <span class="dw-pick-stat-lbl">Schools</span>
+          </div>
+          <div class="dw-pick-stat">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="plan">—</span>
+            <span class="dw-pick-stat-lbl">Annual Plan</span>
+          </div>
+          <div class="dw-pick-stat dw-pick-stat--detailed">
+            <span class="dw-pick-stat-val dw-pick-stat-val--muted" data-kpi="last">—</span>
+            <span class="dw-pick-stat-lbl">Last Activity</span>
+          </div>
+        </div>
+        <div class="dw-pick-foot">
           ${writeChip}
+          <span class="dw-pick-arrow" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </span>
         </div>
-      </a>
+        <div class="dw-pick-jumps" aria-label="Jump to Cambridge pacing pages">
+          <div class="dw-pick-jumps-lbl">Jump to pacing →</div>
+          <div class="dw-pick-jumps-row">${jumpsHtml}</div>
+        </div>
+      </div>
     `;
   }).join('');
 
+  // Resolve the saved density preference (defaults to 'comfortable').
+  // Stored in localStorage so admins/directors who curate the 9-card
+  // view don't have to re-pick on every visit.
+  const initialDensity = readDensityPref();
+
   host.innerHTML = `
     <div class="dw-pick-context">${escHtml(ctxLine)}</div>
-    <div class="dw-pick-grid">${cards}</div>
+    <div class="dw-pick-toolbar" role="toolbar" aria-label="Card density">
+      <span class="dw-pick-toolbar-lbl">View</span>
+      <div class="dw-pick-density" role="group" aria-label="Density">
+        <button type="button" class="dw-pick-density-btn" data-density="compact" aria-pressed="${initialDensity === 'compact'}">Compact</button>
+        <button type="button" class="dw-pick-density-btn" data-density="comfortable" aria-pressed="${initialDensity === 'comfortable'}">Comfortable</button>
+        <button type="button" class="dw-pick-density-btn" data-density="detailed" aria-pressed="${initialDensity === 'detailed'}">Detailed</button>
+      </div>
+    </div>
+    <div class="dw-pick-grid" id="dwPickGrid" data-density="${escHtml(initialDensity)}">${cards}</div>
     <div class="dw-pick-footnote">
       A department workspace gathers that subject's Annual Plan, school subject leaders,
       Coordinator's running notes, and recent activity in one canvas. The cross-subject
@@ -184,6 +298,249 @@ function renderPicker() {
       <a href="department-artifacts">Artifacts</a>) remain for HQ-wide views.
     </div>
   `;
+
+  wireDensityToggle();
+
+  // Fire-and-forget live KPI population. Two batched reads cover all
+  // 9 cards (instead of 18 per-card queries). Failures degrade
+  // silently — cards keep the "—" placeholder.
+  populatePickerKpis().catch(err => console.warn('[picker kpis]', err));
+
+  wirePickerClicks();
+}
+
+// ---------------------------------------------------------------------------
+// Density toggle — persisted in localStorage so admin's view choice
+// survives reloads. Only the grid container's data-density changes;
+// each card has CSS overrides per density value.
+// ---------------------------------------------------------------------------
+
+const DENSITY_PREF_KEY = 'ch-dw-pick-density';
+const VALID_DENSITIES = ['compact', 'comfortable', 'detailed'];
+
+function readDensityPref() {
+  try {
+    const v = localStorage.getItem(DENSITY_PREF_KEY);
+    if (VALID_DENSITIES.includes(v)) return v;
+  } catch (e) { /* private mode / disabled storage — fall through */ }
+  return 'comfortable';
+}
+
+function writeDensityPref(v) {
+  if (!VALID_DENSITIES.includes(v)) return;
+  try { localStorage.setItem(DENSITY_PREF_KEY, v); } catch (e) { /* ignore */ }
+}
+
+function wireDensityToggle() {
+  const grid = $('dwPickGrid');
+  if (!grid) return;
+  const btns = document.querySelectorAll('.dw-pick-density-btn[data-density]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const next = btn.getAttribute('data-density');
+      if (!VALID_DENSITIES.includes(next)) return;
+      grid.setAttribute('data-density', next);
+      btns.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+      writeDensityPref(next);
+    });
+  });
+}
+
+// Each .dw-pick-card is a <div role="link"> because it nests real
+// <a> tags (the Cambridge pacing jump chips). We forward empty-area
+// clicks + Enter/Space keypresses to the workspace href, and let
+// the inner <a> chips handle their own navigation untouched.
+function wirePickerClicks() {
+  const cards = document.querySelectorAll('.dw-pick-card[data-href]');
+  cards.forEach(card => {
+    const href = card.getAttribute('data-href');
+    if (!href) return;
+
+    card.addEventListener('click', (e) => {
+      // If the click landed inside (or on) a real anchor, let it
+      // navigate normally — that's a jump chip doing its job.
+      if (e.target.closest('a')) return;
+      window.location.href = href;
+    });
+
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        // Same rule for keyboard — focused chips own their own
+        // activation, only the card-body Enter/Space opens the
+        // workspace.
+        if (e.target.closest('a')) return;
+        e.preventDefault();
+        window.location.href = href;
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Picker live KPIs — 2 batched reads cover all 9 subject cards
+// ---------------------------------------------------------------------------
+
+async function populatePickerKpis() {
+  if (!db) return;
+
+  // Query 1: every school subject leader in the network. Network is
+  // ~14 schools × 9 subjects = 126 max — well within Firestore single-
+  // query limits. Cap at 500 for safety.
+  const qLeaders = query(
+    collection(db, 'coordinators_directory_entries'),
+    where('entryKind', '==', 'school_subject_leader'),
+    limit(500)
+  );
+
+  // Query 2: every annual-plan artifact across all subjects. Capped
+  // at 9 subjects × small N versions each — typically ≤ 50 docs.
+  const qPlans = query(
+    collection(db, 'department_artifacts'),
+    where('artifactType', '==', 'annual_plan'),
+    limit(200)
+  );
+
+  let leaderSnap, planSnap;
+  try {
+    [leaderSnap, planSnap] = await Promise.all([
+      getDocs(qLeaders),
+      getDocs(qPlans),
+    ]);
+  } catch (err) {
+    console.warn('[populatePickerKpis] read failed:', err);
+    return;
+  }
+
+  // Group leaders + plans by subjectId. lastActivity = max updatedAt
+  // across both sources (no extra Firestore read — the timestamps come
+  // free with each doc we already fetched).
+  const bySubject = new Map();
+  const noteLastActivity = (subjectId, ts) => {
+    if (!subjectId || !ts) return;
+    const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+    if (!d) return;
+    const bucket = bySubject.get(subjectId);
+    if (!bucket) return;
+    if (!bucket.lastActivity || d > bucket.lastActivity) {
+      bucket.lastActivity = d;
+    }
+  };
+  const ensureBucket = (subjectId) => {
+    let bucket = bySubject.get(subjectId);
+    if (!bucket) {
+      bucket = { leaders: 0, schools: new Set(), hasPlan: false, lastActivity: null };
+      bySubject.set(subjectId, bucket);
+    }
+    return bucket;
+  };
+
+  leaderSnap.forEach(d => {
+    const e = d.data();
+    if (!e?.subjectId) return;
+    const bucket = ensureBucket(e.subjectId);
+    bucket.leaders += 1;
+    if (e.schoolId) bucket.schools.add(e.schoolId);
+    noteLastActivity(e.subjectId, e.updatedAt || e.createdAt);
+  });
+
+  // Mark which subjects have a current Annual Plan artifact. "current"
+  // matches the existing department_artifacts pill convention — a
+  // status field of 'current' (others are 'draft' / 'archived').
+  planSnap.forEach(d => {
+    const a = d.data();
+    if (!a?.subjectId) return;
+    const bucket = ensureBucket(a.subjectId);
+    // Treat any non-archived annual_plan as "present"; the green check
+    // is about whether the slot is filled, not lifecycle nuance.
+    if (a.status !== 'archived') bucket.hasPlan = true;
+    noteLastActivity(a.subjectId, a.updatedAt || a.createdAt);
+  });
+
+  // Paint each card's stat row. Subjects with no entries get a
+  // muted "0" — informative on its own (signals "no leader yet").
+  // For users who CAN write to a subject (own / admin / director),
+  // turn the zero/empty value into an inline "+ Add" mini-link
+  // that deep-links to the workspace + scrolls to the matching
+  // section. Read-only viewers see the muted placeholder.
+  document.querySelectorAll('[data-subject-stats]').forEach(host => {
+    const s = host.getAttribute('data-subject-stats');
+    const b = bySubject.get(s) || { leaders: 0, schools: new Set(), hasPlan: false, lastActivity: null };
+    const writable = isAdmin || isDirector || userSubjects.includes(s);
+
+    // Leaders — "+ Add" deep-link when zero (and user can write).
+    if (b.leaders > 0) {
+      paintPickerStat(host, 'leaders', b.leaders, null);
+    } else if (writable) {
+      paintPickerStatAction(host, 'leaders', '+ Add', `?subject=${encodeURIComponent(s)}#subject-leaders`);
+    } else {
+      paintPickerStat(host, 'leaders', '0', 'muted');
+    }
+
+    paintPickerStat(host, 'schools', b.schools.size, b.schools.size > 0 ? null : 'muted');
+
+    // Annual Plan — "+ Add" deep-link when missing (and user can write).
+    if (b.hasPlan) {
+      paintPickerStat(host, 'plan', '✓', 'ok');
+    } else if (writable) {
+      paintPickerStatAction(host, 'plan', '+ Add', `?subject=${encodeURIComponent(s)}#annual-plan`);
+    } else {
+      paintPickerStat(host, 'plan', '—', 'warn');
+    }
+
+    if (b.lastActivity) {
+      paintPickerStat(host, 'last', fmtRelativeCompact(b.lastActivity), null);
+    } else {
+      paintPickerStat(host, 'last', '—', 'muted');
+    }
+  });
+}
+
+// Replaces the stat cell's <span> with an inline <a> CTA. Inherits
+// the cell's flex layout; click bubbles up but the wirePickerClicks
+// handler skips card-routing when the click lands on an <a>.
+function paintPickerStatAction(hostEl, kpi, label, href) {
+  const el = hostEl.querySelector(`[data-kpi="${kpi}"]`);
+  if (!el) return;
+  // Already converted? (rare — defensive against duplicate calls.)
+  if (el.tagName === 'A') {
+    el.textContent = label;
+    el.setAttribute('href', href);
+    return;
+  }
+  const a = document.createElement('a');
+  a.className = 'dw-pick-stat-val dw-pick-stat-val--cta';
+  a.setAttribute('data-kpi', kpi);
+  a.setAttribute('href', href);
+  a.textContent = label;
+  el.replaceWith(a);
+}
+
+// Compact relative-date formatter for the picker's Last Activity
+// cell — fits inside a ~50px mono span. "2d" / "3w" / "Mar 4" /
+// "·" for null. Keeps the 4-cell grid readable in Detailed mode.
+function fmtRelativeCompact(d) {
+  if (!d) return '—';
+  const diffMs = Date.now() - d.getTime();
+  const day = 24 * 60 * 60 * 1000;
+  if (diffMs < day) return 'today';
+  if (diffMs < 2 * day) return '1d';
+  if (diffMs < 7 * day) return `${Math.floor(diffMs / day)}d`;
+  if (diffMs < 30 * day) return `${Math.floor(diffMs / (7 * day))}w`;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+function paintPickerStat(hostEl, kpi, value, variant) {
+  const el = hostEl.querySelector(`[data-kpi="${kpi}"]`);
+  if (!el) return;
+  el.textContent = String(value);
+  el.classList.remove(
+    'dw-pick-stat-val--muted',
+    'dw-pick-stat-val--ok',
+    'dw-pick-stat-val--warn'
+  );
+  if (variant === 'muted') el.classList.add('dw-pick-stat-val--muted');
+  else if (variant === 'ok') el.classList.add('dw-pick-stat-val--ok');
+  else if (variant === 'warn') el.classList.add('dw-pick-stat-val--warn');
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +554,12 @@ function openSubject(subjectId) {
   const host = $('workspaceRoot');
   if (!host) return;
 
+  // Set subject CSS vars on workspaceRoot so descendant sections can
+  // pull the per-subject accent (section left-bar, etc) without each
+  // one needing an inline style attribute.
+  host.style.setProperty('--subj-grad', SUBJECT_ACCENT[subjectId] || '');
+  host.style.setProperty('--subj-pattern-color', SUBJECT_PATTERN_COLOR[subjectId] || '#6c5ce7');
+
   const accent = SUBJECT_ACCENT[subjectId];
   const label = SUBJECT_LABELS[subjectId];
   const badge = SUBJECT_EMOJI[subjectId] || SUBJECT_BADGE[subjectId];
@@ -204,14 +567,45 @@ function openSubject(subjectId) {
     ? '<span class="dw-write-badge dw-write-badge--yes">You can edit</span>'
     : '<span class="dw-write-badge dw-write-badge--no">Read-only · not your subject</span>';
 
+  // Cambridge syllabus codes for the subtitle row — same source as
+  // the picker card stage chips (SUBJECT_PACING_LINKS). Renders as
+  // a one-line mono strip "0096 · 0862 · 0580 · 9709" with hover
+  // titles for the stage label. Coverage badge "n/4" matches the
+  // picker's coverage bar exactly.
+  const pacingLinks = SUBJECT_PACING_LINKS[subjectId] || [];
+  const stageOrder = ['Y1–6', 'Y7–8', 'Y9–10', 'Y11–12'];
+  const orderedStages = stageOrder
+    .map(st => pacingLinks.find(l => l.stage === st))
+    .filter(Boolean);
+  const filledCount = orderedStages.length;
+  const codesHtml = orderedStages.length
+    ? orderedStages.map(l => `
+        <span class="dw-subject-code-chip" title="${escHtml(l.label)} · Cambridge ${escHtml(l.code || '')}">
+          <span class="dw-subject-code-stage">${escHtml(l.stage)}</span>
+          ${l.code ? `<span class="dw-subject-code-num">${escHtml(l.code)}</span>` : ''}
+        </span>
+      `).join('')
+    : '<span class="dw-subject-codes-empty">Network-defined scope — no Cambridge syllabus</span>';
+
   host.innerHTML = `
-    <div class="dw-subject-head">
+    <div class="dw-subject-head"
+         style="--subj-grad:${accent}; --subj-pattern:${SUBJECT_PATTERN[subjectId] || 'none'}; --subj-pattern-color:${SUBJECT_PATTERN_COLOR[subjectId] || '#6c5ce7'}">
+      <a href="department-workspace" class="dw-subject-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        All Departments
+      </a>
       <div class="dw-subject-id-row">
-        <div class="dw-subject-badge" style="background:${accent}" aria-hidden="true"><span>${badge}</span></div>
+        <div class="dw-subject-badge" style="background:${accent}" aria-hidden="true">
+          <span>${badge}</span>
+        </div>
         <div class="dw-subject-title-block">
           <h2 class="dw-subject-title">${escHtml(label)} Department</h2>
-          <div class="dw-subject-sub">${writeBadge}</div>
+          <div class="dw-subject-codes" aria-label="Cambridge syllabus codes">
+            ${codesHtml}
+            <span class="dw-subject-coverage-badge" aria-label="Cambridge stage coverage ${filledCount} of 4">${filledCount}/4 stages</span>
+          </div>
         </div>
+        <div class="dw-subject-write-slot">${writeBadge}</div>
       </div>
     </div>
 
@@ -221,10 +615,31 @@ function openSubject(subjectId) {
         <h3 class="dw-section-title">Overview</h3>
       </div>
       <div class="dw-kpi-grid" id="dwKpiGrid">
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Artifacts</div><div class="dw-kpi-val" id="kpiArtifacts">—</div><div class="dw-kpi-sub">of 4 core types</div></div>
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Subject Leaders</div><div class="dw-kpi-val" id="kpiLeaders">—</div><div class="dw-kpi-sub">across the network</div></div>
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Schools Covered</div><div class="dw-kpi-val" id="kpiSchools">—</div><div class="dw-kpi-sub">with a named leader</div></div>
-        <div class="dw-kpi"><div class="dw-kpi-lbl">Last Meeting</div><div class="dw-kpi-val" id="kpiLastMeeting">—</div><div class="dw-kpi-sub" id="kpiLastMeetingSub">no minutes yet</div></div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiArtifacts">—</div>
+          <div class="dw-kpi-lbl">Artifacts</div>
+          <div class="dw-kpi-sub">of 4 core types</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiLeaders">—</div>
+          <div class="dw-kpi-lbl">Subject Leaders</div>
+          <div class="dw-kpi-sub">across the network</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiSchools">—</div>
+          <div class="dw-kpi-lbl">Schools Covered</div>
+          <div class="dw-kpi-sub">with a named leader</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val dw-kpi-val--ok">${filledCount}/4</div>
+          <div class="dw-kpi-lbl">Stage Coverage</div>
+          <div class="dw-kpi-sub">Cambridge curriculum</div>
+        </div>
+        <div class="dw-kpi">
+          <div class="dw-kpi-val" id="kpiLastMeeting">—</div>
+          <div class="dw-kpi-lbl">Last Meeting</div>
+          <div class="dw-kpi-sub" id="kpiLastMeetingSub">no minutes yet</div>
+        </div>
       </div>
     </section>
 
@@ -281,6 +696,18 @@ function openSubject(subjectId) {
   bindSubjectLeaders(subjectId);
   bindDiscussion(subjectId);
   bindOverviewKpi(subjectId);
+
+  // If the page was deep-linked with a section hash (e.g. picker's
+  // zero-state CTA → #subject-leaders), scroll the matching section
+  // into view once data has had a tick to mount. Section nodes use
+  // data-section="..."; no <a name="..."> needed.
+  const targetHash = window.location.hash.replace(/^#/, '');
+  if (targetHash) {
+    setTimeout(() => {
+      const target = document.querySelector(`[data-section="${CSS.escape(targetHash)}"]`);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -301,8 +728,11 @@ function renderPacingStrip(subjectId) {
     return;
   }
   slot.innerHTML = links.map(L => `
-    <a class="dw-pacing-link" href="${escHtml(L.slug)}">
-      <span class="dw-pacing-stage">${escHtml(L.stage)}</span>
+    <a class="dw-pacing-link" href="${escHtml(L.slug)}" title="${escHtml(L.label)} · Cambridge ${escHtml(L.code || '')}">
+      <span class="dw-pacing-stage">
+        ${escHtml(L.stage)}
+        ${L.code ? `<span class="dw-pacing-stage-code">${escHtml(L.code)}</span>` : ''}
+      </span>
       <span class="dw-pacing-label">${escHtml(L.label)}</span>
       <svg class="dw-pacing-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
     </a>
@@ -431,9 +861,9 @@ function bindSubjectLeaders(subjectId) {
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
     renderLeaders(slot, subjectId, entries);
-    updateKpi('kpiLeaders', entries.length);
+    updateKpi('kpiLeaders', entries.length, null, entries.length === 0 ? 'muted' : null);
     const schools = new Set(entries.map(e => e.schoolId).filter(Boolean));
-    updateKpi('kpiSchools', schools.size);
+    updateKpi('kpiSchools', schools.size, null, schools.size === 0 ? 'muted' : null);
   }, (err) => {
     console.warn('[bindSubjectLeaders]', err);
     slot.innerHTML = `<div class="dw-empty">Could not load subject leaders (${escHtml(err.code || err.message || 'error')}).</div>`;
@@ -827,9 +1257,15 @@ function renderDiscussion(slot, subjectId, ref, data) {
 // Section: Overview KPI strip
 // ---------------------------------------------------------------------------
 
-function updateKpi(id, val, subText) {
+function updateKpi(id, val, subText, variant) {
   const el = $(id);
-  if (el) el.textContent = String(val);
+  if (el) {
+    el.textContent = String(val);
+    el.classList.remove('dw-kpi-val--ok', 'dw-kpi-val--warn', 'dw-kpi-val--muted');
+    if (variant === 'ok') el.classList.add('dw-kpi-val--ok');
+    else if (variant === 'warn') el.classList.add('dw-kpi-val--warn');
+    else if (variant === 'muted') el.classList.add('dw-kpi-val--muted');
+  }
   if (subText != null) {
     const sub = $(id + 'Sub');
     if (sub) sub.textContent = subText;
@@ -848,10 +1284,14 @@ function bindOverviewKpi(subjectId) {
     const docs = snap.docs.map(d => d.data());
     const coreTypes = ['annual_plan', 'dtp_report', 'department_handbook', 'subject_policy'];
     const have = new Set(docs.filter(d => coreTypes.includes(d.artifactType)).map(d => d.artifactType));
-    updateKpi('kpiArtifacts', `${have.size}/4`);
+    // Variant: 4/4 → ok (green), 0/4 → warn (amber), partial → neutral.
+    let variant = null;
+    if (have.size === 4) variant = 'ok';
+    else if (have.size === 0) variant = 'warn';
+    updateKpi('kpiArtifacts', `${have.size}/4`, null, variant);
   }, (err) => {
     console.warn('[kpi artifacts]', err);
-    updateKpi('kpiArtifacts', '—');
+    updateKpi('kpiArtifacts', '—', null, 'muted');
   });
   unsubFns.push(unsubA);
 
@@ -865,13 +1305,13 @@ function bindOverviewKpi(subjectId) {
   );
   const unsubM = onSnapshot(qMeetings, (snap) => {
     if (snap.empty) {
-      updateKpi('kpiLastMeeting', '—', 'no minutes yet');
+      updateKpi('kpiLastMeeting', '—', 'no minutes yet', 'muted');
       return;
     }
     const m = snap.docs[0].data();
     const d = m.meetingDate?.toDate ? m.meetingDate.toDate() : null;
     if (!d) {
-      updateKpi('kpiLastMeeting', '—', 'no minutes yet');
+      updateKpi('kpiLastMeeting', '—', 'no minutes yet', 'muted');
       return;
     }
     const diff = Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000));
@@ -879,10 +1319,12 @@ function bindOverviewKpi(subjectId) {
               : diff === 1 ? '1d ago'
               : diff < 30 ? `${diff}d ago`
               : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-    updateKpi('kpiLastMeeting', lbl, m.title ? escHtml(m.title).slice(0, 64) : 'most recent meeting');
+    // Fresh meeting (≤ 14d) reads as ok (green). Older → neutral.
+    const variant = diff <= 14 ? 'ok' : null;
+    updateKpi('kpiLastMeeting', lbl, m.title ? escHtml(m.title).slice(0, 64) : 'most recent meeting', variant);
   }, (err) => {
     console.warn('[kpi meetings]', err);
-    updateKpi('kpiLastMeeting', '—', 'could not load');
+    updateKpi('kpiLastMeeting', '—', 'could not load', 'muted');
   });
   unsubFns.push(unsubM);
 }

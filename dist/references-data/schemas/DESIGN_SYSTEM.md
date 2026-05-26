@@ -85,7 +85,59 @@ Some pages have their own thematic accent (red for math pacing, green for biolog
 
 8px-based scale — `--space-1` (4px) through `--space-20` (80px).
 
-**Container:** `--container-max: 1200px`. Hero sections and page wrappers should respect this. Inline `max-width: 980px` etc. is a smell — use the token.
+**Container:** `--container-max: 1200px`. Every body-column wrapper on a page — `.hero-inner` / `.page-hero__inner` / `.page-wrap` / `.toolbar` / `.content` / `.summary-row` / `.page-footer__inner` / `.page-footer__meta` / any other top-level content column — MUST land at exactly 1200 px **measured content width**.
+
+**Correct pattern** (works in practice, measures 1200 in DevTools at viewport ≥ 1280):
+```css
+.hero-inner /* or .page-wrap / .toolbar / .content / etc. */ {
+  width: 100%;                       /* CRITICAL — see note below */
+  max-width: var(--container-max);   /* = 1200 */
+  margin: 0 auto;
+  padding: 0;                        /* horizontal padding ZERO */
+}
+.hero { padding: 44px 0; }           /* vertical padding stays on outer */
+```
+
+**The `width: 100%` is not optional — applies to EVERY direct child of `<body>`, including the hero outer.** Pages shipping `<footer class="page-footer">` activate base.css's `body:has(> .page-footer) { display: flex; flex-direction: column }` sticky-footer rule. Inside a flex column, block-level children DO NOT auto-stretch to the parent's content width — they shrink to their own intrinsic content width unless explicitly told otherwise.
+
+Apply `width: 100%` to:
+- `.hero` / `.page-hero` (outer hero band — gradient bg may still appear full-bleed via `::before` overlay, but the actual wrapper collapses without this, dragging `.hero-inner` narrower than the body content below)
+- `.hero-inner` / `.page-hero__inner` (so it stretches to fill the now-100% hero before clamping to `max-width: var(--container-max)`)
+- `.toolbar`, `.content`, `.page-wrap`, any other top-level body-child wrapper
+
+Without it at EVERY level, the cascade breaks somewhere — either hero collapses (body content wider than hero) or body wrappers collapse (hero wider than body). Both produce the same complaint from Alif. Don't trust intuition on flex-column stretch behavior; explicit `width: 100%` on every body-child wrapper is the only safe pattern.
+
+For canonical `.page-hero__inner` + `.page-footer__inner` (which carry `var(--container-max)` clamp + their own 40 px padding in base.css), pages need a **page-local override** to strip that inner padding so content measures 1200:
+
+```css
+.page-hero__inner,
+.page-footer__inner,
+.page-footer__meta {
+  max-width: var(--container-max);
+  padding-left: 0;
+  padding-right: 0;
+}
+```
+
+**Patterns that LOOK correct on paper but fail in practice** (all flagged by Alif on 2026-05-25, multiple iterations):
+
+1. **`max-width: 1280px` / `1320px` literal** — legacy, untokenised. Drift from earlier conventions; ships content wider than the rest of the network. Easy to spot.
+2. **`max-width: calc(var(--container-max) + 80px)` + `padding: 0 40px`** — the "outer +80 padding × 2 → math 1200" pattern. Math says 1280 outer − 40 padding × 2 = 1200 content. **In practice it measures ~1022 px in DevTools** at viewport ≥ 1280. Don't trust the math; measure. This is the OVER-CORRECTION trap — once Alif flags "body content 1200 değil", do NOT reach for the calc(+80) pattern; reach for the **zero-padding** pattern above.
+3. **Inconsistent rail across hero / body / footer** — even when each individual wrapper measures 1200, mixing the canonical `.page-hero__inner` (which carries its own padding) with a page-local `.page-wrap` (no padding) without the override above leaves a 40 px asymmetry. All three rails need the same `max-width: var(--container-max); padding: 0` envelope (or the page-local override on canonical wrappers).
+
+**First-pass grep before claiming a page is design-system-compliant** — must return ZERO matches:
+```
+grep -nE 'max-width:\s*(1[0-9]{3}px|calc\(var\(--container-max\)\s*\+)' page.html
+```
+This catches literal `1200px` / `1280px` / `1320px` AND the calc(+80) over-correction. Only `max-width: var(--container-max)` (paired with horizontal padding 0 on outer + appropriate page-local overrides on canonical wrappers) is correct.
+
+**Past incidents (all 2026-05-25, same page, same complaint, three rounds):**
+- AH `/references` Phase 2 shell: shipped at 1120 content (literal `var(--container-max)` outer + inherited 40 padding from canonical wrappers). User: "body content de 1200 olmali". Round 1.
+- Fixed `/references` to `calc(+80)` + `padding: 0 40px`. Math 1200, measured 1022. User: "halen ayni". Round 2.
+- Fixed `/references` final: outer `var(--container-max)` + horizontal padding ZERO. Measured 1200 in DevTools. User: "nicin anlamiyorsun" → memory note [[references-three-rails-1200]] created.
+- AH `/curriculum-map` + `/syllabus-coverage` went through the SAME 3-round arc within the same session because I missed the memory note. Final fix matches the /references three-rails pattern.
+
+See [`references-three-rails-1200`](../../C:/Users/maliu/.claude/projects/c--Users-maliu-Desktop-Eduversal-Web/memory/feedback_references_three_rails_1200.md) memory note for the original specification this generalises.
 
 ```css
 .page-wrap {
@@ -212,6 +264,142 @@ Don't write a new gradient. Don't override `.page-hero` background in a page `<s
 The same discipline applies to **shared chrome under the hero** — `.page-toolbar` (sticky filter/search bar) and `.page-empty` (empty state with icon + title + desc) live in `shared-styles.css`; don't fork them per page.
 
 **Reminder on padding placement:** when a page is built on `.hero` + `.hero-inner` + `.page-wrap` (the older 3-wrapper pattern still in use on `checklist-admin`, `kpi-admin`, etc.) keep horizontal padding on the INNER wrappers — see "Hero ↔ page-wrap alignment" under §Spacing & layout. The canonical `.page-hero` already does this correctly; the gotcha only bites legacy pages that haven't been migrated yet.
+
+**Reminder on navbar clearance:** every hub ships a `position: fixed` navbar that occupies the top 62px of the viewport. The canonical `.page-hero` does NOT compensate for this — so any page using `.page-hero` must add `body { padding-top: 62px; }` in its page-local `<style>`. Mirror what `MyInduction.html` / `CompetencyFramework.html` / `LearningPath.html` already do; `base.css` doesn't add this globally because other layouts (dashboards, plain admin tools) set their own offsets. Past incident 2026-05-24 on AH `/references` + `/ai-prompts`: shipped first refactor without padding-top, hero rendered behind the navbar.
+
+---
+
+## Page background tint — match the hero family
+
+Every page using the canonical `.page-hero` should also opt into the **family-tinted body background** so the hero gradient flows into a same-family wash instead of an abrupt edge against the default `#f7f6f3` paper. Opt-in is a single attribute on `<body>`:
+
+```html
+<body data-page-accent="cyan">    <!-- pairs with <header class="page-hero" data-accent="cyan"> -->
+```
+
+The attribute value MUST match the hero's `data-accent` value verbatim. Mismatch (hero `cyan` + body `mor`) defeats the purpose — the visual handoff between hero and body content will read as broken family.
+
+**How it composes:**
+
+1. **Body tint** (~3-4% saturated off-white) replaces the default `--paper`. Cards (`var(--white)`) still read as elevated above the tint.
+2. **`.page-hero::after` fade** — a 40px gradient overlay rendered just BELOW the hero on the body background, picking up the same accent. Gives the hero → content handoff a soft gradient bleed instead of a hard edge.
+
+Both are wired by the canonical CSS in each hub's `base.css` / `shared-styles.css`:
+
+```css
+body[data-page-accent="cyan"] { background: var(--paper-tinted-cyan); }
+body[data-page-accent="mor"]  { background: var(--paper-tinted-mor); }
+body[data-page-accent="dark"] { background: var(--paper-tinted-dark); }
+
+.page-hero[data-accent="cyan"]::after { background: var(--hero-fade-cyan); }
+.page-hero[data-accent="mor"]::after  { background: var(--hero-fade-mor); }
+.page-hero[data-accent="dark"]::after { background: var(--hero-fade-dark); }
+```
+
+**Tokens** (in `shared-design/tokens.css`):
+
+| Token | Value | Use |
+|---|---|---|
+| `--paper-tinted-cyan` | `#e6eef5` | ice — Communication family body |
+| `--paper-tinted-mor`  | `#ece5f6` | lavender — Knowledge family body |
+| `--paper-tinted-dark` | `#e9e5ec` | charcoal — My Work family body |
+| `--hero-fade-cyan`    | linear-gradient cyan→tint | 40px bleed below cyan hero |
+| `--hero-fade-mor`     | linear-gradient mor→tint  | 40px bleed below mor hero |
+| `--hero-fade-dark`    | linear-gradient dark→tint | 40px bleed below dark hero |
+
+**My CPD per-page accents** (2026-05-24, AH-specific so far) — `learning` / `portfolio` / `certificates` / `induction` get their own tint + fade variants. The `induction` variant reuses Knowledge's lavender (`#ece5f6`) so My-Induction sits visually next to References. New per-page accents must add **both** the body-tint and the hero-fade tokens, then the `body[data-page-accent="…"]` + `.page-hero[data-accent="…"]::after` rules — adding only one half breaks the bleed.
+
+**Discipline:**
+
+- ❌ Don't override `background` on `body` in a page `<style>` block — that defeats the `data-page-accent` rule. Use the attribute.
+- ❌ Don't invent a new accent value (e.g. `data-page-accent="brand"`) — every value must have matching `--paper-tinted-*` AND `--hero-fade-*` tokens.
+- ❌ Don't omit the attribute "because it's subtle" — the family handoff is part of the design system, not a nice-to-have. Without the attribute the page reads as un-themed against the default cream paper.
+- ✅ If a page wants the family hero but explicitly NOT the tinted body (rare — usually a content-heavy reader page that wants white cards on neutral), leave `data-page-accent` off and document the exception in the page `<style>` block with a one-line comment.
+
+Past incident 2026-05-24 on AH `/references` + `/ai-prompts`: refactor adopted `.page-hero` but forgot `data-page-accent` on body. Hero rendered correctly but the cyan/mor wash terminated abruptly at the hero edge against cream paper. Added in a follow-up commit alongside the navbar-clearance padding + canonical footer.
+
+---
+
+## Canonical footer
+
+Every Communication / Knowledge / My Work page should ship the canonical `.page-footer` (already wired in each hub's `base.css` / `shared-styles.css`). The footer is what closes the page narratively — a forward-flow CTA + 1-2 nav columns pointing to logically-next surfaces, then a meta row.
+
+**Markup** (direct child of `<body>`):
+
+```html
+<footer class="page-footer" role="contentinfo">
+  <div class="page-footer__inner">
+    <div class="page-footer__cta">
+      <span class="page-footer__cta-eyebrow">{Family · Scope}</span>
+      <h2 class="page-footer__cta-title">{Short one-line nudge.}</h2>
+      <p class="page-footer__cta-desc">{Two sentences max. What this page invites the reader to do next.}</p>
+      <a href="{relevant /slug}" class="page-footer__cta-btn">{Open X} <span aria-hidden="true">→</span></a>
+    </div>
+    <nav class="page-footer__nav" aria-label="{Page} footer navigation">
+      <div class="page-footer__nav-group">
+        <span class="page-footer__nav-heading">{Group A — e.g. My Hub}</span>
+        <a href="..." class="page-footer__nav-link">...</a>
+      </div>
+      <div class="page-footer__nav-group">
+        <span class="page-footer__nav-heading">{Group B — e.g. References}</span>
+        <a href="..." class="page-footer__nav-link">...</a>
+      </div>
+    </nav>
+  </div>
+  <div class="page-footer__meta">
+    <span class="page-footer__meta-left">© Eduversal · {Hub name}</span>
+    <span class="page-footer__meta-right">{One-line page tagline}</span>
+  </div>
+</footer>
+```
+
+**Sticky-footer behaviour** is automatic via:
+
+```css
+body:has(> .page-footer) {
+  display: flex; flex-direction: column; min-height: 100vh;
+}
+body:has(> .page-footer) > .page-footer { margin-top: auto; }
+```
+
+The footer pushes to the bottom on short pages without affecting tall pages. **The footer MUST be a direct child of `<body>`** — wrapping it in any intermediate `<div>` breaks the selector. JS modules / overlays / modals / drawer markup can sit anywhere; only the footer itself needs body-level placement.
+
+**Family-matched CTA gradient:** the default `.page-footer__cta-btn` background is the mor gradient (`linear-gradient(135deg, #7c3aed 0%, #5a4bd1 100%)`). Knowledge family pages keep the default. **Communication / My Work / per-page-accent pages override** in the page `<style>` block to match accent:
+
+```css
+/* Communication family — cyan accent */
+.page-footer__cta-btn {
+  background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+  box-shadow: 0 4px 14px rgba(8,145,178,0.35);
+}
+.page-footer__cta-btn:hover { box-shadow: 0 6px 18px rgba(8,145,178,0.45); }
+```
+
+For the My CPD per-page accents (`learning` / `portfolio` / `certificates` / `induction`), `tokens.css` ships matched `--footer-grad-*` / `--footer-radial-*-a` / `--footer-radial-*-b` / `--footer-cta-grad-*` / `--footer-cta-shadow-*` token sets — use them via:
+
+```css
+.page-footer { background: var(--footer-grad-induction); }
+.page-footer::before { background: var(--footer-radial-induction-a), var(--footer-radial-induction-b); }
+.page-footer__cta-btn { background: var(--footer-cta-grad-induction); box-shadow: var(--footer-cta-shadow-induction); }
+```
+
+**Content discipline:**
+
+- **Eyebrow** = family + scope, max 4-5 words. Mirrors the hero's eyebrow style.
+- **Title** = one short imperative sentence, not a question. "Anchor every decision in a source." not "Need to look something up?"
+- **Desc** = two sentences max — what the page invites next, plus optionally one piece of context (read-only, confidential, etc.).
+- **CTA button** = single action verb + the destination. "Open Principal Handbook →" not "Click here →".
+- **Nav groups** = 2 groups × 3-4 links each is the sweet spot. Forward-flow (where to go next) > exhaustive (every related slug).
+- **Meta tagline** = one short editorial line that hints at the page's discipline (e.g. "Read-only · Source of truth lives in docs/", "Listen → Diagnose → Act → Anchor · Charter NN1 + NN2 honoured"). NOT generic ("Updated 2026-05-24" — version info goes in commit history, not the footer).
+
+**Discipline:**
+
+- ❌ Don't wrap the footer in any div — sticky-footer breaks.
+- ❌ Don't fork the gradient — use the family default or override only the `.page-footer__cta-btn` accent. The dark hero gradient on `.page-footer` itself is intentional across all families (closing tone), only My CPD per-page accents earn their own footer gradient via `--footer-grad-*`.
+- ❌ Don't put admin-only actions in the footer CTA — admin actions live in `.page-hero__actions`. Footer CTAs are visitor-facing forward flow.
+- ❌ Don't omit the footer "because the page is short". The sticky rule handles short pages; an Operations-family page (no hero) is the only legitimate footer-less case.
+
+Past incident 2026-05-24 on AH `/references` + `/ai-prompts`: shipped first refactor without footer; added in same follow-up as the navbar-clearance padding and `data-page-accent` body tint.
 
 ---
 
