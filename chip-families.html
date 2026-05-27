@@ -14,32 +14,45 @@
   <!-- SHARED_NAVBAR -->
   <style>
     body { background: #fafafa; }
-    /* Content rail alignment — every direct body child clamps to
-       max-width 1200 and pads its content with 40px each side, so
-       the inner content column lands at the same 1120 px on every
-       rail (hero · showcase · info-strip · main · footer). Shared
-       `.page-hero__inner` + `.page-footer__inner` already carry
-       40px horizontal padding by default; we match it here on the
-       page-local strips and on <main> so card grid + section
-       headers sit on the same column edges as the hero text. */
+
+    /* 1200 px content rail discipline — the ONLY pattern that
+       measures 1200 in DevTools is outer max-width 1200 + horizontal
+       padding ZERO. The calc(+80) + 40-padding pattern measures wrong
+       (1022 not 1200) per memory feedback_references_three_rails_1200.
+       Vertical padding stays. */
     main {
-      max-width: 1200px; margin: 0 auto;
-      padding: 28px 40px 64px;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 0 64px;
+    }
+    /* Strip canonical .page-hero__inner + .page-footer__inner of their
+       40 px horizontal padding so hero/footer text rails sit at the
+       same 1200 px content column as everything else. */
+    .page-hero__inner,
+    .page-footer__inner,
+    .page-footer__meta {
+      width: 100%;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      padding-left: 0;
+      padding-right: 0;
     }
 
     /* Defensive: shared-styles.css carries `body:has(> .page-footer) {
        display: flex; flex-direction: column }` (sticky-footer pattern).
        Body flex children collapse to their intrinsic content width
-       unless explicitly stretched — past incident on /references took
-       6 rounds to find. Force every direct body child to fill the flex
-       column. */
+       unless explicitly stretched (memory: references-three-rails-1200
+       round 6). Force every direct body child to fill the flex column
+       AND apply `width: 100%` so max-width:1200 actually clamps. */
     body:has(> .page-footer) > main,
     body:has(> .page-footer) > .page-hero,
     body:has(> .page-footer) > .cf-info-strip,
     body:has(> .page-footer) > .cf-showcase-strip,
     body:has(> .page-footer) > .page-footer {
-      width: 100%;
-      align-self: stretch;
+      width: 100% !important;
+      align-self: stretch !important;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -68,11 +81,23 @@
        Strip below the hero that lays out one sample chip per family so
        the reader sees all 9 chip colours before reading any card. */
     .cf-showcase-strip {
-      max-width: 1200px; margin: -32px auto 24px; padding: 18px 40px;
+      width: 100%;
+      max-width: 1200px;
+      margin: -32px auto 24px;
+      padding: 18px 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      position: relative; z-index: 2;
+    }
+    /* The white card-with-shadow effect lives on the INNER row so
+       the outer rail can stay at 1200 px without horizontal padding
+       (memory: outer max-width 1200, horizontal padding 0). */
+    .cf-showcase-inner {
       background: #fff;
       border: 1px solid #e5e7eb; border-radius: 14px;
+      padding: 18px 22px;
       box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-      position: relative; z-index: 2;
     }
     .cf-showcase-label {
       font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em;
@@ -96,7 +121,18 @@
        text / cta) which collapsed our 3-block content. */
     .cf-info-strip {
       display: block;
-      max-width: 1200px; margin: 0 auto 32px; padding: 18px 40px;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto 32px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+    /* Coloured surface lives on inner wrapper so the rail itself stays
+       at 1200 px with zero horizontal padding. */
+    .cf-info-strip-inner {
+      padding: 18px 22px;
       background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
       border: 1px solid #ddd6fe;
       border-left: 3px solid #6c5ce7;
@@ -174,10 +210,14 @@
       color: #1f2937; font-weight: 600;
     }
 
-    /* ── Card grid ──────────────────────────────────────────────────*/
+    /* ── Card grid ──────────────────────────────────────────────────
+       auto-fit (not auto-fill) so groups with fewer cards expand to
+       fill the row instead of leaving blank slots. Group A (2 cards)
+       lays out 2-col on desktop, Group B (4) lays out 3-col with one
+       wrap, Group C (3) lays out 3-col cleanly. */
     .cf-grid {
       display: grid; gap: 18px;
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
     }
 
     /* ── Family card (per-family coloured) ──────────────────────────
@@ -381,9 +421,16 @@
     }
 
     @media (max-width: 768px) {
+      /* Mobile: reintroduce horizontal padding for usability. The
+         1200-rail discipline is desktop-only. */
       main { padding: 20px 16px 48px; }
-      .cf-showcase-strip { margin: -20px 16px 20px; padding: 16px; }
-      .cf-info-strip { margin: 0 16px 24px; padding: 16px; }
+      .cf-showcase-strip { margin: -20px 16px 20px; padding: 0; }
+      .cf-info-strip { margin: 0 16px 24px; padding: 0; }
+      .cf-showcase-inner, .cf-info-strip-inner { padding: 16px; }
+      .page-hero__inner, .page-footer__inner, .page-footer__meta {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
       .cf-grid { grid-template-columns: 1fr; }
       .cf-card-row { grid-template-columns: 80px 1fr; }
       .cf-card-head { flex-wrap: wrap; }
@@ -421,30 +468,36 @@
   </header>
 
   <!-- Showcase strip: one sample chip per family, all colours visible
-       at a glance before the reader scrolls into the card grid. -->
+       at a glance before the reader scrolls into the card grid. Outer
+       rail stays at 1200px / padding 0; inner carries the white card
+       look. -->
   <section class="cf-showcase-strip" aria-label="Chip families at a glance">
-    <p class="cf-showcase-label">All 9 chip families at a glance — click any to jump to its card</p>
-    <div class="cf-showcase-row">
-      <a href="#fam-cts"><span class="cts-pill">CTS 3.2</span><span class="cf-showcase-name">CTS</span></a>
-      <a href="#fam-csls"><span class="csls-pill">CSLS 2.4</span><span class="cf-showcase-name">CSLS</span></a>
-      <a href="#fam-pmd"><span class="perm-pill">profesional</span><span class="cf-showcase-name">PMD</span></a>
-      <a href="#fam-pigp"><span class="pigp-pill">PIGP pasal-4</span><span class="cf-showcase-name">PIGP</span></a>
-      <a href="#fam-pkg"><span class="pkg-pill">PKG K1</span><span class="cf-showcase-name">PKG</span></a>
-      <a href="#fam-skl"><span class="skl-pill">SKL · Knowledge</span><span class="cf-showcase-name">SKL</span></a>
-      <a href="#fam-es"><span class="es-pill">ES 7.3</span><span class="cf-showcase-name">ES</span></a>
-      <a href="#fam-aicf"><span class="aicf-pill">AICF · Found · A</span><span class="cf-showcase-name">AICF</span></a>
-      <a href="#fam-ped"><span class="ped-pill">📖 Rosenshine</span><span class="cf-showcase-name">Research</span></a>
+    <div class="cf-showcase-inner">
+      <p class="cf-showcase-label">All 9 chip families at a glance — click any to jump to its card</p>
+      <div class="cf-showcase-row">
+        <a href="#fam-cts"><span class="cts-pill">CTS 3.2</span><span class="cf-showcase-name">CTS</span></a>
+        <a href="#fam-csls"><span class="csls-pill">CSLS 2.4</span><span class="cf-showcase-name">CSLS</span></a>
+        <a href="#fam-pmd"><span class="perm-pill">profesional</span><span class="cf-showcase-name">PMD</span></a>
+        <a href="#fam-pigp"><span class="pigp-pill">PIGP pasal-4</span><span class="cf-showcase-name">PIGP</span></a>
+        <a href="#fam-pkg"><span class="pkg-pill">PKG K1</span><span class="cf-showcase-name">PKG</span></a>
+        <a href="#fam-skl"><span class="skl-pill">SKL · Knowledge</span><span class="cf-showcase-name">SKL</span></a>
+        <a href="#fam-es"><span class="es-pill">ES 7.3</span><span class="cf-showcase-name">ES</span></a>
+        <a href="#fam-aicf"><span class="aicf-pill">AICF · Found · A</span><span class="cf-showcase-name">AICF</span></a>
+        <a href="#fam-ped"><span class="ped-pill">📖 Rosenshine</span><span class="cf-showcase-name">Research</span></a>
+      </div>
     </div>
   </section>
 
   <section class="cf-info-strip">
-    <p class="pis-flow">A chip is a tag. When you see a chip on a card — say <span class="cts-pill">CTS 3.2</span> next to a competency — it means the team chose this competency to map to a specific Cambridge professional standard. You can click most chips to read the exact source text. This guide is for everyone who reads or authors content in Central Hub.</p>
-    <div class="pis-pills">
-      <span class="pis-pill">Audience · all HQ</span>
-      <span class="pis-pill">Read-only</span>
-      <span class="pis-pill">Source · cambridge-crossref.js</span>
+    <div class="cf-info-strip-inner">
+      <p class="pis-flow">A chip is a tag. When you see a chip on a card — say <span class="cts-pill">CTS 3.2</span> next to a competency — it means the team chose this competency to map to a specific Cambridge professional standard. You can click most chips to read the exact source text. This guide is for everyone who reads or authors content in Central Hub.</p>
+      <div class="pis-pills">
+        <span class="pis-pill">Audience · all HQ</span>
+        <span class="pis-pill">Read-only</span>
+        <span class="pis-pill">Source · cambridge-crossref.js</span>
+      </div>
+      <p class="pis-callout">Chips never appear by chance. Every chip is a deliberate citation — the authors of that framework, KPI or handbook wanted you to be able to trace the claim back to its source.</p>
     </div>
-    <p class="pis-callout">Chips never appear by chance. Every chip is a deliberate citation — the authors of that framework, KPI or handbook wanted you to be able to trace the claim back to its source.</p>
   </section>
 
   <main>
