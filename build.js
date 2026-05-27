@@ -423,6 +423,7 @@ const htmlFiles = [
   "specialist-certificates.html",
   "read-me-my-hub.html",
   "read-me-coordinator.html",
+  "read-me-appraisal.html",
   "orientation-admin.html",
   "chapter-test-author.html",
   "ease-item-author.html",
