@@ -171,7 +171,7 @@
     document.addEventListener('mousedown', (e) => {
       if (el.style.display === 'none') return;
       if (!el.contains(e.target) &&
-          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref],[data-aicf-ref],[data-csls-ref],[data-pmd-ref],[data-ped-ref]')) {
+          !e.target.closest?.('[data-cts-ref],[data-skl-ref],[data-pigp-ref],[data-es-ref],[data-aicf-ref],[data-csls-ref],[data-pmd-ref],[data-ped-ref],[data-perlak-ref],[data-eefpd-ref]')) {
         closePopover();
       }
     });
@@ -890,6 +890,18 @@
     'BERA Ethics': {
       what: 'British Educational Research Association — Ethical Guidelines for Educational Research.',
       why: 'Standard for practitioner research at Lead-stage (xen-4, cof-4_lead). Required for video coaching libraries + research publication.'
+    },
+    'PERLAK UU 35/2014': {
+      what: 'Indonesia Undang-Undang 35/2014 (revision of UU 23/2002 Perlindungan Anak) — child protection law. Defines kekerasan terhadap anak (physical/psychological/sexual/neglect) + mandates reporting obligations on schools.',
+      why: 'De jure anchor for school-side safeguarding policy. Eduversal partner schools must implement reporting + investigation procedures per this law; the safeguarding KPI is the operational compliance check.'
+    },
+    'PERLAK Permendikbud 46/2023': {
+      what: 'Permendikbudristek 46/2023 — Pencegahan dan Penanganan Kekerasan di Lingkungan Satuan Pendidikan (PPKSP). Operative regulation. Mandates TPPK (school task force) + Satgas (district-level).',
+      why: 'Current implementing regulation for partner-school safeguarding KPI. ES Section on safeguarding paraphrases this; the PERLAK chip surfaces the actual regulation text + TPPK + Satgas roles.'
+    },
+    'EEF Effective PD 2021': {
+      what: 'Education Endowment Foundation — Effective Professional Development (2021 guidance report). 4 mechanisms × 14 techniques. Distinguishes effective PD by design features, not by topic.',
+      why: 'Design discipline for PLC sessions, walkthrough debriefs, network workshops. Without an EEF-mechanism anchor, evidence predicts <30% landing rate per session.'
     }
   };
 
@@ -1071,6 +1083,33 @@
       el.dataset.gndWired = '1';
       el.dataset.pedRef   = ref;
       el.title = el.title || `Click for a brief on ${ref}.`;
+      makeClickable(el, ref, openPedCrossref);
+    });
+
+    // PERLAK chips — Indonesia child protection regulations (UU 35/2014 +
+    //   Permendikbud 46/2023 PPKSP). Chip text is short form, full brief
+    //   sits in ANCHOR_BRIEFS by full key (e.g. "PERLAK UU 35/2014").
+    //   data-perlak-ref carries the lookup key.
+    scope.querySelectorAll('.perlak-pill, [data-perlak-ref]').forEach(el => {
+      if (el.dataset.perlakWired === '1') return;
+      const ref = el.dataset.perlakRef || (el.textContent || '').trim();
+      if (!ref) return;
+      el.dataset.perlakWired = '1';
+      el.dataset.pedRef      = ref;
+      el.title = el.title || `Indonesia child-protection regulation — click for verbatim anchor.`;
+      makeClickable(el, ref, openPedCrossref);
+    });
+
+    // EEF-PD chips — EEF Effective PD 2021 mechanism/technique anchors.
+    //   Re-uses openPedCrossref + ANCHOR_BRIEFS ("EEF Effective PD 2021"
+    //   + "EEF Effective PD 2024" both registered).
+    scope.querySelectorAll('.eefpd-pill, [data-eefpd-ref]').forEach(el => {
+      if (el.dataset.eefpdWired === '1') return;
+      const ref = el.dataset.eefpdRef || (el.textContent || '').trim();
+      if (!ref) return;
+      el.dataset.eefpdWired = '1';
+      el.dataset.pedRef     = ref;
+      el.title = el.title || `EEF Effective PD — click for the mechanism/technique brief.`;
       makeClickable(el, ref, openPedCrossref);
     });
   }

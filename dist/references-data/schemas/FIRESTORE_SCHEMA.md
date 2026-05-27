@@ -401,8 +401,10 @@ One-shot archive of the pre-2026-05-27 `kpi_config` state, written by `scripts/k
 
 #### `teacher_kpi_config/{kpiId}` and `teacher_kpi_settings/{periodId}`
 Teacher KPI criteria definitions and evaluation periods.
-**Fields on `teacher_kpi_config/{kpiId}`:** `aspect`, `indicator`, `weight`, `targetNumerical`, `unit`, `order`, `target`, `halfAY`, `fullAY`, `rationale`, `cambridge_standard_refs[]` (Track A — Cambridge Teacher Standards 2023 IDs e.g. `["3.6", "4.1"]`; validated against `competency_framework/teachers.cambridgeStandards` lookup at write time), `active`.
-`central_admin` write; any authorised read.
+**Fields on `teacher_kpi_config/{kpiId}`:** `aspect`, `indicator`, `weight`, `targetNumerical`, `unit`, `order`, `target`, `halfAY`, `fullAY`, `rationale`, `active`, plus 8 framework tag arrays (v1, 2026-05-27): `cambridge_standard_refs[]` (CTS 2023, validated against `competency_framework/teachers.cambridgeStandards` at write time), `pkg_refs[]` (Permendiknas 35/2010 14 kompetensi: `pedagogik.N` / `kepribadian.N` / `sosial.N` / `profesional.N`), `pigp_refs[]` (Permendiknas 27/2010: `pasal-N` / `lampiran-X`), `perlak_refs[]` (UU 35/2014 + Permendikbud 46/2023 PPKSP, free-text key matching `ANCHOR_BRIEFS` in `cambridge-crossref.js`), `skl_refs[]` (Permendikdasmen 10/2025 SKL dimensions: `sikap`/`pengetahuan`/`keterampilan`/etc.), `eduversal_standard_refs[]` (ES madde IDs), `aicf_refs[]` (AICF v1.0 refIds: `teacher.{level}.domain{A-E}`), `eefpd_refs[]` (EEF Effective PD 2021/2024, free-text key matching `ANCHOR_BRIEFS`). `central_admin` write; any authorised read.
+
+#### `teacher_kpi_config_legacy_pre_v1/{originalId}` (snapshot — read-only archive)
+Twin of `kpi_config_legacy_pre_v1`. One-shot archive of the pre-2026-05-27 `teacher_kpi_config` state, written by `scripts/kpi/seed-teacher-kpi-v1.js` before the v1 migration remediated invalid CTS 6.x references and added comprehensive multi-chip-family tagging. `_originalId` / `_snapshottedAt` / `_isV1Replacement` metadata fields. `central_admin` read; no writes after the one-shot snapshot.
 
 #### `teacher_kpi_submissions/{submissionId}`
 **PK:** `{uid}_{periodId}` (composite).
