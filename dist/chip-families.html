@@ -3428,23 +3428,72 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
        display: flex; flex-direction: column }` (sticky-footer pattern).
        Body flex children collapse to their intrinsic content width
        unless explicitly stretched — past incident on /references took
-       6 rounds to find. Force <main>, <header>, <section>, <footer> to
-       fill the flex column. */
+       6 rounds to find. Force every direct body child to fill the flex
+       column. */
     body:has(> .page-footer) > main,
     body:has(> .page-footer) > .page-hero,
     body:has(> .page-footer) > .cf-info-strip,
+    body:has(> .page-footer) > .cf-showcase-strip,
     body:has(> .page-footer) > .page-footer {
       width: 100%;
       align-self: stretch;
     }
 
-    /* Info strip — page-local; shared `.page-info-strip` is a 3-col grid
-       (icon / text / cta) which collapses our 3-block content (flow +
-       pills + callout) into a 36px column. Page-local naming avoids the
-       collision — see root CLAUDE.md "Info Strip Pattern" precedent. */
+    /* ═══════════════════════════════════════════════════════════════
+       Per-family colour tokens. One row → one chip family.
+       Naming convention: --fam-{key}-{slot}
+         bg     = card surface tint (pale)
+         bd     = card border (mid)
+         ac     = card left-stripe + name accent (deep)
+         ink    = name text colour
+       Chip pill colours themselves stay in the .*-pill rules below — these
+       tokens only colour the CARD chrome around each chip.
+       ════════════════════════════════════════════════════════════════ */
+    :root {
+      --fam-cts-bg:  #faf5ff;  --fam-cts-bd:  #ddd6fe;  --fam-cts-ac:  #6c5ce7;  --fam-cts-ink:  #5b21b6;
+      --fam-csls-bg: #f5f3ff;  --fam-csls-bd: #c4b5fd;  --fam-csls-ac: #4c1d95;  --fam-csls-ink: #4c1d95;
+      --fam-pmd-bg:  #fffbeb;  --fam-pmd-bd:  #fde68a;  --fam-pmd-ac:  #d97706;  --fam-pmd-ink:  #92400e;
+      --fam-pigp-bg: #fef2f2;  --fam-pigp-bd: #fecaca;  --fam-pigp-ac: #dc2626;  --fam-pigp-ink: #991b1b;
+      --fam-pkg-bg:  #fefce8;  --fam-pkg-bd:  #fde68a;  --fam-pkg-ac:  #ca8a04;  --fam-pkg-ink:  #854d0e;
+      --fam-skl-bg:  #f0fdf4;  --fam-skl-bd:  #bbf7d0;  --fam-skl-ac:  #16a34a;  --fam-skl-ink:  #166534;
+      --fam-es-bg:   #ecfeff;  --fam-es-bd:   #a5f3fc;  --fam-es-ac:   #0891b2;  --fam-es-ink:   #0e7490;
+      --fam-aicf-bg: #fff7ed;  --fam-aicf-bd: #fed7aa;  --fam-aicf-ac: #ea580c;  --fam-aicf-ink: #c2410c;
+      --fam-ped-bg:  #f8fafc;  --fam-ped-bd:  #cbd5e1;  --fam-ped-ac:  #64748b;  --fam-ped-ink:  #475569;
+    }
+
+    /* ── Hero chip showcase ─────────────────────────────────────────
+       Strip below the hero that lays out one sample chip per family so
+       the reader sees all 9 chip colours before reading any card. */
+    .cf-showcase-strip {
+      max-width: 1200px; margin: -32px auto 24px; padding: 18px 22px;
+      background: #fff;
+      border: 1px solid #e5e7eb; border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+      position: relative; z-index: 2;
+    }
+    .cf-showcase-label {
+      font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em;
+      font-weight: 600; margin: 0 0 10px;
+    }
+    .cf-showcase-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .cf-showcase-row a {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 8px; border-radius: 6px;
+      text-decoration: none; transition: background 0.15s;
+    }
+    .cf-showcase-row a:hover { background: #f3f4f6; }
+    .cf-showcase-row a .cf-showcase-name {
+      font-size: 0.78rem; font-weight: 600; color: #374151;
+    }
+
+    /* ── Info strip ─────────────────────────────────────────────────
+       Page-local; shared `.page-info-strip` is a 3-col grid (icon /
+       text / cta) which collapsed our 3-block content. */
     .cf-info-strip {
       display: block;
-      max-width: 1200px; margin: 0 auto 24px; padding: 18px 22px;
+      max-width: 1200px; margin: 0 auto 32px; padding: 18px 22px;
       background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
       border: 1px solid #ddd6fe;
       border-left: 3px solid #6c5ce7;
@@ -3465,119 +3514,241 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       border-radius: 6px;
     }
 
-    /* Sections */
-    .cf-section { margin-bottom: 28px; }
+    /* ── Section header with coloured stripe ────────────────────────
+       Stripe colour shifts per group so the eye can tell at a glance
+       which family group it is reading. */
+    .cf-section { margin-bottom: 36px; }
+    .cf-section-head {
+      display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+      padding: 10px 14px; border-radius: 10px;
+      background: linear-gradient(90deg, var(--cf-grp-from), var(--cf-grp-to));
+      border: 1px solid var(--cf-grp-bd);
+    }
+    .cf-section-head[data-group="A"] {
+      --cf-grp-from: #ede9fe; --cf-grp-to: #ddd6fe; --cf-grp-bd: #c4b5fd;
+    }
+    .cf-section-head[data-group="B"] {
+      --cf-grp-from: #fef3c7; --cf-grp-to: #fee2e2; --cf-grp-bd: #fde68a;
+    }
+    .cf-section-head[data-group="C"] {
+      --cf-grp-from: #cffafe; --cf-grp-to: #ffedd5; --cf-grp-bd: #a5f3fc;
+    }
+    .cf-section-stripe {
+      width: 4px; height: 32px; border-radius: 2px; flex-shrink: 0;
+      background: linear-gradient(180deg, var(--cf-grp-bd), var(--cf-grp-from));
+    }
+    .cf-section-text { flex: 1; }
     .cf-section-title {
       font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 600; color: #1f2937;
-      margin: 0 0 4px;
+      margin: 0 0 2px;
     }
-    .cf-section-desc { font-size: 0.85rem; color: #6b7280; margin: 0 0 16px; }
+    .cf-section-desc { font-size: 0.83rem; color: #4b5563; margin: 0; }
+    .cf-section-count {
+      font-family: 'DM Mono', monospace; font-size: 0.75rem;
+      padding: 4px 10px; background: rgba(255,255,255,0.7); border-radius: 999px;
+      color: #1f2937; font-weight: 600;
+    }
 
-    /* Card grid */
+    /* ── Card grid ──────────────────────────────────────────────────*/
     .cf-grid {
-      display: grid; gap: 16px;
+      display: grid; gap: 18px;
       grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     }
 
-    /* Family card */
+    /* ── Family card (per-family coloured) ──────────────────────────
+       Every card pulls 4 CSS vars from the family it represents. */
     .cf-card {
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
-      padding: 18px 20px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-      display: flex; flex-direction: column; gap: 10px;
+      background: linear-gradient(180deg, var(--fam-bg) 0%, #ffffff 60%);
+      border: 1px solid var(--fam-bd);
+      border-left: 4px solid var(--fam-ac);
+      border-radius: 14px;
+      padding: 0;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transition: box-shadow 0.18s, transform 0.18s;
     }
+    .cf-card:hover {
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+      transform: translateY(-1px);
+    }
+
+    /* Card head (coloured band) */
     .cf-card-head {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      padding-bottom: 8px; border-bottom: 1px solid #f3f4f6;
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--fam-bd);
+      background: linear-gradient(180deg, var(--fam-bg) 0%, rgba(255,255,255,0.4) 100%);
     }
     .cf-card-name {
-      font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 1.02rem; color: #1f2937;
-      margin: 0;
+      font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 1.18rem;
+      color: var(--fam-ink); margin: 0; letter-spacing: -0.01em;
     }
-    .cf-card-color {
-      font-size: 0.7rem; font-weight: 500; color: #9ca3af;
-      padding: 2px 7px; background: #f9fafb; border-radius: 4px;
+    .cf-card-colourname {
+      font-size: 0.7rem; font-weight: 500; color: var(--fam-ink); opacity: 0.7;
+      padding: 2px 8px; background: rgba(255,255,255,0.7); border-radius: 999px;
+      border: 1px solid var(--fam-bd);
     }
-    .cf-card-click {
-      font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-      margin-left: auto;
-    }
-    .cf-card-click.clickable { background: #dcfce7; color: #166534; }
-    .cf-card-click.hover { background: #fef3c7; color: #92400e; }
-
-    /* Sample chip row */
-    .cf-card-sample { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .cf-card-sample-label {
-      font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em;
-      font-weight: 600;
+    .cf-card-sample-inline {
+      display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
-    /* Info rows */
-    .cf-card-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+    /* Card body */
+    .cf-card-body { padding: 14px 18px 0; flex: 1; }
+    .cf-card-rows { display: flex; flex-direction: column; gap: 10px; }
     .cf-card-row {
       display: grid; grid-template-columns: 92px 1fr; gap: 10px;
       font-size: 0.83rem; line-height: 1.5;
     }
     .cf-card-row-label {
-      color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;
-      font-weight: 600; font-size: 0.7rem; padding-top: 2px;
+      color: var(--fam-ink); opacity: 0.65;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      font-weight: 700; font-size: 0.68rem; padding-top: 2px;
     }
     .cf-card-row-value { color: #374151; }
     .cf-card-row-value code {
-      background: #f3f4f6; padding: 1px 5px; border-radius: 3px;
-      font-family: 'DM Mono', monospace; font-size: 0.78rem; color: #5b21b6;
+      background: rgba(0,0,0,0.04); padding: 1px 5px; border-radius: 3px;
+      font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--fam-ink);
     }
+    .cf-card-row-value em { color: var(--fam-ink); font-style: normal; font-weight: 600; }
 
-    /* Pill copies (so chips render even if cambridge-crossref.js hasn't injected
-       its own CSS — these match the source-of-truth styles in
-       Central Hub/competency-framework.html lines 386-403). */
-    .cts-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #ede9fe; color: #5b21b6; border-radius: 4px; font-weight: 700; white-space: nowrap; }
-    .csls-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #ddd6fe; color: #4c1d95; border-radius: 4px; font-weight: 700; white-space: nowrap; }
-    .perm-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #fef3c7; color: #92400e; border-radius: 4px; font-weight: 600; white-space: nowrap; }
-    .pigp-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #fee2e2; color: #991b1b; border-radius: 4px; font-weight: 600; white-space: nowrap; }
-    .pkg-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #fef9c3; color: #854d0e; border-radius: 4px; font-weight: 600; white-space: nowrap; }
-    .es-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #cffafe; color: #0e7490; border-radius: 4px; font-weight: 600; white-space: nowrap; }
-    .aicf-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #ffedd5; color: #c2410c; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+    /* Card footer banner (Clickable / Hover) */
+    .cf-card-foot {
+      margin-top: 14px;
+      padding: 10px 18px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; font-weight: 600;
+      border-top: 1px dashed var(--fam-bd);
+      background: rgba(255,255,255,0.4);
+    }
+    .cf-card-foot-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--fam-ac); color: #fff; font-size: 11px;
+    }
+    .cf-card-foot.clickable .cf-card-foot-label { color: #166534; }
+    .cf-card-foot.hover .cf-card-foot-label { color: #92400e; }
+    .cf-card-foot-detail { color: #6b7280; font-weight: 400; font-size: 0.78rem; }
+
+    /* Family modifier classes — applied on .cf-card */
+    .cf-card.fam-cts  { --fam-bg: var(--fam-cts-bg);  --fam-bd: var(--fam-cts-bd);  --fam-ac: var(--fam-cts-ac);  --fam-ink: var(--fam-cts-ink); }
+    .cf-card.fam-csls { --fam-bg: var(--fam-csls-bg); --fam-bd: var(--fam-csls-bd); --fam-ac: var(--fam-csls-ac); --fam-ink: var(--fam-csls-ink); }
+    .cf-card.fam-pmd  { --fam-bg: var(--fam-pmd-bg);  --fam-bd: var(--fam-pmd-bd);  --fam-ac: var(--fam-pmd-ac);  --fam-ink: var(--fam-pmd-ink); }
+    .cf-card.fam-pigp { --fam-bg: var(--fam-pigp-bg); --fam-bd: var(--fam-pigp-bd); --fam-ac: var(--fam-pigp-ac); --fam-ink: var(--fam-pigp-ink); }
+    .cf-card.fam-pkg  { --fam-bg: var(--fam-pkg-bg);  --fam-bd: var(--fam-pkg-bd);  --fam-ac: var(--fam-pkg-ac);  --fam-ink: var(--fam-pkg-ink); }
+    .cf-card.fam-skl  { --fam-bg: var(--fam-skl-bg);  --fam-bd: var(--fam-skl-bd);  --fam-ac: var(--fam-skl-ac);  --fam-ink: var(--fam-skl-ink); }
+    .cf-card.fam-es   { --fam-bg: var(--fam-es-bg);   --fam-bd: var(--fam-es-bd);   --fam-ac: var(--fam-es-ac);   --fam-ink: var(--fam-es-ink); }
+    .cf-card.fam-aicf { --fam-bg: var(--fam-aicf-bg); --fam-bd: var(--fam-aicf-bd); --fam-ac: var(--fam-aicf-ac); --fam-ink: var(--fam-aicf-ink); }
+    .cf-card.fam-ped  { --fam-bg: var(--fam-ped-bg);  --fam-bd: var(--fam-ped-bd);  --fam-ac: var(--fam-ped-ac);  --fam-ink: var(--fam-ped-ink); }
+
+    /* ── Chip pills ────────────────────────────────────────────────
+       Source-of-truth: Central Hub/competency-framework.html 386-403.
+       Slightly enlarged here (12px font) since the page is a guide
+       and chips need to read as identifiable specimens. */
+    .cts-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #ede9fe; color: #5b21b6; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+    .csls-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #ddd6fe; color: #4c1d95; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+    .perm-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #fef3c7; color: #92400e; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+    .pigp-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #fee2e2; color: #991b1b; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+    .pkg-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #fef9c3; color: #854d0e; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+    .es-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #cffafe; color: #0e7490; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+    .aicf-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #ffedd5; color: #c2410c; border-radius: 4px; font-weight: 600; white-space: nowrap; }
     .ped-pill {
-      font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px;
+      font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px;
       background: #f1f5f9; color: #475569; border-radius: 4px; font-weight: 600;
       white-space: nowrap; border: 1px solid #cbd5e1;
     }
-    .skl-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: #dcfce7; color: #166534; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+    .skl-pill { font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px; background: #dcfce7; color: #166534; border-radius: 4px; font-weight: 600; white-space: nowrap; }
 
-    /* How to read a tagged item — worked example */
+    /* ── Worked example — annotated layout ──────────────────────────
+       Left rail: real competency card with 7 chips. Right rail: per-
+       chip annotations stacked, each pointing back at the chip via
+       colour. */
     .cf-example {
       background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
-      padding: 22px 24px; margin-top: 24px;
+      padding: 24px; margin-top: 36px;
     }
     .cf-example-title {
-      font-family: 'Lora', serif; font-size: 1.05rem; font-weight: 600; color: #1f2937;
-      margin: 0 0 6px;
+      font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 600; color: #1f2937;
+      margin: 0 0 4px;
     }
-    .cf-example-desc { font-size: 0.85rem; color: #6b7280; margin: 0 0 16px; }
+    .cf-example-desc { font-size: 0.85rem; color: #6b7280; margin: 0 0 18px; }
+    .cf-example-grid {
+      display: grid; grid-template-columns: minmax(280px, 1fr) 1fr; gap: 18px;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .cf-example-grid { grid-template-columns: 1fr; }
+    }
     .cf-example-card {
-      background: #fafafa; border: 1px dashed #d1d5db; border-radius: 10px;
-      padding: 14px 16px;
+      background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
+      border: 1px solid #ddd6fe; border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .cf-example-eyebrow {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #6c5ce7; font-weight: 700; margin-bottom: 6px;
     }
     .cf-example-stem {
-      font-size: 0.92rem; color: #1f2937; line-height: 1.5; margin: 0 0 10px;
+      font-size: 0.93rem; color: #1f2937; line-height: 1.55; margin: 0 0 12px;
     }
+    .cf-example-stem strong { color: #1f2937; font-weight: 700; }
     .cf-example-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
-    /* FAQ */
-    .cf-faq { margin-top: 28px; }
+    /* Annotation column */
+    .cf-anno-title {
+      font-size: 0.78rem; font-weight: 700; color: #1f2937;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin: 0 0 10px;
+    }
+    .cf-anno-list { display: flex; flex-direction: column; gap: 8px; }
+    .cf-anno-item {
+      display: grid; grid-template-columns: auto 1fr; gap: 10px;
+      align-items: start;
+      padding: 8px 10px;
+      background: var(--anno-bg, #f9fafb);
+      border-left: 3px solid var(--anno-ac, #d1d5db);
+      border-radius: 6px;
+    }
+    .cf-anno-item.a-cts  { --anno-bg: #faf5ff; --anno-ac: #6c5ce7; }
+    .cf-anno-item.a-pmd  { --anno-bg: #fffbeb; --anno-ac: #d97706; }
+    .cf-anno-item.a-es   { --anno-bg: #ecfeff; --anno-ac: #0891b2; }
+    .cf-anno-item.a-aicf { --anno-bg: #fff7ed; --anno-ac: #ea580c; }
+    .cf-anno-item.a-ped  { --anno-bg: #f8fafc; --anno-ac: #64748b; }
+    .cf-anno-chip { padding-top: 1px; }
+    .cf-anno-text { font-size: 0.82rem; line-height: 1.5; color: #374151; }
+
+    /* ── FAQ ───────────────────────────────────────────────────────*/
+    .cf-faq { margin-top: 36px; }
+    .cf-faq-head {
+      display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+    }
+    .cf-faq-head .cf-section-title { margin: 0; }
     .cf-faq-item {
       background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
       padding: 14px 18px; margin-bottom: 10px;
+      transition: border-color 0.15s;
+    }
+    .cf-faq-item[open] {
+      border-color: #c4b5fd; box-shadow: 0 2px 8px rgba(108, 92, 231, 0.08);
     }
     .cf-faq-q {
       font-weight: 600; font-size: 0.92rem; color: #1f2937; cursor: pointer;
-      list-style: none; display: flex; align-items: center; gap: 8px;
+      list-style: none; display: flex; align-items: center; gap: 10px;
     }
     .cf-faq-q::-webkit-details-marker { display: none; }
-    .cf-faq-q::before { content: '▸'; color: #9ca3af; font-size: 0.8rem; transition: transform 0.15s; }
-    .cf-faq-item[open] .cf-faq-q::before { transform: rotate(90deg); }
+    .cf-faq-q::before {
+      content: '+'; color: #6c5ce7; font-size: 1rem; font-weight: 700;
+      width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+      background: #ede9fe; border-radius: 50%;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .cf-faq-item[open] .cf-faq-q::before {
+      content: '−'; transform: rotate(0deg); background: #ddd6fe;
+    }
     .cf-faq-a {
-      margin-top: 10px; font-size: 0.87rem; color: #4b5563; line-height: 1.6;
+      margin-top: 10px; padding-left: 30px;
+      font-size: 0.87rem; color: #4b5563; line-height: 1.6;
     }
     .cf-faq-a code {
       background: #f3f4f6; padding: 1px 5px; border-radius: 3px;
@@ -3586,8 +3757,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     @media (max-width: 768px) {
       main { padding: 20px 16px 48px; }
+      .cf-showcase-strip { margin: -20px 16px 20px; }
       .cf-grid { grid-template-columns: 1fr; }
       .cf-card-row { grid-template-columns: 80px 1fr; }
+      .cf-card-head { flex-wrap: wrap; }
+      .cf-card-sample-inline { margin-left: 0; width: 100%; justify-content: flex-start; margin-top: 4px; }
     }
   </style>
 </head>
@@ -3598,27 +3772,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="page-hero__text">
         <div class="page-hero__eyebrow">Knowledge · Reference</div>
         <h1 class="page-hero__title">Chip Families Guide</h1>
-        <p class="page-hero__desc">Small coloured labels appear next to KPIs, competencies, handbook tasks and framework items across the network. Each label points to a source that anchors that piece of work. This page explains what every chip family means, where it comes from, and what happens when you click one.</p>
+        <p class="page-hero__desc">Small coloured labels appear next to KPIs, competencies, handbook tasks and framework items across the network. Each label points to a source. This page explains what every family means, where it shows up, and what happens when you click one.</p>
       </div>
       <aside class="page-hero__kpis">
         <div class="page-hero__kpi page-hero__kpi--primary">
-          <div class="page-hero__kpi-num">8</div>
+          <div class="page-hero__kpi-num">9</div>
           <div class="page-hero__kpi-lbl">Chip families</div>
           <div class="page-hero__kpi-sub">across the network</div>
         </div>
         <div class="page-hero__kpi">
-          <div class="page-hero__kpi-num">5</div>
+          <div class="page-hero__kpi-num">7</div>
           <div class="page-hero__kpi-lbl">Clickable</div>
           <div class="page-hero__kpi-sub">open source on click</div>
         </div>
         <div class="page-hero__kpi">
-          <div class="page-hero__kpi-num">3</div>
+          <div class="page-hero__kpi-num">2</div>
           <div class="page-hero__kpi-lbl">Hover only</div>
-          <div class="page-hero__kpi-sub">show full text on hover</div>
+          <div class="page-hero__kpi-sub">show name in tooltip</div>
         </div>
       </aside>
     </div>
   </header>
+
+  <!-- Showcase strip: one sample chip per family, all colours visible
+       at a glance before the reader scrolls into the card grid. -->
+  <section class="cf-showcase-strip" aria-label="Chip families at a glance">
+    <p class="cf-showcase-label">All 9 chip families at a glance — click any to jump to its card</p>
+    <div class="cf-showcase-row">
+      <a href="#fam-cts"><span class="cts-pill">CTS 3.2</span><span class="cf-showcase-name">CTS</span></a>
+      <a href="#fam-csls"><span class="csls-pill">CSLS 2.4</span><span class="cf-showcase-name">CSLS</span></a>
+      <a href="#fam-pmd"><span class="perm-pill">profesional</span><span class="cf-showcase-name">PMD</span></a>
+      <a href="#fam-pigp"><span class="pigp-pill">PIGP pasal-4</span><span class="cf-showcase-name">PIGP</span></a>
+      <a href="#fam-pkg"><span class="pkg-pill">PKG K1</span><span class="cf-showcase-name">PKG</span></a>
+      <a href="#fam-skl"><span class="skl-pill">SKL · Knowledge</span><span class="cf-showcase-name">SKL</span></a>
+      <a href="#fam-es"><span class="es-pill">ES 7.3</span><span class="cf-showcase-name">ES</span></a>
+      <a href="#fam-aicf"><span class="aicf-pill">AICF · Found · A</span><span class="cf-showcase-name">AICF</span></a>
+      <a href="#fam-ped"><span class="ped-pill">📖 Rosenshine</span><span class="cf-showcase-name">Research</span></a>
+    </div>
+  </section>
 
   <section class="cf-info-strip">
     <p class="pis-flow">A chip is a tag. When you see a chip on a card — say <span class="cts-pill">CTS 3.2</span> next to a competency — it means the team chose this competency to map to a specific Cambridge professional standard. You can click most chips to read the exact source text. This guide is for everyone who reads or authors content in Central Hub.</p>
@@ -3634,81 +3825,89 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     <!-- Group A — Cambridge anchors -->
     <section class="cf-section">
-      <h2 class="cf-section-title">Group A · Cambridge anchors</h2>
-      <p class="cf-section-desc">Primary international standards. Bold, solid colour. Mor family — Cambridge International is the network's curriculum partner.</p>
+      <header class="cf-section-head" data-group="A">
+        <div class="cf-section-stripe"></div>
+        <div class="cf-section-text">
+          <h2 class="cf-section-title">Group A · Cambridge anchors</h2>
+          <p class="cf-section-desc">Primary international standards. Bold, solid colour. Cambridge International is the network's curriculum partner.</p>
+        </div>
+        <span class="cf-section-count">2 families</span>
+      </header>
 
       <div class="cf-grid">
 
         <!-- CTS -->
-        <article class="cf-card">
+        <article class="cf-card fam-cts" id="fam-cts">
           <header class="cf-card-head">
             <h3 class="cf-card-name">CTS</h3>
-            <span class="cf-card-color">Mor</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Mor</span>
+            <div class="cf-card-sample-inline">
+              <span class="cts-pill" data-cts-ref="3.2" title="Cambridge Teacher Standards 2023 — 3.2">CTS 3.2</span>
+              <span class="cts-pill" data-cts-ref="4.1" title="Cambridge Teacher Standards 2023 — 4.1">CTS 4.1</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="cts-pill" data-cts-ref="3.2" title="Cambridge Teacher Standards 2023 — 3.2">CTS 3.2</span>
-            <span class="cts-pill" data-cts-ref="4.1" title="Cambridge Teacher Standards 2023 — 4.1">CTS 4.1</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Cambridge Teacher Standards 2023</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">Cambridge International · 6 areas, 27 standards</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The Cambridge professional standard a teacher KPI, competency or handbook task maps to.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">Teacher KPI · Teacher Competency Framework · Specialist CPD · Handbook tasks</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the verbatim Cambridge standard text.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Cambridge Teacher Standards 2023</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value">Cambridge International · <em>6 areas, 27 standards</em></span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The Cambridge professional standard a teacher KPI, competency or handbook task maps to.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">Teacher KPI · Teacher Competency Framework · Specialist CPD · Handbook tasks</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">popover shows the verbatim Cambridge standard text</span>
+          </footer>
         </article>
 
         <!-- CSLS -->
-        <article class="cf-card">
+        <article class="cf-card fam-csls" id="fam-csls">
           <header class="cf-card-head">
             <h3 class="cf-card-name">CSLS</h3>
-            <span class="cf-card-color">Mor-deep</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Mor-deep</span>
+            <div class="cf-card-sample-inline">
+              <span class="csls-pill" data-csls-ref="2.4" title="Cambridge School Leader Standards 2023 — 2.4">CSLS 2.4</span>
+              <span class="csls-pill" data-csls-ref="5.1" title="Cambridge School Leader Standards 2023 — 5.1">CSLS 5.1</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="csls-pill" data-csls-ref="2.4" title="Cambridge School Leader Standards 2023 — 2.4">CSLS 2.4</span>
-            <span class="csls-pill" data-csls-ref="5.1" title="Cambridge School Leader Standards 2023 — 5.1">CSLS 5.1</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Cambridge School Leader Standards 2023</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">Cambridge International · 6 areas, 25 standards</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The Cambridge leadership standard a principal KPI, leader competency or coaching item maps to.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">School KPI · Leader Competency Framework (AH) · Principal Appraisal · Principal 360</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the verbatim Cambridge leader standard text.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Cambridge School Leader Standards 2023</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value">Cambridge International · <em>6 areas, 25 standards</em></span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The Cambridge leadership standard a principal KPI, leader competency or coaching item maps to.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">School KPI · Leader Competency Framework (AH) · Principal Appraisal · Principal 360</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">popover shows the verbatim Cambridge leader standard text</span>
+          </footer>
         </article>
 
       </div>
@@ -3716,153 +3915,163 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     <!-- Group B — Indonesian regulatory -->
     <section class="cf-section">
-      <h2 class="cf-section-title">Group B · Indonesian regulatory</h2>
-      <p class="cf-section-desc">Verbatim Ministry of Education regulations. Eduversal must satisfy these by law. Three different Permendiknas regulations — each covers a different part of the teacher life-cycle.</p>
+      <header class="cf-section-head" data-group="B">
+        <div class="cf-section-stripe"></div>
+        <div class="cf-section-text">
+          <h2 class="cf-section-title">Group B · Indonesian regulatory</h2>
+          <p class="cf-section-desc">Verbatim Ministry of Education regulations. Eduversal must satisfy these by law. Each Permendiknas covers a different part of the teacher life-cycle.</p>
+        </div>
+        <span class="cf-section-count">4 families</span>
+      </header>
 
       <div class="cf-grid">
 
         <!-- PMD -->
-        <article class="cf-card">
+        <article class="cf-card fam-pmd" id="fam-pmd">
           <header class="cf-card-head">
             <h3 class="cf-card-name">PMD</h3>
-            <span class="cf-card-color">Yellow</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Yellow</span>
+            <div class="cf-card-sample-inline">
+              <span class="perm-pill" data-pmd-ref="pedagogik" title="Permendiknas No.16/2007 — Kompetensi Pedagogik">Pedagogik</span>
+              <span class="perm-pill" data-pmd-ref="profesional" title="Permendiknas No.16/2007 — Kompetensi Profesional">Profesional</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="perm-pill" data-pmd-ref="pedagogik" title="Permendiknas No.16/2007 — Kompetensi Pedagogik">Pedagogik</span>
-            <span class="perm-pill" data-pmd-ref="profesional" title="Permendiknas No.16/2007 — Kompetensi Profesional">Profesional</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Permendiknas No. 16 / 2007 — Standar Kualifikasi Akademik dan Kompetensi Guru</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">4 pillars: <em>pedagogik</em>, <em>kepribadian</em>, <em>sosial</em>, <em>profesional</em></span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">Which of the 4 Indonesian teacher competency pillars a competency or KPI satisfies. Lets us answer the partner-school question "do you cover the legally required competencies?"</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">Teacher Competency Framework · Teacher KPI · Specialist CPD</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the verbatim pillar definition.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Permendiknas No. 16 / 2007 — Standar Kualifikasi Akademik dan Kompetensi Guru</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value"><em>4 pillars</em>: pedagogik · kepribadian · sosial · profesional</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">Which of the 4 Indonesian teacher competency pillars a competency or KPI satisfies. Answers partner schools who ask "do you cover the legally required competencies?"</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">Teacher Competency Framework · Teacher KPI · Specialist CPD</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">popover shows the verbatim pillar definition</span>
+          </footer>
         </article>
 
         <!-- PIGP -->
-        <article class="cf-card">
+        <article class="cf-card fam-pigp" id="fam-pigp">
           <header class="cf-card-head">
             <h3 class="cf-card-name">PIGP</h3>
-            <span class="cf-card-color">Red</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Red</span>
+            <div class="cf-card-sample-inline">
+              <span class="pigp-pill" data-pigp-ref="pasal-4" title="Permendiknas 27/2010 — Pasal 4">PIGP pasal-4</span>
+              <span class="pigp-pill" data-pigp-ref="pasal-9" title="Permendiknas 27/2010 — Pasal 9">PIGP pasal-9</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="pigp-pill" data-pigp-ref="pasal-4" title="Permendiknas 27/2010 — Pasal 4">PIGP pasal-4</span>
-            <span class="pigp-pill" data-pigp-ref="pasal-9" title="Permendiknas 27/2010 — Pasal 9">PIGP pasal-9</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Permendiknas No. 27 / 2010 — Program Induksi Guru Pemula</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">Year-1 teacher induction regulation. Pasal-level references.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The legal article in Indonesia's induction regulation that a year-1 induction task, handbook item or mentor certification satisfies.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">Subject Teacher induction handbook · Mentor Certification · Year-1 induction tasks</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the verbatim Pasal text in Indonesian.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Permendiknas No. 27 / 2010 — Program Induksi Guru Pemula</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value"><em>Year-1 teacher induction</em> regulation. Pasal-level references.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The legal article in Indonesia's induction regulation that a year-1 task, handbook item or mentor certification satisfies.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">Subject Teacher induction handbook · Mentor Certification · year-1 induction tasks</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">popover shows the verbatim Pasal text in Indonesian</span>
+          </footer>
         </article>
 
-        <!-- PKG / Permendiknas 35-2010 -->
-        <article class="cf-card">
+        <!-- PKG -->
+        <article class="cf-card fam-pkg" id="fam-pkg">
           <header class="cf-card-head">
             <h3 class="cf-card-name">PKG</h3>
-            <span class="cf-card-color">Sand</span>
-            <span class="cf-card-click hover">Hover</span>
+            <span class="cf-card-colourname">Sand</span>
+            <div class="cf-card-sample-inline">
+              <span class="pkg-pill" title="Permendiknas 35/2010 — Penilaian Kinerja Guru, Kompetensi 1: Mengenal karakteristik peserta didik">PKG K1</span>
+              <span class="pkg-pill" title="Permendiknas 35/2010 — Penilaian Kinerja Guru, Kompetensi 14: Komunikasi dengan sesama guru">PKG K14</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="pkg-pill" title="Permendiknas 35/2010 — Penilaian Kinerja Guru, Kompetensi 1: Mengenal karakteristik peserta didik">PKG K1</span>
-            <span class="pkg-pill" title="Permendiknas 35/2010 — Penilaian Kinerja Guru, Kompetensi 14: Komunikasi dengan sesama guru">PKG K14</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Permendiknas No. 35 / 2010 — Penilaian Kinerja Guru (PKG)</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">14 kompetensi across pedagogik · kepribadian · sosial · profesional</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">Which of the 14 legally required performance-appraisal competencies a teacher KPI cross-walks to. Answers partner schools who ask "you already collect this — why do we need to repeat it for PKG?"</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">Teacher KPI Admin · Teacher Appraisal · cross-walk tables</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On hover</span>
-              <span class="cf-card-row-value">Shows the kompetensi name in the tooltip. No click-through popover.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Permendiknas No. 35 / 2010 — Penilaian Kinerja Guru</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value"><em>14 kompetensi</em> across pedagogik · kepribadian · sosial · profesional</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">Which of the 14 legally required performance-appraisal competencies a teacher KPI cross-walks to. Answers "you already collect this — why repeat it for PKG?"</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">Teacher KPI Admin · Teacher Appraisal · cross-walk tables</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot hover">
+            <span class="cf-card-foot-icon">i</span>
+            <span class="cf-card-foot-label">Hover only</span>
+            <span class="cf-card-foot-detail">tooltip shows the kompetensi name — no click-through</span>
+          </footer>
         </article>
 
         <!-- SKL -->
-        <article class="cf-card">
+        <article class="cf-card fam-skl" id="fam-skl">
           <header class="cf-card-head">
             <h3 class="cf-card-name">SKL</h3>
-            <span class="cf-card-color">Green</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Green</span>
+            <div class="cf-card-sample-inline">
+              <span class="skl-pill" data-skl-ref="dimension-1" title="SKL — Dimension 1: Spiritual">SKL · Spiritual</span>
+              <span class="skl-pill" data-skl-ref="dimension-3" title="SKL — Dimension 3: Knowledge">SKL · Knowledge</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="skl-pill" data-skl-ref="dimension-1" title="SKL — Dimension 1: Spiritual">SKL · Spiritual</span>
-            <span class="skl-pill" data-skl-ref="dimension-3" title="SKL — Dimension 3: Knowledge">SKL · Knowledge</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Standar Kompetensi Lulusan — Indonesian Graduate Standards</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">Ministry-set graduate-outcome dimensions for SD / SMP / SMA</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The graduate-outcome dimension that a school-level KPI, school-handbook item or assessment policy contributes to. Student-outcome focused — most useful at school level, not at individual teacher level.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">School KPI · School handbooks · Curriculum alignment pages</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the verbatim dimension definition.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Standar Kompetensi Lulusan — Indonesian Graduate Standards</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value">Ministry-set <em>graduate-outcome dimensions</em> for SD / SMP / SMA</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The graduate-outcome dimension a school-level KPI, school-handbook item or assessment policy contributes to. Student-outcome focused — best at school level, not at individual teacher level.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">School KPI · School handbooks · Curriculum alignment pages</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">popover shows the verbatim dimension definition</span>
+          </footer>
         </article>
 
       </div>
@@ -3870,145 +4079,194 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     <!-- Group C — Eduversal + AI + Pedagogy -->
     <section class="cf-section">
-      <h2 class="cf-section-title">Group C · Eduversal, AI and pedagogy</h2>
-      <p class="cf-section-desc">Network-internal policy, the AI Competency Framework, and the research literature that backs each piece of work.</p>
+      <header class="cf-section-head" data-group="C">
+        <div class="cf-section-stripe"></div>
+        <div class="cf-section-text">
+          <h2 class="cf-section-title">Group C · Eduversal, AI and pedagogy</h2>
+          <p class="cf-section-desc">Network-internal policy, the AI Competency Framework, and the research literature that backs each piece of work.</p>
+        </div>
+        <span class="cf-section-count">3 families</span>
+      </header>
 
       <div class="cf-grid">
 
         <!-- ES -->
-        <article class="cf-card">
+        <article class="cf-card fam-es" id="fam-es">
           <header class="cf-card-head">
             <h3 class="cf-card-name">ES</h3>
-            <span class="cf-card-color">Cyan-deep</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Cyan-deep</span>
+            <div class="cf-card-sample-inline">
+              <span class="es-pill" data-es-ref="7.3" title="Eduversal Academic Standards madde 7.3">ES 7.3</span>
+              <span class="es-pill" data-es-ref="15.1.1" title="Eduversal Academic Standards madde 15.1.1">ES 15.1.1</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="es-pill" data-es-ref="7.3" title="Eduversal Academic Standards madde 7.3">ES 7.3</span>
-            <span class="es-pill" data-es-ref="15.1.1" title="Eduversal Academic Standards madde 15.1.1">ES 15.1.1</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Eduversal Academic Standards — Partner Schools Network</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">23 sections, 393 madde — Eduversal-authored network-wide policy manual</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The madde (article) of Eduversal's own policy manual that a KPI, handbook item, framework competency or curriculum decision points to. This is the network's own rulebook — partner schools agreed to it when they joined.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">All KPIs · all competency frameworks · all handbooks · curriculum alignment</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the verbatim madde text. "Open full madde" link goes to <code>/references?doc=eduversal-standards-section-NN</code>.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Eduversal Academic Standards — Partner Schools Network</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value"><em>23 sections, 393 madde</em> — Eduversal-authored network-wide policy manual</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The madde (article) of Eduversal's own policy manual that a KPI, handbook item, framework competency or curriculum decision points to. This is the network's own rulebook — partner schools agreed to it when they joined.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">All KPIs · all competency frameworks · all handbooks · curriculum alignment</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">popover + "Open full madde" link to <code>/references?doc=eduversal-standards-section-NN</code></span>
+          </footer>
         </article>
 
         <!-- AICF -->
-        <article class="cf-card">
+        <article class="cf-card fam-aicf" id="fam-aicf">
           <header class="cf-card-head">
             <h3 class="cf-card-name">AICF</h3>
-            <span class="cf-card-color">Orange</span>
-            <span class="cf-card-click clickable">Clickable</span>
+            <span class="cf-card-colourname">Orange</span>
+            <div class="cf-card-sample-inline">
+              <span class="aicf-pill" data-aicf-ref="teacher.foundation.domainA" title="AICF · Teacher · Foundation · Domain A">AICF · Found · A</span>
+              <span class="aicf-pill" data-aicf-ref="unesco_aicft.acquire" title="UNESCO AI-CFT 2024 · Acquire">AICF · Acquire</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="aicf-pill" data-aicf-ref="teacher.foundation.domainA" title="AICF · Teacher · Foundation · Domain A">AICF · Found · A</span>
-            <span class="aicf-pill" data-aicf-ref="unesco_aicft.acquire" title="UNESCO AI-CFT 2024 · Acquire">AICF · Acquire</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">AI Competency Framework v1.0 (Eduversal, with UNESCO AI-CFT 2024 cross-walk)</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">3 parts: Teacher · Student · Institutional Leader. Cross-walked to UNESCO AI Competency Framework for Teachers (2024).</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The AI literacy block a competency, KPI or handbook task anchors to. Modern AI skills are not in Cambridge or Permendiknas yet — this fills the gap.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">AI Maturity Self-Assessment · Specialist CPD · AICF handbooks · Teacher Competency Framework (AID domain)</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On click</span>
-              <span class="cf-card-row-value">Opens a popover with the AICF block description. Refs follow the format <code>teacher.foundation.domainA</code> or <code>unesco_aicft.acquire</code>.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">AI Competency Framework v1.0 (Eduversal, with UNESCO AI-CFT 2024 cross-walk)</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value"><em>3 parts</em>: Teacher · Student · Institutional Leader. Cross-walked to UNESCO AI Competency Framework for Teachers (2024).</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The AI literacy block a competency, KPI or handbook task anchors to. Modern AI skills are not in Cambridge or Permendiknas yet — this fills the gap.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">AI Maturity Self-Assessment · Specialist CPD · AICF handbooks · Teacher Competency Framework (AID domain)</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot clickable">
+            <span class="cf-card-foot-icon">→</span>
+            <span class="cf-card-foot-label">Click to open</span>
+            <span class="cf-card-foot-detail">refs follow <code>teacher.foundation.domainA</code> or <code>unesco_aicft.acquire</code></span>
+          </footer>
         </article>
 
-        <!-- PMD-Pedagogy -->
-        <article class="cf-card">
+        <!-- Research / Pedagogy -->
+        <article class="cf-card fam-ped" id="fam-ped">
           <header class="cf-card-head">
             <h3 class="cf-card-name">Research</h3>
-            <span class="cf-card-color">Slate</span>
-            <span class="cf-card-click hover">Hover</span>
+            <span class="cf-card-colourname">Slate</span>
+            <div class="cf-card-sample-inline">
+              <span class="ped-pill" title="Rosenshine, B. (2012). Principles of Instruction. American Educator, 36(1).">📖 Rosenshine</span>
+              <span class="ped-pill" title="Education Endowment Foundation — Teaching &amp; Learning Toolkit (ongoing)">📖 EEF</span>
+              <span class="ped-pill" title="Kraft, M. A. (2018). Interpreting Effect Sizes of Education Interventions. Educational Researcher, 49(4).">📖 Kraft</span>
+            </div>
           </header>
-          <div class="cf-card-sample">
-            <span class="cf-card-sample-label">Example:</span>
-            <span class="ped-pill" title="Rosenshine, B. (2012). Principles of Instruction. American Educator, 36(1).">📖 Rosenshine</span>
-            <span class="ped-pill" title="Education Endowment Foundation — Teaching &amp; Learning Toolkit (ongoing)">📖 EEF Toolkit</span>
-            <span class="ped-pill" title="Kraft, M. A. (2018). Interpreting Effect Sizes of Education Interventions. Educational Researcher, 49(4).">📖 Kraft 2018</span>
-          </div>
-          <div class="cf-card-rows">
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Full name</span>
-              <span class="cf-card-row-value">Research / Pedagogy citations (free-form bibliographic anchors)</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Source</span>
-              <span class="cf-card-row-value">Named researchers, frameworks and meta-analyses — Rosenshine, EEF, Hattie, Kraft 2018, Wiggins &amp; McTighe, Wenger, Schoenfeld, Lesson Study, etc.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Means</span>
-              <span class="cf-card-row-value">The research or evidence base the team drew on when authoring a competency or KPI. Tells you "where does this idea come from?" Useful for reading lists and CPD planning.</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">Where seen</span>
-              <span class="cf-card-row-value">Competency Framework · Specialist CPD · Learning Path · Handbook task rationales</span>
-            </div>
-            <div class="cf-card-row">
-              <span class="cf-card-row-label">On hover</span>
-              <span class="cf-card-row-value">Tooltip shows the full citation. No click-through.</span>
+          <div class="cf-card-body">
+            <div class="cf-card-rows">
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Full name</span>
+                <span class="cf-card-row-value">Research / Pedagogy citations (free-form bibliographic anchors)</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Source</span>
+                <span class="cf-card-row-value">Named researchers and meta-analyses — Rosenshine, EEF, Hattie, Kraft 2018, Wiggins &amp; McTighe, Wenger, Schoenfeld, Lesson Study, etc.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Means</span>
+                <span class="cf-card-row-value">The research or evidence base the team drew on when authoring a competency or KPI. Tells you "where does this idea come from?" Useful for reading lists and CPD planning.</span>
+              </div>
+              <div class="cf-card-row">
+                <span class="cf-card-row-label">Where seen</span>
+                <span class="cf-card-row-value">Competency Framework · Specialist CPD · Learning Path · Handbook task rationales</span>
+              </div>
             </div>
           </div>
+          <footer class="cf-card-foot hover">
+            <span class="cf-card-foot-icon">i</span>
+            <span class="cf-card-foot-label">Hover only</span>
+            <span class="cf-card-foot-detail">tooltip shows the full citation — no click-through</span>
+          </footer>
         </article>
 
       </div>
     </section>
 
-    <!-- Worked example -->
+    <!-- Worked example — annotated -->
     <section class="cf-example">
       <h2 class="cf-example-title">Worked example — reading a tagged competency</h2>
-      <p class="cf-example-desc">Below is a real competency card. The chips after the descriptor tell you everything the author chose to anchor this competency to. Hover or click to see each source.</p>
-      <div class="cf-example-card">
-        <p class="cf-example-stem"><strong>SMC-2 · Subject mastery and clarity of explanation.</strong> Teacher selects examples, non-examples and explanations that resolve common student misconceptions for the current unit.</p>
-        <div class="cf-example-chips">
-          <span class="cts-pill" data-cts-ref="3.1" title="Cambridge Teacher Standards 2023 — 3.1">CTS 3.1</span>
-          <span class="cts-pill" data-cts-ref="3.2" title="Cambridge Teacher Standards 2023 — 3.2">CTS 3.2</span>
-          <span class="perm-pill" data-pmd-ref="profesional" title="Permendiknas No.16/2007 — Kompetensi Profesional">Profesional</span>
-          <span class="es-pill" data-es-ref="5.5" title="Eduversal Academic Standards madde 5.5">ES 5.5</span>
-          <span class="aicf-pill" data-aicf-ref="teacher.practitioner.domainB" title="AICF · Teacher · Practitioner · Domain B">AICF · Pract · B</span>
-          <span class="ped-pill" title="Rosenshine, B. (2012). Principles of Instruction.">📖 Rosenshine</span>
-          <span class="ped-pill" title="Wiliam, D. (2011). Embedded Formative Assessment.">📖 Wiliam</span>
+      <p class="cf-example-desc">A real Specialist competency card on the left. Each chip is decoded on the right, colour-matched to its family so you can trace the chain at a glance.</p>
+      <div class="cf-example-grid">
+
+        <!-- Left rail: the real card -->
+        <div class="cf-example-card">
+          <div class="cf-example-eyebrow">Specialist · Subject Mastery &amp; Clarity</div>
+          <p class="cf-example-stem"><strong>SMC-2 · Subject mastery and clarity of explanation.</strong> Teacher selects examples, non-examples and explanations that resolve common student misconceptions for the current unit.</p>
+          <div class="cf-example-chips">
+            <span class="cts-pill" data-cts-ref="3.1" title="Cambridge Teacher Standards 2023 — 3.1">CTS 3.1</span>
+            <span class="cts-pill" data-cts-ref="3.2" title="Cambridge Teacher Standards 2023 — 3.2">CTS 3.2</span>
+            <span class="perm-pill" data-pmd-ref="profesional" title="Permendiknas No.16/2007 — Kompetensi Profesional">Profesional</span>
+            <span class="es-pill" data-es-ref="5.5" title="Eduversal Academic Standards madde 5.5">ES 5.5</span>
+            <span class="aicf-pill" data-aicf-ref="teacher.practitioner.domainB" title="AICF · Teacher · Practitioner · Domain B">AICF · Pract · B</span>
+            <span class="ped-pill" title="Rosenshine, B. (2012). Principles of Instruction.">📖 Rosenshine</span>
+            <span class="ped-pill" title="Wiliam, D. (2011). Embedded Formative Assessment.">📖 Wiliam</span>
+          </div>
         </div>
+
+        <!-- Right rail: per-chip annotations -->
+        <div>
+          <h3 class="cf-anno-title">What each chip is telling you</h3>
+          <div class="cf-anno-list">
+            <div class="cf-anno-item a-cts">
+              <span class="cf-anno-chip"><span class="cts-pill">CTS 3.1 · 3.2</span></span>
+              <span class="cf-anno-text">Built on two Cambridge teacher standards from area 3 (Subject knowledge &amp; pedagogy).</span>
+            </div>
+            <div class="cf-anno-item a-pmd">
+              <span class="cf-anno-chip"><span class="perm-pill">Profesional</span></span>
+              <span class="cf-anno-text">Satisfies the Indonesian Profesional pillar — legally required teacher competency.</span>
+            </div>
+            <div class="cf-anno-item a-es">
+              <span class="cf-anno-chip"><span class="es-pill">ES 5.5</span></span>
+              <span class="cf-anno-text">Points to madde 5.5 of Eduversal's own academic standards manual.</span>
+            </div>
+            <div class="cf-anno-item a-aicf">
+              <span class="cf-anno-chip"><span class="aicf-pill">AICF · Pract · B</span></span>
+              <span class="cf-anno-text">Expects practitioner-level AI literacy in Domain B (Pedagogy with AI).</span>
+            </div>
+            <div class="cf-anno-item a-ped">
+              <span class="cf-anno-chip"><span class="ped-pill">📖 Rosenshine</span> <span class="ped-pill">📖 Wiliam</span></span>
+              <span class="cf-anno-text">Draws on Rosenshine's Principles of Instruction and Wiliam's Embedded Formative Assessment.</span>
+            </div>
+          </div>
+        </div>
+
       </div>
-      <p class="cf-example-desc" style="margin-top:14px;">How to read this: the competency is built on two Cambridge teacher standards (CTS 3.1 + 3.2), satisfies the Indonesian Profesional pillar, points to madde 5.5 of Eduversal's own manual, expects practitioner-level AI literacy in Domain B, and draws on Rosenshine and Wiliam's research. If a partner school asks "is this aligned with Cambridge / PKG / our policy?", every answer is one click away.</p>
+      <p class="cf-example-desc" style="margin-top:16px;">If a partner school asks "is this aligned with Cambridge / PKG / our policy?", every answer is one click away. That is the whole point of the chip system.</p>
     </section>
 
     <!-- FAQ -->
     <section class="cf-faq">
-      <h2 class="cf-section-title">Common questions</h2>
+      <header class="cf-section-head" data-group="A">
+        <div class="cf-section-stripe"></div>
+        <div class="cf-section-text">
+          <h2 class="cf-section-title">Common questions</h2>
+          <p class="cf-section-desc">Quick answers to the things HQ usually asks about chips.</p>
+        </div>
+        <span class="cf-section-count">6 items</span>
+      </header>
 
       <details class="cf-faq-item">
         <summary class="cf-faq-q">Why are there so many chip families?</summary>
