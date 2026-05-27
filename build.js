@@ -399,7 +399,6 @@ const htmlFiles = [
   "national-biology-alignment.html",
   "national-chemistry-alignment.html",
   "national-physics-alignment.html",
-  "kpi-admin.html",
   "school-kpi-admin.html",
   "teacher-kpi-admin.html",
   "reports.html",
