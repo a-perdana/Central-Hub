@@ -232,16 +232,25 @@ If you need `z-index: 9999`, you're fighting the system. Stop and check whether 
 
 ## Page families & canonical hero
 
-Feature pages (user-facing content surfaces — NOT dashboards, NOT admin/authoring tools) belong to one of **four families**. The family chooses the hero gradient + accent; the page does not pick its own colour scheme.
+Feature pages (user-facing content surfaces) AND admin/authoring tools belong to one of **eight semantic families**. The family chooses the hero gradient + accent by **function group**; the page does not pick its own colour scheme.
 
-**Why this exists:** the 2026-05-19 audit found 6 hero gradients across 6 hero-bearing CH pages (notifications cyan, library dark-purple, references mor, handbook mor, my-induction dark-card, roles-positions dark-card, walkthroughs 3-window). Each carried 50-300 lines of bespoke hero CSS. The families collapse that to 3 canonical gradients consumed via `data-accent` on `.page-hero`.
+**Why this exists:** the 2026-05-19 audit found 6 bespoke hero gradients across 6 CH pages, each carrying 50-300 lines of hero CSS — collapsed to 3 canonical gradients (cyan/mor/dark). But by 2026-05-27 those 3 had become catch-alls: "mor" = references + admin + certs + department, "dark" = every appraisal/KPI/coaching surface. The colour signal was lost, so the set was expanded to **8 function-mapped families**. Each maps to a CH navbar function group (`groupKeys` in `Central Hub/partials/navbar.html`).
 
-| Family | Accent | Pages | Hero variant |
-|---|---|---|---|
-| **Communication** — feeds, threads, broadcast | cyan `#0891b2` | `message-board`, `announcements`, `notifications` | `data-accent="cyan"` → `--hero-grad-cyan` |
-| **Knowledge** — read/browse content, reference, taxonomy | mor `#6c5ce7` | `references`, `handbook`, `library`, `roles-positions` | `data-accent="mor"` → `--hero-grad-mor` |
-| **My Work** — per-uid CPD / induction / personal surfaces | mor on dark | `my-induction`, `walkthroughs` | `data-accent="dark"` → `--hero-grad-dark` |
-| **Operations** — record-keeping, inventory, logs | neutral (no hero accent stripe) | `documents` / `inventory` | no hero — plain `<h1 class="page-title">` |
+| Family | Accent | Function | Pages | Hero variant |
+|---|---|---|---|---|
+| **Communication** — feeds, threads, broadcast | cyan `#0891b2` | comms | `message-board`, `announcements`, `notifications`, `surveys` | `data-accent="cyan"` → `--hero-grad-cyan` |
+| **Knowledge** — read/browse, reference, taxonomy | mor `#6c5ce7` | pd | `references`, `handbook`, `library`, `roles-positions`, `competency-framework`, `chip-families` | `data-accent="mor"` → `--hero-grad-mor` |
+| **My Work** — per-uid CPD / induction / coaching | mor on dark | specialist | `my-induction`, `learning-path`, `specialist-portfolio/certificates`, `principal-coaching-*` | `data-accent="dark"` → `--hero-grad-dark` |
+| **Assessment** — appraisal + KPI | amber `#d97706` | appraisals/KPI | `school/teacher-appraisals`, `school/teacher-kpi-admin`, `principal-appraisals/observations/360-admin` | `data-accent="amber"` → `--hero-grad-amber` |
+| **Curriculum** — syllabus + authoring | teal `#14b8a6` | curriculum | `igcse/as-alevel/checkpoint syllabus`, `curriculum-map`, `national-*-alignment`, `teaching-progress`, `chapter-test-author`, `question-bank`, `ease-*`, `practice-*`, `diagrams` | `data-accent="teal"` → `--hero-grad-teal` |
+| **People** — directory + credentials | rose `#e11d48` | comms (people) | `schools`, `staff`, `students-overview`, `certificates`, `certificate-verify` | `data-accent="rose"` → `--hero-grad-rose` |
+| **Department** — live coordinator workflow | violet `#7c3aed` | deptoffice | `coordinators-meetings/directory/decisions`, `department-workspace/artifacts`, `activities`, `walkthroughs`, `walkthrough-review`, `weekly-checklist` | `data-accent="violet"` → `--hero-grad-violet` |
+| **Operations** — config + record-keeping | slate `#475569` | admin | `console`, `page-access`, `rules-viewer`, `mail-composer`, `schedule-settings`, `feedback-management`, `survey-console`, `reports`, `inventory`, `pilot-enrolment`, `network-health`, `induction/orientation/competency/checklist-admin` | `data-accent="slate"` → `--hero-grad-slate` |
+| *Subject* (sub-family) | per-subject | pacing | the 14 pacing pages | bespoke per-subject gradient via `build.js` `{{HERO_GRADIENT}}` — **sanctioned exception**, do NOT flatten to teal |
+
+**Note on People + Operations:** these two families are *hand-curated semantics*, not derived 1:1 from a single `groupKeys` array (People pulls from comms + admin; Operations spans comms `inventory` + admin). Accepted by design — don't "fix" them by forcing a groupKeys match.
+
+**Note on Operations:** Operations used to mean "no hero — plain `<h1>`". As of 2026-05-27 Operations pages DO carry a canonical slate `.page-hero` (inventory + reports already had mor heroes; the rest were migrated). The old "no hero" rule is retired.
 
 **Canonical markup** (in any feature page that has a hero):
 
@@ -259,7 +268,7 @@ Feature pages (user-facing content surfaces — NOT dashboards, NOT admin/author
 </header>
 ```
 
-Don't write a new gradient. Don't override `.page-hero` background in a page `<style>` block. If a future page genuinely needs a 4th family (e.g. ever a "Wellbeing" zone), add it to this table FIRST and add `--hero-grad-<name>` to `tokens.css` — page-level invention is forbidden.
+Don't write a new gradient. Don't override `.page-hero` background in a page `<style>` block. If a future page genuinely needs a **9th** family, add it to this table FIRST and add `--hero-grad-<name>` + `--paper-tinted-<name>` + `--hero-fade-<name>` + `--hero-kpi-bg-primary-<name>` to `tokens.css` AND the matching selector rows to all 3 hub stylesheets — page-level invention is forbidden.
 
 The same discipline applies to **shared chrome under the hero** — `.page-toolbar` (sticky filter/search bar) and `.page-empty` (empty state with icon + title + desc) live in `shared-styles.css`; don't fork them per page.
 
@@ -303,9 +312,14 @@ body[data-page-accent="dark"] { background: var(--paper-tinted-dark); }
 | `--paper-tinted-cyan` | `#e6eef5` | ice — Communication family body |
 | `--paper-tinted-mor`  | `#ece5f6` | lavender — Knowledge family body |
 | `--paper-tinted-dark` | `#e9e5ec` | charcoal — My Work family body |
-| `--hero-fade-cyan`    | linear-gradient cyan→tint | 40px bleed below cyan hero |
-| `--hero-fade-mor`     | linear-gradient mor→tint  | 40px bleed below mor hero |
-| `--hero-fade-dark`    | linear-gradient dark→tint | 40px bleed below dark hero |
+| `--paper-tinted-amber`  | `#f3ece2` | sand — Assessment family body |
+| `--paper-tinted-teal`   | `#e3efed` | mint — Curriculum family body |
+| `--paper-tinted-rose`   | `#f4e7eb` | blush — People family body |
+| `--paper-tinted-violet` | `#ebe6f6` | iris — Department family body |
+| `--paper-tinted-slate`  | `#e8ebef` | steel — Operations family body |
+| `--hero-fade-{cyan,mor,dark}` | linear-gradient accent→tint | 40px bleed below the hero |
+| `--hero-fade-{amber,teal,rose,violet,slate}` | linear-gradient accent→tint | 40px bleed below the new-family heroes (2026-05-27) |
+| `--hero-kpi-bg-primary-{amber,teal,rose,violet,slate}` | alpha gradient of the family hue | primary-KPI tile tint so the highlighted stat picks up the family colour, not stray mor-purple (2026-05-27) |
 
 **My CPD per-page accents** (2026-05-24, AH-specific so far) — `learning` / `portfolio` / `certificates` / `induction` get their own tint + fade variants. The `induction` variant reuses Knowledge's lavender (`#ece5f6`) so My-Induction sits visually next to References. New per-page accents must add **both** the body-tint and the hero-fade tokens, then the `body[data-page-accent="…"]` + `.page-hero[data-accent="…"]::after` rules — adding only one half breaks the bleed.
 
