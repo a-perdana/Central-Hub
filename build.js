@@ -415,6 +415,7 @@ const htmlFiles = [
   "principal-coaching-session.html",
   "principal-coaching-hub.html",
   "principal-360-admin.html",
+  "principal-observations.html",
   "competency-framework.html",
   "learning-path.html",
   "specialist-portfolio.html",
