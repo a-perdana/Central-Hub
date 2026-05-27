@@ -417,6 +417,7 @@ const htmlFiles = [
   "principal-360-admin.html",
   "principal-observations.html",
   "principal-appraisals.html",
+  "read-me-leadership-programs.html",
   "competency-framework.html",
   "learning-path.html",
   "specialist-portfolio.html",
