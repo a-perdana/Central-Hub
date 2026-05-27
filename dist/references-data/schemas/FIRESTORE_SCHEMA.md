@@ -385,6 +385,11 @@ A semi-overlapping family of collections — be careful when modifying.
 #### `kpi_config/{kpiId}` and `kpi_settings/{semId}` (school-level KPI)
 Criteria definitions and per-semester settings. AH admin write; AH user read.
 
+**Canonical 20-KPI v1 list (2026-05-27):** Migrated from the ad-hoc hand-entered state into the canonical list anchored to BAN-S/M IASP 2020 + Ofsted EIF + OECD + Cambridge International Self-Eval + COBIS + AICF + Eduversal Academic Standards. Source: `docs/kpi/school-kpi-v1.json`. Spec: `docs/kpi/school-kpi-proposal-v1.md`. Migration script: `scripts/kpi/seed-school-kpi-v1.js`. Each KPI doc carries (beyond the input-type spec) up to 6 framework tag arrays — `eduversal_standard_refs[]`, `iasp_refs[]`, `ofsted_refs[]`, `csls_refs[]`, `aicf_refs[]`, `cambridge_standard_refs[]` (CTS legacy). KPIs with `derivedFrom` are auto-computed from existing collections (e.g. `userProgress.pacingPercent`, `teacher_kpi_submissions.avg_score`, `ai_competency_aggregates.completion_ratio`) — UI surfaces a hint instead of asking the principal to type a number.
+
+#### `kpi_config_legacy_pre_v1/{originalId}` (snapshot — read-only archive)
+One-shot archive of the pre-2026-05-27 `kpi_config` state, written by `scripts/kpi/seed-school-kpi-v1.js` before the v1 migration wipes the legacy docs. Each doc mirrors the original `kpi_config/{id}` payload plus `_originalId`, `_snapshottedAt`, and `_isV1Replacement` (true if the same doc id appears in the v1 list). `central_admin` read; no writes after the one-shot snapshot. Kept for audit traceability — partner-school inquiries about pre-v1 weights/definitions can be answered without git-blame archaeology.
+
 #### `school_performance_kpi/{semId}/schools/{schoolId}` (subcollection)
 **PK (parent):** `semId`. **PK (child):** `schoolId →partner_schools.id`.
 **Read/Write:** AH admin, or `academic_user` whose `userProfile.schoolId` matches the doc's `{schoolId}` path segment.
