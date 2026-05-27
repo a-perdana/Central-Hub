@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Principal Appraisals — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    :root {
+      --accent:    #6c5ce7;
+      --accent-dk: #4e3db8;
+      --accent-2:  #ddd6fe;
+      /* Band colours — A best, F worst */
+      --band-a: #065f46; --band-a-bg: #d1fae5;
+      --band-b: #1e40af; --band-b-bg: #dbeafe;
+      --band-c: #b45309; --band-c-bg: #fef3c7;
+      --band-d: #c2410c; --band-d-bg: #ffedd5;
+      --band-f: #991b1b; --band-f-bg: #fee2e2;
+    }
+
+    /* My Work / dark family — canonical .page-hero from shared-styles.css.
+       CH navbar in normal flow — no body padding-top. */
+    /* width:100% required because body becomes a flex column when .page-footer
+       is a direct body child (root CLAUDE.md #54). */
+    .page-wrap { width: 100%; max-width: 1200px; margin: 0 auto; padding: 36px 40px 80px; }
+    @media (max-width: 768px) { .page-wrap { padding: 24px 20px 60px; } }
+
+    .page-footer .page-footer__cta-btn { background: var(--hero-grad-dark); }
+
+    /* ===== HOW-TO STRIP ===== */
+    .page-howto-strip {
+      background: linear-gradient(135deg, #faf5ff 0%, #ecfeff 100%);
+      border: 1px solid #ddd6fe;
+      border-radius: 14px;
+      padding: 18px 22px;
+      margin: 0 0 28px;
+      box-shadow: 0 1px 3px rgba(108,92,231,0.06);
+    }
+    .page-howto-eyebrow { font-size: .68rem; font-weight: 700; color: #6c5ce7; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; }
+    .page-howto-title { font-size: 1rem; font-weight: 700; color: var(--ink); margin: 0 0 12px; font-family: 'Lora', serif; }
+    .page-howto-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    @media (max-width: 760px) { .page-howto-grid { grid-template-columns: 1fr; } }
+    .page-howto-item { display: flex; gap: 10px; align-items: flex-start; }
+    .page-howto-num {
+      flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+      background: #6c5ce7; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800; margin-top: 1px;
+    }
+    .page-howto-text { font-size: .85rem; line-height: 1.45; color: #3b2f6b; }
+    .page-howto-text strong { color: #5a4bd1; font-weight: 700; }
+
+    /* ===== CONTROLS ===== */
+    .controls-row {
+      display: flex; align-items: center; gap: 12px;
+      flex-wrap: nowrap; margin-bottom: 24px;
+    }
+    .controls-row .search-input-wrap { flex: 1 1 auto; min-width: 0; }
+    .controls-row .filter-select     { flex: 0 0 160px; }
+    @media (max-width: 768px) {
+      .controls-row { flex-wrap: wrap; }
+      .controls-row .filter-select { flex: 1 1 calc(50% - 6px); }
+    }
+    .filter-select {
+      height: 40px; padding: 0 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 0.875rem; color: var(--ink); background: var(--white);
+      cursor: pointer; font-family: inherit;
+    }
+    .filter-select:focus { outline: none; border-color: var(--accent); }
+
+    /* ===== TABLE ===== */
+    .table-wrap {
+      background: var(--white); border: 1px solid var(--border); border-radius: 14px;
+      overflow: hidden; box-shadow: var(--shadow-sm);
+    }
+    .ap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .ap-table thead th {
+      background: #faf9ff; padding: 12px 14px; text-align: left;
+      font-weight: 600; color: var(--ink-2); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .ap-table tbody tr {
+      border-bottom: 1px solid #f1f5f9;
+      transition: background 0.1s; cursor: pointer;
+    }
+    .ap-table tbody tr:hover { background: #faf9ff; }
+    .ap-table tbody tr:last-child { border-bottom: none; }
+    .ap-table td { padding: 13px 14px; vertical-align: middle; color: var(--ink); }
+    .ap-table .principal-cell { font-weight: 600; }
+    .ap-table .school-cell { color: var(--ink-2); font-size: 12.5px; }
+    .ap-table .year-cell, .ap-table .composite-cell, .ap-table .date-cell {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .ap-table .composite-cell { font-weight: 700; font-size: 13px; color: var(--ink); }
+
+    .band-pill {
+      display: inline-block;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 0.05em;
+    }
+    .band-pill.band-a { background: var(--band-a-bg); color: var(--band-a); }
+    .band-pill.band-b { background: var(--band-b-bg); color: var(--band-b); }
+    .band-pill.band-c { background: var(--band-c-bg); color: var(--band-c); }
+    .band-pill.band-d { background: var(--band-d-bg); color: var(--band-d); }
+    .band-pill.band-f { background: var(--band-f-bg); color: var(--band-f); }
+    .band-pill.band-empty { background: #f8fafc; color: #94a3b8; font-style: italic; padding: 3px 10px; font-weight: 500; }
+
+    .status-pill {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .status-pill.draft     { background: #fef3c7; color: #92400e; }
+    .status-pill.submitted { background: #d1fae5; color: #065f46; }
+
+    .empty { padding: 60px 20px; text-align: center; color: var(--ink-3); }
+    .empty-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.5; }
+    .empty-title { font-size: 1rem; font-weight: 600; color: var(--ink); margin-bottom: 6px; font-family: 'Lora', serif; }
+    .empty-desc { font-size: 13px; }
+
+    /* ===== DETAIL MODAL ===== */
+    .ap-detail { max-width: 800px; }
+    .ap-detail-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px;
+      padding: 18px 22px;
+      background: #faf9ff;
+      border-radius: 10px;
+      margin-bottom: 18px;
+    }
+    .ap-detail-meta dt {
+      font-size: 10px; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px;
+    }
+    .ap-detail-meta dd { margin: 0; font-size: 13.5px; color: var(--ink); font-weight: 500; }
+    .ap-detail-meta dd.composite-big { font-size: 1.6rem; font-weight: 700; color: var(--accent-dk); font-family: 'DM Mono', monospace; }
+
+    .focus-block {
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .focus-head {
+      padding: 12px 16px;
+      background: #faf9ff;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .focus-head .title {
+      font-family: 'Lora', serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .focus-head .weight {
+      font-size: 11px;
+      color: var(--ink-3);
+      font-family: 'DM Mono', monospace;
+    }
+    .focus-head .focus-avg {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-dk);
+      padding: 3px 10px;
+      background: var(--accent-2);
+      border-radius: 6px;
+    }
+    .item-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 50px;
+      gap: 12px;
+      padding: 10px 16px;
+      align-items: center;
+      font-size: 12.5px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .item-row:last-child { border-bottom: none; }
+    .item-id {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--ink-3);
+      font-weight: 600;
+    }
+    .item-title { color: var(--ink); }
+    .item-score {
+      text-align: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 0;
+      border-radius: 6px;
+    }
+    .item-score.score-1 { background: var(--band-f-bg); color: var(--band-f); }
+    .item-score.score-2 { background: var(--band-d-bg); color: var(--band-d); }
+    .item-score.score-3 { background: var(--band-b-bg); color: var(--band-b); }
+    .item-score.score-4 { background: var(--band-a-bg); color: var(--band-a); }
+    .item-score.empty { background: #f8fafc; color: #94a3b8; }
+
+    .narrative-block {
+      margin-top: 18px;
+      padding: 16px 20px;
+      background: #faf9ff;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 12px 12px 0;
+    }
+    .narrative-block h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-dk);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .narrative-block .pnf-row { margin-bottom: 14px; }
+    .narrative-block .pnf-row:last-child { margin-bottom: 0; }
+    .narrative-block p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+    .narrative-block .recommendation-pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: 'DM Mono', monospace;
+    }
+    .narrative-block .recommendation-pill.continue        { background: var(--band-a-bg); color: var(--band-a); }
+    .narrative-block .recommendation-pill.development_plan { background: var(--band-c-bg); color: var(--band-c); }
+    .narrative-block .recommendation-pill.non_renewal     { background: var(--band-f-bg); color: var(--band-f); }
+
+    .confidential-block {
+      margin-top: 14px;
+      padding: 14px 18px;
+      background: linear-gradient(180deg, #fee2e2 0%, #fff 100%);
+      border: 1px solid #fca5a5;
+      border-radius: 10px;
+    }
+    .confidential-block h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #991b1b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .confidential-block p {
+      margin: 0;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #7f1d1d;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body data-page-accent="dark">
+  <!-- SHARED_NAVBAR -->
+
+  <!-- ── HERO ── -->
+  <header class="page-hero" data-accent="dark" aria-label="Principal Appraisals header">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <p class="page-hero__eyebrow">Leadership Programs · Annual Appraisal</p>
+        <h1 class="page-hero__title">Principal Appraisals</h1>
+        <p class="page-hero__desc">Network-wide read-only roll-up of every Foundation Rep annual appraisal on partner-school principals. Source: F1–F5 + F_LEAD weighted rubric written from AH <code>/principal-appraisal-entry</code>.</p>
+      </div>
+      <div class="page-hero__kpis">
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="statTotal">—</div>
+          <div class="page-hero__kpi-lbl">Total</div>
+          <div class="page-hero__kpi-sub">appraisals</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="statSubmitted">—</div>
+          <div class="page-hero__kpi-lbl">Submitted</div>
+          <div class="page-hero__kpi-sub">finalised</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="statDraft">—</div>
+          <div class="page-hero__kpi-lbl">Drafts</div>
+          <div class="page-hero__kpi-sub">in progress</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="statAvgComposite">—</div>
+          <div class="page-hero__kpi-lbl">Avg Composite</div>
+          <div class="page-hero__kpi-sub">submitted only</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="statBandDist">—</div>
+          <div class="page-hero__kpi-lbl">A · B+</div>
+          <div class="page-hero__kpi-sub">share submitted</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrap">
+
+    <section class="page-howto-strip" aria-label="What you can do on this page">
+      <p class="page-howto-eyebrow">What you do here</p>
+      <h2 class="page-howto-title">Read every annual principal appraisal in the network — for oversight, not editing.</h2>
+      <div class="page-howto-grid">
+        <div class="page-howto-item">
+          <div class="page-howto-num" aria-hidden="true">1</div>
+          <div class="page-howto-text">
+            <strong>Filter the list.</strong> Narrow by school, academic year, status, band, or recommendation. The table summarises composite (1–4) and predicate band (A–F) per principal.
+          </div>
+        </div>
+        <div class="page-howto-item">
+          <div class="page-howto-num" aria-hidden="true">2</div>
+          <div class="page-howto-text">
+            <strong>Open an appraisal.</strong> Click any row to see the full F1–F5 + F_LEAD score breakdown plus the six narrative reflections (PNF1–PNF6). Useful for coaching prep, succession planning, and FR calibration.
+          </div>
+        </div>
+        <div class="page-howto-item">
+          <div class="page-howto-num" aria-hidden="true">3</div>
+          <div class="page-howto-text">
+            <strong>Read-only.</strong> Editing happens in AH <code>/principal-appraisal-entry</code> by the assigned Foundation Rep. Submitted appraisals are <em>immutable at rule level</em> — this view is the network-wide window into a system the schools own.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="controls-row">
+      <div class="search-input-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" id="searchInput" type="search" placeholder="Search principal or school…" autocomplete="off">
+      </div>
+      <select class="filter-select" id="schoolFilter">
+        <option value="">All Schools</option>
+      </select>
+      <select class="filter-select" id="yearFilter">
+        <option value="">All Years</option>
+      </select>
+      <select class="filter-select" id="statusFilter">
+        <option value="">All Statuses</option>
+        <option value="submitted">Submitted</option>
+        <option value="draft">Draft</option>
+      </select>
+      <select class="filter-select" id="bandFilter">
+        <option value="">All Bands</option>
+        <option value="A">A — Excellent</option>
+        <option value="B">B — Good</option>
+        <option value="C">C — Satisfactory</option>
+        <option value="D">D — Needs Improvement</option>
+        <option value="F">F — Unsatisfactory</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <table class="ap-table">
+        <thead>
+          <tr>
+            <th>Principal</th>
+            <th>School</th>
+            <th>Academic Year</th>
+            <th>Composite</th>
+            <th>Band</th>
+            <th>Status</th>
+            <th>Last Updated</th>
+          </tr>
+        </thead>
+        <tbody id="apTableBody"></tbody>
+      </table>
+      <div id="tableEmpty" class="empty" style="display:none;">
+        <div class="empty-icon">🏛️</div>
+        <div class="empty-title">No appraisals found</div>
+        <div class="empty-desc">Either no Foundation Rep has logged an appraisal yet, or your filters exclude every record. Try clearing the filters.</div>
+      </div>
+      <div id="tableLoading" class="empty">
+        <div class="empty-icon">⏳</div>
+        <div class="empty-title">Loading appraisals…</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== DETAIL MODAL ===== -->
+  <div class="modal-overlay" id="detailModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="modal ap-detail">
+      <div class="modal-head">
+        <div>
+          <h2 class="modal-title" id="detailTitle">Appraisal</h2>
+          <p style="font-size:0.82rem;color:var(--ink-3);margin-top:3px;" id="detailSubtitle"></p>
+        </div>
+        <button class="modal-close" id="detailClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <!-- populated by openDetail() -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="page-footer" role="contentinfo">
+    <div class="page-footer__inner">
+      <div class="page-footer__cta">
+        <span class="page-footer__cta-eyebrow">Leadership Programs · Annual Appraisal</span>
+        <h2 class="page-footer__cta-title">Appraisals close the year; coaching opens the next one.</h2>
+        <p class="page-footer__cta-desc">Read with the principal's whole year in mind — observations, 360° feedback, coaching notes. None of those feed appraisal scoring (Charter NN1 + NN5); appraisals are scored on their own evidence.</p>
+        <a href="/principal-coaching-hub" class="page-footer__cta-btn">Open Coaching Hub <span aria-hidden="true">→</span></a>
+      </div>
+      <nav class="page-footer__nav" aria-label="Principal Appraisals footer navigation">
+        <div class="page-footer__nav-group">
+          <span class="page-footer__nav-heading">Leadership Programs</span>
+          <a href="/principal-360-admin" class="page-footer__nav-link">Principal 360°</a>
+          <a href="/principal-coaching-hub" class="page-footer__nav-link">Principal Coaching</a>
+          <a href="/principal-observations" class="page-footer__nav-link">Principal Observations</a>
+          <a href="/schools" class="page-footer__nav-link">Partner Schools</a>
+        </div>
+        <div class="page-footer__nav-group">
+          <span class="page-footer__nav-heading">References</span>
+          <a href="/references?doc=cm-principal-appraisal" class="page-footer__nav-link">Appraisal Framework v1</a>
+          <a href="/handbook?id=eduversal_principal_v1" class="page-footer__nav-link">Principal Handbook</a>
+          <a href="/references" class="page-footer__nav-link">Frameworks &amp; Standards</a>
+        </div>
+      </nav>
+    </div>
+    <div class="page-footer__meta">
+      <span class="page-footer__meta-left">© Eduversal · Central Hub</span>
+      <span class="page-footer__meta-right">Submitted appraisals are immutable at rule level.</span>
+    </div>
+  </footer>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+  <script type="module">
+    import {
+      collection, getDocs, query, orderBy, limit, where, documentId
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // Framework loaded from /resources/principal-appraisal-framework-v1.json
+    let FRAMEWORK = null;
+
+    const NARRATIVE_LABELS = {
+      PNF1: 'Headline Strength',
+      PNF2: 'Priority Development Area',
+      PNF3: 'Recommendation',
+      PNF4: 'Agreed Next-Year Goals',
+      PNF5: "Principal's Reflection",
+      PNF6: 'Confidential Note (HQ-internal only)',
+    };
+    const RECOMMENDATION_LABELS = {
+      continue: 'Continue in role',
+      development_plan: 'Development plan required',
+      non_renewal: 'Non-renewal recommended',
+    };
+
+    const state = {
+      all: [],
+      filtered: [],
+      schoolNames: {},
+      principalNames: {},
+      isAdmin: false,
+    };
+
+    document.addEventListener('authReady', async ({ detail }) => {
+      state.isAdmin = detail?.profile?.role_centralhub === 'central_admin';
+      try {
+        await loadFramework();
+        await loadAppraisals();
+        wireFilters();
+        applyFilters();
+        renderTable();
+        updateKpis();
+      } catch (err) {
+        console.error('[principal-appraisals] init error', err);
+        const tbody = document.getElementById('apTableBody');
+        if (tbody) tbody.innerHTML = '';
+        const empty = document.getElementById('tableEmpty');
+        const loading = document.getElementById('tableLoading');
+        if (loading) loading.style.display = 'none';
+        if (empty) {
+          empty.style.display = 'block';
+          empty.querySelector('.empty-title').textContent = 'Could not load appraisals';
+          empty.querySelector('.empty-desc').textContent = err?.message || 'Check console for details.';
+        }
+      }
+    });
+
+    async function loadFramework() {
+      try {
+        const res = await fetch('/resources/principal-appraisal-framework-v1.json');
+        if (res.ok) FRAMEWORK = await res.json();
+      } catch (e) {
+        console.warn('[principal-appraisals] framework fetch failed', e);
+      }
+    }
+
+    async function loadAppraisals() {
+      const snap = await getDocs(query(
+        collection(window.db, 'principal_annual_appraisals'),
+        orderBy('updatedAt', 'desc'),
+        limit(500)
+      ));
+      state.all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const schoolIds = [...new Set(state.all.map(a => a.schoolId).filter(Boolean))];
+      const principalUids = [...new Set(state.all.map(a => a.principalUid).filter(Boolean))];
+
+      await Promise.all([
+        resolveNames('partner_schools', schoolIds, state.schoolNames, d => d?.name),
+        resolveNames('users', principalUids, state.principalNames, d => d?.displayName || d?.email),
+      ]);
+
+      // Populate filter dropdowns
+      const schoolSelect = document.getElementById('schoolFilter');
+      const yearSelect = document.getElementById('yearFilter');
+      schoolIds
+        .sort((a, b) => (state.schoolNames[a] || '').localeCompare(state.schoolNames[b] || ''))
+        .forEach(id => {
+          const o = document.createElement('option');
+          o.value = id;
+          o.textContent = state.schoolNames[id] || id;
+          schoolSelect.appendChild(o);
+        });
+      const years = [...new Set(state.all.map(a => a.academicYear).filter(Boolean))].sort().reverse();
+      years.forEach(y => {
+        const o = document.createElement('option');
+        o.value = y;
+        o.textContent = y;
+        yearSelect.appendChild(o);
+      });
+    }
+
+    async function resolveNames(collName, ids, target, extract) {
+      if (!ids.length) return;
+      const CHUNK = 30;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        try {
+          const snap = await getDocs(query(
+            collection(window.db, collName),
+            where(documentId(), 'in', chunk)
+          ));
+          snap.docs.forEach(d => {
+            const v = extract(d.data());
+            target[d.id] = v || d.id;
+          });
+        } catch (e) {
+          console.warn('[principal-appraisals] resolveNames ' + collName + ' chunk failed', e);
+        }
+      }
+    }
+
+    function wireFilters() {
+      ['searchInput', 'schoolFilter', 'yearFilter', 'statusFilter', 'bandFilter'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+          applyFilters();
+          renderTable();
+        });
+      });
+    }
+
+    function applyFilters() {
+      const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+      const school = document.getElementById('schoolFilter').value;
+      const year = document.getElementById('yearFilter').value;
+      const status = document.getElementById('statusFilter').value;
+      const band = document.getElementById('bandFilter').value;
+
+      state.filtered = state.all.filter(a => {
+        if (school && a.schoolId !== school) return false;
+        if (year && a.academicYear !== year) return false;
+        if (status && a.status !== status) return false;
+        if (band && a.band !== band) return false;
+        if (q) {
+          const principalName = (state.principalNames[a.principalUid] || '').toLowerCase();
+          const schoolName = (state.schoolNames[a.schoolId] || '').toLowerCase();
+          if (!principalName.includes(q) && !schoolName.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('apTableBody');
+      const empty = document.getElementById('tableEmpty');
+      const loading = document.getElementById('tableLoading');
+      if (loading) loading.style.display = 'none';
+
+      if (!state.filtered.length) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      tbody.innerHTML = state.filtered.map(a => {
+        const principal = state.principalNames[a.principalUid] || a.principalUid || '—';
+        const school = state.schoolNames[a.schoolId] || a.schoolId || '—';
+        const composite = (typeof a.composite === 'number') ? a.composite.toFixed(2) : '—';
+        const compositePct = (typeof a.compositePercent === 'number') ? `<span style="color:var(--ink-3);font-weight:400">&nbsp;(${Math.round(a.compositePercent)}%)</span>` : '';
+        const band = a.band || '';
+        const bandClass = band ? `band-${band.toLowerCase()}` : 'band-empty';
+        const bandHtml = band
+          ? `<span class="band-pill ${bandClass}">${escapeHtml(band)}</span>`
+          : `<span class="band-pill band-empty">—</span>`;
+        const statusClass = (a.status === 'submitted') ? 'submitted' : 'draft';
+        const updated = a.updatedAt?.toDate
+          ? a.updatedAt.toDate().toLocaleDateString('en-GB')
+          : (a.submittedAt?.toDate ? a.submittedAt.toDate().toLocaleDateString('en-GB') : '—');
+
+        return `
+          <tr data-ap-id="${escapeAttr(a.id)}">
+            <td class="principal-cell">${escapeHtml(principal)}</td>
+            <td class="school-cell">${escapeHtml(school)}</td>
+            <td class="year-cell">${escapeHtml(a.academicYear || '—')}</td>
+            <td class="composite-cell">${composite}${compositePct}</td>
+            <td>${bandHtml}</td>
+            <td><span class="status-pill ${statusClass}">${escapeHtml(a.status || 'draft')}</span></td>
+            <td class="date-cell">${escapeHtml(updated)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.querySelectorAll('tr[data-ap-id]').forEach(tr => {
+        tr.addEventListener('click', () => openDetail(tr.dataset.apId));
+      });
+    }
+
+    function updateKpis() {
+      const submitted = state.all.filter(a => a.status === 'submitted');
+      document.getElementById('statTotal').textContent = state.all.length || 0;
+      document.getElementById('statSubmitted').textContent = submitted.length;
+      document.getElementById('statDraft').textContent = state.all.filter(a => a.status === 'draft').length;
+
+      if (submitted.length) {
+        const composites = submitted.map(a => a.composite).filter(v => typeof v === 'number');
+        if (composites.length) {
+          const avg = composites.reduce((a, b) => a + b, 0) / composites.length;
+          document.getElementById('statAvgComposite').textContent = avg.toFixed(2);
+        } else {
+          document.getElementById('statAvgComposite').textContent = '—';
+        }
+        const aOrB = submitted.filter(a => a.band === 'A' || a.band === 'B').length;
+        const pct = submitted.length ? Math.round((aOrB / submitted.length) * 100) : 0;
+        document.getElementById('statBandDist').textContent = pct + '%';
+      } else {
+        document.getElementById('statAvgComposite').textContent = '—';
+        document.getElementById('statBandDist').textContent = '—';
+      }
+    }
+
+    function focusAverage(a, focusId) {
+      if (!a.scores || !FRAMEWORK) return null;
+      const focus = FRAMEWORK.foci?.find(f => f.id === focusId);
+      if (!focus) return null;
+      const itemScores = focus.items
+        .map(it => a.scores[it.id])
+        .filter(v => typeof v === 'number' && v > 0);
+      if (!itemScores.length) return null;
+      return itemScores.reduce((a, b) => a + b, 0) / itemScores.length;
+    }
+
+    function openDetail(apId) {
+      const a = state.all.find(x => x.id === apId);
+      if (!a) return;
+
+      const principal = state.principalNames[a.principalUid] || a.principalUid || '—';
+      const school = state.schoolNames[a.schoolId] || a.schoolId || '—';
+      const appraiser = a.appraiserName || a.appraiserUid || '—';
+
+      document.getElementById('detailTitle').textContent = `${principal} — ${a.academicYear || ''}`;
+      document.getElementById('detailSubtitle').textContent = `${school} · Appraised by ${appraiser}`;
+
+      const composite = (typeof a.composite === 'number') ? a.composite.toFixed(2) : '—';
+      const compositePct = (typeof a.compositePercent === 'number') ? Math.round(a.compositePercent) + '%' : '—';
+      const band = a.band || '—';
+      const bandClass = a.band ? `band-${a.band.toLowerCase()}` : 'band-empty';
+
+      // Build focus blocks
+      const focusHtml = (FRAMEWORK?.foci || []).map(focus => {
+        const avg = focusAverage(a, focus.id);
+        const avgDisp = (avg !== null) ? avg.toFixed(2) : '—';
+        const weightPct = FRAMEWORK?.weights?.[focus.id]
+          ? Math.round(FRAMEWORK.weights[focus.id] * 100) + '%'
+          : '—';
+        const itemsHtml = focus.items.map(it => {
+          const score = a.scores?.[it.id];
+          const scoreClass = (typeof score === 'number' && score >= 1 && score <= 4)
+            ? `score-${score}`
+            : 'empty';
+          const scoreText = (typeof score === 'number') ? String(score) : '—';
+          return `
+            <div class="item-row">
+              <div class="item-id">${escapeHtml(it.id)}</div>
+              <div class="item-title">${escapeHtml(it.title || '')}</div>
+              <div class="item-score ${scoreClass}">${scoreText}</div>
+            </div>
+          `;
+        }).join('');
+        return `
+          <div class="focus-block">
+            <div class="focus-head">
+              <div class="title">${escapeHtml(focus.id)} — ${escapeHtml(focus.title || '')}</div>
+              <div class="weight">weight ${weightPct}</div>
+              <div class="focus-avg">${avgDisp}</div>
+            </div>
+            ${itemsHtml}
+          </div>
+        `;
+      }).join('');
+
+      // Narratives — filter PNF6 for non-admins
+      const narratives = a.narratives || {};
+      const visibleKeys = state.isAdmin
+        ? ['PNF1', 'PNF2', 'PNF3', 'PNF4', 'PNF5', 'PNF6']
+        : ['PNF1', 'PNF2', 'PNF3', 'PNF4', 'PNF5'];
+
+      const narrativeRows = visibleKeys
+        .filter(k => k !== 'PNF6') // PNF6 rendered separately if admin
+        .map(k => {
+          const text = (narratives[k] || '').trim();
+          if (!text && k === 'PNF5') return ''; // PNF5 optional
+          if (k === 'PNF3') {
+            // Recommendation is dropdown enum
+            const label = RECOMMENDATION_LABELS[text] || text || '—';
+            const cls = text || '';
+            return `
+              <div class="pnf-row">
+                <h4>${escapeHtml(NARRATIVE_LABELS[k])}</h4>
+                <span class="recommendation-pill ${escapeAttr(cls)}">${escapeHtml(label)}</span>
+              </div>
+            `;
+          }
+          return `
+            <div class="pnf-row">
+              <h4>${escapeHtml(NARRATIVE_LABELS[k])}</h4>
+              <p>${text ? escapeHtml(text) : '<em style="color:var(--ink-3)">— not provided —</em>'}</p>
+            </div>
+          `;
+        }).join('');
+
+      const pnf6Text = (narratives.PNF6 || '').trim();
+      const pnf6Html = (state.isAdmin && pnf6Text) ? `
+        <div class="confidential-block">
+          <h4>🔒 Confidential — HQ Internal Only (PNF6)</h4>
+          <p>${escapeHtml(pnf6Text)}</p>
+        </div>
+      ` : '';
+
+      document.getElementById('detailBody').innerHTML = `
+        <dl class="ap-detail-meta">
+          <div><dt>Principal</dt><dd>${escapeHtml(principal)}</dd></div>
+          <div><dt>School</dt><dd>${escapeHtml(school)}</dd></div>
+          <div><dt>Academic year</dt><dd>${escapeHtml(a.academicYear || '—')}</dd></div>
+          <div><dt>Appraiser</dt><dd>${escapeHtml(appraiser)}</dd></div>
+          <div><dt>Status</dt><dd>${escapeHtml(a.status || 'draft')}</dd></div>
+          <div><dt>Framework</dt><dd>${escapeHtml(a.frameworkVersion || '—')}</dd></div>
+          <div><dt>Composite</dt><dd class="composite-big">${composite}</dd></div>
+          <div><dt>Band (${escapeHtml(compositePct)})</dt><dd><span class="band-pill ${bandClass}">${escapeHtml(band)}</span></dd></div>
+        </dl>
+        <h3 style="font-family:Lora,serif;font-size:1rem;font-weight:600;margin:18px 0 10px">Focus-by-focus scores</h3>
+        ${focusHtml || '<p style="color:var(--ink-3);font-size:13px">Framework not loaded — scores cannot be grouped by focus.</p>'}
+        <div class="narrative-block">
+          <h3 style="margin:0 0 14px;font-family:Lora,serif;font-size:1rem;font-weight:600;color:var(--ink);text-transform:none;letter-spacing:normal">Narrative reflections</h3>
+          ${narrativeRows || '<p style="color:var(--ink-3);font-size:13px">No narrative entries.</p>'}
+        </div>
+        ${pnf6Html}
+      `;
+
+      document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    document.getElementById('detailClose').addEventListener('click', () => {
+      document.getElementById('detailModal').style.display = 'none';
+    });
+    document.getElementById('detailModal').addEventListener('click', (e) => {
+      if (e.target.id === 'detailModal') {
+        document.getElementById('detailModal').style.display = 'none';
+      }
+    });
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    function escapeAttr(s) { return escapeHtml(s); }
+  </script>
+</body>
+</html>

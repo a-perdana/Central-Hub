@@ -108,6 +108,18 @@ service cloud.firestore {
       );
     }
 
+    // CH director sub-role check. Used by principal_coaching_sessions
+    // for Charter NN5 (coaching confidentiality) — only HQ Directors
+    // mentor principals; coordinator + plain central_user cannot write
+    // coaching sessions even if the page-access doc lets them open the
+    // form. admin always bypasses.
+    function isCHDirector() {
+      return isCentralUser() && (
+        userProfile().role_centralhub == 'central_admin' ||
+        ('ch_sub_roles' in userProfile() && 'director' in userProfile().ch_sub_roles)
+      );
+    }
+
     function isAcademicUser() {
       return isAuthorized() && userProfileExists() && (
         userProfile().role_academichub == 'academic_admin' ||
@@ -2174,24 +2186,37 @@ service cloud.firestore {
     // Foundation Reps EXCLUDED from access (coaching confidentiality).
     // Doc id: {principalUid}_{YYYY-MM-DD}.
     // Logged sessions are immutable.
+    //
+    // Charter NN5 — director-only-write one-off exception (2026-05-27).
+    // The 2026-05-20 CH role flattening opened writes to any central_user
+    // who reached the form via page-access. That left a privacy boundary
+    // soft: a manually-crafted Firestore SDK write from a non-director
+    // central_user (or a UI bypass) would succeed. Coaching confidentiality
+    // is too sensitive to rely on UI gating alone, so writes are pinned to
+    // ch_sub_roles ∈ {director} via isCHDirector(). admin still bypasses.
+    // This is a deliberate exception to the flatten — every other CH
+    // collection trusts page-access (root CLAUDE.md Common Mistake #51).
     match /principal_coaching_sessions/{sessionId} {
+      // Read: coachee + mentor + admin only. Foundation Reps cannot get
+      // an individual session even with the doc id (no rule branch for
+      // same-school AH leadership — coaching is mentor-coachee private).
       allow get:    if isSignedIn() && (
                        request.auth.uid == resource.data.principalUid
                        || request.auth.uid == resource.data.mentorUid
                        || isAdmin()
                     );
+      // List restricted to admin — non-admin must know the doc id (their
+      // own principalUid_YYYY-MM-DD pattern). Discoverability via list
+      // would let any central_user enumerate principal coaching history.
       allow list:   if isAdmin()
-                    || (isSignedIn() && request.auth.uid != null);
-      // 2026-05-20: write opened to any central_user whom page-access has
-      // granted access to /principal-coaching-session. Charter NN5
-      // (coaching confidentiality — Foundation Reps excluded) is now
-      // enforced at the page-access UI layer, not at the rule level.
-      // mentorUid == auth.uid pin remains (no impersonating another mentor).
+                    || (isSignedIn() && isCHDirector());
+      // Director-only write (Charter NN5 exception, see note above).
       allow create: if isSignedIn()
                     && request.auth.uid == request.resource.data.mentorUid
-                    && (isAdmin() || isCentralUser());
+                    && isCHDirector();
       allow update: if isSignedIn()
                     && request.auth.uid == resource.data.mentorUid
+                    && isCHDirector()
                     && resource.data.status != 'logged';
       allow delete: if isAdmin();
     }
