@@ -401,6 +401,7 @@ const htmlFiles = [
   "reports.html",
   "school-visits.html",
   "notifications.html",
+  "settings.html",
   "mail-composer.html",
   "library.html",
   "network-health.html",

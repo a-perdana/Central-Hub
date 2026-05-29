@@ -608,7 +608,7 @@ function mountProfileDropdown({ user, profile, navUserName, navAvatar }) {
   const SUBJECT_LABELS = {
     math: 'Mathematics', biology: 'Biology', chemistry: 'Chemistry',
     physics: 'Physics', science: 'Science', english: 'English',
-    bahasa: 'Bahasa', religion: 'Religion',
+    bahasa: 'Bahasa', religion: 'Religion', edu_steam: 'Edu-STEAM',
   };
   const SUB_ROLE_LABELS = { director: 'Director', coordinator: 'Coordinator' };
 
