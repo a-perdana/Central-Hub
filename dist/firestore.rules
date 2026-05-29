@@ -3085,6 +3085,39 @@ service cloud.firestore {
       allow delete:     if isAHAdmin();
     }
 
+    // RFC / Proposals board (2026-05-29) — the deliberation layer that
+    // sits BEFORE a school decision. Same school-scoped pattern as
+    // school_leadership_decisions. Phase + promote authority is a School
+    // Principal UX courtesy enforced in page JS only — the rule trusts any
+    // same-school leader. Promoting writes a school_leadership_decisions doc
+    // (sourceProposalId back-link) and flips proposal phase to 'decided'.
+    match /school_leadership_proposals/{proposalId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.createdBy == request.auth.uid);
+      allow update:     if isAHAdmin()
+                           || isAHSchoolLeader(resource.data.schoolId);
+      allow delete:     if isAHAdmin();
+    }
+
+    // Threaded discussion on a proposal. Top-level (not a sub-collection)
+    // so the page subscribes by proposalId. Carries schoolId for the
+    // same-school scope check. A commenter may delete their own comment;
+    // admin can delete any.
+    match /school_leadership_proposal_comments/{commentId} {
+      allow get, list:  if isAHAdmin()
+                           || (resource != null && isAHSchoolLeader(resource.data.schoolId));
+      allow create:     if isAHAdmin()
+                           || (isAHSchoolLeader(request.resource.data.schoolId)
+                               && request.resource.data.authorUid == request.auth.uid);
+      allow update, delete:
+                        if isAHAdmin()
+                           || (isAHSchoolLeader(resource.data.schoolId)
+                               && resource.data.authorUid == request.auth.uid);
+    }
+
     match /school_leadership_directory_entries/{entryId} {
       allow get, list:  if isAHAdmin()
                            || (resource != null && isAHSchoolLeader(resource.data.schoolId));

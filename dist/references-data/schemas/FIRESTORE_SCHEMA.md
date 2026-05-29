@@ -1694,6 +1694,31 @@ Lives under AH navbar > School Leaders dropdown:
 **Indexes:** composite `(schoolId, status, effectiveFrom desc)`, `(schoolId, scope, status, effectiveFrom desc)`, `(schoolId, category, status, effectiveFrom desc)`.
 **Write scope:** same-school leader (read/create/update); admin (delete). Active decisions should be superseded rather than edited in-place — UI discipline today, rule deferral matches CH §22.
 
+#### `school_leadership_proposals/{proposalId}` (2026-05-29)
+**PK:** auto-id.
+**Scope:** RFC / discussion-board layer that sits **before** a binding school decision — the AH school-scoped twin of CH `coordinator_proposals`. The leadership team floats ideas (KPI weighting, assessment changes, curriculum, operations) and debates them in phases before the Principal promotes the agreed ones to `school_leadership_decisions`. Page: AH `/school-leadership-proposals`.
+**Fields:**
+- Identity: `title` (≤200 chars), `description` (plain text), `category` (`'kpi' | 'assessment' | 'curriculum' | 'appraisal' | 'operations' | 'other'`).
+- Phase: `phase` (`'draft' | 'open_for_comment' | 'decided' | 'parked'`). Phase + promote authority is a **School Principal** UX courtesy enforced in page JS only (rule trusts any same-school leader).
+- References: `referenceRefs[]` (free-text source-citation chips, e.g. `'CSLS 4.1'`, `'appraisal-framework-v2.json → F3.weights'`).
+- Decision bridge: `decisionId →school_leadership_decisions.id | null` (set on promote), `decidedAt`, `decidedByUid →users.uid`.
+- Denormalised: `commentCount` (number — maintained by the page via `increment()`).
+- **Required:** `schoolId →partner_schools.id` (drives `isAHSchoolLeader(schoolId)` scope).
+- Audit: `createdBy →users.uid`, `createdByName`, `createdAt`, `updatedAt`, `lastEditedBy →users.uid`.
+
+**FKs:** `school_leadership_decisions.id` (via `decisionId`); `partner_schools.id` (via `schoolId`); `users.uid` (via `createdBy`, `lastEditedBy`, `decidedByUid`). Inverse: `school_leadership_decisions.sourceProposalId →school_leadership_proposals.id` back-links a promoted decision to its origin.
+**Indexes:** composite `(schoolId, updatedAt desc)` for the board list.
+**Write scope:** same-school leader (read/create/update; create pins `createdBy == auth.uid`); admin (delete).
+**Boundary:** discussion surface only — NEVER feeds KPI / Appraisal / Competency scoring. When decided, produces a `school_leadership_decisions` record (the system of record).
+
+#### `school_leadership_proposal_comments/{commentId}` (2026-05-29)
+**PK:** auto-id.
+**Scope:** Threaded discussion on a `school_leadership_proposals` doc. Top-level (NOT a sub-collection) so the page subscribes by `proposalId`.
+**Fields:** `proposalId →school_leadership_proposals.id`, `schoolId →partner_schools.id` (for the same-school scope check), `authorUid →users.uid`, `authorName` (denormalised), `body` (plain text, ≤2000 chars), `createdAt`.
+**FKs:** `school_leadership_proposals.id` (via `proposalId`); `partner_schools.id` (via `schoolId`); `users.uid` (via `authorUid`).
+**Indexes:** composite `(proposalId, createdAt asc)` for the per-proposal thread.
+**Write scope:** same-school leader (read; create pins `authorUid == auth.uid`); author or admin (update/delete).
+
 #### `school_leadership_directory_entries/{entryId}`
 **PK:** auto-id.
 **Scope:** Per-school leadership team phone-book (Foundation Reps + Principal + ACs + CCs + grade/subject leaders + parent-council reps + Eduversal-side liaison contacts). Discoverable lookup for the leadership team.

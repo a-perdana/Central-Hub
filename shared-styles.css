@@ -959,23 +959,43 @@ tr:hover td        { background: var(--paper); }
   padding: 52px 0;
   color: #fff;
   background: var(--hero-grad-cyan);
+  /* Liveliness pass (2026-05-29): each family also exposes its bright
+     accent + mesh so the icon, title glow, top rule + ::before pick it
+     up. Defaults to cyan; the [data-accent] rules below set the rest. */
+  --hero-vivid: var(--hero-vivid-cyan);
+  --hero-mesh:  var(--hero-mesh-cyan);
+  /* 3px family-vivid top rule + a soft inset glow below it, so even the
+     gradient's darkest stop reads as "this family" at a glance. */
+  border-top: 3px solid var(--hero-vivid);
+  box-shadow: inset 0 7px 26px -10px var(--hero-vivid);
+  /* hero text + KPIs rise in on load (see keyframes below) */
+  animation: heroFadeIn 0.5s ease both;
 }
-.page-hero[data-accent="cyan"] { background: var(--hero-grad-cyan); }
-.page-hero[data-accent="mor"]  { background: var(--hero-grad-mor); }
-.page-hero[data-accent="dark"] { background: var(--hero-grad-dark); }
+.page-hero[data-accent="cyan"]   { background: var(--hero-grad-cyan);   --hero-vivid: var(--hero-vivid-cyan);   --hero-mesh: var(--hero-mesh-cyan); }
+.page-hero[data-accent="mor"]    { background: var(--hero-grad-mor);    --hero-vivid: var(--hero-vivid-mor);    --hero-mesh: var(--hero-mesh-mor); }
+.page-hero[data-accent="dark"]   { background: var(--hero-grad-dark);   --hero-vivid: var(--hero-vivid-dark);   --hero-mesh: var(--hero-mesh-dark); }
 /* Semantic family expansion (2026-05-27) — see tokens.css + root CLAUDE.md "Page Families" */
-.page-hero[data-accent="amber"]  { background: var(--hero-grad-amber); }
-.page-hero[data-accent="teal"]   { background: var(--hero-grad-teal); }
-.page-hero[data-accent="rose"]   { background: var(--hero-grad-rose); }
-.page-hero[data-accent="violet"] { background: var(--hero-grad-violet); }
-.page-hero[data-accent="slate"]  { background: var(--hero-grad-slate); }
+.page-hero[data-accent="amber"]  { background: var(--hero-grad-amber);  --hero-vivid: var(--hero-vivid-amber);  --hero-mesh: var(--hero-mesh-amber); }
+.page-hero[data-accent="teal"]   { background: var(--hero-grad-teal);   --hero-vivid: var(--hero-vivid-teal);   --hero-mesh: var(--hero-mesh-teal); }
+.page-hero[data-accent="rose"]   { background: var(--hero-grad-rose);   --hero-vivid: var(--hero-vivid-rose);   --hero-mesh: var(--hero-mesh-rose); }
+.page-hero[data-accent="violet"] { background: var(--hero-grad-violet); --hero-vivid: var(--hero-vivid-violet); --hero-mesh: var(--hero-mesh-violet); }
+.page-hero[data-accent="slate"]  { background: var(--hero-grad-slate);  --hero-vivid: var(--hero-vivid-slate);  --hero-mesh: var(--hero-mesh-slate); }
 
+/* Layered hero texture (2026-05-29) — replaces the single faint radial.
+   Bottom→top: family mesh (two vivid blobs that brighten the gradient)
+   · fine white dot-grid for subtle depth · the original soft radial-light
+   highlight. All decorative, pointer-events:none. */
 .page-hero::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--hero-radial-light), var(--hero-radial-dark);
+  background:
+    var(--hero-radial-light),
+    var(--hero-dot-grid),
+    var(--hero-mesh);
+  background-size: auto, 22px 22px, auto;
   pointer-events: none;
+  z-index: 0;
 }
 
 /* Soft 40px fade overlay rendered just BELOW the hero on the body background
@@ -1011,6 +1031,42 @@ body[data-page-accent="rose"]   { background: var(--paper-tinted-rose); }
 body[data-page-accent="violet"] { background: var(--paper-tinted-violet); }
 body[data-page-accent="slate"]  { background: var(--paper-tinted-slate); }
 
+/* ── Accent bleed into content (2026-05-29 liveliness pass) ──────────
+   The family colour stops at the hero today — scroll past it and the body
+   reads un-themed. We carry it down via a DEDICATED --family-accent /
+   --family-soft pair (NOT the global --accent — many pages deliberately
+   set their own --accent, sometimes off-family, e.g. AI-framework=orange,
+   pacing=subject colour; clobbering those would change page intent).
+   Keys off the data-page-accent the page already declares — no new markup.
+
+   --family-accent = each family's MID accent (the same hue the footer CTA
+   uses), good against the white card surface. --family-soft = its pale tint
+   for hairline top-rules / underlines. */
+body[data-page-accent="cyan"]   { --family-accent: #0891b2; --family-soft: var(--accent-soft-cyan); }
+body[data-page-accent="mor"]    { --family-accent: #6c5ce7; --family-soft: var(--accent-soft-mor); }
+body[data-page-accent="dark"]   { --family-accent: #6c5ce7; --family-soft: var(--accent-soft-dark); }
+body[data-page-accent="amber"]  { --family-accent: #d97706; --family-soft: var(--accent-soft-amber); }
+body[data-page-accent="teal"]   { --family-accent: #0f9b8e; --family-soft: var(--accent-soft-teal); }
+body[data-page-accent="rose"]   { --family-accent: #e11d48; --family-soft: var(--accent-soft-rose); }
+body[data-page-accent="violet"] { --family-accent: #7c3aed; --family-soft: var(--accent-soft-violet); }
+body[data-page-accent="slate"]  { --family-accent: #475569; --family-soft: var(--accent-soft-slate); }
+
+/* Carry the family colour into the shared .card: a family-tinted top accent
+   that appears on hover. Page-local card classes are untouched — this only
+   lifts the generic shared .card so dashboards/listing grids read themed. */
+body[data-page-accent] .card { border-top: 2px solid transparent; }
+body[data-page-accent] .card:hover {
+  border-top-color: var(--family-accent);
+  box-shadow: var(--shadow), inset 0 2px 0 0 var(--family-accent);
+  transform: translateY(-1px);
+}
+
+/* Family-tinted sticky toolbar underline + a thin family rule at the top
+   of the info strip, so the chrome below the hero reads themed instead of
+   flat grey on every page. */
+body[data-page-accent] .page-toolbar { border-bottom-color: var(--family-soft); }
+body[data-page-accent] .page-info-strip { border-top: 2px solid var(--family-soft); }
+
 .page-hero__inner {
   position: relative;
   z-index: 1;
@@ -1027,13 +1083,26 @@ body[data-page-accent="slate"]  { background: var(--paper-tinted-slate); }
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  background: rgba(255,255,255,0.15);
+  /* Family-vivid tinted glass tile + a soft glow ring in the family hue,
+     so the icon slot reads as a coloured focal point rather than a flat
+     white square (2026-05-29 liveliness pass). */
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--hero-vivid) 38%, transparent) 0%,
+                            color-mix(in srgb, var(--hero-vivid) 14%, transparent) 100%);
+  border: 1px solid color-mix(in srgb, var(--hero-vivid) 55%, transparent);
+  box-shadow: 0 6px 22px -6px color-mix(in srgb, var(--hero-vivid) 70%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   flex-shrink: 0;
   margin-top: var(--space-1);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.page-hero__icon svg { width: 30px; height: 30px; }
+.page-hero:hover .page-hero__icon {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 10px 28px -6px color-mix(in srgb, var(--hero-vivid) 80%, transparent);
 }
 
 .page-hero__text {
@@ -1055,6 +1124,8 @@ body[data-page-accent="slate"]  { background: var(--paper-tinted-slate); }
   color: #fff;
   margin-bottom: var(--space-3);
   line-height: 1.2;
+  /* faint family-tinted glow behind the title text for depth */
+  text-shadow: 0 2px 18px color-mix(in srgb, var(--hero-vivid) 45%, transparent);
 }
 .page-hero__desc {
   font-size: var(--text-base);
@@ -1075,6 +1146,23 @@ body[data-page-accent="slate"]  { background: var(--paper-tinted-slate); }
   border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-5);
   min-width: 120px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+/* a thin family-vivid bar down the left edge of each KPI tile */
+.page-hero__kpi::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--hero-vivid);
+  opacity: 0.85;
+}
+.page-hero__kpi:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--hero-vivid) 55%, transparent);
+  box-shadow: 0 10px 26px -10px color-mix(in srgb, var(--hero-vivid) 70%, transparent);
 }
 .page-hero__kpi--primary {
   background: var(--hero-kpi-bg-primary);
@@ -1117,6 +1205,33 @@ body[data-page-accent="slate"]  { background: var(--paper-tinted-slate); }
   .page-hero__kpis { margin-left: 0; }
   .page-hero__kpi-num { font-size: 1.8rem; }
   .page-hero__kpi--primary .page-hero__kpi-num { font-size: 2.2rem; }
+}
+
+/* ── Hero entrance motion (2026-05-29 liveliness pass) ───────────────
+   The whole hero fades+rises in; text block and KPI aside stagger so the
+   page feels alive on load instead of snapping into a static band.
+   Honour prefers-reduced-motion — disable all of it. */
+@keyframes heroFadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes heroRiseIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-hero__text { animation: heroRiseIn 0.55s ease 0.05s both; }
+.page-hero__kpis { animation: heroRiseIn 0.55s ease 0.16s both; }
+/* icon fades in only (no transform fill — it owns its own hover transform) */
+@keyframes heroIconIn { from { opacity: 0; } to { opacity: 1; } }
+.page-hero__icon { animation: heroIconIn 0.5s ease 0.02s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-hero,
+  .page-hero__text,
+  .page-hero__kpis,
+  .page-hero__icon { animation: none; }
+  .page-hero__kpi,
+  .page-hero__icon { transition: none; }
 }
 
 .page-toolbar {
