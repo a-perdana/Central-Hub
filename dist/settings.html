@@ -229,6 +229,12 @@
   .monogram-swatches {
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 320px;
+  }
+  @media (max-width: 560px) {
+    .monogram-swatches { justify-content: flex-start; max-width: none; }
   }
   .monogram-swatch {
     width: 40px;
@@ -4406,19 +4412,30 @@ ready(async () => {
   // sector pattern (Google Workspace for Edu / Canvas / Teams): a single
   // tasteful default, with "Upload photo" as the primary call-to-action.
   //
-  // Each monogram is a LAYERED brand disc — diagonal gradient + dot texture +
-  // top light + hairline inner ring — not a flat circle, so it reads as
-  // "designed" rather than a default placeholder. Initials derive from
+  // Each monogram is a LAYERED disc — diagonal gradient + dot texture + top
+  // light + inner edge highlight — filling the WHOLE square viewBox so the
+  // CONTAINER decides the shape (circle in settings via border-radius:50%,
+  // squircle in coordinators-directory via border-radius:16px). No baked-in
+  // circle, so the same SVG fits any frame edge-to-edge. Initials derive from
   // displayName (→ email → '?') at render time, so the letter always matches
   // the current name. Rendered SVG is stored as a data:image/svg+xml URL so
   // photoURL works everywhere (Firestore doc, Auth updateProfile, <img>, bg).
   //
-  // 4 curated palettes — brand mor→cyan first (the recommended default).
+  // 12 palettes anchored to the design-system page families (cyan/mor/violet/
+  // teal/amber/rose/slate) plus vivid pops. Brand mor→cyan first (default).
   const MONOGRAM_PALETTES = [
-    { id: 'brand',  from: '#7c3aed', mid: '#6c5ce7', to: '#0891b2' }, // mor → cyan (default)
-    { id: 'mor',    from: '#7c3aed', mid: '#6c5ce7', to: '#4c3fb5' }, // deep mor
-    { id: 'cyan',   from: '#06b6d4', mid: '#0891b2', to: '#0e7490' }, // brand cyan
-    { id: 'slate',  from: '#64748b', mid: '#475569', to: '#1e293b' }, // neutral slate
+    { id: 'brand',   from: '#7c3aed', mid: '#6c5ce7', to: '#0891b2' }, // mor → cyan (default)
+    { id: 'mor',     from: '#8b5cf6', mid: '#7c3aed', to: '#5b21b6' }, // DS Knowledge
+    { id: 'cyan',    from: '#22d3ee', mid: '#06b6d4', to: '#0e7490' }, // DS Communication
+    { id: 'violet',  from: '#a78bfa', mid: '#8b5cf6', to: '#6d28d9' }, // DS Department
+    { id: 'teal',    from: '#2dd4bf', mid: '#14b8a6', to: '#0d9488' }, // DS Curriculum
+    { id: 'amber',   from: '#fbbf24', mid: '#f59e0b', to: '#d97706' }, // DS Assessment
+    { id: 'rose',    from: '#fb7185', mid: '#f43f5e', to: '#e11d48' }, // DS People
+    { id: 'slate',   from: '#94a3b8', mid: '#64748b', to: '#334155' }, // DS Operations
+    { id: 'emerald', from: '#34d399', mid: '#10b981', to: '#059669' }, // vivid green
+    { id: 'indigo',  from: '#818cf8', mid: '#6366f1', to: '#4338ca' }, // vivid indigo
+    { id: 'fuchsia', from: '#f0abfc', mid: '#d946ef', to: '#a21caf' }, // vivid pop
+    { id: 'sky',     from: '#38bdf8', mid: '#0ea5e9', to: '#0369a1' }, // vivid blue
   ];
 
   // Derive 1–2 uppercase initials: first letter of first + last word of the
@@ -4437,8 +4454,9 @@ ready(async () => {
     return (local ? local[0] : '?').toUpperCase();
   }
 
-  // Build a LAYERED monogram SVG string for a palette + initials. IDs are
-  // namespaced per palette so multiple monograms can coexist on one page
+  // Build a LAYERED monogram SVG string for a palette + initials. The artwork
+  // fills the whole 0..64 square so it fits ANY container shape edge-to-edge.
+  // IDs are namespaced per palette so multiple monograms coexist on one page
   // without <defs> id collisions.
   function monogramSvg(pal, initials) {
     const len = initials.length;
@@ -4451,18 +4469,20 @@ ready(async () => {
           `<stop offset="0.55" stop-color="${pal.mid}"/>` +
           `<stop offset="1" stop-color="${pal.to}"/>` +
         `</linearGradient>` +
-        `<radialGradient id="${g}_lt" cx="32" cy="20" r="40" gradientUnits="userSpaceOnUse">` +
-          `<stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>` +
+        `<radialGradient id="${g}_lt" cx="32" cy="14" r="46" gradientUnits="userSpaceOnUse">` +
+          `<stop offset="0" stop-color="#ffffff" stop-opacity="0.26"/>` +
           `<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>` +
         `</radialGradient>` +
         `<pattern id="${g}_dot" width="7" height="7" patternUnits="userSpaceOnUse">` +
           `<circle cx="1.4" cy="1.4" r="1.1" fill="#ffffff" fill-opacity="0.06"/>` +
         `</pattern>` +
       `</defs>` +
-      `<circle cx="32" cy="32" r="32" fill="url(#${g}_bg)"/>` +
-      `<circle cx="32" cy="32" r="32" fill="url(#${g}_dot)"/>` +
-      `<circle cx="32" cy="32" r="32" fill="url(#${g}_lt)"/>` +
-      `<circle cx="32" cy="32" r="27.5" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.2"/>` +
+      // Full-bleed square layers — shape comes from the container's clip.
+      `<rect width="64" height="64" fill="url(#${g}_bg)"/>` +
+      `<rect width="64" height="64" fill="url(#${g}_dot)"/>` +
+      `<rect width="64" height="64" fill="url(#${g}_lt)"/>` +
+      // Inset edge highlight (works as a soft frame in circle OR squircle).
+      `<rect x="1" y="1" width="62" height="62" rx="15" fill="none" stroke="#ffffff" stroke-opacity="0.20" stroke-width="1.2"/>` +
       // y baseline ≈ center (32) + ~0.34·fontSize so the cap-height sits
       // optically centred. Avoids dominant-baseline, which is unreliable when
       // an SVG is rendered as a data-URL <img> / CSS background (vs inline).

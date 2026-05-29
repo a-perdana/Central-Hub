@@ -196,6 +196,8 @@
       overflow: hidden;
     }
     .ec-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* Inline monogram SVG fills the squircle frame flush (full-bleed art). */
+    .ec-avatar svg { width: 100%; height: 100%; display: block; }
 
     .ec-name { font-weight: 700; color: var(--ink); font-size: 1.05rem; line-height: 1.25; letter-spacing: -0.01em; }
     .ec-positions { margin-top: 3px; }
@@ -4100,6 +4102,70 @@ function initials(name) {
   return String(name || '?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
 }
 
+// ── Monogram avatar (shared style with /settings) ────────────────────────
+// Layered gradient artwork filling the WHOLE square viewBox, so it sits flush
+// in this card's squircle .ec-avatar frame (border-radius:16px) the same way
+// it sits in the settings circle. Palettes mirror the design-system page
+// families + vivid pops. When a person has no linked photo we render a
+// monogram coloured DETERMINISTICALLY from their name, so every card has a
+// stable, distinct avatar instead of bare text on the kind-gradient box.
+const MONOGRAM_PALETTES = [
+  { id: 'brand',   from: '#7c3aed', mid: '#6c5ce7', to: '#0891b2' },
+  { id: 'mor',     from: '#8b5cf6', mid: '#7c3aed', to: '#5b21b6' },
+  { id: 'cyan',    from: '#22d3ee', mid: '#06b6d4', to: '#0e7490' },
+  { id: 'violet',  from: '#a78bfa', mid: '#8b5cf6', to: '#6d28d9' },
+  { id: 'teal',    from: '#2dd4bf', mid: '#14b8a6', to: '#0d9488' },
+  { id: 'amber',   from: '#fbbf24', mid: '#f59e0b', to: '#d97706' },
+  { id: 'rose',    from: '#fb7185', mid: '#f43f5e', to: '#e11d48' },
+  { id: 'slate',   from: '#94a3b8', mid: '#64748b', to: '#334155' },
+  { id: 'emerald', from: '#34d399', mid: '#10b981', to: '#059669' },
+  { id: 'indigo',  from: '#818cf8', mid: '#6366f1', to: '#4338ca' },
+  { id: 'fuchsia', from: '#f0abfc', mid: '#d946ef', to: '#a21caf' },
+  { id: 'sky',     from: '#38bdf8', mid: '#0ea5e9', to: '#0369a1' },
+];
+
+// Stable hash → palette index, so the same name always gets the same colour.
+function paletteForKey(key) {
+  const s = String(key || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return MONOGRAM_PALETTES[h % MONOGRAM_PALETTES.length];
+}
+
+function monogramSvg(pal, ini) {
+  const fontSize = ini.length >= 2 ? 25 : 31;
+  const g = `mg_${pal.id}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
+    `<defs>` +
+      `<linearGradient id="${g}_bg" x1="0" y1="0" x2="1" y2="1">` +
+        `<stop offset="0" stop-color="${pal.from}"/>` +
+        `<stop offset="0.55" stop-color="${pal.mid}"/>` +
+        `<stop offset="1" stop-color="${pal.to}"/>` +
+      `</linearGradient>` +
+      `<radialGradient id="${g}_lt" cx="32" cy="14" r="46" gradientUnits="userSpaceOnUse">` +
+        `<stop offset="0" stop-color="#ffffff" stop-opacity="0.26"/>` +
+        `<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>` +
+      `</radialGradient>` +
+      `<pattern id="${g}_dot" width="7" height="7" patternUnits="userSpaceOnUse">` +
+        `<circle cx="1.4" cy="1.4" r="1.1" fill="#ffffff" fill-opacity="0.06"/>` +
+      `</pattern>` +
+    `</defs>` +
+    `<rect width="64" height="64" fill="url(#${g}_bg)"/>` +
+    `<rect width="64" height="64" fill="url(#${g}_dot)"/>` +
+    `<rect width="64" height="64" fill="url(#${g}_lt)"/>` +
+    `<rect x="1" y="1" width="62" height="62" rx="15" fill="none" stroke="#ffffff" stroke-opacity="0.20" stroke-width="1.2"/>` +
+    `<text x="32" y="${(32 + fontSize * 0.34).toFixed(1)}" text-anchor="middle" ` +
+      `font-family="DM Sans, Segoe UI, Arial, sans-serif" font-weight="800" ` +
+      `font-size="${fontSize}" fill="#ffffff" letter-spacing="0.5">${ini}</text>` +
+  `</svg>`;
+}
+
+// Inline monogram SVG for a person (no photo case). Keyed by email→name so the
+// colour is stable across renders.
+function monogramFor(name, key) {
+  return monogramSvg(paletteForKey(key || name), initials(name));
+}
+
 document.addEventListener('authReady', async () => {
   currentUser = window.currentUser;
   userProfile = window.userProfile || {};
@@ -4521,9 +4587,13 @@ function renderCard(e) {
        </span>`
     : '';
 
+  // No-photo → inline monogram SVG (fills the squircle frame flush). With a
+  // photo → <img>; on load error, swap in the monogram so it never falls back
+  // to bare text on the gradient box.
+  const monogramMarkup = monogramFor(e.displayName, e.email || e.userId || e.id);
   const avatarInner = photoURL
-    ? `<img src="${escHtml(photoURL)}" alt="${escHtml(e.displayName || '')}" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:this.dataset.fallback}))" data-fallback="${escHtml(initials(e.displayName))}">`
-    : escHtml(initials(e.displayName));
+    ? `<img src="${escHtml(photoURL)}" alt="${escHtml(e.displayName || '')}" referrerpolicy="no-referrer" onerror="this.outerHTML=this.dataset.fallback" data-fallback="${escHtml(monogramMarkup)}">`
+    : monogramMarkup;
 
   // Credentials block — academic qualifications + previous institutions.
   // Both are optional + back-compat (legacy docs never carried them).
