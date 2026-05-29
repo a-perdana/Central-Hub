@@ -439,6 +439,47 @@
     .ai-sub-remove:hover { color: #dc2626; border-color: #fecdd3; }
     .ai-sub-add { padding: 4px 10px; border: 1px dashed var(--border); border-radius: 4px; font-size: 0.78rem; color: var(--ink-3); background: none; cursor: pointer; font-family: 'DM Sans', sans-serif; align-self: flex-start; margin-top: 4px; }
     .ai-sub-add:hover { border-style: solid; color: var(--accent); border-color: var(--accent); }
+    /* Link actions — open + preview, shown only when the url field holds a real link */
+    .ai-sub-linkactions { display: inline-flex; gap: 4px; align-items: center; flex-shrink: 0; }
+    .ai-sub-linkactions:empty { display: none; }
+    .ai-sub-open, .ai-sub-preview {
+      width: 24px; height: 24px; border-radius: 5px;
+      border: 1px solid var(--border); background: var(--paper); color: var(--accent);
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.86rem; font-weight: 700; text-decoration: none; flex-shrink: 0;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .ai-sub-open:hover, .ai-sub-preview:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .ai-sub-row.is-link .ai-sub-input.url { color: var(--accent); }
+
+    /* Preview modal — wider + iframe area */
+    .modal-preview { max-width: 860px; width: 92vw; }
+    .preview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .preview-head h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .preview-head-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .preview-open-btn {
+      padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+      background: var(--accent); color: #fff; text-decoration: none; white-space: nowrap;
+    }
+    .preview-open-btn:hover { opacity: 0.9; }
+    .preview-body { padding: 0 !important; overflow: hidden; }
+    .preview-body iframe { width: 100%; height: 70vh; border: 0; display: block; background: var(--paper); }
+    .preview-fallback {
+      padding: 32px 28px; text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+    }
+    .preview-fallback img { width: 48px; height: 48px; border-radius: 10px; background: var(--paper); }
+    .preview-fallback .pf-host { font-weight: 600; color: var(--ink); font-size: 1rem; }
+    .preview-fallback .pf-url {
+      font-size: 0.82rem; color: var(--ink-3); word-break: break-all; max-width: 560px;
+      font-family: 'DM Mono', monospace;
+    }
+    .preview-fallback .pf-note { font-size: 0.82rem; color: var(--ink-2); max-width: 460px; line-height: 1.5; }
+    .preview-fallback .pf-open {
+      padding: 9px 20px; border-radius: 8px; font-weight: 600; font-size: 0.9rem;
+      background: var(--accent); color: #fff; text-decoration: none; margin-top: 4px;
+    }
+    .preview-fallback .pf-open:hover { opacity: 0.9; }
 
     /* === Tags + Subject chips === */
     .ai-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
@@ -4263,6 +4304,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     </div>
   </div>
 
+  <!-- Sub-item link preview modal -->
+  <div class="modal-overlay" id="modalPreview">
+    <div class="modal modal-preview">
+      <div class="modal-head preview-head">
+        <h3 id="previewTitle">Preview</h3>
+        <div class="preview-head-actions">
+          <a id="previewOpen" class="preview-open-btn" href="#" target="_blank" rel="noopener">Open ↗</a>
+          <button class="modal-close" id="previewClose" aria-label="Close">×</button>
+        </div>
+      </div>
+      <div class="modal-body preview-body" id="previewBody"><!-- iframe / fallback injected --></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -4275,8 +4330,8 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 /* ───── Globals + helpers ──────────────────────────────────────── */
-const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion'];
-const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion' };
+const CH_SUBJECTS = ['math','biology','chemistry','physics','science','english','bahasa','religion','edu_steam'];
+const SUBJECT_LABELS = { math:'Math', biology:'Biology', chemistry:'Chemistry', physics:'Physics', science:'Science', english:'English', bahasa:'Bahasa', religion:'Religion', edu_steam:'Edu-STEAM' };
 const TAGS = ['decision','action','discussion','announcement','red_text'];
 const TAG_LABELS = { decision:'Decision', action:'Action', discussion:'Discussion', announcement:'Announcement', red_text:'Red text' };
 
@@ -4291,6 +4346,47 @@ let activityBoards = [];
 
 const $ = (id) => document.getElementById(id);
 const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Only http(s) URLs are treated as clickable links; everything else
+// (plain notes) returns '#' so the row renders as text-only. Blocks
+// javascript: / data: schemes (Common Mistake #5).
+function safeUrl(url) {
+  const s = String(url || '').trim();
+  return /^https?:\/\/\S+$/i.test(s) ? s : '#';
+}
+
+// Resolve a URL to an embeddable preview. Most sites set X-Frame-Options /
+// CSP frame-ancestors and refuse to load in an <iframe>, so we only embed
+// providers we KNOW allow it (Google Workspace docs, YouTube). Everything
+// else falls back to a link card (favicon + hostname + open button).
+function resolvePreview(url) {
+  let u;
+  try { u = new URL(url); } catch { return { kind: 'fallback', url, host: url }; }
+  const host = u.hostname.replace(/^www\./, '');
+
+  // Google Docs / Sheets / Slides / Drive file → /preview embed
+  const gDoc = u.pathname.match(/\/(document|spreadsheets|presentation|file)\/d\/([^/]+)/);
+  if (/(^|\.)google\.com$/.test(u.hostname) && gDoc) {
+    const kindSeg = gDoc[1], id = gDoc[2];
+    const base = kindSeg === 'spreadsheets' ? 'spreadsheets' : kindSeg === 'presentation' ? 'presentation' : kindSeg === 'file' ? 'file' : 'document';
+    return { kind: 'iframe', src: `https://docs.google.com/${base}/d/${id}/preview`, host, url };
+  }
+  // Google Drive folder/open?id= → embedded folder list
+  if (/(^|\.)(drive|docs)\.google\.com$/.test(u.hostname)) {
+    const id = u.searchParams.get('id');
+    if (id) return { kind: 'iframe', src: `https://drive.google.com/file/d/${id}/preview`, host, url };
+  }
+  // YouTube → embed player
+  let ytId = null;
+  if (/(^|\.)youtube\.com$/.test(u.hostname)) ytId = u.searchParams.get('v');
+  else if (/(^|\.)youtu\.be$/.test(u.hostname)) ytId = u.pathname.slice(1);
+  if (ytId) return { kind: 'iframe', src: `https://www.youtube.com/embed/${ytId}`, host, url };
+
+  // PDF served directly → browsers iframe these fine
+  if (/\.pdf($|\?)/i.test(u.pathname)) return { kind: 'iframe', src: url, host, url };
+
+  return { kind: 'fallback', url, host };
+}
 
 function showToast(msg) {
   const t = $('toast');
@@ -4592,6 +4688,10 @@ function wireUI() {
   $('promoteConfirm').addEventListener('click', confirmPromoteToTask);
   $('decisionCancel').addEventListener('click', () => $('modalDecision').classList.remove('open'));
   $('decisionConfirm').addEventListener('click', confirmPromoteToDecision);
+
+  // Preview modal: close button + click-on-overlay
+  $('previewClose').addEventListener('click', closePreview);
+  $('modalPreview').addEventListener('click', (ev) => { if (ev.target === $('modalPreview')) closePreview(); });
 }
 
 /* ───── Create / open meeting ──────────────────────────────────── */
@@ -5089,13 +5189,24 @@ function renderAgendaItem(it, idx) {
     </label>
   `).join('');
 
-  const subRows = subItems.map((s, sIdx) => `
-    <div class="ai-sub-row" data-sub-idx="${sIdx}">
+  const subRows = subItems.map((s, sIdx) => {
+    const rawUrl = s.url || s.body || '';
+    const safe = safeUrl(rawUrl);
+    const isLink = safe !== '#';
+    const linkActions = isLink ? `
+      <a class="ai-sub-open" href="${escHtml(safe)}" target="_blank" rel="noopener" title="Open in new tab">↗</a>
+      <button class="ai-sub-preview" data-preview-url="${escHtml(safe)}" data-preview-label="${escHtml(s.label || '')}" title="Preview" type="button">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>` : '';
+    return `
+    <div class="ai-sub-row ${isLink ? 'is-link' : ''}" data-sub-idx="${sIdx}">
       <input type="text" class="ai-sub-input label" placeholder="Label (e.g. English Department)" value="${escHtml(s.label || '')}">
-      <input type="text" class="ai-sub-input url" placeholder="Link or note" value="${escHtml(s.url || s.body || '')}">
+      <input type="text" class="ai-sub-input url" placeholder="Link or note" value="${escHtml(rawUrl)}">
+      <span class="ai-sub-linkactions">${linkActions}</span>
       <button class="ai-sub-remove" title="Remove">×</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   // Bridge bar: shown only when 'action' or 'decision' tagged
   const showActionBridge = tags.includes('action');
@@ -5226,7 +5337,13 @@ function wireAgendaItem(it, idx) {
   root.querySelectorAll('.ai-sub-row').forEach((row, sIdx) => {
     const inputs = row.querySelectorAll('.ai-sub-input');
     inputs.forEach(inp => inp.addEventListener('input', debounce(() => saveSubItems(it.id))));
+    // Refresh the open/preview affordances live as the url field is typed,
+    // without waiting for the debounced Firestore save.
+    const urlInput = row.querySelector('.ai-sub-input.url');
+    if (urlInput) urlInput.addEventListener('input', () => refreshSubRowLink(row));
     row.querySelector('.ai-sub-remove').addEventListener('click', () => removeSubItem(it.id, sIdx));
+    const prevBtn = row.querySelector('.ai-sub-preview');
+    if (prevBtn) prevBtn.addEventListener('click', () => openPreview(prevBtn.dataset.previewUrl, prevBtn.dataset.previewLabel));
   });
   root.querySelector('.ai-sub-add').addEventListener('click', () => addSubItem(it.id));
 
@@ -5348,6 +5465,67 @@ async function saveSubItems(itemId) {
     return { label: inputs[0].value.trim(), url: inputs[1].value.trim() };
   }).filter(s => s.label || s.url);
   await updateDoc(doc(db, 'coordinators_meeting_items', itemId), { subItems, updatedAt: serverTimestamp() });
+}
+
+// Live-update a single sub-row's open ↗ / preview affordances as the user
+// types into its url field — avoids a full re-render (which would steal focus).
+function refreshSubRowLink(row) {
+  const urlInput = row.querySelector('.ai-sub-input.url');
+  const labelInput = row.querySelector('.ai-sub-input.label');
+  const slot = row.querySelector('.ai-sub-linkactions');
+  if (!urlInput || !slot) return;
+  const safe = safeUrl(urlInput.value);
+  if (safe === '#') {
+    row.classList.remove('is-link');
+    slot.innerHTML = '';
+    return;
+  }
+  row.classList.add('is-link');
+  slot.innerHTML = `
+    <a class="ai-sub-open" href="${escHtml(safe)}" target="_blank" rel="noopener" title="Open in new tab">↗</a>
+    <button class="ai-sub-preview" data-preview-url="${escHtml(safe)}" data-preview-label="${escHtml(labelInput ? labelInput.value : '')}" title="Preview" type="button">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>`;
+  const btn = slot.querySelector('.ai-sub-preview');
+  if (btn) btn.addEventListener('click', () => openPreview(btn.dataset.previewUrl, btn.dataset.previewLabel));
+}
+
+/* ───── Sub-item link preview ───────────────────────────────────── */
+function openPreview(url, label) {
+  const safe = safeUrl(url);
+  if (safe === '#') { showToast('Not a valid link.'); return; }
+  const info = resolvePreview(safe);
+  const titleEl = $('previewTitle');
+  const openEl = $('previewOpen');
+  const body = $('previewBody');
+  titleEl.textContent = label || info.host || 'Preview';
+  titleEl.title = safe;
+  openEl.href = safe;
+
+  if (info.kind === 'iframe') {
+    // referrerpolicy keeps the embed happy on Google's preview endpoints.
+    body.innerHTML = `<iframe src="${escHtml(info.src)}" referrerpolicy="no-referrer" allow="fullscreen" loading="lazy" title="Link preview"></iframe>`;
+  } else {
+    // Most sites block iframing — show a clean link card instead of a blank frame.
+    let host = info.host || '';
+    let favicon = '';
+    try { favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(safe).hostname)}&sz=64`; } catch {}
+    body.innerHTML = `
+      <div class="preview-fallback">
+        ${favicon ? `<img src="${escHtml(favicon)}" alt="" onerror="this.style.display='none'">` : ''}
+        <div class="pf-host">${escHtml(host)}</div>
+        <div class="pf-url">${escHtml(safe)}</div>
+        <p class="pf-note">This site can't be previewed inline (it blocks embedding for security). Open it in a new tab instead.</p>
+        <a class="pf-open" href="${escHtml(safe)}" target="_blank" rel="noopener">Open link ↗</a>
+      </div>`;
+  }
+  $('modalPreview').classList.add('open');
+}
+
+function closePreview() {
+  $('modalPreview').classList.remove('open');
+  // Clear the iframe so audio/video (e.g. a YouTube embed) stops on close.
+  $('previewBody').innerHTML = '';
 }
 
 /* ───── Activity bridge ─────────────────────────────────────────── */
