@@ -1085,7 +1085,17 @@ function renderCard(e) {
 
   // Credentials block — academic qualifications + previous institutions.
   // Both are optional + back-compat (legacy docs never carried them).
-  const quals = Array.isArray(e.qualifications) ? e.qualifications.filter(q => q && (q.degree || q.institution || q.field)) : [];
+  // Qualifications render most-recent-first (CV convention); entries without
+  // a parseable year sink to the bottom in their original order.
+  const quals = (Array.isArray(e.qualifications) ? e.qualifications.filter(q => q && (q.degree || q.institution || q.field)) : [])
+    .map((q, i) => ({ q, i, yr: parseInt(String(q.year || '').replace(/[^0-9]/g, ''), 10) }))
+    .sort((a, b) => {
+      const av = Number.isFinite(a.yr), bv = Number.isFinite(b.yr);
+      if (av && bv) return b.yr - a.yr;        // newest first
+      if (av !== bv) return av ? -1 : 1;       // dated entries before undated
+      return a.i - b.i;                         // stable for equal/undated
+    })
+    .map(x => x.q);
   const prevInst = Array.isArray(e.prevInstitutions) ? e.prevInstitutions.filter(Boolean) : [];
   const credBlocks = [];
   if (quals.length) {
