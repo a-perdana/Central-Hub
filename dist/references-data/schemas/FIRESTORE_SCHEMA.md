@@ -1551,6 +1551,35 @@ Director + Subject Coordinator workspace replacing the long-running Google Docs 
 
 **Immutability discipline:** once a decision is `status: 'active'`, the `body` + `effectiveFrom` should not be changed in-place — supersede with a new decision instead. Rule-level immutability is deferred to a future tightening; UI enforces today.
 
+#### `coordinator_proposals/{proposalId}` (2026-05-29)
+**PK:** auto-id.
+**Scope:** RFC / discussion-board layer that sits **before** a binding decision. Coordinators float strategic cross-network topics — KPI weighting, MAP Testing, Diagnostic Tests — and debate them in phases before the Director promotes the agreed ones to `coordinators_decisions`. Replaces the running Heads-of-Departments Google Doc for the deliberation stage. Page: CH `/coordinator-proposals` (navbar label "Proposals").
+**Fields:**
+- Identity: `title` (≤ 200 chars), `description` (plain text — mirror of the rich body, fed to a decision's `body` on promote), `descriptionHtml` (sanitised Quill HTML, same allowlist as `coordinators_meeting_items.bodyHtml`), `category` (`'kpi' | 'assessment' | 'curriculum' | 'appraisal' | 'other'`).
+- Phase: `phase` (`'draft' | 'open_for_comment' | 'decided' | 'parked'`). `draft` = author drafting; `open_for_comment` = discussion live; `decided` = promoted to a decision; `parked` = shelved but kept for the record. Phase + promote authority is a **Director UX courtesy** enforced in page JS only (2026-05-20 model — rule trusts any dept-office member).
+- References: `referenceRefs[]` (free-text source-citation chips, e.g. `'appraisal-framework-v2.json → F3.weights'`, `'ES 7.3'` — the Common Mistake #45 "cite your source" discipline, surfaced as chips).
+- Decision bridge: `decisionId →coordinators_decisions.id | null` (set on promote), `decidedAt` (Timestamp | null), `decidedByUid →users.uid | null`.
+- Denormalised: `commentCount` (number — maintained by the page via `increment()` on comment add/delete, for list-view display).
+- Audit: `createdBy →users.uid`, `createdByName` (denormalised), `createdAt`, `updatedAt`, `lastEditedBy →users.uid`.
+
+**FKs:** `coordinators_decisions.id` (optional, via `decisionId`); `users.uid` (via `createdBy`, `lastEditedBy`, `decidedByUid`). Inverse: `coordinators_decisions.sourceProposalId →coordinator_proposals.id` back-links a promoted decision to its origin proposal.
+**Indexes:** composite on `(phase, updatedAt desc)` for the board list; composite on `(category, phase, updatedAt desc)` for category-filtered views.
+**Write scope:**
+- **CREATE + UPDATE:** any dept-office member (`central_admin` or `central_user`). `createdBy` pins to the caller.
+- **DELETE:** `central_admin` only (the page also best-effort deletes the comment thread first).
+
+**Boundary:** proposals are a discussion surface only — they NEVER feed KPI / Appraisal / Competency scoring. When a proposal is decided it produces a `coordinators_decisions` record (the system of record); the proposal itself is the deliberation trail.
+
+#### `coordinator_proposal_comments/{commentId}` (2026-05-29)
+**PK:** auto-id.
+**Scope:** Threaded discussion on a `coordinator_proposals` doc. Top-level (NOT a sub-collection) so the page subscribes by `proposalId` — mirrors the `coordinators_meeting_items` top-level pattern.
+**Fields:** `proposalId →coordinator_proposals.id`, `authorUid →users.uid`, `authorName` (denormalised), `body` (plain text, ≤ 2000 chars), `createdAt` (Timestamp).
+**FKs:** `coordinator_proposals.id` (via `proposalId`); `users.uid` (via `authorUid`).
+**Indexes:** composite on `(proposalId, createdAt asc)` for the per-proposal thread.
+**Write scope:**
+- **CREATE:** any dept-office member; rule pins `authorUid == request.auth.uid`.
+- **UPDATE + DELETE:** `central_admin`, or the comment's own author (`resource.data.authorUid == auth.uid`). The page decrements the parent `commentCount` on delete.
+
 #### `coordinators_directory_entries/{entryId}`
 **PK:** auto-id.
 **Scope:** Eduversal Subject Coordinators (CH) + per-school Subject Leaders (TH `subject_leader` sub-role) + per-grade Grade Coordinators (e.g. EASE G7-G12 in the meeting corpus). Network-wide phone-book of the leadership graph this office runs against.

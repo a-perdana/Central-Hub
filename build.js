@@ -455,6 +455,7 @@ const htmlFiles = [
   "coordinators-meetings.html",
   "department-artifacts.html",
   "decisions-register.html",
+  "coordinator-proposals.html",
   "coordinators-directory.html",
   // Department Workspace (2026-05-24) — subject-scoped command centre.
   // Single page renders any of 9 ch_subjects via ?subject= query;

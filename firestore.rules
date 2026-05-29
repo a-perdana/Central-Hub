@@ -2924,6 +2924,33 @@ service cloud.firestore {
       allow delete:           if isAdmin();
     }
 
+    // RFC / Proposals board (2026-05-29). The deliberation layer that
+    // sits BEFORE a binding decision — coordinators discuss strategic
+    // topics (KPI weighting, MAP Testing, Diagnostic Tests) in phases
+    // (draft → open_for_comment → decided / parked). Promoting a
+    // proposal writes a coordinators_decisions doc with a back-link
+    // (sourceProposalId) and flips the proposal phase to 'decided'.
+    // Phase + promote authority is a Director UX courtesy enforced in
+    // the page JS only — the rule trusts any dept-office member, same
+    // as the rest of the office collections (2026-05-20 model).
+    match /coordinator_proposals/{proposalId} {
+      allow get, list:        if isDeptOfficeMember();
+      allow create, update:   if isDeptOfficeMember();
+      allow delete:           if isAdmin();
+    }
+
+    // Threaded discussion on a proposal. Top-level (not a sub-collection)
+    // so the page can subscribe by proposalId. A commenter may delete
+    // their own comment (the page decrements the parent commentCount);
+    // admin can delete any.
+    match /coordinator_proposal_comments/{commentId} {
+      allow get, list:        if isDeptOfficeMember();
+      allow create:           if isDeptOfficeMember()
+                                 && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete:   if isAdmin() || (isDeptOfficeMember()
+                                 && resource.data.authorUid == request.auth.uid);
+    }
+
     // Coordinators Directory — Eduversal Subject Coordinators (CH)
     // plus per-school Subject Leaders + per-grade Grade Coordinators.
     // entryKind discriminates: 'hq_coordinator' | 'school_subject_leader' | 'grade_coordinator'.

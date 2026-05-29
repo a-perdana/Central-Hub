@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proposals — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%230a0a1a'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><line x1='85' y1='46' x2='85' y2='68' stroke='%23ffd93d' stroke-width='4' stroke-linecap='round'/><circle cx='85' cy='72' r='3.5' fill='%23ffd93d'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <!-- Quill rich-text editor (proposal body, lazy-init on focus) -->
+  <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+  <style>
+    /* === Page-specific tokens === */
+    :root {
+      --phase-draft: #6b7280;
+      --phase-open: #0891b2;
+      --phase-decided: #10b981;
+      --phase-parked: #b45309;
+    }
+
+    /* === Layout — master/detail under the hero ===
+       Left rail = proposal list; right = selected proposal detail.
+       Collapses to single column under 900px. */
+    .prop-layout {
+      max-width: var(--container-max, 1200px);
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+    .prop-layout .page-info-strip {
+      max-width: calc(var(--container-max, 1200px) - 56px);
+      margin: 20px auto;
+    }
+    .prop-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 18px 0 14px;
+    }
+    .prop-search-wrap { position: relative; flex: 1; min-width: 200px; }
+    .prop-search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+    .prop-search { width: 100%; padding: 9px 12px 9px 36px; border: 1px solid var(--border); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.88rem; color: var(--ink); background: var(--white); }
+    .prop-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .prop-cat-select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: var(--ink); background: var(--white); }
+    .prop-new-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 16px; background: linear-gradient(135deg,#7c3aed,#0891b2);
+      color: #fff; border: none; border-radius: 8px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; transition: opacity .15s, transform .12s; flex-shrink: 0;
+    }
+    .prop-new-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+
+    .prop-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .prop-tab { padding: 8px 14px; border: none; background: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; color: var(--ink-3); border-bottom: 2px solid transparent; transition: all .12s; }
+    .prop-tab:hover { color: var(--ink-2); }
+    .prop-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .prop-tab .tab-count { font-size: 0.72rem; color: var(--ink-3); margin-left: 4px; }
+
+    .prop-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+      align-items: start;
+      padding-bottom: 60px;
+    }
+    @media (max-width: 900px) {
+      .prop-grid { grid-template-columns: 1fr; }
+      .prop-detail.is-empty-mobile { display: none; }
+    }
+
+    /* === Proposal list (left rail) === */
+    .prop-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .prop-list-empty { padding: 40px 20px; text-align: center; color: var(--ink-3); font-size: 0.88rem; }
+    .prop-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      padding: 13px 15px; cursor: pointer; transition: all .12s; position: relative;
+    }
+    .prop-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+    .prop-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.10); }
+    .prop-card__top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .prop-card__cat { padding: 2px 8px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: var(--paper-2); color: var(--ink-2); }
+    .prop-phase-pill { padding: 2px 9px; border-radius: 11px; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-left: auto; }
+    .prop-phase-pill.draft     { background: #f3f4f6; color: #374151; }
+    .prop-phase-pill.open_for_comment { background: #cffafe; color: #155e75; }
+    .prop-phase-pill.decided   { background: #d1fae5; color: #065f46; }
+    .prop-phase-pill.parked    { background: #fef3c7; color: #92400e; }
+    .prop-card__title { font-family: 'Lora', serif; font-size: 1rem; font-weight: 600; color: var(--ink); line-height: 1.3; margin-bottom: 6px; }
+    .prop-card__meta { display: flex; align-items: center; gap: 10px; font-size: 0.74rem; color: var(--ink-3); }
+    .prop-card__meta .cm-comments { display: inline-flex; align-items: center; gap: 3px; }
+
+    /* === Detail pane (right) === */
+    .prop-detail { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 22px 26px 26px; box-shadow: var(--shadow-sm); min-width: 0; }
+    .prop-detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 70px 40px; text-align: center; color: var(--ink-3); }
+    .prop-detail-empty .empty-icon { width: 56px; height: 56px; border-radius: 14px; background: var(--paper-2); display: flex; align-items: center; justify-content: center; color: var(--ink-3); margin-bottom: 16px; }
+    .prop-detail-empty h2 { font-family: 'Lora', serif; font-size: 1.1rem; color: var(--ink); margin-bottom: 6px; }
+    .prop-detail-empty p { font-size: 0.86rem; line-height: 1.5; max-width: 340px; }
+
+    .pd-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+    .pd-cat-select, .pd-phase-select { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600; color: var(--ink-2); background: var(--white); cursor: pointer; }
+    .pd-meta { font-size: 0.72rem; color: var(--ink-3); margin-left: auto; }
+    .pd-title { font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.25; padding: 4px 6px; border: 1px solid transparent; border-radius: 5px; margin-bottom: 14px; }
+    .pd-title:focus { outline: none; border-color: var(--accent); background: var(--white); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+
+    .pd-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .pd-btn { padding: 7px 14px; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600; border: 1px solid var(--border); background: var(--white); color: var(--ink-2); cursor: pointer; transition: all .15s; }
+    .pd-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .pd-btn.primary { background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; border: none; }
+    .pd-btn.primary:hover { opacity: 0.9; }
+    .pd-btn.primary.is-decided { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+    .pd-btn.danger { color: #dc2626; border-color: #fecdd3; }
+    .pd-btn.danger:hover { background: #fff1f2; }
+
+    .pd-section-label { font-size: 0.7rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 18px 0 8px; }
+
+    /* Body editor — Quill lazy-mount, same pattern as meetings */
+    .pd-body-preview {
+      min-height: 120px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--white); color: var(--ink); font-family: 'DM Sans', sans-serif;
+      font-size: 0.92rem; line-height: 1.6; cursor: text; transition: border-color .12s, box-shadow .12s;
+    }
+    .pd-body-preview:hover { border-color: var(--accent); }
+    .pd-body-preview:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .pd-body-preview .pd-body-placeholder { color: var(--ink-3); font-style: italic; }
+    .pd-body-preview > p:first-child { margin-top: 0; }
+    .pd-body-preview > p:last-child { margin-bottom: 0; }
+    .pd-body-preview p, .pd-body-preview ul, .pd-body-preview ol, .pd-body-preview blockquote { margin: 0.5em 0; }
+    .pd-body-preview ul, .pd-body-preview ol { padding-left: 1.4em; }
+    .pd-body-preview blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--ink-2); }
+    .pd-body-preview h1, .pd-body-preview h2, .pd-body-preview h3 { font-family: 'Lora', serif; margin: 0.5em 0 0.3em; line-height: 1.3; }
+    .pd-body-preview h2 { font-size: 1.1rem; }
+    .pd-body-preview h3 { font-size: 1rem; }
+    .pd-body-preview a { color: var(--accent); text-decoration: underline; }
+    .pd-body-quill { border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; background: var(--white); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+    .pd-body-quill[hidden] { display: none; }
+    .pd-body-quill .ql-toolbar.ql-snow { border: none; border-bottom: 1px solid var(--border); background: var(--paper); padding: 6px 8px; }
+    .pd-body-quill .ql-container.ql-snow { border: none; font-family: 'DM Sans', sans-serif; font-size: 0.92rem; }
+    .pd-body-quill .ql-editor { min-height: 220px; padding: 16px 18px; line-height: 1.65; font-size: 0.96rem; color: var(--ink); }
+    .pd-body-quill .ql-editor.ql-blank::before { color: var(--ink-3); font-style: italic; left: 18px; right: 18px; }
+
+    /* Reference chips */
+    .pd-refs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .ref-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; border: 1px solid #93c5fd; background: #eff6ff; color: #1d4ed8; font-family: 'DM Mono', monospace; }
+    .ref-chip .ref-x { cursor: pointer; opacity: 0.6; font-weight: 700; font-family: 'DM Sans', sans-serif; }
+    .ref-chip .ref-x:hover { opacity: 1; }
+    .ref-add-row { display: flex; gap: 6px; margin-top: 8px; }
+    .ref-add-input { flex: 1; max-width: 320px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.8rem; font-family: 'DM Mono', monospace; color: var(--ink); background: var(--paper); }
+    .ref-add-input:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .ref-add-btn { padding: 5px 12px; border: 1px dashed var(--border); border-radius: 6px; font-size: 0.78rem; color: var(--ink-3); background: none; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+    .ref-add-btn:hover { border-style: solid; color: var(--accent); border-color: var(--accent); }
+
+    /* === Comment thread === */
+    .pd-thread { margin-top: 8px; }
+    .comment {
+      display: flex; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border);
+    }
+    .comment:first-child { border-top: none; }
+    .comment__avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#7c3aed,#0891b2); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; }
+    .comment__main { flex: 1; min-width: 0; }
+    .comment__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+    .comment__author { font-size: 0.84rem; font-weight: 600; color: var(--ink); }
+    .comment__time { font-size: 0.72rem; color: var(--ink-3); }
+    .comment__del { margin-left: auto; background: none; border: none; color: var(--ink-3); cursor: pointer; font-size: 0.86rem; padding: 0 4px; }
+    .comment__del:hover { color: #dc2626; }
+    .comment__body { font-size: 0.88rem; line-height: 1.55; color: var(--ink-2); white-space: pre-wrap; word-wrap: break-word; }
+    .thread-empty { padding: 18px 0; color: var(--ink-3); font-size: 0.85rem; font-style: italic; }
+
+    .comment-composer { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+    .comment-composer textarea { width: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.88rem; line-height: 1.5; color: var(--ink); background: var(--paper-2); resize: vertical; }
+    .comment-composer textarea:focus { outline: none; border-color: var(--accent); background: var(--white); }
+    .comment-composer-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+    /* === Modals (cloned from meetings) === */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--white); border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
+    .modal-head { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); }
+    .modal-head h3 { font-family: 'Lora', serif; font-size: 1.1rem; font-weight: 600; color: var(--ink); }
+    .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; background: var(--paper); }
+
+    /* === Toast === */
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 0.86rem; font-weight: 500; z-index: 9999; opacity: 0; transition: all .25s; pointer-events: none; max-width: 460px; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body data-page-accent="violet">
+  <script src="firebase-config.js"></script>
+  <!-- Quill must load before the module script that references it. -->
+  <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <header class="page-hero" data-accent="violet" id="pageHero" aria-label="Coordinators proposals header">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <p class="page-hero__eyebrow">Department Office · CentralHub</p>
+        <h1 class="page-hero__title">Proposals</h1>
+        <p class="page-hero__desc">A discussion board for strategic topics still being shaped — KPI improvements, MAP Testing, Diagnostic Tests — before they become binding decisions. Coordinators open a proposal and comment; the Director sets the phase and promotes agreed proposals to the Decisions Register.</p>
+      </div>
+      <aside class="page-hero__kpis">
+        <div class="page-hero__kpi page-hero__kpi--primary">
+          <div class="page-hero__kpi-num" id="heroKpiOpen">—</div>
+          <div class="page-hero__kpi-lbl">Open for comment</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="heroKpiDecided">—</div>
+          <div class="page-hero__kpi-lbl">Decided</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="heroKpiTotal">—</div>
+          <div class="page-hero__kpi-lbl">Total</div>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <main class="prop-layout" id="mainRoot" style="display:none">
+
+    <aside class="page-info-strip" data-accent="violet" data-strip-key="coordinator-proposals:v1" role="note">
+      <div class="page-info-strip__icon" aria-hidden="true">💡</div>
+      <div class="page-info-strip__text">
+        <span class="page-info-strip__title">About this page</span>
+        <div class="page-info-strip__body">Brainstorm and debate cross-network topics — KPI weighting, MAP Testing, Diagnostic Tests — <strong>before</strong> they become binding. Anyone can open a proposal and add comments; the comment thread stays searchable. The Director sets the phase and, when consensus is reached, promotes a proposal to the <a href="decisions-register">Decisions</a> register so the decision keeps an audit trail. This replaces the running Google Doc.</div>
+      </div>
+      <a href="read-me-coordinator#page-proposals" class="page-info-strip__cta">How to use →</a>
+      <button class="page-info-strip__dismiss" type="button" aria-label="Dismiss">×</button>
+    </aside>
+
+    <div class="prop-toolbar">
+      <div class="prop-search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="prop-search" id="propSearch" placeholder="Search proposals by title, body, or reference…" autocomplete="off" spellcheck="false">
+      </div>
+      <select class="prop-cat-select" id="propCatFilter">
+        <option value="all">All categories</option>
+        <option value="kpi">KPI</option>
+        <option value="assessment">Assessment</option>
+        <option value="curriculum">Curriculum</option>
+        <option value="appraisal">Appraisal</option>
+        <option value="other">Other</option>
+      </select>
+      <button class="prop-new-btn" id="btnNewProposal" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New proposal
+      </button>
+    </div>
+
+    <div class="prop-tabs" id="propTabs">
+      <button class="prop-tab active" data-phase="open_for_comment">Open <span class="tab-count" id="cntOpen"></span></button>
+      <button class="prop-tab" data-phase="decided">Decided <span class="tab-count" id="cntDecided"></span></button>
+      <button class="prop-tab" data-phase="parked">Parked <span class="tab-count" id="cntParked"></span></button>
+      <button class="prop-tab" data-phase="draft">Drafts <span class="tab-count" id="cntDraft"></span></button>
+      <button class="prop-tab" data-phase="all">All <span class="tab-count" id="cntAll"></span></button>
+    </div>
+
+    <div class="prop-grid">
+      <div class="prop-list" id="propList"></div>
+      <section class="prop-detail is-empty-mobile" id="propDetail">
+        <div class="prop-detail-empty" id="detailEmpty">
+          <div class="empty-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          </div>
+          <h2>No proposal selected</h2>
+          <p>Pick a proposal from the list, or hit <strong>New proposal</strong> to open one for discussion. KPI, MAP Testing, Diagnostic Test — anything the office is still deliberating.</p>
+        </div>
+        <div id="detailBody" style="display:none;"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- New proposal modal -->
+  <div class="modal-overlay" id="modalNew">
+    <div class="modal">
+      <div class="modal-head"><h3>New proposal</h3></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input type="text" class="form-input" id="newTitle" placeholder="e.g. Adopt MAP Growth for Year 7–8 baseline">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-select" id="newCategory">
+            <option value="kpi">KPI</option>
+            <option value="assessment">Assessment</option>
+            <option value="curriculum">Curriculum</option>
+            <option value="appraisal">Appraisal</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-hint">Opens as a <strong>draft</strong>. Set it to "Open for comment" from the proposal once you've written the body.</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" id="newCancel">Cancel</button>
+        <button class="btn-save" id="newCreate">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promote-to-decision modal (Director only) -->
+  <div class="modal-overlay" id="modalDecision">
+    <div class="modal">
+      <div class="modal-head"><h3>Promote to a binding decision</h3></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Decision title</label>
+          <input type="text" class="form-input" id="decisionTitle">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-select" id="decisionCategory">
+            <option value="pedagogy">Pedagogy</option>
+            <option value="appraisal">Appraisal</option>
+            <option value="communications">Communications</option>
+            <option value="conduct">Conduct</option>
+            <option value="safeguarding">Safeguarding</option>
+            <option value="admin">Admin</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Effective from</label>
+          <input type="date" class="form-input" id="decisionEffective">
+        </div>
+        <div class="form-hint">Decision lands in <strong>/decisions-register</strong> (network-wide) with a back-link to this proposal. The proposal flips to <strong>decided</strong>. Body inherits from the proposal; edit further on the Decisions page.</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" id="decisionCancel">Cancel</button>
+        <button class="btn-save" id="decisionConfirm">Create decision</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  collection, query, where, orderBy, onSnapshot,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, increment, limit
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+/* ───── Constants ──────────────────────────────────────────────── */
+const CATEGORIES = ['kpi','assessment','curriculum','appraisal','other'];
+const CAT_LABELS = { kpi:'KPI', assessment:'Assessment', curriculum:'Curriculum', appraisal:'Appraisal', other:'Other' };
+const PHASES = ['draft','open_for_comment','decided','parked'];
+const PHASE_LABELS = { draft:'Draft', open_for_comment:'Open for comment', decided:'Decided', parked:'Parked' };
+// Proposal category → Decisions-register category, when promoting.
+const CAT_TO_DECISION = { kpi:'appraisal', assessment:'pedagogy', curriculum:'pedagogy', appraisal:'appraisal', other:'other' };
+
+const DEBOUNCE_MS = 800;
+let db, currentUser, userProfile;
+let isAdmin = false, isDirector = false;
+let proposals = [];          // list cache
+let currentPhaseTab = 'open_for_comment';
+let selectedId = null;
+let comments = [];           // for the selected proposal
+let _commentsUnsub = null;   // detach previous thread listener
+let bodyQuill = null;        // lazy-mounted Quill for the selected proposal
+
+const $ = (id) => document.getElementById(id);
+const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function debounce(fn, ms = DEBOUNCE_MS) {
+  let h;
+  return (...args) => { clearTimeout(h); h = setTimeout(() => fn(...args), ms); };
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+function fmtDateTime(ts) {
+  if (!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' }) + ', ' +
+         d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+}
+function initials(name) {
+  const parts = String(name || '?').trim().split(/\s+/).slice(0, 2);
+  return parts.map(p => p[0] || '').join('').toUpperCase() || '?';
+}
+
+/* ───── HTML sanitiser — same allowlist as coordinators-meetings ── */
+const ALLOWED_TAGS = new Set([
+  'P','BR','STRONG','EM','B','I','U','S','STRIKE',
+  'UL','OL','LI','H1','H2','H3','H4','H5','H6',
+  'A','BLOCKQUOTE','CODE','PRE','SPAN','DIV'
+]);
+const ALLOWED_ATTRS = { A: new Set(['href','title','target','rel']), '*': new Set([]) };
+function sanitiseHtml(html) {
+  if (!html) return '';
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html);
+  (function walk(node) {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType !== 1) continue;
+      if (!ALLOWED_TAGS.has(child.tagName)) {
+        while (child.firstChild) child.parentNode.insertBefore(child.firstChild, child);
+        child.remove();
+        continue;
+      }
+      const okSet = ALLOWED_ATTRS[child.tagName] || ALLOWED_ATTRS['*'];
+      for (const attr of [...child.attributes]) {
+        if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+      }
+      if (child.tagName === 'A') {
+        const href = child.getAttribute('href') || '';
+        if (!/^(https?:|mailto:|\/|#)/i.test(href)) child.removeAttribute('href');
+        child.setAttribute('rel', 'noopener noreferrer');
+        if (/^https?:/i.test(href)) child.setAttribute('target', '_blank');
+      }
+      walk(child);
+    }
+  })(tpl.content);
+  return tpl.innerHTML.trim();
+}
+
+/* ───── Boot ───────────────────────────────────────────────────── */
+document.addEventListener('authReady', async () => {
+  currentUser = window.currentUser;
+  userProfile = window.userProfile || {};
+  db = window.db;
+
+  isAdmin = userProfile.role_centralhub === 'central_admin';
+  // Promote-to-decision is a Director courtesy gate (UX only; rules don't
+  // enforce since 2026-05-20). Admin counts as director here.
+  isDirector = isAdmin || (Array.isArray(userProfile.ch_sub_roles) && userProfile.ch_sub_roles.includes('director'));
+
+  $('mainRoot').style.display = 'block';
+  wireUI();
+  subscribeProposals();
+});
+
+function wireUI() {
+  $('btnNewProposal').addEventListener('click', openNewModal);
+  $('newCancel').addEventListener('click', () => $('modalNew').classList.remove('open'));
+  $('newCreate').addEventListener('click', createProposal);
+  $('decisionCancel').addEventListener('click', () => $('modalDecision').classList.remove('open'));
+  $('decisionConfirm').addEventListener('click', confirmPromoteToDecision);
+
+  $('propSearch').addEventListener('input', renderList);
+  $('propCatFilter').addEventListener('change', renderList);
+
+  $('propTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.prop-tab');
+    if (!tab) return;
+    currentPhaseTab = tab.dataset.phase;
+    document.querySelectorAll('.prop-tab').forEach(t => t.classList.toggle('active', t === tab));
+    renderList();
+  });
+}
+
+/* ───── Proposals collection — subscribe ───────────────────────── */
+function subscribeProposals() {
+  const q = query(
+    collection(db, 'coordinator_proposals'),
+    orderBy('updatedAt', 'desc'),
+    limit(300)
+  );
+  onSnapshot(q, (snap) => {
+    proposals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    paintHeroKpis();
+    paintTabCounts();
+    renderList();
+    // Keep the open detail fresh (e.g. phase changed elsewhere) — but don't
+    // clobber the Quill editor if it's mounted (user typing).
+    if (selectedId) {
+      const sel = proposals.find(p => p.id === selectedId);
+      if (sel && !bodyQuill) renderDetail(sel);
+      else if (sel) { paintDetailChrome(sel); }
+      else { selectedId = null; showDetailEmpty(); }
+    }
+  }, (err) => {
+    console.error('[proposals]', err);
+    showToast('Could not load proposals: ' + (err.code || err.message));
+  });
+}
+
+function paintHeroKpis() {
+  $('heroKpiOpen').textContent    = proposals.filter(p => p.phase === 'open_for_comment').length;
+  $('heroKpiDecided').textContent = proposals.filter(p => p.phase === 'decided').length;
+  $('heroKpiTotal').textContent   = proposals.length;
+}
+function paintTabCounts() {
+  $('cntOpen').textContent    = proposals.filter(p => p.phase === 'open_for_comment').length || '';
+  $('cntDecided').textContent = proposals.filter(p => p.phase === 'decided').length || '';
+  $('cntParked').textContent  = proposals.filter(p => p.phase === 'parked').length || '';
+  $('cntDraft').textContent   = proposals.filter(p => (p.phase || 'draft') === 'draft').length || '';
+  $('cntAll').textContent     = proposals.length || '';
+}
+
+/* ───── List rendering ─────────────────────────────────────────── */
+function filteredProposals() {
+  const needle = ($('propSearch').value || '').trim().toLowerCase();
+  const cat = $('propCatFilter').value;
+  return proposals.filter(p => {
+    if (currentPhaseTab !== 'all' && (p.phase || 'draft') !== currentPhaseTab) return false;
+    if (cat !== 'all' && p.category !== cat) return false;
+    if (needle) {
+      const refs = Array.isArray(p.referenceRefs) ? p.referenceRefs.join(' ') : '';
+      const hay = `${p.title || ''} ${p.description || ''} ${refs}`.toLowerCase();
+      if (!hay.includes(needle)) return false;
+    }
+    return true;
+  });
+}
+
+function renderList() {
+  const list = $('propList');
+  const items = filteredProposals();
+  if (!items.length) {
+    list.innerHTML = `<div class="prop-list-empty">No proposals in this view.${currentPhaseTab === 'open_for_comment' ? ' Hit <strong>New proposal</strong> to start one.' : ''}</div>`;
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const phase = p.phase || 'draft';
+    const cc = p.commentCount || 0;
+    return `
+      <div class="prop-card ${p.id === selectedId ? 'is-selected' : ''}" data-id="${p.id}">
+        <div class="prop-card__top">
+          <span class="prop-card__cat">${CAT_LABELS[p.category] || p.category || '—'}</span>
+          <span class="prop-phase-pill ${phase}">${PHASE_LABELS[phase] || phase}</span>
+        </div>
+        <div class="prop-card__title">${escHtml(p.title || 'Untitled proposal')}</div>
+        <div class="prop-card__meta">
+          <span>${fmtDate(p.updatedAt || p.createdAt)}</span>
+          <span class="cm-comments">💬 ${cc}</span>
+        </div>
+      </div>`;
+  }).join('');
+  list.querySelectorAll('.prop-card').forEach(card => {
+    card.addEventListener('click', () => selectProposal(card.dataset.id));
+  });
+}
+
+/* ───── Detail pane ────────────────────────────────────────────── */
+function showDetailEmpty() {
+  $('detailEmpty').style.display = 'flex';
+  $('detailBody').style.display = 'none';
+  $('propDetail').classList.add('is-empty-mobile');
+  teardownThread();
+}
+
+function selectProposal(id) {
+  selectedId = id;
+  // flush any mounted Quill on the previously-open proposal
+  bodyQuill = null;
+  const p = proposals.find(x => x.id === id);
+  document.querySelectorAll('.prop-card').forEach(c => c.classList.toggle('is-selected', c.dataset.id === id));
+  if (p) renderDetail(p);
+}
+
+// Update only the lightweight chrome (phase pill, meta, list selection) on a
+// live snapshot when the editor is open — avoids re-rendering the whole pane.
+function paintDetailChrome(p) {
+  const sel = $('pdPhaseSelect');
+  if (sel && sel.value !== (p.phase || 'draft')) sel.value = p.phase || 'draft';
+  renderList();
+}
+
+function renderDetail(p) {
+  $('detailEmpty').style.display = 'none';
+  $('propDetail').classList.remove('is-empty-mobile');
+  const body = $('detailBody');
+  body.style.display = 'block';
+
+  const phase = p.phase || 'draft';
+  const refs = Array.isArray(p.referenceRefs) ? p.referenceRefs : [];
+  const decidedBadge = p.decisionId
+    ? `<a class="pd-btn primary is-decided" href="decisions-register" title="View in Decisions Register">✓ Decided — view decision</a>`
+    : '';
+
+  const phaseOptions = PHASES.map(ph =>
+    `<option value="${ph}" ${ph === phase ? 'selected' : ''}>${PHASE_LABELS[ph]}</option>`
+  ).join('');
+
+  body.innerHTML = `
+    <div class="pd-eyebrow">
+      <select class="pd-cat-select" id="pdCatSelect" title="Category">
+        ${CATEGORIES.map(c => `<option value="${c}" ${c === p.category ? 'selected' : ''}>${CAT_LABELS[c]}</option>`).join('')}
+      </select>
+      <select class="pd-phase-select" id="pdPhaseSelect" title="Phase">${phaseOptions}</select>
+      <span class="pd-meta">Opened ${fmtDate(p.createdAt)} by ${escHtml(p.createdByName || 'someone')}</span>
+    </div>
+
+    <div class="pd-title" id="pdTitle" contenteditable="true" spellcheck="false">${escHtml(p.title || 'Untitled proposal')}</div>
+
+    <div class="pd-actions">
+      ${(isDirector && phase !== 'decided') ? `<button class="pd-btn primary" id="pdPromote">Promote to decision ↗</button>` : ''}
+      ${decidedBadge}
+      ${isAdmin ? `<button class="pd-btn danger" id="pdDelete" data-confirming="false">Delete</button>` : ''}
+    </div>
+
+    <div class="pd-section-label">Proposal</div>
+    <div class="pd-body-preview" id="pdBodyPreview" tabindex="0" role="textbox" aria-label="Proposal body — click to edit"></div>
+    <div class="pd-body-quill" id="pdBodyQuill" hidden></div>
+
+    <div class="pd-section-label">References (cite source files / standards)</div>
+    <div class="pd-refs" id="pdRefs"></div>
+    <div class="ref-add-row">
+      <input type="text" class="ref-add-input" id="pdRefInput" placeholder="e.g. appraisal-framework-v2.json → F3.weights, ES 7.3" spellcheck="false">
+      <button class="ref-add-btn" id="pdRefAdd">+ Add reference</button>
+    </div>
+
+    <div class="pd-section-label">Discussion <span id="pdCommentCount" style="color:var(--ink-3);font-weight:400;"></span></div>
+    <div class="pd-thread" id="pdThread"></div>
+    <div class="comment-composer">
+      <textarea id="pdCommentInput" placeholder="Add to the discussion…"></textarea>
+      <div class="comment-composer-row">
+        <button class="btn-save" id="pdCommentPost">Post comment</button>
+      </div>
+    </div>
+  `;
+
+  // Body preview
+  const preview = $('pdBodyPreview');
+  if (p.descriptionHtml) preview.innerHTML = sanitiseHtml(p.descriptionHtml);
+  else if (p.description) preview.textContent = p.description;
+  else preview.innerHTML = '<span class="pd-body-placeholder">Click to write the proposal — the problem, the options, your recommendation…</span>';
+  preview.addEventListener('click', () => mountBodyQuill(p));
+  preview.addEventListener('focus', () => mountBodyQuill(p));
+
+  // Category + phase
+  $('pdCatSelect').addEventListener('change', (e) => persist(p.id, { category: e.target.value }));
+  $('pdPhaseSelect').addEventListener('change', (e) => {
+    const next = e.target.value;
+    if (next === 'decided' && !p.decisionId) {
+      // Don't allow setting "decided" directly without a decision link — guide to Promote.
+      showToast('Use “Promote to decision” to mark a proposal decided.');
+      e.target.value = p.phase || 'draft';
+      return;
+    }
+    persist(p.id, { phase: next });
+  });
+
+  // Title
+  const title = $('pdTitle');
+  title.addEventListener('input', debounce(() => {
+    const v = title.textContent.trim();
+    if (v) persist(p.id, { title: v });
+  }));
+
+  // Actions
+  if ($('pdPromote')) $('pdPromote').addEventListener('click', () => openDecisionModal(p));
+  if ($('pdDelete')) wireDeleteButton($('pdDelete'), p.id);
+
+  // References
+  renderRefs(p);
+  $('pdRefAdd').addEventListener('click', () => addRef(p));
+  $('pdRefInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addRef(p); } });
+
+  // Comments
+  $('pdCommentPost').addEventListener('click', () => postComment(p.id));
+  subscribeThread(p.id);
+
+  renderList(); // refresh selected highlight
+}
+
+/* ───── Body Quill (lazy mount, same pattern as meetings) ──────── */
+function mountBodyQuill(p) {
+  const preview = $('pdBodyPreview');
+  const mount = $('pdBodyQuill');
+  if (bodyQuill) { bodyQuill.focus(); return; }
+  if (typeof Quill === 'undefined') {
+    const ta = document.createElement('textarea');
+    ta.value = p.description || '';
+    ta.style.cssText = 'width:100%;min-height:200px;padding:12px;border:1px solid var(--accent);border-radius:8px;font-family:DM Sans,sans-serif;font-size:0.92rem;line-height:1.6;';
+    ta.addEventListener('input', debounce(() => persist(p.id, { description: ta.value, descriptionHtml: '' })));
+    mount.innerHTML = ''; mount.appendChild(ta); mount.hidden = false; preview.hidden = true; ta.focus();
+    return;
+  }
+  preview.hidden = true;
+  mount.hidden = false;
+  const q = new Quill(mount, {
+    theme: 'snow',
+    placeholder: 'The problem, the options, your recommendation…',
+    modules: { toolbar: [
+      [{ header: [2, 3, false] }],
+      ['bold', 'italic', 'underline'],
+      [{ list: 'ordered' }, { list: 'bullet' }],
+      ['link', 'blockquote', 'code-block'],
+      ['clean'],
+    ] },
+  });
+  if (p.descriptionHtml) q.clipboard.dangerouslyPasteHTML(sanitiseHtml(p.descriptionHtml));
+  else if (p.description) q.setText(p.description);
+  q.focus();
+  q.setSelection(q.getLength(), 0);
+  const save = debounce(() => {
+    const cleanHtml = sanitiseHtml(q.root.innerHTML);
+    const plain = q.getText().replace(/\n+$/, '');
+    persist(p.id, { description: plain, descriptionHtml: cleanHtml });
+  }, 1200);
+  q.on('text-change', save);
+  bodyQuill = q;
+}
+
+/* ───── References ─────────────────────────────────────────────── */
+function renderRefs(p) {
+  const wrap = $('pdRefs');
+  const refs = Array.isArray(p.referenceRefs) ? p.referenceRefs : [];
+  if (!refs.length) { wrap.innerHTML = '<span style="color:var(--ink-3);font-size:0.78rem;">None yet — anchor this proposal to a framework, KPI weight, or standard.</span>'; return; }
+  wrap.innerHTML = refs.map((r, i) =>
+    `<span class="ref-chip">${escHtml(r)}<span class="ref-x" data-ref-idx="${i}" title="Remove">×</span></span>`
+  ).join('');
+  wrap.querySelectorAll('.ref-x').forEach(x => {
+    x.addEventListener('click', () => {
+      const idx = Number(x.dataset.refIdx);
+      const next = refs.filter((_, j) => j !== idx);
+      persist(p.id, { referenceRefs: next }).then(() => { p.referenceRefs = next; renderRefs(p); });
+    });
+  });
+}
+function addRef(p) {
+  const input = $('pdRefInput');
+  const v = input.value.trim();
+  if (!v) return;
+  const refs = Array.isArray(p.referenceRefs) ? [...p.referenceRefs] : [];
+  if (refs.includes(v)) { showToast('Already added.'); return; }
+  refs.push(v);
+  input.value = '';
+  persist(p.id, { referenceRefs: refs }).then(() => { p.referenceRefs = refs; renderRefs(p); });
+}
+
+/* ───── Comment thread ─────────────────────────────────────────── */
+function teardownThread() {
+  if (_commentsUnsub) { _commentsUnsub(); _commentsUnsub = null; }
+  comments = [];
+}
+function subscribeThread(proposalId) {
+  teardownThread();
+  const q = query(
+    collection(db, 'coordinator_proposal_comments'),
+    where('proposalId', '==', proposalId),
+    orderBy('createdAt', 'asc')
+  );
+  _commentsUnsub = onSnapshot(q, (snap) => {
+    comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderThread();
+  }, (err) => {
+    console.error('[thread]', err);
+    const t = $('pdThread');
+    if (t) t.innerHTML = `<div class="thread-empty">Could not load comments: ${escHtml(err.code || err.message)}</div>`;
+  });
+}
+function renderThread() {
+  const t = $('pdThread');
+  if (!t) return;
+  const cc = $('pdCommentCount');
+  if (cc) cc.textContent = comments.length ? `(${comments.length})` : '';
+  if (!comments.length) { t.innerHTML = '<div class="thread-empty">No comments yet — start the discussion below.</div>'; return; }
+  t.innerHTML = comments.map(c => {
+    const canDelete = isAdmin || c.authorUid === currentUser.uid;
+    return `
+      <div class="comment">
+        <div class="comment__avatar">${escHtml(initials(c.authorName))}</div>
+        <div class="comment__main">
+          <div class="comment__head">
+            <span class="comment__author">${escHtml(c.authorName || 'Someone')}</span>
+            <span class="comment__time">${fmtDateTime(c.createdAt)}</span>
+            ${canDelete ? `<button class="comment__del" data-del="${c.id}" title="Delete comment">×</button>` : ''}
+          </div>
+          <div class="comment__body">${escHtml(c.body || '')}</div>
+        </div>
+      </div>`;
+  }).join('');
+  t.querySelectorAll('.comment__del').forEach(b => {
+    b.addEventListener('click', () => deleteComment(b.dataset.del));
+  });
+}
+async function postComment(proposalId) {
+  const input = $('pdCommentInput');
+  const text = input.value.trim();
+  if (!text) return;
+  if (text.length > 2000) { showToast('Comment too long (max 2000 chars).'); return; }
+  input.value = '';
+  try {
+    await addDoc(collection(db, 'coordinator_proposal_comments'), {
+      proposalId,
+      authorUid: currentUser.uid,
+      authorName: userProfile.displayName || currentUser.displayName || currentUser.email || 'Someone',
+      body: text,
+      createdAt: serverTimestamp(),
+    });
+    // Bump denormalised count + activity timestamp on the parent.
+    await updateDoc(doc(db, 'coordinator_proposals', proposalId), {
+      commentCount: increment(1),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('[postComment]', err);
+    showToast('Could not post: ' + (err.code || err.message));
+    input.value = text; // restore so the user doesn't lose their text
+  }
+}
+async function deleteComment(commentId) {
+  try {
+    await deleteDoc(doc(db, 'coordinator_proposal_comments', commentId));
+    if (selectedId) {
+      await updateDoc(doc(db, 'coordinator_proposals', selectedId), {
+        commentCount: increment(-1),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (err) {
+    console.error('[deleteComment]', err);
+    showToast('Could not delete: ' + (err.code || err.message));
+  }
+}
+
+/* ───── Persist proposal field patch ───────────────────────────── */
+async function persist(id, patch) {
+  try {
+    await updateDoc(doc(db, 'coordinator_proposals', id), {
+      ...patch,
+      updatedAt: serverTimestamp(),
+      lastEditedBy: currentUser.uid,
+    });
+  } catch (err) {
+    console.error('[persist]', err);
+    showToast('Save failed: ' + (err.code || err.message));
+  }
+}
+
+/* ───── New proposal ───────────────────────────────────────────── */
+function openNewModal() {
+  $('newTitle').value = '';
+  $('newCategory').value = 'kpi';
+  $('modalNew').classList.add('open');
+  requestAnimationFrame(() => $('newTitle').focus());
+}
+async function createProposal() {
+  const title = $('newTitle').value.trim();
+  if (!title) { showToast('Title required.'); return; }
+  try {
+    const ref = await addDoc(collection(db, 'coordinator_proposals'), {
+      title,
+      description: '',
+      descriptionHtml: '',
+      category: $('newCategory').value,
+      phase: 'draft',
+      referenceRefs: [],
+      decisionId: null,
+      commentCount: 0,
+      createdBy: currentUser.uid,
+      createdByName: userProfile.displayName || currentUser.displayName || currentUser.email || 'Someone',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    $('modalNew').classList.remove('open');
+    showToast('Proposal created (draft).');
+    // jump to drafts so the new one is visible, then open it
+    currentPhaseTab = 'draft';
+    document.querySelectorAll('.prop-tab').forEach(t => t.classList.toggle('active', t.dataset.phase === 'draft'));
+    selectedId = ref.id;
+  } catch (err) {
+    console.error('[createProposal]', err);
+    showToast('Could not create: ' + (err.code || err.message));
+  }
+}
+
+/* ───── Promote to decision (Director only) ────────────────────── */
+let _decisionProposal = null;
+function openDecisionModal(p) {
+  _decisionProposal = p;
+  $('decisionTitle').value = p.title || '';
+  $('decisionCategory').value = CAT_TO_DECISION[p.category] || 'other';
+  $('decisionEffective').value = '';
+  $('modalDecision').classList.add('open');
+}
+async function confirmPromoteToDecision() {
+  if (!_decisionProposal) return;
+  const title = $('decisionTitle').value.trim();
+  if (!title) { showToast('Title required.'); return; }
+  try {
+    const effective = $('decisionEffective').value ? new Date($('decisionEffective').value) : new Date();
+    const ref = await addDoc(collection(db, 'coordinators_decisions'), {
+      title,
+      body: _decisionProposal.description || '',
+      category: $('decisionCategory').value,
+      scope: 'network_wide',
+      schoolIds: [],
+      subjectIds: [],
+      status: 'active',
+      sourceMeetingId: null,
+      sourceItemId: null,
+      sourceProposalId: _decisionProposal.id,
+      effectiveFrom: effective,
+      effectiveUntil: null,
+      createdBy: currentUser.uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'coordinator_proposals', _decisionProposal.id), {
+      phase: 'decided',
+      decisionId: ref.id,
+      decidedAt: serverTimestamp(),
+      decidedByUid: currentUser.uid,
+      updatedAt: serverTimestamp(),
+    });
+    $('modalDecision').classList.remove('open');
+    _decisionProposal = null;
+    showToast('Decision logged in Decisions Register.');
+  } catch (err) {
+    console.error('[promoteToDecision]', err);
+    showToast('Could not promote: ' + (err.code || err.message));
+  }
+}
+
+/* ───── Delete proposal (admin only, double-click confirm) ─────── */
+function wireDeleteButton(btn, id) {
+  btn.addEventListener('click', async () => {
+    if (btn.dataset.confirming !== 'true') {
+      btn.dataset.confirming = 'true';
+      btn.textContent = 'Click again to delete';
+      setTimeout(() => { btn.dataset.confirming = 'false'; btn.textContent = 'Delete'; }, 3000);
+      return;
+    }
+    try {
+      // Best-effort: remove the comment thread first.
+      const snap = await getDocs(query(collection(db, 'coordinator_proposal_comments'), where('proposalId', '==', id)));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      await deleteDoc(doc(db, 'coordinator_proposals', id));
+      selectedId = null;
+      showDetailEmpty();
+      showToast('Proposal deleted.');
+    } catch (err) {
+      console.error('[deleteProposal]', err);
+      showToast('Could not delete: ' + (err.code || err.message));
+    }
+  });
+}
+</script>
+
+<footer class="page-footer" data-accent="violet" role="contentinfo">
+  <div class="page-footer__inner">
+    <div class="page-footer__cta">
+      <span class="page-footer__cta-eyebrow">Coordinators Workspace · Proposals</span>
+      <h2 class="page-footer__cta-title">Float the idea before it hardens into policy.</h2>
+      <p class="page-footer__cta-desc">Proposals are the deliberation phase — open one for comment, gather the room's view, then the Director promotes the agreed ones to the Decisions register with the audit trail intact.</p>
+      <a href="#" class="page-footer__cta-btn" onclick="document.getElementById('btnNewProposal')?.click();return false;">New proposal <span aria-hidden="true">+</span></a>
+    </div>
+    <nav class="page-footer__nav" aria-label="Proposals footer navigation">
+      <div class="page-footer__nav-group">
+        <span class="page-footer__nav-heading">Workspace</span>
+        <a href="/decisions-register" class="page-footer__nav-link">Decisions</a>
+        <a href="/coordinators-meetings" class="page-footer__nav-link">Meetings</a>
+        <a href="/coordinators-directory" class="page-footer__nav-link">Directory</a>
+        <a href="/activities" class="page-footer__nav-link">Activities</a>
+        <a href="/weekly-checklist" class="page-footer__nav-link">Weekly Checklist</a>
+      </div>
+      <div class="page-footer__nav-group">
+        <span class="page-footer__nav-heading">References</span>
+        <a href="/read-me-coordinator" class="page-footer__nav-link">Read Me First</a>
+        <a href="/references" class="page-footer__nav-link">References &amp; Standards</a>
+      </div>
+    </nav>
+  </div>
+  <div class="page-footer__meta">
+    <span class="page-footer__meta-left">© Eduversal · Central Hub</span>
+    <span class="page-footer__meta-right">Proposals are visible to all coordinators; the Director sets the phase and promotes decisions.</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var strip = document.querySelector('.page-info-strip[data-strip-key]');
+  if (!strip) return;
+  var key = 'ch-strip:' + strip.dataset.stripKey;
+  try { if (localStorage.getItem(key) === '1') strip.hidden = true; } catch (e) {}
+  var btn = strip.querySelector('.page-info-strip__dismiss');
+  if (btn) btn.addEventListener('click', function () {
+    strip.hidden = true;
+    try { localStorage.setItem(key, '1'); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
