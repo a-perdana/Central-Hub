@@ -202,30 +202,39 @@
     color: #8b8b9e;
   }
 
-  /* Preset avatars */
-  .preset-avatars-label {
-    font-size: 12px;
+  /* Monogram fallback — one clean default avatar in the user's initials,
+     with a compact accent switcher (not a 10-circle picker). */
+  .monogram-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #efeee9;
+  }
+  .monogram-title {
+    font-size: 13px;
     font-weight: 600;
-    color: #6b6b7e;
-    margin: 14px 0 8px;
-    letter-spacing: 0.3px;
+    color: #3a3a4e;
   }
-  .preset-avatars-grid {
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
+  .monogram-sub {
+    font-size: 12px;
+    color: #9b978f;
+    margin-top: 2px;
+  }
+  .monogram-swatches {
+    display: flex;
     gap: 10px;
-    max-width: 560px;
   }
-  @media (max-width: 700px) {
-    .preset-avatars-grid { grid-template-columns: repeat(5, 1fr); }
-  }
-  .preset-avatar {
-    width: 100%;
-    aspect-ratio: 1 / 1;
+  .monogram-swatch {
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     border: 2px solid transparent;
     padding: 0;
-    background: #fafaf8;
+    background: transparent;
     cursor: pointer;
     overflow: hidden;
     display: flex;
@@ -233,19 +242,21 @@
     justify-content: center;
     transition: transform .15s, border-color .15s, box-shadow .15s;
   }
-  .preset-avatar:hover {
+  .monogram-swatch:hover {
     transform: translateY(-2px);
-    border-color: var(--accent);
     box-shadow: 0 4px 10px rgba(124, 58, 237, 0.18);
   }
-  .preset-avatar.is-selected {
+  .monogram-swatch.is-selected {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
   }
-  .preset-avatar svg {
+  .monogram-swatch svg {
     width: 100%;
     height: 100%;
     display: block;
+  }
+  @media (max-width: 560px) {
+    .monogram-row { flex-direction: column; align-items: flex-start; }
   }
 
   .settings-input {
@@ -612,8 +623,13 @@
             <div class="settings-msg" id="sPhotoMsg"></div>
           </div>
         </div>
-        <div class="preset-avatars-label">Or pick a monogram in your initials</div>
-        <div class="preset-avatars-grid" id="sPresetAvatars" role="radiogroup" aria-label="Monogram avatars"></div>
+        <div class="monogram-row">
+          <div class="monogram-copy">
+            <div class="monogram-title">No photo? Use your monogram</div>
+            <div class="monogram-sub">A clean avatar in your initials. Pick an accent below.</div>
+          </div>
+          <div class="monogram-swatches" id="sPresetAvatars" role="radiogroup" aria-label="Monogram accent"></div>
+        </div>
       </div>
 
       <div class="settings-card">
@@ -942,29 +958,28 @@ ready(async () => {
   document.getElementById('sPhone').value       = profile.phone || '';
   document.getElementById('sLinkedin').value    = profile.linkedin_url || '';
 
-  // Preset avatars — professional MONOGRAM avatars (LinkedIn / Slack style).
-  // The user's initials sit on a brand-aligned gradient disc. Initials are
-  // derived from displayName (falls back to email) at render time, so the
-  // letter always matches the current name. 10 distinct palettes; each
-  // rendered SVG is stored as a data:image/svg+xml URL so photoURL works
-  // everywhere (Firestore doc, Firebase Auth updateProfile, <img>, CSS bg).
+  // Monogram fallback — ONE clean default avatar in the user's initials, with
+  // a compact accent switcher (not a 10-circle picker). Matches the education-
+  // sector pattern (Google Workspace for Edu / Canvas / Teams): a single
+  // tasteful default, with "Upload photo" as the primary call-to-action.
   //
-  // 10 palettes: { id, from, to, fg } — fg is the initials colour.
+  // Each monogram is a LAYERED brand disc — diagonal gradient + dot texture +
+  // top light + hairline inner ring — not a flat circle, so it reads as
+  // "designed" rather than a default placeholder. Initials derive from
+  // displayName (→ email → '?') at render time, so the letter always matches
+  // the current name. Rendered SVG is stored as a data:image/svg+xml URL so
+  // photoURL works everywhere (Firestore doc, Auth updateProfile, <img>, bg).
+  //
+  // 4 curated palettes — brand mor→cyan first (the recommended default).
   const MONOGRAM_PALETTES = [
-    { id: 'mor',    from: '#7c3aed', to: '#6c5ce7', fg: '#ffffff' }, // brand mor
-    { id: 'cyan',   from: '#06b6d4', to: '#0891b2', fg: '#ffffff' }, // brand cyan
-    { id: 'duo',    from: '#7c3aed', to: '#0891b2', fg: '#ffffff' }, // mor → cyan
-    { id: 'indigo', from: '#6366f1', to: '#3730a3', fg: '#ffffff' },
-    { id: 'teal',   from: '#14b8a6', to: '#0d9488', fg: '#ffffff' },
-    { id: 'amber',  from: '#f59e0b', to: '#d97706', fg: '#ffffff' },
-    { id: 'rose',   from: '#fb7185', to: '#e11d48', fg: '#ffffff' },
-    { id: 'forest', from: '#10b981', to: '#059669', fg: '#ffffff' },
-    { id: 'slate',  from: '#475569', to: '#1e293b', fg: '#ffffff' },
-    { id: 'cream',  from: '#f3f0e8', to: '#e8e3d6', fg: '#6c5ce7' }, // light disc, mor ink
+    { id: 'brand',  from: '#7c3aed', mid: '#6c5ce7', to: '#0891b2' }, // mor → cyan (default)
+    { id: 'mor',    from: '#7c3aed', mid: '#6c5ce7', to: '#4c3fb5' }, // deep mor
+    { id: 'cyan',   from: '#06b6d4', mid: '#0891b2', to: '#0e7490' }, // brand cyan
+    { id: 'slate',  from: '#64748b', mid: '#475569', to: '#1e293b' }, // neutral slate
   ];
 
   // Derive 1–2 uppercase initials: first letter of first + last word of the
-  // display name; single-word name → just its first letter; no name → email
+  // display name; single-word name → its first 2 letters; no name → email
   // local-part first letter; nothing → '?'.
   function initialsFor(name, email) {
     const n = (name || '').trim();
@@ -979,29 +994,44 @@ ready(async () => {
     return (local ? local[0] : '?').toUpperCase();
   }
 
-  // Build a monogram SVG string for a palette + initials.
+  // Build a LAYERED monogram SVG string for a palette + initials. IDs are
+  // namespaced per palette so multiple monograms can coexist on one page
+  // without <defs> id collisions.
   function monogramSvg(pal, initials) {
     const len = initials.length;
-    const fontSize = len >= 2 ? 26 : 32;            // shrink for 2 letters
-    const grad = `g_${pal.id}`;
+    const fontSize = len >= 2 ? 25 : 31;            // shrink for 2 letters
+    const g = `mg_${pal.id}`;
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
-      `<defs><linearGradient id="${grad}" x1="0" y1="0" x2="1" y2="1">` +
-        `<stop offset="0" stop-color="${pal.from}"/>` +
-        `<stop offset="1" stop-color="${pal.to}"/>` +
-      `</linearGradient></defs>` +
-      `<circle cx="32" cy="32" r="32" fill="url(#${grad})"/>` +
+      `<defs>` +
+        `<linearGradient id="${g}_bg" x1="0" y1="0" x2="1" y2="1">` +
+          `<stop offset="0" stop-color="${pal.from}"/>` +
+          `<stop offset="0.55" stop-color="${pal.mid}"/>` +
+          `<stop offset="1" stop-color="${pal.to}"/>` +
+        `</linearGradient>` +
+        `<radialGradient id="${g}_lt" cx="32" cy="20" r="40" gradientUnits="userSpaceOnUse">` +
+          `<stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>` +
+          `<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>` +
+        `</radialGradient>` +
+        `<pattern id="${g}_dot" width="7" height="7" patternUnits="userSpaceOnUse">` +
+          `<circle cx="1.4" cy="1.4" r="1.1" fill="#ffffff" fill-opacity="0.06"/>` +
+        `</pattern>` +
+      `</defs>` +
+      `<circle cx="32" cy="32" r="32" fill="url(#${g}_bg)"/>` +
+      `<circle cx="32" cy="32" r="32" fill="url(#${g}_dot)"/>` +
+      `<circle cx="32" cy="32" r="32" fill="url(#${g}_lt)"/>` +
+      `<circle cx="32" cy="32" r="27.5" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.2"/>` +
       // y baseline ≈ center (32) + ~0.34·fontSize so the cap-height sits
       // optically centred. Avoids dominant-baseline, which is unreliable when
       // an SVG is rendered as a data-URL <img> / CSS background (vs inline).
       `<text x="32" y="${(32 + fontSize * 0.34).toFixed(1)}" text-anchor="middle" ` +
-        `font-family="DM Sans, Segoe UI, Arial, sans-serif" font-weight="700" ` +
-        `font-size="${fontSize}" fill="${pal.fg}" letter-spacing="0.5">` +
+        `font-family="DM Sans, Segoe UI, Arial, sans-serif" font-weight="800" ` +
+        `font-size="${fontSize}" fill="#ffffff" letter-spacing="0.5">` +
         `${initials}</text>` +
     `</svg>`;
   }
 
-  // Build the 10 monogram SVGs for the CURRENT name. Recomputed whenever the
-  // name changes so the grid always shows up-to-date initials.
+  // Build the monogram SVGs for the CURRENT name. Recomputed whenever the name
+  // changes so the swatches always show up-to-date initials.
   function buildMonograms(name, email) {
     const initials = initialsFor(name, email);
     return MONOGRAM_PALETTES.map(pal => monogramSvg(pal, initials));
@@ -1016,21 +1046,25 @@ ready(async () => {
   // Profile photo render + upload
   const photoPreviewEl = document.getElementById('sPhotoPreview');
   const photoRemoveBtn = document.getElementById('sPhotoRemoveBtn');
+  // Empty-state preview = the default brand monogram (not a bare letter), so
+  // the no-photo case already looks designed. Uses the first (brand) palette.
+  function defaultMonogramUrl(name) {
+    return svgToDataUrl(monogramSvg(MONOGRAM_PALETTES[0], initialsFor(name, user.email)));
+  }
   function renderPhotoPreview(url, fallbackName) {
+    photoPreviewEl.textContent = '';
     if (url) {
       photoPreviewEl.style.backgroundImage = `url("${url}")`;
-      photoPreviewEl.textContent = '';
       photoRemoveBtn.style.display = '';
     } else {
-      photoPreviewEl.style.backgroundImage = '';
-      const initial = (fallbackName || user.email || '?').trim().charAt(0).toUpperCase();
-      photoPreviewEl.textContent = initial;
+      // No uploaded photo / no chosen monogram → show the brand monogram.
+      photoPreviewEl.style.backgroundImage = `url("${defaultMonogramUrl(fallbackName)}")`;
       photoRemoveBtn.style.display = 'none';
     }
   }
   renderPhotoPreview(profile.photoURL || user.photoURL || '', profile.displayName);
 
-  // Build preset avatars grid
+  // Build monogram accent swatches
   const presetGrid = document.getElementById('sPresetAvatars');
   let presetUrls = PRESET_AVATARS.map(svgToDataUrl);
   function markSelectedPreset(currentUrl) {
@@ -1038,9 +1072,9 @@ ready(async () => {
       btn.classList.toggle('is-selected', presetUrls[idx] === currentUrl);
     });
   }
-  // (Re)build the monogram grid for the given initials source. Called once on
-  // load, and again whenever the name input changes so the previews track the
-  // user's current initials live.
+  // (Re)build the monogram swatches for the given initials source. Called once
+  // on load, and again whenever the name input changes so the swatches track
+  // the user's current initials live.
   function renderPresetGrid(nameForInitials) {
     PRESET_AVATARS = buildMonograms(nameForInitials, user.email);
     presetUrls = PRESET_AVATARS.map(svgToDataUrl);
@@ -1048,9 +1082,9 @@ ready(async () => {
     PRESET_AVATARS.forEach((svg, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'preset-avatar';
+      btn.className = 'monogram-swatch';
       btn.setAttribute('role', 'radio');
-      btn.setAttribute('aria-label', `Monogram avatar — ${MONOGRAM_PALETTES[idx].id}`);
+      btn.setAttribute('aria-label', `Monogram accent — ${MONOGRAM_PALETTES[idx].id}`);
       btn.innerHTML = svg;
       btn.addEventListener('click', async () => {
         const url = presetUrls[idx];
@@ -1077,13 +1111,17 @@ ready(async () => {
   }
   renderPresetGrid(profile.displayName);
 
-  // Live-refresh the monogram previews as the user types their name, so the
-  // initials in the grid track what they'll actually get. Debounced lightly.
+  // Live-refresh the monogram swatches as the user types their name, so the
+  // initials track what they'll actually get. If no photo is set yet, also
+  // refresh the empty-state preview disc. Debounced lightly.
   let _monogramTimer = null;
   document.getElementById('sDisplayName').addEventListener('input', function () {
     clearTimeout(_monogramTimer);
     const v = this.value;
-    _monogramTimer = setTimeout(() => renderPresetGrid(v), 150);
+    _monogramTimer = setTimeout(() => {
+      renderPresetGrid(v);
+      if (!window.userProfile?.photoURL) renderPhotoPreview('', v);
+    }, 150);
   });
 
   document.getElementById('sPhotoUploadBtn').addEventListener('click', () => {
