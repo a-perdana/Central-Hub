@@ -4077,15 +4077,58 @@ let editSubjects = [];    // CH_SUBJECTS subset
 let editPrevInstitutions = [];  // string[]
 let editQualifications = [];    // { degree, field, institution, year }[]
 
-// Common degree shorthands for the qualification <select> — free "Other" still
-// allowed via the field-of-study text, but a quick-pick keeps entries consistent.
-const DEGREE_OPTIONS = [
-  'High School Diploma', 'Diploma', 'Associate Degree',
-  'B.A.', 'B.Sc.', 'B.Ed.', "Bachelor's (other)",
-  'M.A.', 'M.Sc.', 'M.Ed.', 'MBA', "Master's (other)",
-  'Ph.D.', 'Ed.D.', 'Doctorate (other)',
-  'PGCE', 'Cambridge PGCEi', 'Certificate', 'Other',
+// Degree quick-pick for the qualification <select>, grouped semantically via
+// <optgroup>. `value` is what gets STORED (kept stable so existing records
+// keep matching); `label` is the shortened display text that fits the narrow
+// dropdown. Free "Other" still allowed; field-of-study text carries detail.
+const DEGREE_GROUPS = [
+  { group: 'Secondary', options: [
+    { value: 'High School Diploma', label: 'High School' },
+    { value: 'IB Diploma',          label: 'IB Diploma' },
+    { value: 'Diploma',             label: 'Diploma' },
+  ]},
+  { group: 'Undergraduate', options: [
+    { value: 'Associate Degree',     label: 'Associate' },
+    { value: 'B.A.',                 label: 'B.A.' },
+    { value: 'B.Sc.',                label: 'B.Sc.' },
+    { value: 'B.Ed.',                label: 'B.Ed.' },
+    { value: 'B.Eng.',               label: 'B.Eng.' },
+    { value: "Bachelor's (other)",   label: 'Bachelor (other)' },
+  ]},
+  { group: 'Postgraduate', options: [
+    { value: 'PGCE',                 label: 'PGCE' },
+    { value: 'Cambridge PGCEi',      label: 'PGCEi' },
+    { value: 'PG Diploma',           label: 'PG Diploma' },
+    { value: 'M.A.',                 label: 'M.A.' },
+    { value: 'M.Sc.',                label: 'M.Sc.' },
+    { value: 'M.Ed.',                label: 'M.Ed.' },
+    { value: 'M.Phil.',              label: 'M.Phil.' },
+    { value: 'MBA',                  label: 'MBA' },
+    { value: "Master's (other)",     label: 'Master (other)' },
+  ]},
+  { group: 'Doctoral', options: [
+    { value: 'Ph.D.',                label: 'Ph.D.' },
+    { value: 'Ed.D.',                label: 'Ed.D.' },
+    { value: 'Doctorate (other)',    label: 'Doctorate' },
+  ]},
+  { group: 'Teaching & Professional', options: [
+    { value: 'QTS',                  label: 'QTS' },
+    { value: 'Akta Mengajar',        label: 'Akta Mengajar' },
+    { value: 'Cambridge Cert. (PDQ)',label: 'Cambridge PDQ' },
+    { value: 'TEFL / TESOL',         label: 'TEFL / TESOL' },
+    { value: 'Certificate',          label: 'Certificate' },
+    { value: 'Professional Cert.',   label: 'Prof. Cert.' },
+  ]},
+  { group: 'Other', options: [
+    { value: 'Other',                label: 'Other' },
+  ]},
 ];
+
+// Flat lookup (value → label) for back-compat: any stored value not present in
+// the groups (legacy free entry) still renders its own value as a fallback
+// option so the saved selection is never lost.
+const DEGREE_LABEL = {};
+DEGREE_GROUPS.forEach(g => g.options.forEach(o => { DEGREE_LABEL[o.value] = o.label; }));
 
 const $ = (id) => document.getElementById(id);
 const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4289,9 +4332,23 @@ function addPrevInstFromInput() {
 // change so the array is always current without a separate "commit" step.
 function renderQualRows() {
   const list = $('eQualList');
-  const degreeOpts = (sel) => DEGREE_OPTIONS.map(d =>
-    `<option value="${escHtml(d)}"${d === sel ? ' selected' : ''}>${escHtml(d)}</option>`
-  ).join('');
+  // Build grouped <optgroup> markup; mark the stored value as selected.
+  const degreeOpts = (sel) => {
+    const known = DEGREE_GROUPS.some(g => g.options.some(o => o.value === sel));
+    let html = DEGREE_GROUPS.map(g =>
+      `<optgroup label="${escHtml(g.group)}">` +
+      g.options.map(o =>
+        `<option value="${escHtml(o.value)}"${o.value === sel ? ' selected' : ''}>${escHtml(o.label)}</option>`
+      ).join('') +
+      `</optgroup>`
+    ).join('');
+    // Legacy / free-text value not in any group → keep it so the saved
+    // selection still displays instead of silently resetting to blank.
+    if (sel && !known) {
+      html += `<optgroup label="Saved"><option value="${escHtml(sel)}" selected>${escHtml(sel)}</option></optgroup>`;
+    }
+    return html;
+  };
   list.innerHTML = editQualifications.map((q, idx) => `
     <div class="qual-row" data-idx="${idx}">
       <select class="form-select qf-degree" data-field="degree" aria-label="Degree">
@@ -4612,7 +4669,10 @@ function renderCard(e) {
   const credBlocks = [];
   if (quals.length) {
     const lines = quals.map(q => {
-      const deg = q.degree ? `<span class="ec-qual-deg">${escHtml(q.degree)}</span>` : '';
+      // Prefer the short display label; fall back to the stored value for
+      // legacy / free-text degrees that predate the grouped picker.
+      const degText = q.degree ? (DEGREE_LABEL[q.degree] || q.degree) : '';
+      const deg = degText ? `<span class="ec-qual-deg">${escHtml(degText)}</span>` : '';
       const tail = [q.field, q.institution].filter(Boolean).map(escHtml).join(' · ');
       const yr = q.year ? ` <span style="color:var(--ink-3)">(${escHtml(q.year)})</span>` : '';
       return `<div class="ec-qual">${deg}<span>${tail}${yr}</span></div>`;
