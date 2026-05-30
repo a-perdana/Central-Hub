@@ -1,6 +1,6 @@
 // Canonical CH subject taxonomy.
 //
-// Source of truth for the 10 ch_subjects[] enum values used across:
+// Source of truth for the 11 ch_subjects[] enum values used across:
 //   - /coordinators-directory  (school subject leader rows, HQ coordinator rows)
 //   - /department-workspace    (per-subject command centre)
 //   - any future page that filters by subject specialty
@@ -19,6 +19,7 @@ export const SUBJECTS = [
   'religion',
   'edu_steam',
   'early_years',
+  'civics',
 ];
 
 export const SUBJECT_LABELS = {
@@ -32,6 +33,7 @@ export const SUBJECT_LABELS = {
   religion:  'Religion',
   edu_steam: 'Edu-STEAM',
   early_years: 'Early Years',
+  civics:    'Civics',
 };
 
 // Two-letter mono badge (matches department-artifacts.html .subject-icon convention).
@@ -46,6 +48,7 @@ export const SUBJECT_BADGE = {
   religion:  'Re',
   edu_steam: 'ES',
   early_years: 'EY',
+  civics:    'Ci',
 };
 
 // Subject-themed emoji, used as the primary visual on /department-workspace
@@ -62,6 +65,7 @@ export const SUBJECT_EMOJI = {
   religion:  '🕌',  // mosque (Indonesian school context)
   edu_steam: '🚀',  // rocket (Edu-STEAM = science + tech + engineering + arts + math)
   early_years: '🧸',  // teddy bear (Early Years / EYFS foundation stage)
+  civics:    '⚖️',  // balance scale (Civics / Pancasila & citizenship education)
 };
 
 // Per-subject SVG identity pattern, served as a data:image/svg+xml URL.
@@ -108,6 +112,8 @@ export const SUBJECT_PATTERN = {
   edu_steam: SVG(`<circle cx='10' cy='10' r='2' fill='currentColor' stroke='none'/><circle cx='50' cy='10' r='2' fill='currentColor' stroke='none'/><circle cx='30' cy='30' r='2' fill='currentColor' stroke='none'/><circle cx='10' cy='50' r='2' fill='currentColor' stroke='none'/><circle cx='50' cy='50' r='2' fill='currentColor' stroke='none'/><path d='M10 10 L30 30 L50 10 M10 50 L30 30 L50 50 M10 10 L10 50 M50 10 L50 50' stroke-opacity='0.35'/>`),
   // Early Years — building blocks + play shapes (foundation-stage feel)
   early_years: SVG(`<rect x='8' y='32' width='16' height='16' rx='2'/><rect x='26' y='32' width='16' height='16' rx='2'/><rect x='17' y='14' width='16' height='16' rx='2'/><circle cx='48' cy='20' r='7'/><polygon points='48,38 56,52 40,52'/>`),
+  // Civics — balance scales (justice / citizenship / Pancasila values)
+  civics: SVG(`<line x1='30' y1='8' x2='30' y2='44'/><line x1='14' y1='18' x2='46' y2='18'/><path d='M14 18 L8 32 M14 18 L20 32'/><path d='M8 32 a6 4 0 0 0 12 0'/><path d='M46 18 L40 32 M46 18 L52 32'/><path d='M40 32 a6 4 0 0 0 12 0'/><rect x='22' y='44' width='16' height='4' rx='1'/>`),
 };
 
 // Per-subject gradient. Reuses the same hues as department-artifacts.html
@@ -123,6 +129,7 @@ export const SUBJECT_ACCENT = {
   religion:  'linear-gradient(135deg,#6366f1,#3730a3)',
   edu_steam: 'linear-gradient(135deg,#7c3aed,#0891b2)',
   early_years: 'linear-gradient(135deg,#fb923c,#c2410c)',
+  civics:    'linear-gradient(135deg,#0ea5e9,#0369a1)',
 };
 
 // Single tint colour per subject, used by the pattern SVG via
@@ -139,6 +146,7 @@ export const SUBJECT_PATTERN_COLOR = {
   religion:  '#3730a3',
   edu_steam: '#5b21b6',
   early_years: '#c2410c',
+  civics:    '#0369a1',
 };
 
 // Per-subject Cambridge pacing pages — the live "annual plan" of what
@@ -156,8 +164,8 @@ export const SUBJECT_PATTERN_COLOR = {
 //             for the 4-digit syllabus codes used network-wide.
 //
 // Subjects with no Cambridge pacing pages (Bahasa / Religion / Edu-STEAM /
-// Early Years) have an empty array — the UI renders an empty-state pointing
-// the coordinator at the Annual Strategy slot below.
+// Early Years / Civics) have an empty array — the UI renders an empty-state
+// pointing the coordinator at the Annual Strategy slot below.
 export const SUBJECT_PACING_LINKS = {
   math: [
     { slug: 'primary-math-pacing',    label: 'Primary Math',      stage: 'Y1–6',   code: '0096' },
@@ -192,6 +200,7 @@ export const SUBJECT_PACING_LINKS = {
   religion:    [],
   edu_steam:   [],
   early_years: [],
+  civics:      [],
 };
 
 export function isValidSubject(subjectId) {
