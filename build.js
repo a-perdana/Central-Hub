@@ -427,6 +427,7 @@ const htmlFiles = [
   "read-me-coordinator.html",
   "read-me-appraisal.html",
   "read-me-kpi.html",
+  "read-me-competency.html",
   "read-me-teacher-programs.html",
   "orientation-admin.html",
   "chapter-test-author.html",
