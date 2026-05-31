@@ -1808,7 +1808,7 @@
         Admin
         <svg class="ch-dd-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-      <div class="ch-dd-panel ch-dd-panel--xwide" id="chDdPanel-admin">
+      <div class="ch-dd-panel ch-dd-panel--wide" id="chDdPanel-admin">
         <div class="ch-dd-col-group">
           <!-- Column 1 — People & Access + Network Insights
                People & Access = who can sign in + what they can see + rules debug + cross-hub hiring.
@@ -1888,16 +1888,13 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
               <span class="nav-item-label">AI Maturity Admin</span>
             </a>
-          </div>
-
-          <div class="ch-dd-col-divider"></div>
-
-          <!-- Column 3 — Communications + Configuration
-               Communications = the two-way data plane (outbound mail + inbound surveys/feedback).
-               Configuration = system-wide knobs the admin tweaks (checklist content, calendar/term
-               windows, design tokens viewer). -->
-          <div class="ch-dd-col">
-            <div class="ch-dd-col-header">Communications</div>
+            <!-- Communications + Configuration + Certificates folded into this column
+                 2026-05-31 when the Admin panel was narrowed from --xwide (3 col) to
+                 --wide (2 col). Communications = two-way data plane (outbound mail +
+                 inbound surveys/feedback); Configuration = system-wide knobs; Certificates
+                 = issue + verify + cross-hub mentor cert. -->
+            <div class="ch-dd-divider"></div>
+            <div class="ch-dd-col-header" style="padding-top:4px;">Communications</div>
             <a href="mail-composer" class="ch-dd-item" data-nav-page="mail-composer" data-nav-key="mail-composer">
               <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
@@ -2441,20 +2438,27 @@
 
     // ── Role-aware Admin dropdown / section gating ───────────────────────────
     // The Admin dropdown (desktop) and Admin section (mobile) are marked with
-    // [data-admin-only="1"] and start hidden via inline style. Since 2026-05-20
-    // we reveal them for EVERY signed-in central_user — auth-guard.js's
-    // applyPageAccessGating() then hides individual links + empty columns
-    // based on page_access_config[].visible_to, so a coordinator only sees
-    // the user-also surfaces (Hiring Funnel, Network Health, Frameworks,
-    // Survey Console, Checklist Admin, Schedule Settings, Design System,
-    // etc.) while admin-only links remain hidden via [data-pa-hidden].
-    // Note: if every link in the dropdown ends up hidden for this user,
-    // applyPageAccessGating() marks the wrap [data-pa-hidden="1"] and the
-    // dropdown disappears entirely (empty-wrap collapse). That's why we
-    // reveal here unconditionally for any signed-in user — let the
-    // page-access layer do the per-link filtering.
+    // [data-admin-only="1"] and start hidden via inline style.
+    //
+    // 2026-05-31: narrowed the audience back to central_admin + ch_sub_roles
+    // 'director'. Rationale (audience-first navbar grouping, per Alif): the
+    // Admin menu is HQ-leadership tooling — coordinators / plain central_users
+    // don't run console / page-access / induction-admin etc., so surfacing the
+    // whole dropdown to them was noise. We still reveal for EVERY central_admin
+    // even if they lack the 'director' sub-role (admin must always reach admin
+    // tooling). auth-guard.js's applyPageAccessGating() still runs on top and
+    // hides individual links the viewer can't access (so a director only sees
+    // what page_access_config[].visible_to permits) — and if every link ends
+    // up hidden the empty-wrap collapse removes the dropdown entirely.
+    //
+    // (Before 2026-05-20 this was central_admin-only; 2026-05-20→05-31 it was
+    // revealed to every signed-in central_user with page-access doing all the
+    // filtering. The all-users phase made the menu too broad — reverted.)
     function applyAdminGating(profile) {
       if (!profile) return; // not signed in yet
+      var isAdmin = profile.role_centralhub === 'central_admin';
+      var isDirector = Array.isArray(profile.ch_sub_roles) && profile.ch_sub_roles.indexOf('director') !== -1;
+      if (!isAdmin && !isDirector) return; // coordinators / plain users: leave hidden
       document.querySelectorAll('[data-admin-only="1"]').forEach(function(el) {
         el.style.display = '';
       });
