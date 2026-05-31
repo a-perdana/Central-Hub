@@ -127,6 +127,39 @@ const IGCSE_SUBJECTS = {
     pacingConfig: `{ collection: 'physics_pacing', docId: 'year9-10', subjectKey: 'physics', comboKey: 'igcse_physics', syllabusCode: '0625', progressKey: 'statuses', classesField: 'igcse_physics_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
   },
+  // ── Eduversal-authored non-Cambridge subjects (Secondary Y9-10 tier) ──
+  // Bahasa Indonesia + Edu-STEAM have no Cambridge syllabus code; they
+  // carry an EDV-prefix placeholder until Eduversal authors a real
+  // scheme. Structure mirrors the IGCSE Cambridge pages exactly so the
+  // pacing-core.js engine + Teachers Hub coverage views work unchanged.
+  // The IGCSE-tier collection uses the bare `<subject>_pacing` name to
+  // align with subject-config.js SUBJECT_PACING_LINKS (igcse-* slug).
+  'igcse-bahasa-pacing.html': {
+    pageTitle:    'Bahasa Indonesia Pacing (Y9–10) — CentralHub',
+    accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
+    heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
+    heroGlow:     'rgba(225,29,72,.4)',
+    heroIcon:     '📚',
+    heroEyebrow:  'Bahasa Indonesia · EDV-BAH-S',
+    heroTitle:    'Bahasa Indonesia Pacing (Y9–10)',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'bahasa_pacing', docId: 'year9-10', subjectKey: 'bahasa', comboKey: 'igcse_bahasa', syllabusCode: 'EDV-BAH-S', progressKey: 'statuses', classesField: 'igcse_bahasa_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
+    yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
+  },
+  'igcse-edu-steam-pacing.html': {
+    pageTitle:    'Edu-STEAM Pacing (Y9–10) — CentralHub',
+    accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
+    heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
+    heroGlow:     'rgba(124,58,237,.4)',
+    heroIcon:     '🚀',
+    heroEyebrow:  'Edu-STEAM · EDV-STM-S',
+    heroTitle:    'Edu-STEAM Pacing (Y9–10)',
+    heroDesc:     'Manage projects, topics, and learning objectives for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'edu_steam_pacing', docId: 'year9-10', subjectKey: 'edu_steam', comboKey: 'igcse_edu_steam', syllabusCode: 'EDV-STM-S', progressKey: 'statuses', classesField: 'igcse_edu_steam_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
+    yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
+  },
 };
 
 // ============================================================
@@ -170,6 +203,33 @@ const CHECKPOINT_SUBJECTS = {
     heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'science', comboKeys: ['checkpoint_science', 'checkpoint_biology', 'checkpoint_chemistry', 'checkpoint_physics'], syllabusCode: '0893', progressKey: 'checkpoint_science_statuses', classesField: 'checkpoint_science_classes', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
+  },
+  // ── Eduversal-authored non-Cambridge subjects (Checkpoint Y7-8 tier) ──
+  'checkpoint-bahasa-pacing.html': {
+    pageTitle:    'Bahasa Indonesia Pacing (Y7–8) — CentralHub',
+    accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
+    heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
+    heroGlow:     'rgba(225,29,72,.4)',
+    heroIcon:     '📚',
+    heroEyebrow:  'Bahasa Indonesia · EDV-BAH-C',
+    heroTitle:    'Bahasa Indonesia Pacing (Y7–8)',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'checkpoint_bahasa_pacing', docId: 'year7-8', subjectKey: 'bahasa', comboKey: 'checkpoint_bahasa', syllabusCode: 'EDV-BAH-C', progressKey: 'checkpoint_bahasa_statuses', classesField: 'checkpoint_bahasa_classes', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
+    yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
+  },
+  'checkpoint-edu-steam-pacing.html': {
+    pageTitle:    'Edu-STEAM Pacing (Y7–8) — CentralHub',
+    accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
+    heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
+    heroGlow:     'rgba(124,58,237,.4)',
+    heroIcon:     '🚀',
+    heroEyebrow:  'Edu-STEAM · EDV-STM-C',
+    heroTitle:    'Edu-STEAM Pacing (Y7–8)',
+    heroDesc:     'Manage projects, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'checkpoint_edu_steam_pacing', docId: 'year7-8', subjectKey: 'edu_steam', comboKey: 'checkpoint_edu_steam', syllabusCode: 'EDV-STM-C', progressKey: 'checkpoint_edu_steam_statuses', classesField: 'checkpoint_edu_steam_classes', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
 };
@@ -234,6 +294,31 @@ const PRIMARY_SUBJECTS = {
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'primary_science_pacing', docId: 'year1-6', subjectKey: 'science', comboKeys: ['primary_science', 'primary_biology', 'primary_chemistry', 'primary_physics'], syllabusCode: '0097', progressKey: 'primary_science_statuses', classesField: 'primary_science_classes', years: ${PRIMARY_YEARS_JSON} }`,
   },
+  // ── Eduversal-authored non-Cambridge subjects (Primary Y1-6 tier) ──
+  'primary-bahasa-pacing.html': {
+    pageTitle:    'Primary Bahasa Indonesia Pacing — CentralHub',
+    accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
+    heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
+    heroGlow:     'rgba(225,29,72,.4)',
+    heroIcon:     '📚',
+    heroEyebrow:  'Primary Bahasa Indonesia · EDV-BAH-P',
+    heroTitle:    'Primary Bahasa Indonesia Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'primary_bahasa_pacing', docId: 'year1-6', subjectKey: 'bahasa', comboKey: 'primary_bahasa', syllabusCode: 'EDV-BAH-P', progressKey: 'primary_bahasa_statuses', classesField: 'primary_bahasa_classes', years: ${PRIMARY_YEARS_JSON} }`,
+  },
+  'primary-edu-steam-pacing.html': {
+    pageTitle:    'Primary Edu-STEAM Pacing — CentralHub',
+    accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
+    heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
+    heroGlow:     'rgba(124,58,237,.4)',
+    heroIcon:     '🚀',
+    heroEyebrow:  'Primary Edu-STEAM · EDV-STM-P',
+    heroTitle:    'Primary Edu-STEAM Pacing',
+    heroDesc:     'Manage projects, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'primary_edu_steam_pacing', docId: 'year1-6', subjectKey: 'edu_steam', comboKey: 'primary_edu_steam', syllabusCode: 'EDV-STM-P', progressKey: 'primary_edu_steam_statuses', classesField: 'primary_edu_steam_classes', years: ${PRIMARY_YEARS_JSON} }`,
+  },
 };
 
 // ============================================================
@@ -290,6 +375,33 @@ const ASALEVEL_SUBJECTS = {
     heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_physics_pacing', docId: 'year11-12', subjectKey: 'physics', comboKey: 'asalevel_physics', progressKey: 'asphys_statuses', classesField: 'asalevel_physics_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
+    yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
+  },
+  // ── Eduversal-authored non-Cambridge subjects (AS / A-Level Y11-12 tier) ──
+  'as-alevel-bahasa-pacing.html': {
+    pageTitle:    'AS & A Level Bahasa Indonesia Pacing — CentralHub',
+    accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
+    heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
+    heroGlow:     'rgba(225,29,72,.4)',
+    heroIcon:     '📚',
+    heroEyebrow:  'AS & A Level Bahasa Indonesia · EDV-BAH-A',
+    heroTitle:    'AS & A Level Bahasa Indonesia Pacing',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_MATH,
+    pacingConfig: `{ collection: 'asalevel_bahasa_pacing', docId: 'year11-12', subjectKey: 'bahasa', comboKey: 'asalevel_bahasa', syllabusCode: 'EDV-BAH-A', progressKey: 'asbahasa_statuses', classesField: 'asalevel_bahasa_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
+    yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
+  },
+  'as-alevel-edu-steam-pacing.html': {
+    pageTitle:    'AS & A Level Edu-STEAM Pacing — CentralHub',
+    accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
+    heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
+    heroGlow:     'rgba(124,58,237,.4)',
+    heroIcon:     '🚀',
+    heroEyebrow:  'AS & A Level Edu-STEAM · EDV-STM-A',
+    heroTitle:    'AS & A Level Edu-STEAM Pacing',
+    heroDesc:     'Manage projects, topics, and learning objectives for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    aoOptions:    AO_SCIENCE,
+    pacingConfig: `{ collection: 'asalevel_edu_steam_pacing', docId: 'year11-12', subjectKey: 'edu_steam', comboKey: 'asalevel_edu_steam', syllabusCode: 'EDV-STM-A', progressKey: 'asedusteam_statuses', classesField: 'asalevel_edu_steam_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
 };
@@ -378,6 +490,20 @@ const htmlFiles = [
   "as-alevel-biology-pacing.html",
   "as-alevel-chemistry-pacing.html",
   "as-alevel-physics-pacing.html",
+  // Eduversal-authored non-Cambridge subjects — Bahasa Indonesia + Edu-STEAM,
+  // all 4 stages (Primary / Checkpoint / IGCSE-Secondary / AS-A-Level).
+  // Generated from the same pacing templates as the Cambridge pages
+  // (see IGCSE_SUBJECTS / CHECKPOINT_SUBJECTS / PRIMARY_SUBJECTS /
+  // ASALEVEL_SUBJECTS). EDV-prefix placeholder codes until HQ authors a
+  // real scheme; content is filled in later via the standard pacing UI.
+  "primary-bahasa-pacing.html",
+  "checkpoint-bahasa-pacing.html",
+  "igcse-bahasa-pacing.html",
+  "as-alevel-bahasa-pacing.html",
+  "primary-edu-steam-pacing.html",
+  "checkpoint-edu-steam-pacing.html",
+  "igcse-edu-steam-pacing.html",
+  "as-alevel-edu-steam-pacing.html",
   "as-alevel-syllabus.html",
   "assessment-management.html",
   "console.html",
@@ -756,6 +882,7 @@ const refAssetMap = [
   ["schemas/induction-firestore-schema.json",     path.join("..", "docs", "induction", "firestore-schema.json")],
   ["schemas/MENTOR_CERTIFICATION_CURRICULUM.md",   path.join("..", "docs", "induction", "MENTOR_CERTIFICATION_CURRICULUM.md")],
   ["schemas/SIGNIFICANT_CONCERN_POLICY.md",        path.join("..", "docs", "induction", "SIGNIFICANT_CONCERN_POLICY.md")],
+  ["schemas/induction-observation-rubric-v1.json", path.join("..", "docs", "induction", "induction-observation-rubric-v1.json")],
   ["schemas/weekly-checklists-SCHEMA.md",          path.join("..", "docs", "weekly-checklists", "SCHEMA.md")],
 ];
 
