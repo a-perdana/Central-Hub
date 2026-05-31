@@ -5332,6 +5332,28 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       render();
     });
 
+    // Open/close a modal-overlay while keeping aria-hidden in sync.
+    // The static markup ships aria-hidden="true"; if we only toggle the
+    // .is-open visibility class the attribute goes stale, and the moment a
+    // focusable child (e.g. #addItemBtn) takes focus the browser warns that
+    // focus is trapped inside an aria-hidden subtree. Toggling both together
+    // matches the announcements / coordinators-meetings pattern.
+    function showModal(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.add('is-open');
+      el.setAttribute('aria-hidden', 'false');
+    }
+    function hideModal(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      // Move focus out before re-hiding so nothing stays focused inside the
+      // aria-hidden subtree.
+      if (el.contains(document.activeElement)) document.activeElement.blur();
+      el.classList.remove('is-open');
+      el.setAttribute('aria-hidden', 'true');
+    }
+
     async function openTestModal(testId, prefill = null) {
       editingTestId = testId;
       workingItems = [];
@@ -5413,10 +5435,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       renderItems();
       syncItemButtons();
       applySubjectAccent(document.getElementById('fSubject').value);
-      document.getElementById('testModal').classList.add('is-open');
+      showModal('testModal');
     }
 
-    function closeTestModal() { document.getElementById('testModal').classList.remove('is-open'); }
+    function closeTestModal() { hideModal('testModal'); }
     document.getElementById('cancelBtn').addEventListener('click', closeTestModal);
 
     function renderItems() {
@@ -5522,11 +5544,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       bpState.pageIndex = 0;
       bpState.lastSnap = null;
       updateBpSelCount();
-      document.getElementById('bankPickerModal').classList.add('is-open');
+      showModal('bankPickerModal');
       loadBpPage(0);
     }
     function closeBankPicker() {
-      document.getElementById('bankPickerModal').classList.remove('is-open');
+      hideModal('bankPickerModal');
     }
 
     function buildBpQuery() {
@@ -5756,14 +5778,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
 
       body.innerHTML = html;
-      modal.classList.add('is-open');
+      showModal('bpPreviewModal');
       if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise([modal]).catch(() => {});
       }
     }
 
     function closeBpPreview() {
-      document.getElementById('bpPreviewModal').classList.remove('is-open');
+      hideModal('bpPreviewModal');
     }
 
     // Less-strict sanitiser for the full preview modal — keep tables,
@@ -5932,7 +5954,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const mount = document.getElementById('itemEditorMount');
       mount.innerHTML = '<div style="padding:30px;text-align:center;color:#888">Loading editor…</div>';
       applySubjectAccent(envCtx.subjectId);
-      document.getElementById('itemModal').classList.add('is-open');
+      showModal('itemModal');
       activeItemEditor = await mountQuestionEditor(mount, {
         mode: 'chapter_test',
         initialItem: seed,
@@ -5948,7 +5970,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       });
     }
     function closeItemModal() {
-      document.getElementById('itemModal').classList.remove('is-open');
+      hideModal('itemModal');
       if (activeItemEditor) { activeItemEditor.destroy(); activeItemEditor = null; }
     }
 
