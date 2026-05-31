@@ -140,19 +140,53 @@
       </section>`;
   }
 
+  /* Render a single object-field value. Primitives render inline; arrays
+     of primitives render as a comma list (or a count chip if long); nested
+     objects render as a compact key:value run (or a count chip). This keeps
+     card fields readable without dumping rich structure to Raw JSON. */
+  function renderFieldValue(v) {
+    if (v === null || v === undefined) return '<span class="dv-empty">—</span>';
+    if (Array.isArray(v)) {
+      if (!v.length) return '<span class="dv-empty">—</span>';
+      const primOnly = v.every(x => x === null || typeof x !== 'object');
+      if (primOnly && v.length <= 8) return v.map(x => richString(x)).join(', ');
+      if (primOnly) return `<span class="doc-view-kv-nested">${v.length} items</span>`;
+      // Array of objects: name/label/title preview + count.
+      const names = v.map(o => (o && (o.name || o.label || o.title || o.id || o.code)))
+        .filter(Boolean).slice(0, 4);
+      return names.length
+        ? `<span class="dv-list">${names.map(n => `<span class="dv-tag">${richString(n)}</span>`).join('')}</span>${v.length > names.length ? ` <span class="doc-view-kv-nested">+${v.length - names.length}</span>` : ''}`
+        : `<span class="doc-view-kv-nested">${v.length} entries</span>`;
+    }
+    if (typeof v === 'object') {
+      const subKeys = Object.keys(v);
+      const allPrim = subKeys.every(sk => v[sk] === null || typeof v[sk] !== 'object');
+      if (allPrim && subKeys.length <= 4) {
+        return subKeys.map(sk => `<span class="dv-subk">${escapeHtml(humaniseKey(sk))}:</span> ${richString(v[sk])}`).join('<br>');
+      }
+      return `<span class="doc-view-kv-nested">object · ${subKeys.length} key${subKeys.length === 1 ? '' : 's'}</span>`;
+    }
+    return richString(v);
+  }
+
   function renderObjectArraySection(label, items) {
     if (!Array.isArray(items) || !items.length) return null;
     if (!items.every(it => it && typeof it === 'object' && !Array.isArray(it))) return null;
     const cards = items.map(it => {
+      // Lead with an identity line (name/label/title/id/code) if present,
+      // so each card reads as a titled unit rather than an anonymous grid.
+      const titleKey = ['name', 'label', 'title', 'id', 'code'].find(k => typeof it[k] === 'string');
+      const titleHtml = titleKey
+        ? `<div class="doc-view-object-title">${richString(it[titleKey])}</div>` : '';
       const fields = Object.entries(it)
-        .filter(([_, v]) => v !== null && v !== undefined && typeof v !== 'object')
-        .slice(0, 6)
+        .filter(([k, v]) => k !== titleKey && v !== null && v !== undefined && v !== '')
+        .slice(0, 10)
         .map(([k, v]) => `
           <div class="field">
             <div class="field-label">${escapeHtml(humaniseKey(k))}</div>
-            <div class="field-value">${richString(v)}</div>
+            <div class="field-value">${renderFieldValue(v)}</div>
           </div>`).join('');
-      return `<div class="doc-view-object">${fields}</div>`;
+      return `<div class="doc-view-object">${titleHtml}${fields}</div>`;
     }).join('');
     return `
       <section class="doc-view-section">

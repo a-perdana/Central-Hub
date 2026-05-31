@@ -249,6 +249,44 @@ function transformSlideDeck(body) {
   return slideStarted ? out.join('\n') : body;
 }
 
+/* Slugify a heading's text into a DOM-safe id for TOC anchors. */
+function slugifyHeading(text, used) {
+  let base = String(text).toLowerCase()
+    .replace(/<[^>]+>/g, '')           // strip any inline HTML from the heading
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'section';
+  let slug = base, n = 2;
+  while (used.has(slug)) slug = `${base}-${n++}`;
+  used.add(slug);
+  return slug;
+}
+
+/* Post-process rendered markdown HTML: inject ids onto h2/h3 headings and
+   build a table-of-contents. Only worth showing for longer multi-section
+   docs (handbooks, audits, charters). Returns { html, toc } — toc is '' when
+   there are too few headings to bother. Slide decks are excluded by caller. */
+function buildMarkdownToc(html) {
+  const used = new Set();
+  const entries = [];
+  const out = html.replace(/<(h[23])>([\s\S]*?)<\/\1>/g, (m, tag, inner) => {
+    const id = slugifyHeading(inner, used);
+    entries.push({ level: tag === 'h2' ? 2 : 3, id, text: inner });
+    return `<${tag} id="${id}">${inner}</${tag}>`;
+  });
+  // Need at least 3 h2s for a TOC to earn its space.
+  const h2count = entries.filter(e => e.level === 2).length;
+  if (h2count < 3) return { html, toc: '' };
+  const items = entries.map(e =>
+    `<li class="md-toc-item md-toc-l${e.level}"><a href="#${e.id}" data-toc-id="${e.id}">${e.text}</a></li>`
+  ).join('');
+  const toc = `
+    <nav class="md-toc" aria-label="On this page">
+      <div class="md-toc-label">On this page</div>
+      <ul class="md-toc-list">${items}</ul>
+    </nav>`;
+  return { html: out, toc };
+}
+
 /* All MANIFEST facet keys that hold an array of items. Handbooks is
    present but loaded asynchronously from Firestore — callers usually
    want to treat it specially. The 'handbooks' inclusion is controlled
@@ -878,9 +916,28 @@ async function openDoc(MANIFEST, ctx, { path, kind, title }) {
       const metaCard = renderPdMetaCard(fm);
       const isSlideDeck = fm && (fm.docType === 'slide-outline');
       const source = isSlideDeck ? transformSlideDeck(mdBody) : mdBody;
-      const html = window.marked ? window.marked.parse(source) : `<pre>${escapeHtml(source)}</pre>`;
+      let html = window.marked ? window.marked.parse(source) : `<pre>${escapeHtml(source)}</pre>`;
+      // TOC for long, multi-section prose docs (handbooks, audits, charters).
+      // Slide decks navigate by card, so skip them.
+      let toc = '';
+      if (!isSlideDeck && window.marked) {
+        const built = buildMarkdownToc(html);
+        html = built.html; toc = built.toc;
+      }
       const renderClass = isSlideDeck ? 'md-render pd-slide-render' : 'md-render';
-      bodyEl.innerHTML = `${backStrip}${metaCard}<div class="${renderClass}">${injectCrossrefChips(html)}</div>`;
+      const bodyHtml = `<div class="${renderClass}">${injectCrossrefChips(html)}</div>`;
+      const layout = toc
+        ? `<div class="md-doc-layout">${toc}<div class="md-doc-main">${bodyHtml}</div></div>`
+        : bodyHtml;
+      bodyEl.innerHTML = `${backStrip}${metaCard}${layout}`;
+      // Smooth-scroll the modal body to the heading on TOC click.
+      bodyEl.querySelectorAll('.md-toc a[data-toc-id]').forEach(a => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = bodyEl.querySelector('#' + CSS.escape(a.dataset.tocId));
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
     } else if (kind === 'json') {
       const viewer = window.EduversalReferencesViewer;
       let inner;
