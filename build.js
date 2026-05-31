@@ -728,6 +728,16 @@ htmlFiles.forEach((file) => {
         + output.slice(closeIdx);
     }
   }
+  // A11Y (WCAG 2.1.1 Keyboard): inject keyboard-enabler.js on every page —
+  // global Enter/Space -> click for role="button" non-native elements. Defer.
+  if (!/<script\s[^>]*src=["']keyboard-enabler\.js["']/.test(output)) {
+    const kClose = output.lastIndexOf('</body>');
+    if (kClose >= 0) {
+      output = output.slice(0, kClose)
+        + '<script src="keyboard-enabler.js" defer></script>\n'
+        + output.slice(kClose);
+    }
+  }
   fs.writeFileSync(path.join("dist", file), output);
   console.log(`Copied: ${file}`);
 });
@@ -742,6 +752,12 @@ if (fs.existsSync("auth-guard.js")) {
 if (fs.existsSync("cambridge-crossref.js")) {
   fs.copyFileSync("cambridge-crossref.js", path.join("dist", "cambridge-crossref.js"));
   console.log("Copied: cambridge-crossref.js");
+}
+
+// -- Copy keyboard-enabler.js (A11Y WCAG 2.1.1 — build-injected per page)
+if (fs.existsSync("keyboard-enabler.js")) {
+  fs.copyFileSync("keyboard-enabler.js", path.join("dist", "keyboard-enabler.js"));
+  console.log("Copied: keyboard-enabler.js");
 }
 
 // -- Copy handbook-reader.{css,js} â€” shared handbook reader module.
