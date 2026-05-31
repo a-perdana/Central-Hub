@@ -884,6 +884,34 @@ const refAssetMap = [
   ["schemas/SIGNIFICANT_CONCERN_POLICY.md",        path.join("..", "docs", "induction", "SIGNIFICANT_CONCERN_POLICY.md")],
   ["schemas/induction-observation-rubric-v1.json", path.join("..", "docs", "induction", "induction-observation-rubric-v1.json")],
   ["schemas/weekly-checklists-SCHEMA.md",          path.join("..", "docs", "weekly-checklists", "SCHEMA.md")],
+
+  // ── PD & Facilitation (docs/pd/) — facilitator session guides, participant
+  //    one-pagers, slide-deck outlines, workbooks for the partner-school PD
+  //    program. Surfaced under the /references 'pd' facet. ESL/EAL English.
+  ["pd/README.md",                                 path.join("..", "docs", "pd", "README.md")],
+  ["pd/facilitator-conventions.md",                path.join("..", "docs", "pd", "_facilitator-conventions.md")],
+  ["pd/july-pd-program-map.md",                    path.join("..", "docs", "pd", "00-program-overview", "july-pd-program-map.md")],
+  ["pd/three-rating-systems-at-a-glance.md",       path.join("..", "docs", "pd", "00-program-overview", "three-rating-systems-at-a-glance.md")],
+  ["pd/teachers/onepager-how-appraisal-works.md",  path.join("..", "docs", "pd", "teachers", "onepager-how-appraisal-works.md")],
+  ["pd/teachers/onepager-how-kpi-works.md",        path.join("..", "docs", "pd", "teachers", "onepager-how-kpi-works.md")],
+  ["pd/teachers/session-appraisal-for-teachers.md", path.join("..", "docs", "pd", "teachers", "session-appraisal-for-teachers.md")],
+  ["pd/teachers/session-kpi-for-teachers.md",      path.join("..", "docs", "pd", "teachers", "session-kpi-for-teachers.md")],
+  ["pd/teachers/session-competency-self-assessment.md", path.join("..", "docs", "pd", "teachers", "session-competency-self-assessment.md")],
+  ["pd/teachers/workbook-competency-self-assessment.md", path.join("..", "docs", "pd", "teachers", "workbook-competency-self-assessment.md")],
+  ["pd/teachers/session-ai-in-the-classroom.md",   path.join("..", "docs", "pd", "teachers", "session-ai-in-the-classroom.md")],
+  ["pd/leaders/onepager-leadership-evaluation-map.md", path.join("..", "docs", "pd", "leaders", "onepager-leadership-evaluation-map.md")],
+  ["pd/leaders/session-observer-calibration-f2.md", path.join("..", "docs", "pd", "leaders", "session-observer-calibration-f2.md")],
+  ["pd/leaders/workbook-f2-calibration-exercise.md", path.join("..", "docs", "pd", "leaders", "workbook-f2-calibration-exercise.md")],
+  ["pd/leaders/session-coaching-glow-grow-go.md",  path.join("..", "docs", "pd", "leaders", "session-coaching-glow-grow-go.md")],
+  ["pd/leaders/session-kpi-target-setting.md",     path.join("..", "docs", "pd", "leaders", "session-kpi-target-setting.md")],
+  ["pd/leaders/session-leadership-competency.md",  path.join("..", "docs", "pd", "leaders", "session-leadership-competency.md")],
+  ["pd/specialists/train-the-trainer-guide.md",    path.join("..", "docs", "pd", "specialists", "train-the-trainer-guide.md")],
+  ["pd/specialists/session-specialist-walkthrough-lens.md", path.join("..", "docs", "pd", "specialists", "session-specialist-walkthrough-lens.md")],
+  ["pd/slides/deck-three-rating-systems.md",       path.join("..", "docs", "pd", "slides", "deck-three-rating-systems.md")],
+  ["pd/slides/deck-appraisal-for-teachers.md",     path.join("..", "docs", "pd", "slides", "deck-appraisal-for-teachers.md")],
+  ["pd/slides/deck-kpi-for-teachers.md",           path.join("..", "docs", "pd", "slides", "deck-kpi-for-teachers.md")],
+  ["pd/slides/deck-observer-calibration.md",       path.join("..", "docs", "pd", "slides", "deck-observer-calibration.md")],
+  ["pd/slides/deck-ai-in-the-classroom.md",        path.join("..", "docs", "pd", "slides", "deck-ai-in-the-classroom.md")],
 ];
 
 let refCopied = 0, refMissing = 0;
