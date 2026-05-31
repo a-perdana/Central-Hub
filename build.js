@@ -537,6 +537,7 @@ const htmlFiles = [
   "my-induction.html",
   "handbook.html",
   "references.html",
+  "pd.html",
   "roles-positions.html",
   "chip-families.html",
   "principal-coaching-session.html",
@@ -884,6 +885,9 @@ const refAssetMap = [
   ["schemas/SIGNIFICANT_CONCERN_POLICY.md",        path.join("..", "docs", "induction", "SIGNIFICANT_CONCERN_POLICY.md")],
   ["schemas/induction-observation-rubric-v1.json", path.join("..", "docs", "induction", "induction-observation-rubric-v1.json")],
   ["schemas/SCHOOL_DATA_PACK_TEMPLATE.md",         path.join("..", "docs", "induction", "SCHOOL_DATA_PACK_TEMPLATE.md")],
+  ["schemas/SPECIALIST_NETWORK_DATA_ACCESS.md",    path.join("..", "docs", "induction", "SPECIALIST_NETWORK_DATA_ACCESS.md")],
+  ["schemas/KPI_APPRAISAL_REVISION_WORKFLOW.md",   path.join("..", "docs", "induction", "KPI_APPRAISAL_REVISION_WORKFLOW.md")],
+  ["schemas/SPECIALIST_COHORT_REVIEW.md",          path.join("..", "docs", "induction", "SPECIALIST_COHORT_REVIEW.md")],
   ["schemas/weekly-checklists-SCHEMA.md",          path.join("..", "docs", "weekly-checklists", "SCHEMA.md")],
 
   // ── PD & Facilitation (docs/pd/) — facilitator session guides, participant

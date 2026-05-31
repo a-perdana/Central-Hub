@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PD Materials — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- SHARED_NAVBAR -->
+  <style>
+    /* ── 1200px content rail (root CLAUDE.md #53) — outer wrappers at
+         --container-max, ZERO horizontal padding. ───────────────────── */
+    .page-hero__inner,
+    .pd-toolbar-inner,
+    .pd-wrap {
+      width: 100%;
+      max-width: var(--container-max, 1200px);
+      margin-left: auto;
+      margin-right: auto;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .pd-wrap { padding: 28px 0 72px; }
+
+    /* ── Info strip ──────────────────────────────────────────────────── */
+    .pd-info-strip {
+      max-width: var(--container-max, 1200px);
+      margin: -20px auto 0;
+      padding: 16px 22px;
+      background: var(--white, #fff);
+      border: 1px solid var(--border, #e7e3f3);
+      border-radius: var(--radius, 12px);
+      box-shadow: var(--shadow-sm, 0 1px 3px rgba(20,12,50,.06));
+      position: relative;
+      z-index: 2;
+    }
+    .pd-info-flow { font-size: 14px; color: var(--ink, #1a1530); line-height: 1.55; margin: 0 0 10px; }
+    .pd-info-flow strong { color: var(--accent-dk, #4e3db8); }
+    .pd-info-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+    .pd-info-pill {
+      font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+      background: rgba(108,92,231,.09); color: var(--accent-dk, #4e3db8);
+    }
+    .pd-info-callout {
+      margin: 10px 0 0; font-size: 12.5px; font-style: italic; color: #6b6580;
+      border-left: 3px solid var(--accent, #6c5ce7); padding-left: 10px;
+    }
+
+    /* ── Sticky toolbar: search + tier/type filter chips ─────────────── */
+    .pd-toolbar { position: sticky; top: 0; z-index: 30; background: var(--paper, #faf9fe); border-bottom: 1px solid var(--border, #e7e3f3); margin-top: 22px; }
+    .pd-toolbar-inner { padding: 14px 0; display: flex; flex-direction: column; gap: 11px; }
+    .pd-search { position: relative; max-width: 420px; }
+    .pd-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #9b95ad; }
+    .pd-search input { width: 100%; padding: 9px 12px 9px 36px; border: 1px solid var(--border, #e7e3f3); border-radius: 9px; font: inherit; font-size: 14px; background: #fff; }
+    .pd-search input:focus { outline: none; border-color: var(--accent, #6c5ce7); box-shadow: 0 0 0 3px rgba(108,92,231,.12); }
+    .pd-chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .pd-chip-grp-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #9b95ad; margin-right: 2px; }
+    .pd-chip {
+      font-size: 12.5px; font-weight: 600; padding: 5px 13px; border-radius: 999px; cursor: pointer;
+      border: 1px solid var(--border, #e7e3f3); background: #fff; color: var(--ink, #1a1530);
+      transition: all .12s;
+    }
+    .pd-chip:hover { border-color: var(--accent, #6c5ce7); }
+    .pd-chip.active { background: var(--accent, #6c5ce7); border-color: var(--accent, #6c5ce7); color: #fff; }
+    .pd-chip-sep { width: 1px; align-self: stretch; background: var(--border, #e7e3f3); margin: 0 4px; }
+
+    /* ── Card grid ───────────────────────────────────────────────────── */
+    .pd-section-head { margin: 26px 0 12px; display: flex; align-items: baseline; gap: 10px; }
+    .pd-section-head h2 { font-family: 'Lora', serif; font-size: 19px; color: var(--ink, #1a1530); margin: 0; }
+    .pd-section-head .pd-count { font-size: 12.5px; color: #9b95ad; font-weight: 600; }
+    .pd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: 14px; }
+    .pd-card {
+      display: flex; flex-direction: column; text-align: left; cursor: pointer;
+      background: #fff; border: 1px solid var(--border, #e7e3f3); border-radius: 12px; padding: 16px 17px;
+      transition: transform .12s, box-shadow .12s, border-color .12s; min-height: 132px;
+    }
+    .pd-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(20,12,50,.10); border-color: rgba(108,92,231,.5); }
+    .pd-card-type {
+      align-self: flex-start; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+      padding: 2px 9px; border-radius: 999px; margin-bottom: 9px;
+    }
+    .pd-card-type.t-session  { background: rgba(108,92,231,.12); color: #5a4bd1; }
+    .pd-card-type.t-onepager { background: rgba(8,145,178,.13);  color: #0e7490; }
+    .pd-card-type.t-workbook { background: rgba(217,119,6,.14);  color: #b45309; }
+    .pd-card-type.t-slides   { background: rgba(225,29,72,.12);  color: #be123c; }
+    .pd-card-type.t-overview { background: rgba(71,85,105,.13);  color: #475569; }
+    .pd-card-title { font-size: 15px; font-weight: 600; color: var(--ink, #1a1530); line-height: 1.32; margin: 0 0 6px; }
+    .pd-card-desc { font-size: 12.5px; color: #6b6580; line-height: 1.45; margin: 0; flex: 1; }
+    .pd-card-meta { display: flex; gap: 10px; margin-top: 11px; font-size: 11.5px; color: #9b95ad; }
+    .pd-card-meta .pd-present-hint { color: #be123c; font-weight: 600; }
+
+    .pd-empty { text-align: center; padding: 48px 20px; color: #9b95ad; }
+    .pd-empty strong { display: block; font-size: 16px; color: var(--ink, #1a1530); margin-bottom: 6px; }
+
+    /* ── Reader mode ─────────────────────────────────────────────────── */
+    .pd-reader { max-width: 860px; margin: 0 auto; padding: 8px 0 80px; }
+    .pd-reader-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0 20px; }
+    .pd-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--accent-dk, #4e3db8); text-decoration: none; padding: 7px 13px; border: 1px solid var(--border, #e7e3f3); border-radius: 8px; background: #fff; cursor: pointer; }
+    .pd-back:hover { border-color: var(--accent, #6c5ce7); }
+    .pd-reader-spacer { flex: 1; }
+    .pd-btn {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+      padding: 7px 14px; border-radius: 8px; border: 1px solid var(--accent, #6c5ce7);
+      background: var(--accent, #6c5ce7); color: #fff;
+    }
+    .pd-btn:hover { background: var(--accent-dk, #4e3db8); }
+    .pd-btn-ghost { background: #fff; color: var(--accent-dk, #4e3db8); }
+    .pd-btn-ghost:hover { background: rgba(108,92,231,.07); }
+
+    /* Presentation-first markdown render — large, readable from a room */
+    .pd-doc { background: #fff; border: 1px solid var(--border, #e7e3f3); border-radius: 14px; padding: 42px 48px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(20,12,50,.06)); }
+    .pd-doc h1 { font-family: 'Lora', serif; font-size: 30px; line-height: 1.2; color: var(--ink, #1a1530); margin: 0 0 18px; }
+    .pd-doc h2 { font-family: 'Lora', serif; font-size: 23px; color: var(--accent-dk, #4e3db8); margin: 32px 0 12px; padding-top: 8px; border-top: 1px solid #f0edf9; }
+    .pd-doc h3 { font-size: 18px; font-weight: 700; color: var(--ink, #1a1530); margin: 24px 0 8px; }
+    .pd-doc p, .pd-doc li { font-size: 16.5px; line-height: 1.65; color: #2a2440; }
+    .pd-doc ul, .pd-doc ol { padding-left: 24px; margin: 10px 0; }
+    .pd-doc li { margin: 5px 0; }
+    .pd-doc strong { color: var(--ink, #1a1530); }
+    .pd-doc code { font-family: 'DM Mono', monospace; font-size: 13.5px; background: #f4f2fb; padding: 1.5px 6px; border-radius: 4px; color: #5a4bd1; }
+    .pd-doc blockquote { border-left: 4px solid var(--accent, #6c5ce7); margin: 16px 0; padding: 6px 0 6px 18px; background: #faf9fe; color: #4a4460; font-style: italic; }
+    .pd-doc table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14.5px; }
+    .pd-doc th, .pd-doc td { border: 1px solid var(--border, #e7e3f3); padding: 9px 12px; text-align: left; vertical-align: top; }
+    .pd-doc th { background: #f4f2fb; font-weight: 700; color: var(--ink, #1a1530); }
+    .pd-doc hr { border: none; border-top: 1px solid #eee; margin: 26px 0; }
+    .pd-doc a { color: var(--accent-dk, #4e3db8); }
+    .pd-doc-loading, .pd-doc-error { text-align: center; padding: 60px 20px; color: #9b95ad; }
+    .pd-doc-error strong { color: #be123c; }
+
+    /* ── Slide Player (full-screen presentation for decks) ───────────── */
+    .pd-slidewrap { background: #fff; border: 1px solid var(--border, #e7e3f3); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm, 0 1px 3px rgba(20,12,50,.06)); }
+    .pd-stage {
+      position: relative; aspect-ratio: 16 / 9; background: linear-gradient(135deg, #1a1530 0%, #2a1f5a 55%, #0e7490 140%);
+      display: flex; flex-direction: column; justify-content: center; padding: 6% 8%; color: #fff;
+    }
+    .pd-stage-num { position: absolute; top: 18px; right: 24px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,.55); font-family: 'DM Mono', monospace; }
+    .pd-stage-title { font-family: 'Lora', serif; font-size: clamp(22px, 3.4vw, 40px); line-height: 1.15; margin: 0 0 4%; color: #fff; }
+    .pd-stage-bullets { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2.4%; }
+    .pd-stage-bullets li { font-size: clamp(15px, 2.1vw, 27px); line-height: 1.35; color: #ece9fb; padding-left: 1.4em; position: relative; }
+    .pd-stage-bullets li::before { content: "▸"; position: absolute; left: 0; color: #6c5ce7; }
+    .pd-stage-bullets strong { color: #fff; }
+    /* Fullscreen variant */
+    .pd-slidewrap:fullscreen { display: flex; flex-direction: column; background: #1a1530; border-radius: 0; }
+    .pd-slidewrap:fullscreen .pd-stage { flex: 1; aspect-ratio: auto; }
+
+    .pd-slide-ctrl { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #fff; border-top: 1px solid var(--border, #e7e3f3); }
+    .pd-slidewrap:fullscreen .pd-slide-ctrl { background: #15102a; border-top-color: #2a2350; }
+    .pd-nav-btn { width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border, #e7e3f3); background: #fff; cursor: pointer; font-size: 18px; color: var(--ink, #1a1530); display: flex; align-items: center; justify-content: center; }
+    .pd-nav-btn:hover:not(:disabled) { border-color: var(--accent, #6c5ce7); color: var(--accent, #6c5ce7); }
+    .pd-nav-btn:disabled { opacity: .35; cursor: default; }
+    .pd-slide-pos { font-size: 13.5px; font-weight: 600; color: #6b6580; font-family: 'DM Mono', monospace; min-width: 64px; text-align: center; }
+    .pd-slidewrap:fullscreen .pd-slide-pos { color: #c9c2e8; }
+    .pd-slide-ctrl-spacer { flex: 1; }
+    .pd-slidewrap:fullscreen .pd-nav-btn { background: #221b44; border-color: #3a3260; color: #ece9fb; }
+
+    /* Speaker-notes / visual panel */
+    .pd-notes { padding: 14px 20px; background: #faf9fe; border-top: 1px solid var(--border, #e7e3f3); font-size: 14px; line-height: 1.55; color: #3a3458; }
+    .pd-notes[hidden] { display: none; }
+    .pd-notes-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #9b95ad; display: block; margin-bottom: 3px; }
+    .pd-notes .pd-visual { margin-top: 9px; color: #6b6580; font-style: italic; }
+    .pd-slidewrap:fullscreen .pd-notes { background: #15102a; color: #d8d3f0; border-top-color: #2a2350; }
+
+    @media (max-width: 640px) {
+      .pd-doc { padding: 26px 20px; }
+      .page-hero__kpis { display: none; }
+    }
+    @media print {
+      .page-hero, .pd-toolbar, .navbar, nav, .page-footer, .pd-reader-bar, .pd-slide-ctrl { display: none !important; }
+      .pd-doc { border: none; box-shadow: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page-hero" data-accent="mor">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <div class="page-hero__eyebrow">Professional Development</div>
+        <h1 class="page-hero__title" id="pdHeroTitle">PD Materials</h1>
+        <p class="page-hero__desc" id="pdHeroDesc">Ready-to-present professional-development materials for partner-school PD days, school visits, and online sessions. Facilitator session guides, participant one-pagers, slide decks, and workbooks — open clean to present, or run a deck full-screen.</p>
+      </div>
+      <aside class="page-hero__kpis" id="pdHeroKpis">
+        <div class="page-hero__kpi page-hero__kpi--primary">
+          <div class="page-hero__kpi-num" id="kpiTotal">24</div>
+          <div class="page-hero__kpi-lbl">Materials</div>
+          <div class="page-hero__kpi-sub">session · one-pager · slides · workbook</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="kpiSessions">—</div>
+          <div class="page-hero__kpi-lbl">Session guides</div>
+          <div class="page-hero__kpi-sub">timed run-of-show</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="kpiDecks">—</div>
+          <div class="page-hero__kpi-lbl">Slide decks</div>
+          <div class="page-hero__kpi-sub">present full-screen</div>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <!-- BROWSER MODE (no ?doc=) -->
+  <div id="pdBrowser">
+    <div class="pd-info-strip" aria-label="What this page is for">
+      <p class="pd-info-flow">This page is your <strong>presentation surface</strong> for professional development. Pick a material below: a <strong>session guide</strong> gives you a timed plan to run a workshop; a <strong>one-pager</strong> is a printable handout for participants; a <strong>slide deck</strong> opens a full-screen player you can present from; a <strong>workbook</strong> is a hands-on participant sheet.</p>
+      <div class="pd-info-pills">
+        <span class="pd-info-pill">PD days</span>
+        <span class="pd-info-pill">School visits</span>
+        <span class="pd-info-pill">Online sessions</span>
+        <span class="pd-info-pill">ESL/EAL · CEFR B1–B2</span>
+        <span class="pd-info-pill">Cambridge-anchored</span>
+      </div>
+      <p class="pd-info-callout">These materials package the live frameworks (Appraisal · KPI · Competency · AICF) into facilitated sessions. Read-only — authored in <code>docs/pd/</code>.</p>
+    </div>
+
+    <div class="pd-toolbar">
+      <div class="pd-toolbar-inner">
+        <div class="pd-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="pdSearch" placeholder="Search materials — try &quot;appraisal&quot;, &quot;calibration&quot;, &quot;AI&quot;…" autocomplete="off" aria-label="Search PD materials">
+        </div>
+        <div class="pd-chip-row" id="pdTierChips">
+          <span class="pd-chip-grp-label">Audience</span>
+          <button class="pd-chip active" data-tier="all">All</button>
+          <button class="pd-chip" data-tier="overview">Everyone</button>
+          <button class="pd-chip" data-tier="teachers">Teachers</button>
+          <button class="pd-chip" data-tier="leaders">Leaders</button>
+          <button class="pd-chip" data-tier="specialists">Specialists</button>
+          <span class="pd-chip-sep" aria-hidden="true"></span>
+          <span class="pd-chip-grp-label">Type</span>
+          <button class="pd-chip active" data-type="all">All</button>
+          <button class="pd-chip" data-type="session-guide">Sessions</button>
+          <button class="pd-chip" data-type="one-pager">One-pagers</button>
+          <button class="pd-chip" data-type="slide-outline">Slide decks</button>
+          <button class="pd-chip" data-type="workbook">Workbooks</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pd-wrap">
+      <div id="pdSections"></div>
+      <div class="pd-empty" id="pdEmpty" style="display:none;">
+        <strong>No materials match</strong>
+        Try a broader filter or clear the search.
+      </div>
+    </div>
+  </div>
+
+  <!-- READER MODE (?doc=slug) — populated by JS -->
+  <div id="pdReader" class="pd-wrap" style="display:none;">
+    <div class="pd-reader">
+      <div class="pd-reader-bar">
+        <a class="pd-back" id="pdBackBtn">← All materials</a>
+        <div class="pd-reader-spacer"></div>
+        <button class="pd-btn-ghost pd-btn" id="pdPrintBtn" style="display:none;">🖨 Print</button>
+        <button class="pd-btn" id="pdPresentBtn" style="display:none;">▶ Present full-screen</button>
+      </div>
+      <div id="pdReaderBody">
+        <div class="pd-doc-loading">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="page-footer" data-accent="mor">
+    <div class="page-footer__inner">
+      <div class="page-footer__cta">
+        <span class="page-footer__cta-eyebrow">Professional Development</span>
+        <h2 class="page-footer__cta-title">Present with confidence.</h2>
+        <p class="page-footer__cta-desc">Every material here is Cambridge-anchored and written for an ESL/EAL audience. Pick a session, present it, and hand out the one-pager. Authored in <code style="background:rgba(255,255,255,.12);padding:1px 6px;border-radius:3px;color:#ddd6fe;font-family:'DM Mono',monospace;font-size:11.5px;">docs/pd/</code>.</p>
+        <a href="references" class="page-footer__cta-btn">Full reference library <span aria-hidden="true">→</span></a>
+      </div>
+      <nav class="page-footer__nav" aria-label="PD footer navigation">
+        <div class="page-footer__nav-group">
+          <span class="page-footer__nav-heading">Start here</span>
+          <a href="pd?doc=july-pd-program-map" class="page-footer__nav-link">July PD Program Map</a>
+          <a href="pd?doc=three-rating-systems-at-a-glance" class="page-footer__nav-link">Three Rating Systems</a>
+          <a href="pd?doc=facilitator-conventions" class="page-footer__nav-link">Facilitator Conventions</a>
+        </div>
+        <div class="page-footer__nav-group">
+          <span class="page-footer__nav-heading">Related</span>
+          <a href="handbook" class="page-footer__nav-link">Handbooks</a>
+          <a href="references" class="page-footer__nav-link">References</a>
+          <a href="competency-framework" class="page-footer__nav-link">Competency Framework</a>
+        </div>
+      </nav>
+    </div>
+  </footer>
+
+  <script type="module">
+    /* ── PD MANIFEST — the 24-doc corpus (docs/pd/, deployed at
+         references-data/pd/). Static so the grid renders instantly;
+         each doc is fetched only when opened. ───────────────────────── */
+    const BASE = 'references-data/pd/';
+    const PD_MANIFEST = [
+      // Everyone / overview
+      { slug:'july-pd-program-map',            title:'July PD Program Map',                 tier:'overview', type:'overview',     duration:'plan',     desc:'The whole arc: which session for which audience, in what order, priority guide, F2F/online modes.', path:BASE+'july-pd-program-map.md' },
+      { slug:'three-rating-systems-at-a-glance',title:'Three Rating Systems at a Glance',   tier:'overview', type:'one-pager',    duration:'1 page',   desc:'KPI vs Appraisal vs Competency — who owns each, the scale, how they relate. Resolves the #1 confusion.', path:BASE+'three-rating-systems-at-a-glance.md' },
+      { slug:'facilitator-conventions',        title:'Facilitator Conventions',             tier:'overview', type:'session-guide',duration:'read once',desc:'Shared playbook for every session — ESL/EAL rule, 5-block timing, F2F/online variants, Glow/Grow/Go.', path:BASE+'facilitator-conventions.md' },
+      { slug:'readme',                         title:'PD Corpus — README + Index',          tier:'overview', type:'overview',     duration:'index',    desc:'What this corpus is, the index, and the authoring rules behind it.', path:BASE+'README.md' },
+
+      // Teachers
+      { slug:'onepager-how-appraisal-works',   title:'How Appraisal Works',                 tier:'teachers', type:'one-pager',    duration:'1 page',   desc:'Printable: the 4 parts (F1–F4), F2 as the 50% observation, A–F bands, the 4-step cycle, Glow/Grow/Go.', path:BASE+'teachers/onepager-how-appraisal-works.md' },
+      { slug:'onepager-how-kpi-works',         title:'How KPI Works',                       tier:'teachers', type:'one-pager',    duration:'1 page',   desc:'Printable: what a KPI is, the 15 KPIs + weights, two checkpoints, the 3-step cycle.', path:BASE+'teachers/onepager-how-kpi-works.md' },
+      { slug:'session-appraisal-for-teachers', title:'Understanding Your Appraisal',        tier:'teachers', type:'session-guide',duration:'90 min',   desc:'Removes appraisal fear — teach teachers to read the F2 rubric (3 vs 4) and use Glow/Grow/Go.', path:BASE+'teachers/session-appraisal-for-teachers.md' },
+      { slug:'session-kpi-for-teachers',       title:'Understanding Your KPI',              tier:'teachers', type:'session-guide',duration:'90 min',   desc:'Turns KPI into a year plan — read weights as priorities, turn one KPI into one dated action.', path:BASE+'teachers/session-kpi-for-teachers.md' },
+      { slug:'session-competency-self-assessment',title:'Competency Self-Assessment',       tier:'teachers', type:'session-guide',duration:'90 min',   desc:'Guided first use of the Learning Path — pick an honest level with evidence; the 7-domain ladder.', path:BASE+'teachers/session-competency-self-assessment.md' },
+      { slug:'workbook-competency-self-assessment',title:'Competency Self-Assessment Workbook',tier:'teachers', type:'workbook',   duration:'hands-on', desc:'Participant sheet: the 4-level ladder, self-assess-three with an evidence check, choose-one-to-grow.', path:BASE+'teachers/workbook-competency-self-assessment.md' },
+      { slug:'session-ai-in-the-classroom',    title:'AI in the Classroom',                 tier:'teachers', type:'session-guide',duration:'90 min',   desc:'Safe, useful AI — the two questions, the red lines (never student data in public AI), one quick win.', path:BASE+'teachers/session-ai-in-the-classroom.md' },
+
+      // Leaders
+      { slug:'onepager-leadership-evaluation-map',title:'Leadership Evaluation Map',         tier:'leaders',  type:'one-pager',    duration:'1 page',   desc:'Two-hats map — what a leader evaluates vs what evaluates them. The 6 leaders-track domains.', path:BASE+'leaders/onepager-leadership-evaluation-map.md' },
+      { slug:'session-observer-calibration-f2',title:'Observer Calibration (F2)',           tier:'leaders',  type:'session-guide',duration:'120 min',  desc:'⭐ Score F2 the same way across schools — evidence not impression, score-alone-then-reconcile. Protects the 50%-weighted observation.', path:BASE+'leaders/session-observer-calibration-f2.md' },
+      { slug:'workbook-f2-calibration-exercise',title:'F2 Calibration Exercise Workbook',   tier:'leaders',  type:'workbook',     duration:'hands-on', desc:'Exact F2 rubric extracts + two lesson vignettes + score-and-reconcile tables + facilitator answer notes.', path:BASE+'leaders/workbook-f2-calibration-exercise.md' },
+      { slug:'session-coaching-glow-grow-go',  title:'Coaching: Glow / Grow / Go',          tier:'leaders',  type:'session-guide',duration:'120 min',  desc:'⭐ Post-observation feedback that changes practice — one Glow, one Grow, one Go, plus GROW questions.', path:BASE+'leaders/session-coaching-glow-grow-go.md' },
+      { slug:'session-kpi-target-setting',     title:'Setting Teacher KPI Targets',         tier:'leaders',  type:'session-guide',duration:'120 min',  desc:'Set weight profiles that signal priorities; run agreed-not-assigned target conversations.', path:BASE+'leaders/session-kpi-target-setting.md' },
+      { slug:'session-leadership-competency',  title:'Your Leadership Competency',          tier:'leaders',  type:'session-guide',duration:'90 min',   desc:'Guided self-assessment of the 6 leaders-track domains — model the honesty you ask of teachers.', path:BASE+'leaders/session-leadership-competency.md' },
+
+      // Specialists (trainers)
+      { slug:'train-the-trainer-guide',        title:'Train-the-Trainer',                   tier:'specialists',type:'session-guide',duration:'half-day', desc:'Deliver every session consistently across schools — the five blocks, ESL/EAL modelling, the non-negotiables. The foundation session.', path:BASE+'specialists/train-the-trainer-guide.md' },
+      { slug:'session-specialist-walkthrough-lens',title:'Specialist Walkthrough Lens',     tier:'specialists',type:'session-guide',duration:'120 min',  desc:'School-visit observation through the shared F2 lens + subject depth + connect findings to competency.', path:BASE+'specialists/session-specialist-walkthrough-lens.md' },
+
+      // Slide decks (present full-screen)
+      { slug:'deck-three-rating-systems',      title:'Slides: Three Rating Systems',        tier:'overview', type:'slide-outline',duration:'11 slides',desc:'Full-screen deck for the Three Rating Systems session.', path:BASE+'slides/deck-three-rating-systems.md' },
+      { slug:'deck-appraisal-for-teachers',    title:'Slides: Appraisal for Teachers',      tier:'teachers', type:'slide-outline',duration:'12 slides',desc:'Full-screen deck for the teacher appraisal session.', path:BASE+'slides/deck-appraisal-for-teachers.md' },
+      { slug:'deck-kpi-for-teachers',          title:'Slides: KPI for Teachers',            tier:'teachers', type:'slide-outline',duration:'11 slides',desc:'Full-screen deck for the teacher KPI session.', path:BASE+'slides/deck-kpi-for-teachers.md' },
+      { slug:'deck-observer-calibration',      title:'Slides: Observer Calibration',        tier:'leaders',  type:'slide-outline',duration:'11 slides',desc:'Full-screen deck for the F2 observer-calibration session.', path:BASE+'slides/deck-observer-calibration.md' },
+      { slug:'deck-ai-in-the-classroom',       title:'Slides: AI in the Classroom',         tier:'teachers', type:'slide-outline',duration:'11 slides',desc:'Full-screen deck for the teacher AI session.', path:BASE+'slides/deck-ai-in-the-classroom.md' },
+    ];
+
+    const TIER_LABEL = { overview:'For Everyone', teachers:'Teachers', leaders:'School Leaders', specialists:'Specialists (Trainers)' };
+    const TIER_ORDER = ['overview','teachers','leaders','specialists'];
+    const TYPE_LABEL = { 'session-guide':'Session', 'one-pager':'One-pager', 'workbook':'Workbook', 'slide-outline':'Slides', 'overview':'Overview' };
+    const TYPE_CLASS = { 'session-guide':'t-session', 'one-pager':'t-onepager', 'workbook':'t-workbook', 'slide-outline':'t-slides', 'overview':'t-overview' };
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    function stripFrontmatter(md) {
+      if (md.startsWith('---')) { const end = md.indexOf('\n---', 3); if (end !== -1) return md.slice(md.indexOf('\n', end + 1) + 1); }
+      return md;
+    }
+
+    /* ── Browser grid ──────────────────────────────────────────────── */
+    let activeTier = 'all', activeType = 'all', searchQ = '';
+    function renderGrid() {
+      const wrap = document.getElementById('pdSections');
+      const q = searchQ.trim().toLowerCase();
+      const items = PD_MANIFEST.filter(m =>
+        (activeTier === 'all' || m.tier === activeTier) &&
+        (activeType === 'all' || m.type === activeType) &&
+        (!q || (m.title + ' ' + m.desc).toLowerCase().includes(q))
+      );
+      wrap.innerHTML = '';
+      let shown = 0;
+      for (const tier of TIER_ORDER) {
+        const group = items.filter(m => m.tier === tier);
+        if (!group.length) continue;
+        shown += group.length;
+        const sec = document.createElement('section');
+        sec.innerHTML = `<div class="pd-section-head"><h2>${esc(TIER_LABEL[tier])}</h2><span class="pd-count">${group.length} material${group.length>1?'s':''}</span></div>`;
+        const grid = document.createElement('div'); grid.className = 'pd-grid';
+        for (const m of group) {
+          const isDeck = m.type === 'slide-outline';
+          const card = document.createElement('a');
+          card.className = 'pd-card';
+          card.href = 'pd?doc=' + encodeURIComponent(m.slug);
+          card.innerHTML =
+            `<span class="pd-card-type ${TYPE_CLASS[m.type]}">${esc(TYPE_LABEL[m.type])}</span>` +
+            `<h3 class="pd-card-title">${esc(m.title)}</h3>` +
+            `<p class="pd-card-desc">${esc(m.desc)}</p>` +
+            `<div class="pd-card-meta"><span>${esc(m.duration)}</span>${isDeck ? '<span class="pd-present-hint">▶ Present full-screen</span>' : ''}</div>`;
+          grid.appendChild(card);
+        }
+        sec.appendChild(grid);
+        wrap.appendChild(sec);
+      }
+      document.getElementById('pdEmpty').style.display = shown ? 'none' : 'block';
+    }
+
+    /* ── Slide parser + player ─────────────────────────────────────── */
+    function parseSlides(md) {
+      const body = stripFrontmatter(md);
+      // Split on lines beginning "## Slide". First piece is the deck intro (skip).
+      const parts = body.split(/^## Slide /m).slice(1);
+      return parts.map(chunk => {
+        const lines = chunk.split('\n');
+        const titleLine = lines.shift() || '';
+        // titleLine looks like "1 — Title"
+        const title = titleLine.replace(/^\s*\d+\s*[—–-]\s*/, '').trim();
+        const bullets = []; let speaker = '', visual = '';
+        for (const ln of lines) {
+          const t = ln.trim();
+          if (/^\*\*Speaker note:\*\*/i.test(t)) speaker = t.replace(/^\*\*Speaker note:\*\*/i, '').trim();
+          else if (/^\*\*Visual:\*\*/i.test(t)) visual = t.replace(/^\*\*Visual:\*\*/i, '').trim();
+          else if (/^-\s+/.test(t)) bullets.push(t.replace(/^-\s+/, ''));
+        }
+        return { title, bullets, speaker, visual };
+      });
+    }
+    const inlineMd = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    function mountSlidePlayer(container, meta, slides) {
+      let idx = 0, notesOn = true;
+      container.innerHTML =
+        `<div class="pd-slidewrap" id="pdSlidewrap" tabindex="0">
+           <div class="pd-stage" id="pdStage"></div>
+           <div class="pd-notes" id="pdNotes"></div>
+           <div class="pd-slide-ctrl">
+             <button class="pd-nav-btn" id="pdPrev" aria-label="Previous slide">‹</button>
+             <span class="pd-slide-pos" id="pdPos"></span>
+             <button class="pd-nav-btn" id="pdNext" aria-label="Next slide">›</button>
+             <span class="pd-slide-ctrl-spacer"></span>
+             <button class="pd-btn-ghost pd-btn" id="pdNotesToggle" title="Toggle speaker notes (f)">Notes</button>
+             <button class="pd-btn" id="pdFs">⛶ Full-screen</button>
+           </div>
+         </div>`;
+      const stage = container.querySelector('#pdStage');
+      const notes = container.querySelector('#pdNotes');
+      const pos = container.querySelector('#pdPos');
+      const prev = container.querySelector('#pdPrev');
+      const next = container.querySelector('#pdNext');
+      const wrap = container.querySelector('#pdSlidewrap');
+      function draw() {
+        const s = slides[idx];
+        stage.innerHTML =
+          `<span class="pd-stage-num">${idx+1} / ${slides.length}</span>` +
+          `<h2 class="pd-stage-title">${inlineMd(s.title)}</h2>` +
+          (s.bullets.length ? `<ul class="pd-stage-bullets">${s.bullets.map(b=>`<li>${inlineMd(b)}</li>`).join('')}</ul>` : '');
+        notes.hidden = !notesOn || (!s.speaker && !s.visual);
+        notes.innerHTML =
+          (s.speaker ? `<span class="pd-notes-lbl">Speaker note</span>${esc(s.speaker)}` : '') +
+          (s.visual ? `<div class="pd-visual">Visual: ${esc(s.visual)}</div>` : '');
+        pos.textContent = `${idx+1} / ${slides.length}`;
+        prev.disabled = idx === 0; next.disabled = idx === slides.length - 1;
+      }
+      const go = d => { idx = Math.max(0, Math.min(slides.length - 1, idx + d)); draw(); };
+      prev.onclick = () => go(-1);
+      next.onclick = () => go(1);
+      container.querySelector('#pdNotesToggle').onclick = () => { notesOn = !notesOn; draw(); };
+      container.querySelector('#pdFs').onclick = () => {
+        if (!document.fullscreenElement) wrap.requestFullscreen?.(); else document.exitFullscreen?.();
+        setTimeout(() => wrap.focus(), 50);
+      };
+      wrap.addEventListener('keydown', e => {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); go(1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
+        else if (e.key.toLowerCase() === 'f') { notesOn = !notesOn; draw(); }
+      });
+      draw();
+      wrap.focus();
+    }
+
+    /* ── Reader mode ───────────────────────────────────────────────── */
+    async function openDoc(slug) {
+      const meta = PD_MANIFEST.find(m => m.slug === slug);
+      document.getElementById('pdBrowser').style.display = 'none';
+      document.getElementById('pdReader').style.display = '';
+      const body = document.getElementById('pdReaderBody');
+      const printBtn = document.getElementById('pdPrintBtn');
+      const presentBtn = document.getElementById('pdPresentBtn');
+      printBtn.style.display = 'none'; presentBtn.style.display = 'none';
+      if (!meta) { body.innerHTML = `<div class="pd-doc-error"><strong>Not found</strong><br>No material with id “${esc(slug)}”.</div>`; return; }
+      document.getElementById('pdHeroTitle').textContent = meta.title;
+      document.getElementById('pdHeroDesc').textContent = meta.desc;
+      body.innerHTML = `<div class="pd-doc-loading">Loading “${esc(meta.title)}”…</div>`;
+      let md;
+      try {
+        const res = await fetch(meta.path);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        md = await res.text();
+      } catch (err) {
+        body.innerHTML = `<div class="pd-doc-error"><strong>Could not load</strong><br>${esc(err.message || 'fetch failed')}<br><br><span style="font-size:13px">Path: <code>${esc(meta.path)}</code></span></div>`;
+        return;
+      }
+      if (meta.type === 'slide-outline') {
+        const slides = parseSlides(md);
+        if (!slides.length) { body.innerHTML = `<div class="pd-doc-error"><strong>No slides found</strong><br>This deck has no parseable “## Slide N” blocks.</div>`; return; }
+        mountSlidePlayer(body, meta, slides);
+        presentBtn.style.display = '';
+        presentBtn.onclick = () => { const w = body.querySelector('#pdSlidewrap'); w?.requestFullscreen?.(); setTimeout(()=>w?.focus(),50); };
+      } else {
+        body.innerHTML = `<div class="pd-doc">${marked.parse(stripFrontmatter(md))}</div>`;
+        printBtn.style.display = '';
+        printBtn.onclick = () => window.print();
+      }
+    }
+
+    function showBrowser() {
+      document.getElementById('pdReader').style.display = 'none';
+      document.getElementById('pdBrowser').style.display = '';
+      document.getElementById('pdHeroTitle').textContent = 'PD Materials';
+      document.getElementById('pdHeroDesc').textContent = 'Ready-to-present professional-development materials for partner-school PD days, school visits, and online sessions. Facilitator session guides, participant one-pagers, slide decks, and workbooks — open clean to present, or run a deck full-screen.';
+    }
+
+    function route() {
+      const slug = new URLSearchParams(location.search).get('doc');
+      if (slug) openDoc(slug); else showBrowser();
+    }
+
+    function boot() {
+      // KPI counts
+      document.getElementById('kpiTotal').textContent = PD_MANIFEST.length;
+      document.getElementById('kpiSessions').textContent = PD_MANIFEST.filter(m=>m.type==='session-guide').length;
+      document.getElementById('kpiDecks').textContent = PD_MANIFEST.filter(m=>m.type==='slide-outline').length;
+
+      // Filter chips
+      document.querySelectorAll('#pdTierChips .pd-chip[data-tier]').forEach(c => c.onclick = () => {
+        document.querySelectorAll('#pdTierChips .pd-chip[data-tier]').forEach(x => x.classList.remove('active'));
+        c.classList.add('active'); activeTier = c.dataset.tier; renderGrid();
+      });
+      document.querySelectorAll('#pdTierChips .pd-chip[data-type]').forEach(c => c.onclick = () => {
+        document.querySelectorAll('#pdTierChips .pd-chip[data-type]').forEach(x => x.classList.remove('active'));
+        c.classList.add('active'); activeType = c.dataset.type; renderGrid();
+      });
+      document.getElementById('pdSearch').addEventListener('input', e => { searchQ = e.target.value; renderGrid(); });
+      document.getElementById('pdBackBtn').onclick = () => { history.pushState({}, '', 'pd'); route(); };
+
+      renderGrid();
+      route();
+      window.addEventListener('popstate', route);
+    }
+
+    // CH auth-guard dispatches authReady on document (Common Mistake #13)
+    document.addEventListener('authReady', boot);
+  </script>
+</body>
+</html>
