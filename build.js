@@ -1,4 +1,4 @@
-const fs   = require("fs");
+﻿const fs   = require("fs");
 const path = require("path");
 
 function copyDirRecursive(srcDir, destDir) {
@@ -13,13 +13,13 @@ function copyDirRecursive(srcDir, destDir) {
 }
 
 // -- A11Y injection helper (WCAG 2.2 AA, 2026-05-31) -----------------------
-//    Shared by all 3 hubs (keep CH / AH / TH copies in sync — same manual-
+//    Shared by all 3 hubs (keep CH / AH / TH copies in sync â€” same manual-
 //    sync discipline as the a11y.css block). Adds:
 //      1. <a class="skip-link" href="#main-content"> right after <body ...>
-//         (2.4.1 Bypass Blocks) — first focusable element on the page.
+//         (2.4.1 Bypass Blocks) â€” first focusable element on the page.
 //      2. id="main-content" role="main" tabindex="-1" ATTRIBUTES on the first
-//         content wrapper (1.3.1). Attributes only — never a new <main> element
-//         (would break `body:has(> .page-footer)` — Common Mistake #54).
+//         content wrapper (1.3.1). Attributes only â€” never a new <main> element
+//         (would break `body:has(> .page-footer)` â€” Common Mistake #54).
 //    Idempotent (skips if a skip-link / #main-content already present).
 //    Skips auth-flow pages (login) where there is no main content to skip to.
 const A11Y_SKIP_FILES = new Set(["login.html"]);
@@ -37,8 +37,8 @@ const A11Y_WRAPPER_PATTERNS = [
 ];
 function injectA11y(html, fileBase) {
   if (A11Y_SKIP_FILES.has(fileBase)) return html;
-  // Idempotency — already processed.
-  if (/class="skip-link"/.test(html) || /id="main-content"/.test(html)) return html;
+  // Idempotency â€” already processed.
+  if (/class="skip-link"/.test(html)) return html;
 
   const SKIP = '<a class="skip-link" href="#main-content">Skip to main content</a>\n';
   const LANDMARK = ' id="main-content" role="main" tabindex="-1"';
@@ -51,7 +51,7 @@ function injectA11y(html, fileBase) {
   for (const pat of A11Y_WRAPPER_PATTERNS) {
     const m = out.match(pat);
     if (!m) continue;
-    // Skip the TH-only navbar-container sentinel here — handled by fallback.
+    // Skip the TH-only navbar-container sentinel here â€” handled by fallback.
     if (pat.source.includes("navbar-container")) break;
     // Inject the attributes just after the matched tag-name token.
     const tag = m[0];
@@ -122,70 +122,70 @@ fs.writeFileSync(path.join("dist", "firebase-config.js"), firebaseConfigContent)
 console.log("Generated: dist/firebase-config.js");
 
 // ============================================================
-// IGCSE pacing pages — generated from igcse-pacing-template.html
+// IGCSE pacing pages â€” generated from igcse-pacing-template.html
 // ============================================================
-const AO_MATH = `<option value="AO1">AO1 — Knowledge &amp; techniques</option>
-          <option value="AO2">AO2 — Analyse &amp; interpret</option>
-          <option value="AO1+AO2">AO1 + AO2 — Both</option>`;
-const AO_SCIENCE = `<option value="AO1">AO1 — Knowledge &amp; understanding</option>
-          <option value="AO2">AO2 — Handle information &amp; solve problems</option>
-          <option value="AO3">AO3 — Experimental skills &amp; investigations</option>
-          <option value="AO1+AO2">AO1 + AO2 — Both</option>`;
+const AO_MATH = `<option value="AO1">AO1 â€” Knowledge &amp; techniques</option>
+          <option value="AO2">AO2 â€” Analyse &amp; interpret</option>
+          <option value="AO1+AO2">AO1 + AO2 â€” Both</option>`;
+const AO_SCIENCE = `<option value="AO1">AO1 â€” Knowledge &amp; understanding</option>
+          <option value="AO2">AO2 â€” Handle information &amp; solve problems</option>
+          <option value="AO3">AO3 â€” Experimental skills &amp; investigations</option>
+          <option value="AO1+AO2">AO1 + AO2 â€” Both</option>`;
 
 const IGCSE_SUBJECTS = {
   'igcse-math-pacing.html': {
-    pageTitle:    'IGCSE Mathematics Pacing — CentralHub',
+    pageTitle:    'IGCSE Mathematics Pacing â€” CentralHub',
     accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;\n      --red-50: #fff5f5;\n      --red-100: #fee2e2;\n      --red-600: #dc2626;\n      --red-700: #b91c1c;\n      --red-800: #991b1b;\n      --red-900: #7f1d1d;',
     heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
     heroGlow:     'rgba(185,28,28,.4)',
-    heroIcon:     '∫',
+    heroIcon:     'âˆ«',
     heroEyebrow:  'IGCSE Mathematics 0580',
     heroTitle:    'IGCSE Mathematics Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9â€“10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'math_pacing', docId: 'year9-10', subjectKey: 'math', comboKey: 'igcse_math', syllabusCode: '0580', progressKey: 'statuses', classesField: 'igcse_math_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
   },
   'igcse-biology-pacing.html': {
-    pageTitle:    'IGCSE Biology Pacing — CentralHub',
+    pageTitle:    'IGCSE Biology Pacing â€” CentralHub',
     accentVars:   '--accent: #1e7a4a;\n      --accent-dk: #166534;\n      --accent-2: #e9f7ef;',
     heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
     heroGlow:     'rgba(21,128,61,.4)',
-    heroIcon:     '🧬',
+    heroIcon:     'ðŸ§¬',
     heroEyebrow:  'IGCSE Biology 0610',
     heroTitle:    'IGCSE Biology Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9â€“10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'biology_pacing', docId: 'year9-10', subjectKey: 'biology', comboKey: 'igcse_biology', syllabusCode: '0610', progressKey: 'statuses', classesField: 'igcse_biology_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
   },
   'igcse-chemistry-pacing.html': {
-    pageTitle:    'IGCSE Chemistry Pacing — CentralHub',
+    pageTitle:    'IGCSE Chemistry Pacing â€” CentralHub',
     accentVars:   '--accent: #7c3aed;\n      --accent-dk: #6d28d9;\n      --accent-2: #f5f3ff;',
     heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 40%, #5b21b6 70%, #6d28d9 100%)',
     heroGlow:     'rgba(109,40,217,.4)',
-    heroIcon:     '⚗',
+    heroIcon:     'âš—',
     heroEyebrow:  'IGCSE Chemistry 0620',
     heroTitle:    'IGCSE Chemistry Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9â€“10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'chemistry_pacing', docId: 'year9-10', subjectKey: 'chemistry', comboKey: 'igcse_chemistry', syllabusCode: '0620', progressKey: 'statuses', classesField: 'igcse_chemistry_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
   },
   'igcse-physics-pacing.html': {
-    pageTitle:    'IGCSE Physics Pacing — CentralHub',
+    pageTitle:    'IGCSE Physics Pacing â€” CentralHub',
     accentVars:   '--accent: #0369a1;\n      --accent-dk: #075985;\n      --accent-2: #f0f9ff;',
     heroGradient: 'linear-gradient(135deg, #0c4a6e 0%, #075985 40%, #0369a1 70%, #0284c7 100%)',
     heroGlow:     'rgba(2,132,199,.4)',
-    heroIcon:     '⚛',
+    heroIcon:     'âš›',
     heroEyebrow:  'IGCSE Physics 0625',
     heroTitle:    'IGCSE Physics Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 9â€“10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'physics_pacing', docId: 'year9-10', subjectKey: 'physics', comboKey: 'igcse_physics', syllabusCode: '0625', progressKey: 'statuses', classesField: 'igcse_physics_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
   },
-  // ── Eduversal-authored non-Cambridge subjects (Secondary Y9-10 tier) ──
+  // â”€â”€ Eduversal-authored non-Cambridge subjects (Secondary Y9-10 tier) â”€â”€
   // Bahasa Indonesia + Edu-STEAM have no Cambridge syllabus code; they
   // carry an EDV-prefix placeholder until Eduversal authors a real
   // scheme. Structure mirrors the IGCSE Cambridge pages exactly so the
@@ -193,27 +193,27 @@ const IGCSE_SUBJECTS = {
   // The IGCSE-tier collection uses the bare `<subject>_pacing` name to
   // align with subject-config.js SUBJECT_PACING_LINKS (igcse-* slug).
   'igcse-bahasa-pacing.html': {
-    pageTitle:    'Bahasa Indonesia Pacing (Y9–10) — CentralHub',
+    pageTitle:    'Bahasa Indonesia Pacing (Y9â€“10) â€” CentralHub',
     accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
     heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
     heroGlow:     'rgba(225,29,72,.4)',
-    heroIcon:     '📚',
-    heroEyebrow:  'Bahasa Indonesia · EDV-BAH-S',
-    heroTitle:    'Bahasa Indonesia Pacing (Y9–10)',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    heroIcon:     'ðŸ“š',
+    heroEyebrow:  'Bahasa Indonesia Â· EDV-BAH-S',
+    heroTitle:    'Bahasa Indonesia Pacing (Y9â€“10)',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 9â€“10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'bahasa_pacing', docId: 'year9-10', subjectKey: 'bahasa', comboKey: 'igcse_bahasa', syllabusCode: 'EDV-BAH-S', progressKey: 'statuses', classesField: 'igcse_bahasa_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
   },
   'igcse-edu-steam-pacing.html': {
-    pageTitle:    'Edu-STEAM Pacing (Y9–10) — CentralHub',
+    pageTitle:    'Edu-STEAM Pacing (Y9â€“10) â€” CentralHub',
     accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
     heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
     heroGlow:     'rgba(124,58,237,.4)',
-    heroIcon:     '🚀',
-    heroEyebrow:  'Edu-STEAM · EDV-STM-S',
-    heroTitle:    'Edu-STEAM Pacing (Y9–10)',
-    heroDesc:     'Manage projects, topics, and learning objectives for Years 9–10. Monitor teacher coverage and track pacing by class.',
+    heroIcon:     'ðŸš€',
+    heroEyebrow:  'Edu-STEAM Â· EDV-STM-S',
+    heroTitle:    'Edu-STEAM Pacing (Y9â€“10)',
+    heroDesc:     'Manage projects, topics, and learning objectives for Years 9â€“10. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'edu_steam_pacing', docId: 'year9-10', subjectKey: 'edu_steam', comboKey: 'igcse_edu_steam', syllabusCode: 'EDV-STM-S', progressKey: 'statuses', classesField: 'igcse_edu_steam_classes', yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10' }`,
     yearA: 'Year 9', yearB: 'Year 10', yearAKey: 'year9', yearBKey: 'year10',
@@ -221,71 +221,71 @@ const IGCSE_SUBJECTS = {
 };
 
 // ============================================================
-// Checkpoint pacing pages — generated from igcse-pacing-template.html
+// Checkpoint pacing pages â€” generated from igcse-pacing-template.html
 // ============================================================
 const CHECKPOINT_SUBJECTS = {
   'checkpoint-math-pacing.html': {
-    pageTitle:    'Checkpoint Mathematics Pacing — CentralHub',
+    pageTitle:    'Checkpoint Mathematics Pacing â€” CentralHub',
     accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
     heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
     heroGlow:     'rgba(185,28,28,.4)',
-    heroIcon:     '∫',
+    heroIcon:     'âˆ«',
     heroEyebrow:  'Cambridge Checkpoint Mathematics 0862',
     heroTitle:    'Checkpoint Mathematics Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7â€“8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'checkpoint_math_pacing', docId: 'year7-8', subjectKey: 'math', comboKey: 'checkpoint_math', syllabusCode: '0862', progressKey: 'checkpoint_math_statuses', classesField: 'checkpoint_math_classes', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
   'checkpoint-english-pacing.html': {
-    pageTitle:    'Checkpoint English Pacing — CentralHub',
+    pageTitle:    'Checkpoint English Pacing â€” CentralHub',
     accentVars:   '--accent: #2980b9;\n      --accent-dk: #1f6fa3;\n      --accent-2: #e8f4fd;',
     heroGradient: 'linear-gradient(135deg, #0c2340 0%, #1a4a7a 40%, #1f6fa3 70%, #2980b9 100%)',
     heroGlow:     'rgba(41,128,185,.4)',
-    heroIcon:     '📖',
+    heroIcon:     'ðŸ“–',
     heroEyebrow:  'Cambridge Checkpoint English 1111',
     heroTitle:    'Checkpoint English Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7â€“8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'checkpoint_english_pacing', docId: 'year7-8', subjectKey: 'english', comboKey: 'checkpoint_english', syllabusCode: '1111', progressKey: 'checkpoint_english_statuses', classesField: 'checkpoint_english_classes', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
   'checkpoint-science-pacing.html': {
-    pageTitle:    'Checkpoint Science Pacing — CentralHub',
+    pageTitle:    'Checkpoint Science Pacing â€” CentralHub',
     accentVars:   '--accent: #27ae60;\n      --accent-dk: #1e8449;\n      --accent-2: #e9f7ef;',
     heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
     heroGlow:     'rgba(21,128,61,.4)',
-    heroIcon:     '🔬',
+    heroIcon:     'ðŸ”¬',
     heroEyebrow:  'Cambridge Checkpoint Science 0893',
     heroTitle:    'Checkpoint Science Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7â€“8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'checkpoint_science_pacing', docId: 'year7-8', subjectKey: 'science', comboKeys: ['checkpoint_science', 'checkpoint_biology', 'checkpoint_chemistry', 'checkpoint_physics'], syllabusCode: '0893', progressKey: 'checkpoint_science_statuses', classesField: 'checkpoint_science_classes', progressionGrid: true, yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
-  // ── Eduversal-authored non-Cambridge subjects (Checkpoint Y7-8 tier) ──
+  // â”€â”€ Eduversal-authored non-Cambridge subjects (Checkpoint Y7-8 tier) â”€â”€
   'checkpoint-bahasa-pacing.html': {
-    pageTitle:    'Bahasa Indonesia Pacing (Y7–8) — CentralHub',
+    pageTitle:    'Bahasa Indonesia Pacing (Y7â€“8) â€” CentralHub',
     accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
     heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
     heroGlow:     'rgba(225,29,72,.4)',
-    heroIcon:     '📚',
-    heroEyebrow:  'Bahasa Indonesia · EDV-BAH-C',
-    heroTitle:    'Bahasa Indonesia Pacing (Y7–8)',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    heroIcon:     'ðŸ“š',
+    heroEyebrow:  'Bahasa Indonesia Â· EDV-BAH-C',
+    heroTitle:    'Bahasa Indonesia Pacing (Y7â€“8)',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 7â€“8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'checkpoint_bahasa_pacing', docId: 'year7-8', subjectKey: 'bahasa', comboKey: 'checkpoint_bahasa', syllabusCode: 'EDV-BAH-C', progressKey: 'checkpoint_bahasa_statuses', classesField: 'checkpoint_bahasa_classes', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
   },
   'checkpoint-edu-steam-pacing.html': {
-    pageTitle:    'Edu-STEAM Pacing (Y7–8) — CentralHub',
+    pageTitle:    'Edu-STEAM Pacing (Y7â€“8) â€” CentralHub',
     accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
     heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
     heroGlow:     'rgba(124,58,237,.4)',
-    heroIcon:     '🚀',
-    heroEyebrow:  'Edu-STEAM · EDV-STM-C',
-    heroTitle:    'Edu-STEAM Pacing (Y7–8)',
-    heroDesc:     'Manage projects, topics, and learning objectives for Years 7–8. Monitor teacher coverage and track pacing by class.',
+    heroIcon:     'ðŸš€',
+    heroEyebrow:  'Edu-STEAM Â· EDV-STM-C',
+    heroTitle:    'Edu-STEAM Pacing (Y7â€“8)',
+    heroDesc:     'Manage projects, topics, and learning objectives for Years 7â€“8. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'checkpoint_edu_steam_pacing', docId: 'year7-8', subjectKey: 'edu_steam', comboKey: 'checkpoint_edu_steam', syllabusCode: 'EDV-STM-C', progressKey: 'checkpoint_edu_steam_statuses', classesField: 'checkpoint_edu_steam_classes', yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8' }`,
     yearA: 'Year 7', yearB: 'Year 8', yearAKey: 'year7', yearBKey: 'year8',
@@ -293,7 +293,7 @@ const CHECKPOINT_SUBJECTS = {
 };
 
 // ============================================================
-// Primary pacing pages — generated from primary-pacing-template.html
+// Primary pacing pages â€” generated from primary-pacing-template.html
 // All 6 stages live in one Firestore doc (year1-6); the page renders
 // a 6-chip year filter + 6-option chapter modal dropdown rather than
 // the 2-year secondary/IGCSE/AS-A pattern. PACING_CONFIG.years[] drives
@@ -317,147 +317,147 @@ const PRIMARY_YEAR_OPTIONS = PRIMARY_YEARS.map(
 
 const PRIMARY_SUBJECTS = {
   'primary-math-pacing.html': {
-    pageTitle:    'Primary Mathematics Pacing — CentralHub',
+    pageTitle:    'Primary Mathematics Pacing â€” CentralHub',
     accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
     heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
     heroGlow:     'rgba(185,28,28,.4)',
-    heroIcon:     '∫',
+    heroIcon:     'âˆ«',
     heroEyebrow:  'Cambridge Primary Mathematics 0096',
     heroTitle:    'Primary Mathematics Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1â€“6 (Year 1â€“6). Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'primary_math_pacing', docId: 'year1-6', subjectKey: 'math', comboKey: 'primary_math', syllabusCode: '0096', progressKey: 'primary_math_statuses', classesField: 'primary_math_classes', years: ${PRIMARY_YEARS_JSON} }`,
   },
   'primary-english-pacing.html': {
-    pageTitle:    'Primary English Pacing — CentralHub',
+    pageTitle:    'Primary English Pacing â€” CentralHub',
     accentVars:   '--accent: #2980b9;\n      --accent-dk: #1f6fa3;\n      --accent-2: #e8f4fd;',
     heroGradient: 'linear-gradient(135deg, #0c2340 0%, #1a4a7a 40%, #1f6fa3 70%, #2980b9 100%)',
     heroGlow:     'rgba(41,128,185,.4)',
-    heroIcon:     '📖',
+    heroIcon:     'ðŸ“–',
     heroEyebrow:  'Cambridge Primary English 0058',
     heroTitle:    'Primary English Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1â€“6 (Year 1â€“6). Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'primary_english_pacing', docId: 'year1-6', subjectKey: 'english', comboKey: 'primary_english', syllabusCode: '0058', progressKey: 'primary_english_statuses', classesField: 'primary_english_classes', years: ${PRIMARY_YEARS_JSON} }`,
   },
   'primary-science-pacing.html': {
-    pageTitle:    'Primary Science Pacing — CentralHub',
+    pageTitle:    'Primary Science Pacing â€” CentralHub',
     accentVars:   '--accent: #27ae60;\n      --accent-dk: #1e8449;\n      --accent-2: #e9f7ef;',
     heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
     heroGlow:     'rgba(21,128,61,.4)',
-    heroIcon:     '🔬',
+    heroIcon:     'ðŸ”¬',
     heroEyebrow:  'Cambridge Primary Science 0097',
     heroTitle:    'Primary Science Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1â€“6 (Year 1â€“6). Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'primary_science_pacing', docId: 'year1-6', subjectKey: 'science', comboKeys: ['primary_science', 'primary_biology', 'primary_chemistry', 'primary_physics'], syllabusCode: '0097', progressKey: 'primary_science_statuses', classesField: 'primary_science_classes', years: ${PRIMARY_YEARS_JSON} }`,
   },
-  // ── Eduversal-authored non-Cambridge subjects (Primary Y1-6 tier) ──
+  // â”€â”€ Eduversal-authored non-Cambridge subjects (Primary Y1-6 tier) â”€â”€
   'primary-bahasa-pacing.html': {
-    pageTitle:    'Primary Bahasa Indonesia Pacing — CentralHub',
+    pageTitle:    'Primary Bahasa Indonesia Pacing â€” CentralHub',
     accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
     heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
     heroGlow:     'rgba(225,29,72,.4)',
-    heroIcon:     '📚',
-    heroEyebrow:  'Primary Bahasa Indonesia · EDV-BAH-P',
+    heroIcon:     'ðŸ“š',
+    heroEyebrow:  'Primary Bahasa Indonesia Â· EDV-BAH-P',
     heroTitle:    'Primary Bahasa Indonesia Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Stage 1â€“6 (Year 1â€“6). Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'primary_bahasa_pacing', docId: 'year1-6', subjectKey: 'bahasa', comboKey: 'primary_bahasa', syllabusCode: 'EDV-BAH-P', progressKey: 'primary_bahasa_statuses', classesField: 'primary_bahasa_classes', years: ${PRIMARY_YEARS_JSON} }`,
   },
   'primary-edu-steam-pacing.html': {
-    pageTitle:    'Primary Edu-STEAM Pacing — CentralHub',
+    pageTitle:    'Primary Edu-STEAM Pacing â€” CentralHub',
     accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
     heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
     heroGlow:     'rgba(124,58,237,.4)',
-    heroIcon:     '🚀',
-    heroEyebrow:  'Primary Edu-STEAM · EDV-STM-P',
+    heroIcon:     'ðŸš€',
+    heroEyebrow:  'Primary Edu-STEAM Â· EDV-STM-P',
     heroTitle:    'Primary Edu-STEAM Pacing',
-    heroDesc:     'Manage projects, topics, and learning objectives for Stage 1–6 (Year 1–6). Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage projects, topics, and learning objectives for Stage 1â€“6 (Year 1â€“6). Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'primary_edu_steam_pacing', docId: 'year1-6', subjectKey: 'edu_steam', comboKey: 'primary_edu_steam', syllabusCode: 'EDV-STM-P', progressKey: 'primary_edu_steam_statuses', classesField: 'primary_edu_steam_classes', years: ${PRIMARY_YEARS_JSON} }`,
   },
 };
 
 // ============================================================
-// AS/A-Level pacing pages — generated from igcse-pacing-template.html
+// AS/A-Level pacing pages â€” generated from igcse-pacing-template.html
 // ============================================================
 const ASALEVEL_SUBJECTS = {
   'as-alevel-math-pacing.html': {
-    pageTitle:    'AS & A Level Mathematics Pacing — CentralHub',
+    pageTitle:    'AS & A Level Mathematics Pacing â€” CentralHub',
     accentVars:   '--accent: #c0392b;\n      --accent-dk: #a93224;\n      --accent-2: #fdf0ef;',
     heroGradient: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 70%, #b91c1c 100%)',
     heroGlow:     'rgba(185,28,28,.4)',
-    heroIcon:     '∫',
+    heroIcon:     'âˆ«',
     heroEyebrow:  'Cambridge AS & A Level Mathematics 9709',
     heroTitle:    'AS & A Level Mathematics Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11â€“12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'asalevel_math_pacing', docId: 'year11-12', subjectKey: 'math', comboKey: 'asalevel_math', progressKey: 'asmath_statuses', classesField: 'asalevel_math_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
   'as-alevel-biology-pacing.html': {
-    pageTitle:    'AS & A Level Biology Pacing — CentralHub',
+    pageTitle:    'AS & A Level Biology Pacing â€” CentralHub',
     accentVars:   '--accent: #1e7a4a;\n      --accent-dk: #166534;\n      --accent-2: #e9f7ef;',
     heroGradient: 'linear-gradient(135deg, #052e16 0%, #14532d 40%, #166534 70%, #15803d 100%)',
     heroGlow:     'rgba(21,128,61,.4)',
-    heroIcon:     '🧬',
+    heroIcon:     'ðŸ§¬',
     heroEyebrow:  'Cambridge AS & A Level Biology 9700',
     heroTitle:    'AS & A Level Biology Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11â€“12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_biology_pacing', docId: 'year11-12', subjectKey: 'biology', comboKey: 'asalevel_biology', progressKey: 'asbio_statuses', classesField: 'asalevel_biology_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
   'as-alevel-chemistry-pacing.html': {
-    pageTitle:    'AS & A Level Chemistry Pacing — CentralHub',
+    pageTitle:    'AS & A Level Chemistry Pacing â€” CentralHub',
     accentVars:   '--accent: #e67e22;\n      --accent-dk: #ca6f1e;\n      --accent-2: #fef5e7;',
     heroGradient: 'linear-gradient(135deg, #431407 0%, #7c2d12 40%, #9a3412 70%, #c2410c 100%)',
     heroGlow:     'rgba(194,65,12,.4)',
-    heroIcon:     '⚗',
+    heroIcon:     'âš—',
     heroEyebrow:  'Cambridge AS & A Level Chemistry 9701',
     heroTitle:    'AS & A Level Chemistry Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11â€“12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_chemistry_pacing', docId: 'year11-12', subjectKey: 'chemistry', comboKey: 'asalevel_chemistry', progressKey: 'aschem_statuses', classesField: 'asalevel_chemistry_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
   'as-alevel-physics-pacing.html': {
-    pageTitle:    'AS & A Level Physics Pacing — CentralHub',
+    pageTitle:    'AS & A Level Physics Pacing â€” CentralHub',
     accentVars:   '--accent: #0369a1;\n      --accent-dk: #075985;\n      --accent-2: #f0f9ff;',
     heroGradient: 'linear-gradient(135deg, #0c4a6e 0%, #075985 40%, #0369a1 70%, #0284c7 100%)',
     heroGlow:     'rgba(2,132,199,.4)',
-    heroIcon:     '⚛',
+    heroIcon:     'âš›',
     heroEyebrow:  'Cambridge AS & A Level Physics 9702',
     heroTitle:    'AS & A Level Physics Pacing',
-    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and syllabus codes for Years 11â€“12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_physics_pacing', docId: 'year11-12', subjectKey: 'physics', comboKey: 'asalevel_physics', progressKey: 'asphys_statuses', classesField: 'asalevel_physics_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
-  // ── Eduversal-authored non-Cambridge subjects (AS / A-Level Y11-12 tier) ──
+  // â”€â”€ Eduversal-authored non-Cambridge subjects (AS / A-Level Y11-12 tier) â”€â”€
   'as-alevel-bahasa-pacing.html': {
-    pageTitle:    'AS & A Level Bahasa Indonesia Pacing — CentralHub',
+    pageTitle:    'AS & A Level Bahasa Indonesia Pacing â€” CentralHub',
     accentVars:   '--accent: #e11d48;\n      --accent-dk: #9f1239;\n      --accent-2: #fff1f3;',
     heroGradient: 'linear-gradient(135deg, #4c0519 0%, #881337 40%, #9f1239 70%, #be123c 100%)',
     heroGlow:     'rgba(225,29,72,.4)',
-    heroIcon:     '📚',
-    heroEyebrow:  'AS & A Level Bahasa Indonesia · EDV-BAH-A',
+    heroIcon:     'ðŸ“š',
+    heroEyebrow:  'AS & A Level Bahasa Indonesia Â· EDV-BAH-A',
     heroTitle:    'AS & A Level Bahasa Indonesia Pacing',
-    heroDesc:     'Manage chapters, topics, and learning objectives for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage chapters, topics, and learning objectives for Years 11â€“12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_MATH,
     pacingConfig: `{ collection: 'asalevel_bahasa_pacing', docId: 'year11-12', subjectKey: 'bahasa', comboKey: 'asalevel_bahasa', syllabusCode: 'EDV-BAH-A', progressKey: 'asbahasa_statuses', classesField: 'asalevel_bahasa_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
   },
   'as-alevel-edu-steam-pacing.html': {
-    pageTitle:    'AS & A Level Edu-STEAM Pacing — CentralHub',
+    pageTitle:    'AS & A Level Edu-STEAM Pacing â€” CentralHub',
     accentVars:   '--accent: #7c3aed;\n      --accent-dk: #5b21b6;\n      --accent-2: #f5f3ff;',
     heroGradient: 'linear-gradient(135deg, #2e1065 0%, #4c1d95 35%, #5b21b6 65%, #0891b2 100%)',
     heroGlow:     'rgba(124,58,237,.4)',
-    heroIcon:     '🚀',
-    heroEyebrow:  'AS & A Level Edu-STEAM · EDV-STM-A',
+    heroIcon:     'ðŸš€',
+    heroEyebrow:  'AS & A Level Edu-STEAM Â· EDV-STM-A',
     heroTitle:    'AS & A Level Edu-STEAM Pacing',
-    heroDesc:     'Manage projects, topics, and learning objectives for Years 11–12. Monitor teacher coverage and track pacing by class.',
+    heroDesc:     'Manage projects, topics, and learning objectives for Years 11â€“12. Monitor teacher coverage and track pacing by class.',
     aoOptions:    AO_SCIENCE,
     pacingConfig: `{ collection: 'asalevel_edu_steam_pacing', docId: 'year11-12', subjectKey: 'edu_steam', comboKey: 'asalevel_edu_steam', syllabusCode: 'EDV-STM-A', progressKey: 'asedusteam_statuses', classesField: 'asalevel_edu_steam_classes', yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12' }`,
     yearA: 'Year 11', yearB: 'Year 12', yearAKey: 'year11', yearBKey: 'year12',
@@ -548,7 +548,7 @@ const htmlFiles = [
   "as-alevel-biology-pacing.html",
   "as-alevel-chemistry-pacing.html",
   "as-alevel-physics-pacing.html",
-  // Eduversal-authored non-Cambridge subjects — Bahasa Indonesia + Edu-STEAM,
+  // Eduversal-authored non-Cambridge subjects â€” Bahasa Indonesia + Edu-STEAM,
   // all 4 stages (Primary / Checkpoint / IGCSE-Secondary / AS-A-Level).
   // Generated from the same pacing templates as the Cambridge pages
   // (see IGCSE_SUBJECTS / CHECKPOINT_SUBJECTS / PRIMARY_SUBJECTS /
@@ -634,9 +634,9 @@ const htmlFiles = [
   "ai-framework-teacher.html",
   "ai-framework-student.html",
   "ai-framework-institutional.html",
-  // AICF Phase 3 (2026-05-18) — Institutional Maturity appraisal queue
+  // AICF Phase 3 (2026-05-18) â€” Institutional Maturity appraisal queue
   "ai-maturity-admin.html",
-  // Department Office workspace (2026-05-19) — Director + Coordinator
+  // Department Office workspace (2026-05-19) â€” Director + Coordinator
   // meeting + decision + artifact + directory cluster. Replaces the
   // long-running Heads-of-Departments Google Doc workflow.
   "coordinators-meetings.html",
@@ -644,20 +644,20 @@ const htmlFiles = [
   "decisions-register.html",
   "coordinator-proposals.html",
   "coordinators-directory.html",
-  // Department Workspace (2026-05-24) — subject-scoped command centre.
+  // Department Workspace (2026-05-24) â€” subject-scoped command centre.
   // Single page renders any of 9 ch_subjects via ?subject= query;
   // shared JS lives in partials/department-core.js + subject-config.js.
   "department-workspace.html",
   // Specialist appraisal walkthrough log (2026-05-19; renamed from
-  // my-school-visits 2026-05-26) — Department Office > Workspace. Coordinator-
+  // my-school-visits 2026-05-26) â€” Department Office > Workspace. Coordinator-
   // gated own 15-school visit + Window 2/3/4 progress. Shares school_visits
   // collection with /school-visits (Operations) via visitType:
   // 'specialist_walkthrough' discriminator.
   "walkthroughs.html",
   // Walkthrough review queue (2026-05-19; renamed from specialist-mentor-review
-  // 2026-05-26) — Department Office > Workspace. Director-only. HQ Director
+  // 2026-05-26) â€” Department Office > Workspace. Director-only. HQ Director
   // sees submitted specialist walkthroughs, leaves NN2-confidential coaching
-  // feedback, flips notesState 'submitted' → 'mentor_reviewed' (or back to
+  // feedback, flips notesState 'submitted' â†’ 'mentor_reviewed' (or back to
   // 'draft' for revision).
   "walkthrough-review.html",
 ];
@@ -690,8 +690,8 @@ htmlFiles.forEach((file) => {
   //       shared-styles.css.
   //    2) main-content landmark (1.3.1 / supports 2.4.1): add the id +
   //       role="main" + tabindex="-1" attributes to the FIRST content
-  //       wrapper — attributes only, NEVER a new <main> wrapper element
-  //       (would break `body:has(> .page-footer)` — Common Mistake #54).
+  //       wrapper â€” attributes only, NEVER a new <main> wrapper element
+  //       (would break `body:has(> .page-footer)` â€” Common Mistake #54).
   //       Fallback: a bare focus target right after the navbar if no known
   //       wrapper is found (bespoke pages like index).
   output = injectA11y(output, file);
@@ -703,12 +703,12 @@ htmlFiles.forEach((file) => {
   if (syllabusToolbarBtn) {
     output = output.replace("<!-- SYLLABUS_TEACH_SCHED_BTN -->", syllabusToolbarBtn);
   }
-  // Inject personal notes widget (currently only on index.html — placeholder
+  // Inject personal notes widget (currently only on index.html â€” placeholder
   // is a no-op on every other page, since the marker isn't present)
   if (notesWidget) {
     output = output.replace("<!-- NOTES_WIDGET -->", notesWidget);
   }
-  // Phase 4 — inject /cambridge-crossref.js once per page (defer; auto-
+  // Phase 4 â€” inject /cambridge-crossref.js once per page (defer; auto-
   // bootstraps from DOM scan). Skip login + index since they don't render
   // CTS chips. Use lastIndexOf so we target the actual document </body>
   // and not a </body> sitting inside an inline JS template literal
@@ -718,7 +718,7 @@ htmlFiles.forEach((file) => {
   // a plain substring of the filename. Past incident 2026-05-15:
   // handbook.html had CSS/JS comments referencing "cambridge-crossref.js"
   // which made the loose substring check think the script was already
-  // there → ES/CTS/SKL/PIGP chips rendered but were unclickable.
+  // there â†’ ES/CTS/SKL/PIGP chips rendered but were unclickable.
   if (file !== 'login.html' && file !== 'index.html' && file !== 'waiting.html' &&
       !/<script\s[^>]*src=["']cambridge-crossref\.js["']/.test(output)) {
     const closeIdx = output.lastIndexOf('</body>');
@@ -744,7 +744,7 @@ if (fs.existsSync("cambridge-crossref.js")) {
   console.log("Copied: cambridge-crossref.js");
 }
 
-// -- Copy handbook-reader.{css,js} — shared handbook reader module.
+// -- Copy handbook-reader.{css,js} â€” shared handbook reader module.
 //    Source-of-truth is shared-design/; synced to each hub root via
 //    `npm run sync:handbook -- --apply`. handbook.html loads these by
 //    relative path so they must land at dist root next to handbook.html.
@@ -755,13 +755,13 @@ if (fs.existsSync("cambridge-crossref.js")) {
   }
 });
 
-// Research-archive copy blocks (Permendiknas / Cambridge / ES / AICF) —
+// Research-archive copy blocks (Permendiknas / Cambridge / ES / AICF) â€”
 // drives the chip popovers in cambridge-crossref.js + AICF reader pages.
 // Source-of-truth lives in monorepo docs/research/. CH's Vercel deploy
 // checks out the monorepo (CH project root), so `..` resolves directly;
 // no local mirror is needed (unlike AH+TH).
 //
-// Since 2026-05-25 (architecture pass step 6) — replaces ~110 lines of
+// Since 2026-05-25 (architecture pass step 6) â€” replaces ~110 lines of
 // near-identical "iterate-list-and-copyFileSync" boilerplate with one
 // declarative call per subtree via the shared copy-tree helper.
 const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
@@ -777,7 +777,7 @@ const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
   );
 }
 
-// Cambridge research archive (CSLS chip popovers — also surfaced cross-hub
+// Cambridge research archive (CSLS chip popovers â€” also surfaced cross-hub
 // via /references reader)
 {
   const src = path.join("..", "docs", "research", "cambridge");
@@ -789,7 +789,7 @@ const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
   );
 }
 
-// Eduversal Academic Standards (ES chip popovers — manifest + blurbs only;
+// Eduversal Academic Standards (ES chip popovers â€” manifest + blurbs only;
 // full section JSONs ship via references-data tree below for the reader)
 {
   const src = path.join("..", "docs", "research", "eduversal", "academic-standards");
@@ -802,7 +802,7 @@ const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
 }
 
 // Eduversal AI Competency Framework v1.0 (manifest + practical + reference
-// layers) — AICF chip family + 3 reader pages /ai-framework-{teacher,
+// layers) â€” AICF chip family + 3 reader pages /ai-framework-{teacher,
 // student,institutional}
 {
   const src = path.join("..", "docs", "research", "eduversal", "ai-competency-framework");
@@ -819,10 +819,10 @@ const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
     if (fs.existsSync(referenceSrc)) {
       copyDir(referenceSrc, path.join(destDir, "reference"), "dist/research/eduversal/ai-competency-framework/reference");
     } else {
-      console.warn(`WARNING: reference/ subdir not found in ${src} — chip popovers will degrade gracefully but reader pages will be empty.`);
+      console.warn(`WARNING: reference/ subdir not found in ${src} â€” chip popovers will degrade gracefully but reader pages will be empty.`);
     }
   } else {
-    console.warn(`WARNING: docs/research/eduversal/ai-competency-framework/ not found — AICF chip family and reader pages will not function.`);
+    console.warn(`WARNING: docs/research/eduversal/ai-competency-framework/ not found â€” AICF chip family and reader pages will not function.`);
   }
 }
 
@@ -836,25 +836,25 @@ fs.mkdirSync(refDestRoot, { recursive: true });
 
 // Map: [destRelativePath, sourceAbsolutePath]
 const refAssetMap = [
-  // ── Cross-Module Audits ─────────────────────────────────────
+  // â”€â”€ Cross-Module Audits â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ["audits/INDEX.md",                                         path.join("..", "docs", "cross-module", "INDEX.md")],
   ["audits/specialist-content-depth-audit.md",                path.join("..", "docs", "cross-module", "specialist-content-depth-audit.md")],
   ["audits/school-appraisal-x-principal-rubric-mapping.json", path.join("..", "docs", "cross-module", "school-appraisal-x-principal-rubric-mapping.json")],
   ["audits/principal-360-framework-v1.json",                  path.join("..", "docs", "cross-module", "principal-360-framework-v1.json")],
   ["audits/principal-coaching-framework-v1.json",             path.join("..", "docs", "cross-module", "principal-coaching-framework-v1.json")],
-  // Provenance / hand-author backfills — preserved as an audit trail
+  // Provenance / hand-author backfills â€” preserved as an audit trail
   // for the May 2026 content-quality sweep. Source-of-truth is now in
   // Firestore; these JSONs are the hand-authored set the seeders read.
   ["audits/competency-content-backfill-v1.json",              path.join("..", "docs", "competency", "competency-content-backfill-v1.json")],
   ["audits/specialist-content-backfill-v1.json",              path.join("..", "docs", "competency", "specialist-content-backfill-v1.json")],
   ["audits/specialist-content-backfill-v1-part2.json",        path.join("..", "docs", "competency", "specialist-content-backfill-v1-part2.json")],
   ["audits/specialist-content-polish-v1.json",                path.join("..", "docs", "competency", "specialist-content-polish-v1.json")],
-  // Heyet board proposal — early Round 1 deliverable, archived but
+  // Heyet board proposal â€” early Round 1 deliverable, archived but
   // kept reachable for executive context.
   ["audits/HEYET-PROPOSAL.md",                                path.join("..", "docs", "principal-development", "HEYET-PROPOSAL.md")],
 
-  // ── Frameworks ──────────────────────────────────────────────
-  // Appraisal v2 + Principal Appraisal v1 — read from AH/CH resources
+  // â”€â”€ Frameworks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Appraisal v2 + Principal Appraisal v1 â€” read from AH/CH resources
   // which are kept byte-identical with TH copies via tag scripts.
   ["frameworks/appraisal-framework-v2.json",               path.join("..", "Academic Hub", "resources", "appraisal-framework-v2.json")],
   ["frameworks/principal-appraisal-framework-v1.json",     path.join("..", "Academic Hub", "resources", "principal-appraisal-framework-v1.json")],
@@ -869,7 +869,7 @@ const refAssetMap = [
   ["frameworks/teacher-kpi-extensions-v1.json",            path.join("..", "docs", "kpi", "teacher-kpi-extensions-v1.json")],
   ["frameworks/teacher-kpi-legacy-backfill-v1.json",       path.join("..", "docs", "kpi", "teacher-kpi-legacy-backfill-v1.json")],
 
-  // ── Weekly checklists × 8 sub-roles ────────────────────────
+  // â”€â”€ Weekly checklists Ã— 8 sub-roles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ["frameworks/weekly-checklists/_academic-year-arc.json",        path.join("..", "docs", "weekly-checklists", "_academic-year-arc.json")],
   ["frameworks/weekly-checklists/subject-teacher.json",           path.join("..", "docs", "weekly-checklists", "subject-teacher.json")],
   ["frameworks/weekly-checklists/subject-leader.json",            path.join("..", "docs", "weekly-checklists", "subject-leader.json")],
@@ -880,34 +880,34 @@ const refAssetMap = [
   ["frameworks/weekly-checklists/subject-specialist.json",        path.join("..", "docs", "weekly-checklists", "subject-specialist.json")],
   ["frameworks/weekly-checklists/director.json",                  path.join("..", "docs", "weekly-checklists", "director.json")],
 
-  // ── Cambridge verbatim ──────────────────────────────────────
+  // â”€â”€ Cambridge verbatim â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ["cambridge/teacher-standards-2023.json",         path.join("..", "docs", "research", "cambridge", "teacher-standards-2023.json")],
   ["cambridge/teacher-standards-rationale.json",    path.join("..", "docs", "research", "cambridge", "teacher-standards-rationale.json")],
   ["cambridge/school-leader-standards-2023.json",   path.join("..", "docs", "research", "cambridge", "school-leader-standards-2023.json")],
   ["cambridge/mentoring-guide-2020.json",           path.join("..", "docs", "research", "cambridge", "mentoring-guide-2020.json")],
   ["cambridge/ictl-5881-syllabus.json",             path.join("..", "docs", "research", "cambridge", "ictl-5881-syllabus.json")],
 
-  // ── Permendiknas / Permendikbud verbatim ────────────────────
+  // â”€â”€ Permendiknas / Permendikbud verbatim â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ["permendiknas/no-10-2025-skl.json",  path.join("..", "docs", "research", "permendiknas", "no-10-2025-skl.json")],
   ["permendiknas/no-27-2010-pigp.json", path.join("..", "docs", "research", "permendiknas", "no-27-2010-pigp.json")],
   ["permendiknas/no-16-2007.json",      path.join("..", "docs", "research", "permendiknas", "no-16-2007.json")],
 
-  // ── Organization (Framework v1.0 + Lampiran V + roles catalogue) ─
+  // â”€â”€ Organization (Framework v1.0 + Lampiran V + roles catalogue) â”€
   // Canonical eduversal-side org-topology references. The roles catalogue
   // itself stays in resources/roles-positions.json and is rendered by the
-  // dedicated /roles-positions surface — references-data only mirrors a
+  // dedicated /roles-positions surface â€” references-data only mirrors a
   // copy here so the search index can pick up its content and the manifest
   // can deep-link to it.
   ["organization/organizational-meeting-framework-v1-2026.json", path.join("..", "docs", "research", "eduversal", "organizational-meeting-framework-v1-2026.json")],
   ["organization/partner-school-org-structure-lampiran-v.json",  path.join("..", "docs", "research", "eduversal", "partner-school-org-structure-lampiran-v.json")],
   ["organization/roles-positions.json",                          path.join("resources", "roles-positions.json")],
 
-  // ── Eduversal Academic Standards (23-section network-wide manual) ─
+  // â”€â”€ Eduversal Academic Standards (23-section network-wide manual) â”€
   // The whole standards corpus is mirrored here so the /references reader
-  // can deep-link any madde (e.g. "ES 7.3" → /references?doc=eduversal-
+  // can deep-link any madde (e.g. "ES 7.3" â†’ /references?doc=eduversal-
   // standards-section-07). manifest.json is the flat madde id index used
   // by the ES chip family AND by the references search index. Source-of-
-  // truth is HQ-authored Academic Hub/Sections/Section NN.json → mirrored
+  // truth is HQ-authored Academic Hub/Sections/Section NN.json â†’ mirrored
   // into docs/research/eduversal/academic-standards/ by build-academic-
   // standards.js (--apply).
   ["eduversal-standards/manifest.json",      path.join("..", "docs", "research", "eduversal", "academic-standards", "manifest.json")],
@@ -920,13 +920,13 @@ const refAssetMap = [
     ];
   }),
 
-  // ── AI Competency Framework v1.0 (AICF) ─────────────────────
+  // â”€â”€ AI Competency Framework v1.0 (AICF) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mirror the framework spine + 4 reference JSONs (verbatim PDF parts) +
   // 6 practical layer JSONs into references-data/ so the /references hub
   // can index, search, and deep-link them (?doc=aicf-...). Source is the
   // same monorepo tree the 3 reader pages (/ai-framework-{teacher,student,
   // institutional}) and the chip family already consume, so this is a
-  // duplicate-mirror — both copies stay in sync via this single build step.
+  // duplicate-mirror â€” both copies stay in sync via this single build step.
   ["aicf/manifest.json",                  path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "manifest.json")],
   ["aicf/eduversal-v1-part1-teacher.json", path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "eduversal-v1-part1-teacher.json")],
   ["aicf/eduversal-v1-part2-student.json", path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "reference", "eduversal-v1-part2-student.json")],
@@ -943,7 +943,7 @@ const refAssetMap = [
   ["aicf/weekly-tips.json",               path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "weekly-tips.json")],
   ["aicf/classroom-activities.json",      path.join("..", "docs", "research", "eduversal", "ai-competency-framework", "practical", "classroom-activities.json")],
 
-  // ── Schemas & Governance ────────────────────────────────────
+  // â”€â”€ Schemas & Governance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ["schemas/FIRESTORE_SCHEMA.md",                  path.join("..", "docs", "architecture", "FIRESTORE_SCHEMA.md")],
   ["schemas/DESIGN_SYSTEM.md",                     path.join("..", "docs", "architecture", "DESIGN_SYSTEM.md")],
   ["schemas/CONTRIBUTING-FIRESTORE.md",            path.join("..", "docs", "architecture", "CONTRIBUTING-FIRESTORE.md")],
@@ -960,7 +960,7 @@ const refAssetMap = [
   ["schemas/SPECIALIST_COHORT_REVIEW.md",          path.join("..", "docs", "induction", "SPECIALIST_COHORT_REVIEW.md")],
   ["schemas/weekly-checklists-SCHEMA.md",          path.join("..", "docs", "weekly-checklists", "SCHEMA.md")],
 
-  // ── PD & Facilitation (docs/pd/) — facilitator session guides, participant
+  // â”€â”€ PD & Facilitation (docs/pd/) â€” facilitator session guides, participant
   //    one-pagers, slide-deck outlines, workbooks for the partner-school PD
   //    program. Surfaced under the /references 'pd' facet. ESL/EAL English.
   ["pd/README.md",                                 path.join("..", "docs", "pd", "README.md")],
@@ -1003,12 +1003,12 @@ refAssetMap.forEach(([rel, src]) => {
 });
 console.log(`Copied: dist/references-data/ (${refCopied} files, ${refMissing} missing)`);
 
-// ── References search index ─────────────────────────────────────────
+// â”€â”€ References search index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Scans every successfully-copied references-data file and extracts:
 //   - special tokens (NN[1-5], CTS X.Y, F[1-5L], F_LEAD, PIGP pasal-N,
-//     SKL: dimension) — so 'NN3' finds every doc that uses NN3, not just
+//     SKL: dimension) â€” so 'NN3' finds every doc that uses NN3, not just
 //     ones whose MANIFEST tag literally lists 'NN3'.
-//   - headings (markdown # ## ### or top-level JSON keys) — give the
+//   - headings (markdown # ## ### or top-level JSON keys) â€” give the
 //     search a few prose anchors per doc.
 // Runtime references.html fetches dist/references-search-index.json once
 // at boot and unions matches with the existing DOM-text search.
@@ -1018,7 +1018,7 @@ function extractTokens(text) {
   // NN1-NN5
   for (const m of text.matchAll(/\bNN[1-5]\b/g)) tokens.add(m[0]);
 
-  // CTS X.Y (Cambridge Teacher Standards) — also store the bare 'CTS' so a
+  // CTS X.Y (Cambridge Teacher Standards) â€” also store the bare 'CTS' so a
   // search for 'CTS' alone surfaces every doc that anchors to the standard.
   for (const m of text.matchAll(/\bCTS\s*(\d+\.\d+)\b/g)) {
     tokens.add(`CTS ${m[1]}`);
@@ -1028,13 +1028,13 @@ function extractTokens(text) {
   // F1-F5, F_LEAD, F3L
   for (const m of text.matchAll(/\bF(?:_LEAD|[1-5][A-Z]?)\b/g)) tokens.add(m[0]);
 
-  // PIGP — bare mention OR with pasal-N / lampiran-X qualifier
+  // PIGP â€” bare mention OR with pasal-N / lampiran-X qualifier
   if (/\bPIGP\b/.test(text)) tokens.add('PIGP');
   for (const m of text.matchAll(/\bPIGP\s+(?:pasal|lampiran)-[\w-]+/gi)) {
     tokens.add(m[0].replace(/\s+/g, ' '));
   }
 
-  // SKL — bare mention OR with dimension_id
+  // SKL â€” bare mention OR with dimension_id
   if (/\bSKL\b/.test(text)) tokens.add('SKL');
   for (const m of text.matchAll(/\bSKL[:\s]+([a-z_]+)\b/gi)) tokens.add(`SKL: ${m[1]}`);
 
@@ -1054,7 +1054,7 @@ function extractHeadings(text, kind) {
       if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
         for (const k of Object.keys(obj).slice(0, 12)) out.push(k);
       }
-    } catch (_) { /* malformed JSON — skip headings, tokens still work */ }
+    } catch (_) { /* malformed JSON â€” skip headings, tokens still work */ }
   }
   return out;
 }
@@ -1067,7 +1067,7 @@ refAssetMap.forEach(([rel, src]) => {
   const kind = rel.endsWith('.md') ? 'md' : rel.endsWith('.json') ? 'json' : 'unknown';
   const tokens = extractTokens(text);
   const headings = extractHeadings(text, kind);
-  // Only persist entries that actually carry tokens or headings — empty
+  // Only persist entries that actually carry tokens or headings â€” empty
   // payloads add bytes and noise without helping recall.
   if (tokens.length || headings.length) {
     searchIndex.docs[rel] = { tokens, headings };
@@ -1122,7 +1122,7 @@ if (fs.existsSync("eduversal-logo-white.png")) {
 }
 
 // references-viewer schema-aware modal renderer + references-shell
-// runtime (shared CSS + ES module) — local-then-shared fallback pattern
+// runtime (shared CSS + ES module) â€” local-then-shared fallback pattern
 // (mirrors nav-edit-simple). Used by references.html. Local hub copies
 // are auto-synced from shared-design/ via `npm run sync:tokens --apply`.
 [
@@ -1142,7 +1142,7 @@ if (fs.existsSync("eduversal-logo-white.png")) {
   }
 });
 
-// competency-framework.css — 3-hub byte-identical CSS partial (cf-legend
+// competency-framework.css â€” 3-hub byte-identical CSS partial (cf-legend
 // popover + domain-takeaways accordion). Source-of-truth lives in
 // monorepo-root /shared-design/competency-framework.css. Same local-then-
 // shared fallback as references-viewer. Linked from competency-framework.html
