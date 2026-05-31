@@ -280,15 +280,19 @@
     /* ════════════════════════════════════════════════════════════════
        PRO PACK 3 — FLOW (sticky TOC · recents · print branding)
        ════════════════════════════════════════════════════════════════ */
-    /* Reader gets a 2-col layout: sticky TOC rail + doc */
-    .pd-reader.has-toc { display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: start; }
-    .pd-toc { position: sticky; top: 70px; align-self: start; font-size: 13px; max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 6px; }
+    /* Reader body gets a 2-col layout: sticky TOC rail + doc. The grid is
+       on #pdReaderBody (which holds TOC + doc) — NOT on .pd-reader (which
+       also holds the full-width button bar). min-width:0 on the grid lets
+       the doc column shrink instead of overflowing the 1200px rail. */
+    #pdReaderBody.has-toc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; }
+    #pdReaderBody.has-toc > .pd-doc { min-width: 0; }
+    .pd-toc { position: sticky; top: 70px; align-self: start; font-size: 13px; max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 6px; min-width: 0; }
     .pd-toc-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #9b95ad; margin: 0 0 10px; }
     .pd-toc a { display: block; padding: 5px 10px; border-radius: 7px; color: #6b6580; text-decoration: none; line-height: 1.35; border-left: 2px solid transparent; margin-bottom: 2px; transition: all .1s; }
     .pd-toc a:hover { background: rgba(108,92,231,.06); color: var(--ink, #1a1530); }
     .pd-toc a.active { background: rgba(108,92,231,.1); color: var(--accent-dk, #4e3db8); border-left-color: var(--accent, #6c5ce7); font-weight: 600; }
     .pd-toc a.lvl-3 { padding-left: 22px; font-size: 12px; }
-    @media (max-width: 900px) { .pd-reader.has-toc { grid-template-columns: 1fr; } .pd-toc { display: none; } }
+    @media (max-width: 900px) { #pdReaderBody.has-toc { grid-template-columns: 1fr; } .pd-toc { display: none; } }
 
     /* Recently opened strip on the browser */
     .pd-recents { max-width: var(--container-max, 1200px); margin: 18px auto 0; }
@@ -301,12 +305,12 @@
     @media (max-width: 640px) {
       .pd-doc { padding: 26px 20px; }
       .page-hero__kpis { display: none; }
-      .pd-reader.has-toc { grid-template-columns: 1fr; }
+      #pdReaderBody.has-toc { grid-template-columns: 1fr; }
       .pd-toc { display: none; }
     }
     @media print {
       .page-hero, .pd-toolbar, .navbar, nav, .page-footer, .pd-reader-bar, .pd-slide-ctrl, .pd-toc, .pd-recents { display: none !important; }
-      .pd-reader.has-toc { display: block !important; }
+      #pdReaderBody.has-toc { display: block !important; }
       .pd-doc { border: none; box-shadow: none; padding: 0; }
       /* Print branding — Eduversal header + page footer on every printed page */
       .pd-print-brand { display: block !important; border-bottom: 2px solid #6c5ce7; padding-bottom: 8px; margin-bottom: 18px; }
@@ -700,8 +704,7 @@
         return;
       }
       pushRecent(slug);
-      const reader = document.querySelector('.pd-reader');
-      reader.classList.remove('has-toc');
+      body.classList.remove('has-toc');  // body === #pdReaderBody; grid is on the body, not .pd-reader
       if (meta.type === 'slide-outline') {
         const slides = parseSlides(md);
         if (!slides.length) { body.innerHTML = `<div class="pd-doc-error"><strong>No slides found</strong><br>This deck has no parseable “## Slide N” blocks.</div>`; return; }
@@ -718,7 +721,7 @@
         const docBody = body.querySelector('#pdDocBody');
         const heads = [...docBody.querySelectorAll('h2, h3')];
         if (heads.length >= 3) {
-          reader.classList.add('has-toc');
+          body.classList.add('has-toc');
           const nav = body.querySelector('#pdTocNav');
           heads.forEach((h, i) => {
             const id = 'pdh-' + i; h.id = id;
