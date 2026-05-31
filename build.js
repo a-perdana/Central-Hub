@@ -12,6 +12,64 @@ function copyDirRecursive(srcDir, destDir) {
   });
 }
 
+// -- A11Y injection helper (WCAG 2.2 AA, 2026-05-31) -----------------------
+//    Shared by all 3 hubs (keep CH / AH / TH copies in sync — same manual-
+//    sync discipline as the a11y.css block). Adds:
+//      1. <a class="skip-link" href="#main-content"> right after <body ...>
+//         (2.4.1 Bypass Blocks) — first focusable element on the page.
+//      2. id="main-content" role="main" tabindex="-1" ATTRIBUTES on the first
+//         content wrapper (1.3.1). Attributes only — never a new <main> element
+//         (would break `body:has(> .page-footer)` — Common Mistake #54).
+//    Idempotent (skips if a skip-link / #main-content already present).
+//    Skips auth-flow pages (login) where there is no main content to skip to.
+const A11Y_SKIP_FILES = new Set(["login.html"]);
+// First-content-wrapper candidates, in priority order. The first match in the
+// document that does NOT already carry an id gets the landmark attributes.
+const A11Y_WRAPPER_PATTERNS = [
+  /<header class="page-hero"/,
+  /<main\b(?![^>]*\bid=)/,
+  /<section class="page-info-strip"/,
+  /<div class="page-wrap"/,
+  /<div class="main-content"/,
+  /<div class="page-layout"/,
+  /<div id="mainContent"/,            // AH
+  /<div id="navbar-container"><\/div>/ // TH bespoke (fallback handled below)
+];
+function injectA11y(html, fileBase) {
+  if (A11Y_SKIP_FILES.has(fileBase)) return html;
+  // Idempotency — already processed.
+  if (/class="skip-link"/.test(html) || /id="main-content"/.test(html)) return html;
+
+  const SKIP = '<a class="skip-link" href="#main-content">Skip to main content</a>\n';
+  const LANDMARK = ' id="main-content" role="main" tabindex="-1"';
+
+  // 1) Skip-link right after the opening <body ...> tag.
+  let out = html.replace(/(<body\b[^>]*>)/, `$1\n${SKIP}`);
+
+  // 2) Landmark attributes on the first matching content wrapper.
+  let landmarkPlaced = false;
+  for (const pat of A11Y_WRAPPER_PATTERNS) {
+    const m = out.match(pat);
+    if (!m) continue;
+    // Skip the TH-only navbar-container sentinel here — handled by fallback.
+    if (pat.source.includes("navbar-container")) break;
+    // Inject the attributes just after the matched tag-name token.
+    const tag = m[0];
+    out = out.replace(tag, tag + LANDMARK);
+    landmarkPlaced = true;
+    break;
+  }
+  // 3) Fallback for bespoke pages with no known wrapper: drop a bare focus
+  //    target right after the skip-link so the skip-link still lands.
+  if (!landmarkPlaced) {
+    out = out.replace(
+      SKIP,
+      SKIP + '<span id="main-content" tabindex="-1"></span>\n'
+    );
+  }
+  return out;
+}
+
 // -- Create dist
 if (!fs.existsSync("dist")) fs.mkdirSync("dist");
 
@@ -625,6 +683,18 @@ htmlFiles.forEach((file) => {
   let output = sharedNavbar
     ? source.replace("<!-- SHARED_NAVBAR -->", sharedNavbar)
     : source;
+  // -- A11Y (WCAG 2.2 AA, 2026-05-31): skip-link + <main> landmark --------
+  //    1) Skip-link as the FIRST focusable element on the page (2.4.1 Bypass
+  //       Blocks). Injected right after the opening <body ...> tag so it
+  //       precedes the navbar in DOM/focus order. Styled by .skip-link in
+  //       shared-styles.css.
+  //    2) main-content landmark (1.3.1 / supports 2.4.1): add the id +
+  //       role="main" + tabindex="-1" attributes to the FIRST content
+  //       wrapper — attributes only, NEVER a new <main> wrapper element
+  //       (would break `body:has(> .page-footer)` — Common Mistake #54).
+  //       Fallback: a bare focus target right after the navbar if no known
+  //       wrapper is found (bespoke pages like index).
+  output = injectA11y(output, file);
   // Inject shared syllabus modals (Teaching Schedule + toast)
   if (syllabusModals) {
     output = output.replace("<!-- SYLLABUS_MODALS -->", syllabusModals);
