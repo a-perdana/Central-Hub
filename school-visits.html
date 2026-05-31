@@ -1180,7 +1180,7 @@
               <label class="cycle-form-label" for="cycleYear">Academic Year</label>
               <select class="cycle-form-select" id="cycleYear">
                 <option value="2024/2025">2024/2025</option>
-                <option value="2025/2026" selected>2025/2026</option>
+                <option value="2025/2026">2025/2026</option>
                 <option value="2026/2027">2026/2027</option>
               </select>
             </div>
@@ -1445,7 +1445,9 @@ const ANNUAL_PHASES = [
 /* ===================================================
    APPRAISAL ROLL-UP — moved here from /appraisals 2026-05-26
    =================================================== */
-const APPR_CURRENT_YEAR = '2025/2026';
+// Slash format (`2025/2026`) — appraisals/walkthroughs store academicYear that way.
+// Set in authReady from the single source of truth (calendar_settings/current).
+let APPR_CURRENT_YEAR = '2025/2026';
 let allCycles = [];
 
 function apprFmt(date) {
@@ -1746,6 +1748,17 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   isAdmin = profile?.role_centralhub === 'central_admin';
   window.isAdmin = isAdmin; // exposed for footer CTA inline handler
   const db = window.db;
+
+  // Current academic year from the single source of truth (calendar_settings/current),
+  // converted to the slash format these collections use. Date heuristic as fallback.
+  {
+    const hy = (window.getCurrentAcademicYear && window.getCurrentAcademicYear())
+      || (() => { const n = new Date(), y = n.getFullYear(); return n.getMonth() >= 6 ? `${y}-${y+1}` : `${y-1}-${y}`; })();
+    APPR_CURRENT_YEAR = hy.replace('-', '/');
+    // Default the create-cycle year picker to the current year (option exists in the list).
+    const cyEl = document.getElementById('cycleYear');
+    if (cyEl && [...cyEl.options].some(o => o.value === APPR_CURRENT_YEAR)) cyEl.value = APPR_CURRENT_YEAR;
+  }
 
   if (isAdmin) {
     document.getElementById('btnNewVisit').style.display = '';
