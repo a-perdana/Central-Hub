@@ -47,6 +47,208 @@ function escapeHtml(s) {
   }[c]));
 }
 
+/* ── PD / facilitation markdown enrichment ───────────────────────────
+   PD docs (docs/pd/**) carry a YAML front-matter block and — for the
+   slide decks — a "## Slide N" + Speaker note / Visual structure that
+   raw marked.parse() dumps as flat text. These helpers lift the
+   front-matter into a metadata card and turn slide blocks into cards.   */
+
+/* Lightweight, dependency-free front-matter splitter. We only support
+   the small subset of YAML our PD authoring uses: scalars (quoted or
+   bare), inline arrays (["a","b"]), and one level of nested mappings /
+   sequences (references:, provenance:, etc.). Anything we can't model
+   cleanly is preserved verbatim under the key so nothing is lost. */
+function parseFrontmatter(text) {
+  const m = /^﻿?---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+  if (!m) return { data: null, body: text };
+  const raw = m[1];
+  const body = text.slice(m[0].length);
+  const data = {};
+  const lines = raw.split(/\r?\n/);
+  const unquote = (v) => {
+    v = v.trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      return v.slice(1, -1);
+    }
+    return v;
+  };
+  const parseInlineArray = (v) => v.slice(1, -1).split(',')
+    .map(x => unquote(x)).filter(x => x !== '');
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    const top = /^([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
+    if (!top) { i++; continue; }
+    const key = top[1];
+    let rest = top[2];
+    if (rest === '') {
+      // Nested block: gather indented child lines.
+      const children = [];
+      i++;
+      while (i < lines.length && /^\s+\S/.test(lines[i])) {
+        children.push(lines[i]); i++;
+      }
+      // Sequence of mappings ("- source: …") → array of objects.
+      if (children.some(c => /^\s*-\s/.test(c))) {
+        const arr = [];
+        let cur = null;
+        for (const c of children) {
+          const item = /^\s*-\s*(.*)$/.exec(c);
+          if (item) {
+            if (cur) arr.push(cur);
+            cur = {};
+            const kv = /^([A-Za-z0-9_]+):\s*(.*)$/.exec(item[1]);
+            if (kv) cur[kv[1]] = unquote(kv[2]);
+            else cur._value = unquote(item[1]);
+          } else if (cur) {
+            const kv = /^\s*([A-Za-z0-9_]+):\s*(.*)$/.exec(c);
+            if (kv) cur[kv[1]] = unquote(kv[2]);
+          }
+        }
+        if (cur) arr.push(cur);
+        data[key] = arr.map(o => (o._value !== undefined && Object.keys(o).length === 1) ? o._value : o);
+      } else {
+        // Mapping of scalars / inline-arrays.
+        const obj = {};
+        for (const c of children) {
+          const kv = /^\s*([A-Za-z0-9_]+):\s*(.*)$/.exec(c);
+          if (!kv) continue;
+          const v = kv[2].trim();
+          obj[kv[1]] = (v.startsWith('[') && v.endsWith(']')) ? parseInlineArray(v) : unquote(v);
+        }
+        data[key] = obj;
+      }
+      continue;
+    }
+    rest = rest.trim();
+    if (rest.startsWith('[') && rest.endsWith(']')) data[key] = parseInlineArray(rest);
+    else data[key] = unquote(rest);
+    i++;
+  }
+  return { data, body };
+}
+
+/* Glyph + readable label for the docType front-matter value. */
+const PD_DOCTYPE_META = {
+  'slide-outline':   { glyph: '🎤', label: 'Slide outline' },
+  'session-guide':   { glyph: '🗂', label: 'Session guide' },
+  'one-pager':       { glyph: '📄', label: 'One-pager' },
+  'onepager':        { glyph: '📄', label: 'One-pager' },
+  'workbook':        { glyph: '✏️', label: 'Workbook' },
+  'program-map':     { glyph: '🗺', label: 'Program map' },
+  'train-the-trainer': { glyph: '🎓', label: 'Train-the-trainer' },
+};
+
+function pdMetaPills(data) {
+  const pills = [];
+  const push = (label, val, cls) => {
+    if (val === undefined || val === null || val === '') return;
+    pills.push(`<span class="pd-meta-pill ${cls || ''}">${escapeHtml(label)}${val === true ? '' : ': ' + escapeHtml(String(val))}</span>`);
+  };
+  if (data.audience)    push('audience', data.audience, 'pd-pill-audience');
+  if (Array.isArray(data.participants) && data.participants.length) {
+    push('for', data.participants.join(' · '), 'pd-pill-audience');
+  }
+  if (data.duration)    push('⏱', data.duration);
+  if (data.mode)        push('mode', data.mode);
+  if (data.language)    push('lang', data.language);
+  return pills.join('');
+}
+
+function renderPdMetaCard(data) {
+  if (!data) return '';
+  const dt = (data.docType || '').toString();
+  const meta = PD_DOCTYPE_META[dt] || { glyph: '📘', label: dt || 'Document' };
+  const pills = pdMetaPills(data);
+
+  // References (framework / cambridge / eduversal / aicf …) as small chips.
+  let refChips = '';
+  if (data.references && typeof data.references === 'object') {
+    const groups = [];
+    for (const [grp, vals] of Object.entries(data.references)) {
+      const list = Array.isArray(vals) ? vals : [vals];
+      for (const v of list) {
+        groups.push(`<span class="pd-ref-chip" title="${escapeHtml(grp)}">${escapeHtml(String(v).replace(/\.json$/, ''))}</span>`);
+      }
+    }
+    if (groups.length) refChips = `<div class="pd-meta-refs"><span class="pd-meta-refs-label">References</span>${groups.join('')}</div>`;
+  }
+
+  const purpose = data.purpose
+    ? `<p class="pd-meta-purpose">${escapeHtml(data.purpose)}</p>` : '';
+  const langNote = data.languageNote
+    ? `<p class="pd-meta-langnote">🗣 ${escapeHtml(data.languageNote)}</p>` : '';
+
+  return `
+    <div class="pd-meta-card">
+      <div class="pd-meta-head">
+        <span class="pd-meta-glyph">${meta.glyph}</span>
+        <div class="pd-meta-headtext">
+          <span class="pd-meta-eyebrow">${escapeHtml(meta.label)}</span>
+          ${data.title ? `<span class="pd-meta-title">${escapeHtml(data.title)}</span>` : ''}
+        </div>
+      </div>
+      ${purpose}
+      ${pills ? `<div class="pd-meta-pills">${pills}</div>` : ''}
+      ${langNote}
+      ${refChips}
+    </div>`;
+}
+
+/* Rewrite a slide-deck body so each "## Slide N — title" block becomes a
+   card with the slide number badge, on-screen bullets, and a styled
+   Speaker note / Visual footer. Returns markdown-with-embedded-HTML that
+   marked.parse() passes through untouched (HTML blocks are preserved). */
+function transformSlideDeck(body) {
+  const lines = body.split(/\r?\n/);
+  const out = [];
+  // Keep any leading content (title H1, intro blockquote) before the first slide.
+  let slideStarted = false;
+  let buf = null;          // current slide's inner lines
+
+  const flush = () => {
+    if (!buf) return;
+    const { num, title, content } = buf;
+    // Pull Speaker note / Visual footer lines out of the bullet body.
+    const footer = [];
+    const bodyLines = [];
+    for (const l of content) {
+      const sp = /^\*\*Speaker note:\*\*\s*(.*)$/.exec(l);
+      const vi = /^\*\*Visual:\*\*\s*(.*)$/.exec(l);
+      if (sp) { footer.push(`<div class="pd-slide-note"><span class="pd-slide-note-tag">🎤 Speaker</span><span class="pd-slide-note-text">${escapeHtml(sp[1])}</span></div>`); }
+      else if (vi) { footer.push(`<div class="pd-slide-note pd-slide-visual"><span class="pd-slide-note-tag">🖼 Visual</span><span class="pd-slide-note-text">${escapeHtml(vi[1])}</span></div>`); }
+      else bodyLines.push(l);
+    }
+    out.push(`<div class="pd-slide-card">`);
+    out.push(`<div class="pd-slide-badge">Slide ${escapeHtml(String(num))}${title ? ` <span class="pd-slide-badge-title">${escapeHtml(title)}</span>` : ''}</div>`);
+    out.push('');
+    // Bullets stay as markdown so marked renders bold / chips inside them.
+    out.push(bodyLines.join('\n').trim());
+    out.push('');
+    if (footer.length) out.push(`<div class="pd-slide-footer">${footer.join('')}</div>`);
+    out.push(`</div>`);
+    out.push('');
+    buf = null;
+  };
+
+  for (const line of lines) {
+    const slide = /^##\s+Slide\s+(\d+)\s*[—–-]?\s*(.*)$/i.exec(line);
+    if (slide) {
+      flush();
+      slideStarted = true;
+      buf = { num: slide[1], title: slide[2].trim(), content: [] };
+      continue;
+    }
+    if (buf) buf.content.push(line);
+    else out.push(line);   // pre-first-slide preamble passes through
+  }
+  flush();
+  // If we never found a slide block, return the original untouched.
+  return slideStarted ? out.join('\n') : body;
+}
+
 /* All MANIFEST facet keys that hold an array of items. Handbooks is
    present but loaded asynchronously from Firestore — callers usually
    want to treat it specially. The 'handbooks' inclusion is controlled
@@ -672,8 +874,13 @@ async function openDoc(MANIFEST, ctx, { path, kind, title }) {
     const text = await res.text();
 
     if (kind === 'md') {
-      const html = window.marked ? window.marked.parse(text) : `<pre>${escapeHtml(text)}</pre>`;
-      bodyEl.innerHTML = `${backStrip}<div class="md-render">${injectCrossrefChips(html)}</div>`;
+      const { data: fm, body: mdBody } = parseFrontmatter(text);
+      const metaCard = renderPdMetaCard(fm);
+      const isSlideDeck = fm && (fm.docType === 'slide-outline');
+      const source = isSlideDeck ? transformSlideDeck(mdBody) : mdBody;
+      const html = window.marked ? window.marked.parse(source) : `<pre>${escapeHtml(source)}</pre>`;
+      const renderClass = isSlideDeck ? 'md-render pd-slide-render' : 'md-render';
+      bodyEl.innerHTML = `${backStrip}${metaCard}<div class="${renderClass}">${injectCrossrefChips(html)}</div>`;
     } else if (kind === 'json') {
       const viewer = window.EduversalReferencesViewer;
       let inner;
