@@ -163,9 +163,14 @@ export const SUBJECT_PATTERN_COLOR = {
 //             primary-checkpoint-syllabus.html — single source of truth
 //             for the 4-digit syllabus codes used network-wide.
 //
-// Subjects with no Cambridge pacing pages (Bahasa / Religion / Edu-STEAM /
-// Early Years / Civics) have an empty array — the UI renders an empty-state
-// pointing the coordinator at the Annual Strategy slot below.
+// Bahasa Indonesia + Edu-STEAM are Eduversal-authored (non-Cambridge)
+// subjects that now carry the full 4-stage pacing surface, mirroring the
+// Cambridge subjects' structure. Their `code` is an EDV-prefix placeholder
+// (no Cambridge syllabus code) — replace once HQ authors a real scheme.
+//
+// Subjects with no pacing pages (Religion / Early Years / Civics) keep an
+// empty array — the UI renders an empty-state pointing the coordinator at
+// the Annual Strategy slot below.
 export const SUBJECT_PACING_LINKS = {
   math: [
     { slug: 'primary-math-pacing',    label: 'Primary Math',      stage: 'Y1–6',   code: '0096' },
@@ -196,9 +201,19 @@ export const SUBJECT_PACING_LINKS = {
     { slug: 'primary-english-pacing',    label: 'Primary English',    stage: 'Y1–6', code: '0844' },
     { slug: 'checkpoint-english-pacing', label: 'Checkpoint English', stage: 'Y7–8', code: '1111' },
   ],
-  bahasa:      [],
+  bahasa: [
+    { slug: 'primary-bahasa-pacing',    label: 'Primary Bahasa',    stage: 'Y1–6',   code: 'EDV-BAH-P' },
+    { slug: 'checkpoint-bahasa-pacing', label: 'Checkpoint Bahasa', stage: 'Y7–8',   code: 'EDV-BAH-C' },
+    { slug: 'igcse-bahasa-pacing',      label: 'Secondary Bahasa',  stage: 'Y9–10',  code: 'EDV-BAH-S' },
+    { slug: 'as-alevel-bahasa-pacing',  label: 'AS/A-Level Bahasa', stage: 'Y11–12', code: 'EDV-BAH-A' },
+  ],
+  edu_steam: [
+    { slug: 'primary-edu-steam-pacing',    label: 'Primary Edu-STEAM',    stage: 'Y1–6',   code: 'EDV-STM-P' },
+    { slug: 'checkpoint-edu-steam-pacing', label: 'Checkpoint Edu-STEAM', stage: 'Y7–8',   code: 'EDV-STM-C' },
+    { slug: 'igcse-edu-steam-pacing',      label: 'Secondary Edu-STEAM',  stage: 'Y9–10',  code: 'EDV-STM-S' },
+    { slug: 'as-alevel-edu-steam-pacing',  label: 'AS/A-Level Edu-STEAM', stage: 'Y11–12', code: 'EDV-STM-A' },
+  ],
   religion:    [],
-  edu_steam:   [],
   early_years: [],
   civics:      [],
 };

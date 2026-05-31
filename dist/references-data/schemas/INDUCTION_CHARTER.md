@@ -158,9 +158,11 @@ This Charter is reviewed annually every May, before the next academic year's coh
 
 ## Open Items
 
-These four items must be resolved before pilot start (target: 2026-07).
+These items must be resolved before pilot start (target: 2026-07).
 
-- [ ] Define the Significant Concern policy referenced in Principle 3 — separate document, drafted before pilot start.
-- [ ] Publish the Mentor Certification curriculum (2-hour internal session, adapted from Cambridge gswment).
+- [x] Define the Significant Concern policy referenced in Principle 3 — separate document, drafted before pilot start. → [SIGNIFICANT_CONCERN_POLICY.md](SIGNIFICANT_CONCERN_POLICY.md) (v1.0, 2026-05-04)
+- [x] Publish the Mentor Certification curriculum (2-hour internal session, adapted from Cambridge gswment). → [MENTOR_CERTIFICATION_CURRICULUM.md](MENTOR_CERTIFICATION_CURRICULUM.md) (v1.0, 2026-05-04)
 - [ ] Define the soft / hard cap for mentor capacity (currently 2 / 3 — confirm with pilot data).
 - [ ] Specify the induction extension criteria — what counts as a reason for the optional 6-month extension.
+
+> The Year-1 induction observation rubric (publication blocker raised in the handbook audit) was drafted 2026-05-31 — see [induction-observation-rubric-v1.json](induction-observation-rubric-v1.json).

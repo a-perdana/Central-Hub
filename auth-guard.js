@@ -93,6 +93,17 @@ const SUBJECT_PAGE_MAP = {
   'national-biology-alignment':   ['biology'],
   'national-chemistry-alignment': ['chemistry'],
   'national-physics-alignment':   ['physics'],
+  // Eduversal-authored non-Cambridge subjects (Bahasa Indonesia + Edu-STEAM),
+  // all 4 stages. Single-subject gate — only a bahasa / edu_steam specialist
+  // (or admin) reaches the page. No Cambridge code; EDV-prefix placeholder.
+  'primary-bahasa-pacing':        ['bahasa'],
+  'checkpoint-bahasa-pacing':     ['bahasa'],
+  'igcse-bahasa-pacing':          ['bahasa'],
+  'as-alevel-bahasa-pacing':      ['bahasa'],
+  'primary-edu-steam-pacing':     ['edu_steam'],
+  'checkpoint-edu-steam-pacing':  ['edu_steam'],
+  'igcse-edu-steam-pacing':       ['edu_steam'],
+  'as-alevel-edu-steam-pacing':   ['edu_steam'],
 };
 
 // Syllabus pages render multiple subject tabs in one page. Each entry
@@ -101,14 +112,16 @@ const SUBJECT_PAGE_MAP = {
 // a "no matching subjects" notice. Keep in sync with each syllabus
 // HTML's initSyllabusPage({ subjects }) config.
 const SYLLABUS_PAGE_SUBJECTS = {
-  'igcse-syllabus':                 ['math', 'biology', 'chemistry', 'physics'],
-  'as-alevel-syllabus':             ['math', 'biology', 'chemistry', 'physics'],
+  'igcse-syllabus':                 ['math', 'biology', 'chemistry', 'physics', 'bahasa', 'edu_steam'],
+  'as-alevel-syllabus':             ['math', 'biology', 'chemistry', 'physics', 'bahasa', 'edu_steam'],
   // Checkpoint Science is the combined-science subject — biology /
   // chemistry / physics specialists may also enter to read the lower-
   // secondary build-up of their subject (matches checkpoint_science_pacing
   // rule layer + SUBJECT_PAGE_MAP['checkpoint-science-pacing']).
-  'secondary-checkpoint-syllabus':  ['math', 'english', 'science', 'biology', 'chemistry', 'physics'],
-  'primary-checkpoint-syllabus':    ['math', 'english', 'science', 'biology', 'chemistry', 'physics'],
+  // bahasa + edu_steam are Eduversal-authored non-Cambridge tabs on the
+  // same syllabus pages (gated tab-side via subject config chSubjectKeys).
+  'secondary-checkpoint-syllabus':  ['math', 'english', 'science', 'biology', 'chemistry', 'physics', 'bahasa', 'edu_steam'],
+  'primary-checkpoint-syllabus':    ['math', 'english', 'science', 'biology', 'chemistry', 'physics', 'bahasa', 'edu_steam'],
 };
 
 // Pages that NEVER get gated regardless of role (auth flow + dashboard).
