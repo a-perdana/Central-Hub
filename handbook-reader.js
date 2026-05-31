@@ -60,7 +60,38 @@
     if (opts.charterUrl) _charterUrl = opts.charterUrl;
     if (typeof opts.audienceFilter === 'function') _audienceFilter = opts.audienceFilter;
     if (typeof opts.onAuthReady === 'function') _onAuthReady = opts.onAuthReady;
+    // Show the right shell + a loading spinner IMMEDIATELY — before authReady
+    // fires and before the (network-bound) getDocs resolves. On a slow
+    // connection the gap between page-load and Firestore-resolve can run
+    // several seconds; without this the page sits blank and reads as broken.
+    // (Past report 2026-05-31: a handbook "didn't open" — it was just loading
+    //  with no visible feedback.) We pick the mode from the URL ?id= param so
+    //  the correct view (reader vs browser) is visible during the wait.
+    _showBootLoading();
     document.addEventListener('authReady', _boot);
+  }
+
+  // Pre-resolve loading state: classes the body so exactly one view shows,
+  // then paints a spinner into whichever containers that view exposes. Safe
+  // to call before Firestore data exists — _boot() overwrites these nodes.
+  function _showBootLoading() {
+    const requestedId = new URLSearchParams(window.location.search).get('id');
+    const inReaderMode = !!requestedId;
+    document.body.classList.add(inReaderMode ? 'is-reader-mode' : 'is-browser-mode');
+    const spinner = (label) =>
+      `<div class="hb-loading"><span class="hb-spinner" aria-hidden="true"></span>${escapeHtml(label)}</div>`;
+    if (inReaderMode) {
+      const content = document.getElementById('hbContent');
+      if (content) content.innerHTML = spinner('Loading handbook…');
+    } else {
+      // Browser mode: paint a spinner into each bookshelf rail until the
+      // spines render. Shelf labels stay so the page reads as "loading
+      // the library", not "broken".
+      ['hbShelfInduction', 'hbShelfRole', 'hbShelfSchool'].forEach((railId) => {
+        const rail = document.getElementById(railId);
+        if (rail) rail.innerHTML = spinner('Loading…');
+      });
+    }
   }
 
   async function _boot() {
@@ -88,10 +119,16 @@
         const requestedId = params.get('id');
         const inReaderMode = !!requestedId && allHandbooks.find(h => h.id === requestedId);
 
+        // Reconcile the body mode-class. _showBootLoading() set one
+        // optimistically from the URL before data existed; now that we know
+        // whether the requested id actually resolved, swap to the real mode
+        // (a bad/stale ?id= falls back to the browser).
         if (inReaderMode) {
+          document.body.classList.remove('is-browser-mode');
           document.body.classList.add('is-reader-mode');
           bootReaderMode(requestedId);
         } else {
+          document.body.classList.remove('is-reader-mode');
           document.body.classList.add('is-browser-mode');
           bootBrowserMode();
         }
