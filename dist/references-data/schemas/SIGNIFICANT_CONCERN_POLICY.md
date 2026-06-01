@@ -1,6 +1,6 @@
 # Eduversal Significant Concern Policy
 
-**Version 1.0 — published 2026-05-04 by Eduversal HQ.**
+**Version 1.0 — published 2026-05-04 by Eduversal.**
 
 This document closes [Induction Charter](INDUCTION_CHARTER.md) Open Item 1.
 
@@ -42,7 +42,7 @@ A Significant Concern is a situation where, despite the routine support structur
 
 ### Category C — School environment
 - The school leader has not held the year-start three-party meeting within the first month.
-- The school has not provided the **20% timetable reduction** for stage 1 that the Charter commits Eduversal HQ to.
+- The school has not provided the **20% timetable reduction** for stage 1 that the Charter commits Eduversal to.
 - More than one mentee at the same school has raised Category-A or Category-B concerns within a 60-day window — suggesting a school-level issue rather than an individual issue.
 - The school has rejected, ignored, or punished a mentee or mentor for raising an escalation through Charter levels 1–4.
 
@@ -60,14 +60,14 @@ Any of:
 - The **mentee** themselves.
 - The **mentor**.
 - The **school leader** (school principal, foundation representative).
-- The **HQ Induction Coordinator** (`central_admin` with the induction sub-role).
-- An **observer** — another adult at the school or HQ who has reasonable grounds.
+- The **Eduversal Induction Coordinator** (`central_admin` with the induction sub-role).
+- An **observer** — another adult at the school or Eduversal who has reasonable grounds.
 
 Significant Concerns can be raised:
 - About the mentee (Category A).
 - About the mentor (Category B).
 - About the school (Category C).
-- About the HQ Induction Coordinator (Charter Escalation Level 4 — Foundation Rep handles).
+- About the Eduversal Induction Coordinator (Charter Escalation Level 4 — Foundation Rep handles).
 
 **Anonymous concerns** are accepted but are harder to action; the policy below favours named concerns. An anonymous concern may still trigger a routine welfare check.
 
@@ -75,7 +75,7 @@ Significant Concerns can be raised:
 
 ## How a Significant Concern is raised
 
-For pilot Year 1 (2026–2027): **email** to `induction@eduversal.org` (or in-person to the HQ Induction Coordinator), with the following information:
+For pilot Year 1 (2026–2027): **email** to `induction@eduversal.org` (or in-person to the Eduversal Induction Coordinator), with the following information:
 
 1. Date.
 2. Who is raising the concern (name + role; or "anonymous" if applicable).
@@ -90,15 +90,15 @@ For Year 2+: a structured form will be added to Central Hub `/induction-admin` t
 
 ## The 7-day review window
 
-When a Significant Concern is received, the HQ Induction Coordinator has **7 calendar days** to:
+When a Significant Concern is received, the Eduversal Induction Coordinator has **7 calendar days** to:
 
 1. **Acknowledge receipt** to the concern-raiser within 24 hours.
 2. **Verify facts** by reading the relevant induction data (assignment, recent observations, recent pulses, journal **only with the mentee's consent**, mentor session logs).
-3. **Speak with each named party separately** — mentee, mentor, school leader as relevant. Each conversation is recorded in writing in the HQ Induction Coordinator's notes.
+3. **Speak with each named party separately** — mentee, mentor, school leader as relevant. Each conversation is recorded in writing in the Eduversal Induction Coordinator's notes.
 4. **Determine which Charter Non-Negotiables, if any, are being violated.** The most common: NN2 (journal confidentiality), NN3 (uncertified mentor still actively mentoring), Charter Principle 1 (data being used as surveillance).
 5. **Convene a review panel** if the determination is non-trivial (see next section).
 
-If the 7-day window cannot be met, the HQ Induction Coordinator notifies the concern-raiser of the delay and sets a new deadline (max 14 days total).
+If the 7-day window cannot be met, the Eduversal Induction Coordinator notifies the concern-raiser of the delay and sets a new deadline (max 14 days total).
 
 ---
 
@@ -106,7 +106,7 @@ If the 7-day window cannot be met, the HQ Induction Coordinator notifies the con
 
 For non-trivial concerns, a 3-person review panel is convened:
 
-- **HQ Induction Coordinator** (lead).
+- **Eduversal Induction Coordinator** (lead).
 - **One Foundation Representative** from a school **other than** the school in question — for objectivity.
 - **One senior practitioner** — typically a senior subject specialist or experienced principal not directly involved in the concern.
 
@@ -116,7 +116,7 @@ The panel reaches one of these outcomes:
 
 ### Outcome 1 — Continue with additional support
 
-The induction continues. The panel recommends specific additional resources: more frequent HQ check-ins, a co-mentor, an extension of the timetable reduction beyond stage 1, etc. The mentor and school leader are both informed of the panel's recommendation.
+The induction continues. The panel recommends specific additional resources: more frequent Eduversal check-ins, a co-mentor, an extension of the timetable reduction beyond stage 1, etc. The mentor and school leader are both informed of the panel's recommendation.
 
 ### Outcome 2 — Reassign mentor (no-fault)
 
@@ -132,11 +132,11 @@ The mentor's `mentor_certifications/{uid}_mentor_base.active` is set to false. N
 
 ### Outcome 5 — School flagged for Foundation Rep review
 
-The school's induction practice is referred to the Foundation Rep and Eduversal HQ Director. Possible actions: pause new mentee placements at that school for the rest of the academic year; require a school-wide induction review; in extreme cases (e.g. retaliation against escalators), withdraw Eduversal partnership.
+The school's induction practice is referred to the Foundation Rep and Eduversal Director. Possible actions: pause new mentee placements at that school for the rest of the academic year; require a school-wide induction review; in extreme cases (e.g. retaliation against escalators), withdraw Eduversal partnership.
 
 ### Outcome 6 — Mentee withdraws from induction
 
-The mentee chooses not to continue induction. `induction_assignments.status` is set to `withdrew`. Year-1 data is retained for HQ network-improvement review (anonymised) but is **never** used in any future appraisal or hiring reference.
+The mentee chooses not to continue induction. `induction_assignments.status` is set to `withdrew`. Year-1 data is retained for Eduversal network-improvement review (anonymised) but is **never** used in any future appraisal or hiring reference.
 
 ### Outcome 7 — No action
 
@@ -152,7 +152,7 @@ Specifically:
 
 - A mentee who raises a concern cannot have it count against their Q4 formal evaluation, their Year-2 reference, or their Induction Completion Certificate.
 - A mentor who raises a concern about the school cannot have it count against their certification renewal or future mentee assignments.
-- A school leader who raises a concern about HQ cannot have it count against the school's enrolment in network-wide systems (`partner_schools.enabled_systems[]`).
+- A school leader who raises a concern about Eduversal cannot have it count against the school's enrolment in network-wide systems (`partner_schools.enabled_systems[]`).
 
 If retaliation is alleged, that allegation is itself processed under this policy as a Category B or C concern.
 
@@ -160,19 +160,19 @@ If retaliation is alleged, that allegation is itself processed under this policy
 
 ## Audit trail
 
-Every Significant Concern, regardless of outcome, generates a private case file at HQ:
+Every Significant Concern, regardless of outcome, generates a private case file at Eduversal:
 
 - Date raised, by whom (or "anonymous"), category.
 - Names of all parties involved.
 - The concern statement (verbatim).
-- Notes from each separate conversation conducted by the HQ Induction Coordinator.
+- Notes from each separate conversation conducted by the Eduversal Induction Coordinator.
 - The panel's deliberation and outcome decision.
 - The action taken and by whom.
 - The date the case was closed.
 
-These files are retained for **7 years** for audit purposes (consistent with PIGP record-retention practice). Access is limited to the HQ Induction Coordinator, the HQ Director, and an external auditor on request. The mentee or any named party can request a copy of their own statements within the file at any time.
+These files are retained for **7 years** for audit purposes (consistent with PIGP record-retention practice). Access is limited to the Eduversal Induction Coordinator, the Eduversal Director, and an external auditor on request. The mentee or any named party can request a copy of their own statements within the file at any time.
 
-The case file is **not** stored in Firestore for Year 1 of the pilot. Until the dedicated `/induction-admin` flow exists, files are kept in HQ-internal Google Drive with restricted access. Year 2 will move them into a `significant_concerns/{id}` Firestore collection with rule access limited to `central_admin`.
+The case file is **not** stored in Firestore for Year 1 of the pilot. Until the dedicated `/induction-admin` flow exists, files are kept in Eduversal-internal Google Drive with restricted access. Year 2 will move them into a `significant_concerns/{id}` Firestore collection with rule access limited to `central_admin`.
 
 ---
 
@@ -180,7 +180,7 @@ The case file is **not** stored in Firestore for Year 1 of the pilot. Until the 
 
 Annually, every May, alongside the [Induction Charter](INDUCTION_CHARTER.md) review.
 
-The HQ Induction Coordinator publishes anonymised statistics in the year-end review note:
+The Eduversal Induction Coordinator publishes anonymised statistics in the year-end review note:
 - Number of concerns raised.
 - Distribution by category (A / B / C).
 - Distribution by outcome (1 through 7).
@@ -196,12 +196,12 @@ These statistics, alongside pulse and observation aggregates, drive the next yea
 
 - **It is not a complaints-against-Eduversal policy.** Eduversal-wide grievances are handled by the Eduversal HR / governance process. This policy is specifically about the induction relationship.
 
-- **It is not a substitute for safeguarding policy.** Where a concern relates to child protection or staff safeguarding (sexual harassment, child welfare, etc.), the school's existing safeguarding policy takes priority and law-enforcement reporting requirements apply. The HQ Induction Coordinator acknowledges receipt and refers immediately.
+- **It is not a substitute for safeguarding policy.** Where a concern relates to child protection or staff safeguarding (sexual harassment, child welfare, etc.), the school's existing safeguarding policy takes priority and law-enforcement reporting requirements apply. The Eduversal Induction Coordinator acknowledges receipt and refers immediately.
 
 ---
 
 ## Open items
 
-- [ ] Set up the `induction@eduversal.org` distribution list and confirm only the HQ Induction Coordinator and Director receive it.
-- [ ] Drafttwo example anonymised case studies (one Category A, one Category B) for use in HQ Induction Coordinator training.
+- [ ] Set up the `induction@eduversal.org` distribution list and confirm only the Eduversal Induction Coordinator and Director receive it.
+- [ ] Drafttwo example anonymised case studies (one Category A, one Category B) for use in Eduversal Induction Coordinator training.
 - [ ] Year 2: build the `/induction-admin` "Concerns" tab + `significant_concerns/{id}` Firestore collection + rules.

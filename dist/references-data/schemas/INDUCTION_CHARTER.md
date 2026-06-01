@@ -1,6 +1,6 @@
 # Eduversal Induction Charter
 
-**Version 1.0 — published 2026-05-04 by Eduversal HQ.**
+**Version 1.0 — published 2026-05-04 by Eduversal.**
 
 How we welcome, support, and grow first-year staff across the Eduversal partner-school network.
 
@@ -15,7 +15,7 @@ The machine-readable version of this document — used by the system to enforce 
 **Applies to:**
 - First-year subject teachers at any Eduversal partner school
 - First-year school principals at any Eduversal partner school
-- First-year HQ subject specialists at Eduversal central
+- First-year Eduversal subject specialists at Eduversal central
 
 **Does not apply to:** second-year and beyond staff (covered by the network-wide KPI / Appraisal / Competency systems), and non-Eduversal contractors, observers, or visiting consultants.
 
@@ -30,7 +30,7 @@ To give every first-year hire across the Eduversal network a structured, dignifi
 Alongside that primary purpose, the Charter exists to:
 
 - Make implicit mentoring culture explicit and trainable, so the quality of first-year support does not depend on which school or which mentor a new hire happens to land with.
-- Produce structured first-year data that lets Eduversal HQ identify systemic gaps (workload, mentor availability, retention risk) and act on them at network level.
+- Produce structured first-year data that lets Eduversal identify systemic gaps (workload, mentor availability, retention risk) and act on them at network level.
 - Free the network-wide systems (KPI, Appraisal, Competency) from carrying induction weight they were not designed for.
 
 ---
@@ -42,8 +42,8 @@ Alongside that primary purpose, the Charter exists to:
 First-year data — journals, weekly pulses, mentor reflections, observation notes — exists to inform support, not to judge. None of it feeds the network-wide Appraisal or KPI scoring during the induction year. Mentees see this guarantee from day one, in writing, in their dashboard.
 
 **What this means in practice:**
-- `induction_journal` entries are private to the mentee, the assigned mentor, and the assigned school leader. No HQ role reads named entries; HQ sees only anonymous aggregates.
-- Weekly pulse data is anonymised at school level before any HQ dashboard surfaces it.
+- `induction_journal` entries are private to the mentee, the assigned mentor, and the assigned school leader. No Eduversal role reads named entries; Eduversal sees only anonymous aggregates.
+- Weekly pulse data is anonymised at school level before any Eduversal dashboard surfaces it.
 - Induction completion is binary (completed / extension / withdrew); no induction year produces an A-F predicate or a numeric score that follows the teacher into year 2.
 - Anything mentee-authored that the mentee marks 'private' is invisible to the school leader — only the mentor sees it.
 
@@ -63,26 +63,26 @@ A subject leader given a mentee without mentor training will replicate whatever 
 
 ### 3. First-year data is a learning resource, not a judgment.
 
-Year-one observations, reflections, and pulses build a portrait of the mentee's growth. That portrait is for the mentee, the mentor, the school leader, and Eduversal HQ as a network-improvement tool. It is never used as input to the network-wide Appraisal scoring engine, the predicate calculation, or any retention decision in year one.
+Year-one observations, reflections, and pulses build a portrait of the mentee's growth. That portrait is for the mentee, the mentor, the school leader, and Eduversal as a network-improvement tool. It is never used as input to the network-wide Appraisal scoring engine, the predicate calculation, or any retention decision in year one.
 
 **What this means in practice:**
 - `induction_observations` are stored in their own collection and rubric; they do not write to `teacher_appraisal_results`.
 - Year-one mentees are excluded from the network appraisal cycle (their `teacher_kpi_submissions` and `teacher_self_appraisals` are optional, not required).
 - Year-one completion produces an Induction Completion Certificate in `competency_certificates` with a fixed level (no Distinguished / Proficient gradation). This celebrates the mentee finishing the year, nothing more.
-- Retention decisions inside year one are made against a separate, written 'Significant Concern' policy that requires multi-party sign-off (mentor + school leader + HQ). They are rare and never automatic.
+- Retention decisions inside year one are made against a separate, written 'Significant Concern' policy that requires multi-party sign-off (mentor + school leader + Eduversal). They are rare and never automatic.
 
 **Why:** conflating formative and summative assessment in induction destroys the formative value. We separate them deliberately.
 
 ### 4. Three audiences, three paths — but one charter.
 
-A new subject teacher needs survival skills then mastery-building. A new school principal needs to listen before acting. A new HQ subject specialist needs to map the network before coaching it. The handbook content differs by role; the principles, the data discipline, the certificate, the dignity — do not.
+A new subject teacher needs survival skills then mastery-building. A new school principal needs to listen before acting. A new Eduversal subject specialist needs to map the network before coaching it. The handbook content differs by role; the principles, the data discipline, the certificate, the dignity — do not.
 
 **What this means in practice:**
 - Three `induction_programs` templates: `handbook_subject_teacher_v1`, `eduversal_principal_v1`, `eduversal_specialist_v1`. Same shape, different stages and tasks.
 - Same Firestore collections (`induction_assignments`, `induction_progress`, `induction_observations`, `induction_journal`) serve all three audiences.
 - All three end with the same kind of Induction Completion Certificate — the certificate is platform-neutral.
 
-**Why:** a single shared schema lets HQ compare cohort completion across roles; a single shared certificate signals that all three induction tracks are equally serious commitments.
+**Why:** a single shared schema lets Eduversal compare cohort completion across roles; a single shared certificate signals that all three induction tracks are equally serious commitments.
 
 ### 5. Induction is a two-way contract.
 
@@ -91,7 +91,7 @@ Eduversal commits to specific support: a trained mentor, weekly mentor time, str
 **What this means in practice:**
 - Mentor and mentee both sign a digital Induction Agreement at the start of stage 1 — visible inside the induction dashboard.
 - If three consecutive scheduled mentor sessions are missed (by either side), the school leader is automatically notified.
-- If a mentor leaves the school mid-induction, HQ is notified within 7 days and a replacement mentor must be assigned within 14 days.
+- If a mentor leaves the school mid-induction, Eduversal is notified within 7 days and a replacement mentor must be assigned within 14 days.
 
 **Why:** induction quality erodes silently when nobody has a structured way to flag drift. We make the agreement and the drift-detection both explicit.
 
@@ -99,10 +99,10 @@ Eduversal commits to specific support: a trained mentor, weekly mentor time, str
 
 ## Non-Negotiables
 
-These five rules are encoded directly in Firestore rules and admin tooling. Bypassing them in the system is not possible without a Charter version bump and HQ sign-off.
+These five rules are encoded directly in Firestore rules and admin tooling. Bypassing them in the system is not possible without a Charter version bump and Eduversal sign-off.
 
 1. **Year-one induction data never feeds network appraisal scoring.**
-2. **Mentee journal entries are not visible to anyone the mentee has not explicitly granted access to** (mentor + school leader by default; HQ never).
+2. **Mentee journal entries are not visible to anyone the mentee has not explicitly granted access to** (mentor + school leader by default; Eduversal never).
 3. **No user without active Mentor Certification can be assigned as a mentor.**
 4. **An induction assignment requires three named parties at creation:** mentee, mentor, school leader. No assignment can be created with any of these missing.
 5. **An Induction Completion Certificate is binary and platform-neutral.** It does not record a numeric score, a predicate, or a quality band.
@@ -129,7 +129,7 @@ These five rules are encoded directly in Firestore rules and admin tooling. Bypa
 - conducting the Q4 formal evaluation in person and writing the post-conference feedback within 14 days
 - monitoring the school's induction dashboard at least weekly during stages 1 and 2, monthly thereafter
 
-### Eduversal HQ commits to:
+### Eduversal commits to:
 - providing the induction dashboard, scheduling tools, observation rubric, and mentor training to every partner school free of charge
 - publishing anonymised network-level induction completion and retention data once per academic year
 - reviewing and revising this Charter at least once per academic year against pilot data and partner feedback
@@ -141,8 +141,8 @@ These five rules are encoded directly in Firestore rules and admin tooling. Bypa
 
 1. **Level 1.** Mentee raises a concern with mentor (or vice versa).
 2. **Level 2.** Either party raises a concern with the school leader.
-3. **Level 3.** Any party raises a concern with the Eduversal HQ Induction Coordinator (a designated `central_admin` sub-role).
-4. **Level 4.** HQ Induction Coordinator escalates to the school's Foundation Representative if the school-leader is the source of the concern.
+3. **Level 3.** Any party raises a concern with the Eduversal Induction Coordinator (a designated `central_admin` sub-role).
+4. **Level 4.** Eduversal Induction Coordinator escalates to the school's Foundation Representative if the school-leader is the source of the concern.
 
 **Principle:** an escalation never disadvantages the person raising it. Retaliation is a Significant Concern in itself.
 
@@ -150,7 +150,7 @@ These five rules are encoded directly in Firestore rules and admin tooling. Bypa
 
 ## Review
 
-This Charter is reviewed annually every May, before the next academic year's cohort intake. The HQ Induction Coordinator publishes a year-end review note alongside the next year's cohort planning. The Charter version is bumped only on substantive change.
+This Charter is reviewed annually every May, before the next academic year's cohort intake. The Eduversal Induction Coordinator publishes a year-end review note alongside the next year's cohort planning. The Charter version is bumped only on substantive change.
 
 **Next review due:** 2027-05-01.
 

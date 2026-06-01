@@ -45,7 +45,7 @@
         {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
         {"name": "hireDate", "type": "Timestamp", "notes": "anchor date for all stage day computations"},
         {"name": "mentorUid", "type": "string", "fk": "users.uid", "notes": "must hold active Mentor Certification (rule-checked)"},
-        {"name": "schoolLeaderUid", "type": "string", "fk": "users.uid", "notes": "for principal induction this is the Foundation Rep; for specialist induction this is the HQ Director"},
+        {"name": "schoolLeaderUid", "type": "string", "fk": "users.uid", "notes": "for principal induction this is the Foundation Rep; for specialist induction this is the Eduversal Director"},
         {"name": "schoolId", "type": "string", "fk": "partner_schools.id", "notes": "specialist induction uses 'eduversal_hq'"},
         {"name": "status", "type": "enum", "values": ["pre_arrival", "active", "paused", "completed", "extended", "withdrew"]},
         {"name": "currentStageId", "type": "string", "notes": "denormalised, computed from hireDate + program stages"},
@@ -66,7 +66,7 @@
       "indexes": [
         {"fields": ["schoolId", "status"], "purpose": "school-leader team-induction view"},
         {"fields": ["mentorUid", "status"], "purpose": "mentor my-mentees view"},
-        {"fields": ["status", "hireDate"], "purpose": "HQ cohort-completion dashboard"}
+        {"fields": ["status", "hireDate"], "purpose": "Eduversal cohort-completion dashboard"}
       ],
       "notes": "Unique on uid (one active induction per user). Charter Non-Negotiable 4: cannot create with any of mentee/mentor/schoolLeader missing."
     },
@@ -99,7 +99,7 @@
       },
       "indexes": [
         {"fields": ["uid", "stageId"], "purpose": "mentee my-induction view by stage"},
-        {"fields": ["programId", "stageId"], "purpose": "HQ stage-completion analytics"}
+        {"fields": ["programId", "stageId"], "purpose": "Eduversal stage-completion analytics"}
       ],
       "storagePathPattern": "induction_evidence/{uid}/{taskId}/{timestamp}_{filename}",
       "storageMaxBytes": 26214400,
@@ -140,7 +140,7 @@
       "indexes": [
         {"fields": ["menteeUid", "observationDate"], "purpose": "mentee history view"},
         {"fields": ["observerUid", "observationDate"], "purpose": "mentor / school-leader own observations"},
-        {"fields": ["programId", "observationType", "completedAt"], "purpose": "HQ cycle completion telemetry"}
+        {"fields": ["programId", "observationType", "completedAt"], "purpose": "Eduversal cycle completion telemetry"}
       ],
       "notes": "Charter Non-Negotiable 1: this collection NEVER feeds teacher_appraisal_results. There is no automatic propagation. Year-1 mentee data is induction-scope only."
     },
@@ -164,16 +164,16 @@
       "writers": "owner (mentee) only",
       "readScope": {
         "get": "owner always; mentor if visibility >= mentee_and_mentor; schoolLeader if visibility == mentee_mentor_school_leader; central_admin NEVER on named entries (rule blocks)",
-        "list": "owner only; mentor for own mentees with visibility >= mentee_and_mentor; central_admin NEVER (rule blocks even for HQ)"
+        "list": "owner only; mentor for own mentees with visibility >= mentee_and_mentor; central_admin NEVER (rule blocks even for central_admin)"
       },
       "indexes": [
         {"fields": ["uid", "entryDate"], "purpose": "mentee timeline view"}
       ],
-      "notes": "Charter Non-Negotiable 2: HQ never reads named journal entries. Aggregate analysis (e.g. 'how many mentees wrote a journal entry this week') uses Cloud Function aggregation that strips uid before write to a separate induction_journal_aggregates collection (see below)."
+      "notes": "Charter Non-Negotiable 2: Eduversal never reads named journal entries. Aggregate analysis (e.g. 'how many mentees wrote a journal entry this week') uses Cloud Function aggregation that strips uid before write to a separate induction_journal_aggregates collection (see below)."
     },
     {
       "name": "induction_pulses",
-      "summary": "Weekly 1-question pulse responses. Anonymised at school level for HQ.",
+      "summary": "Weekly 1-question pulse responses. Anonymised at school level for Eduversal.",
       "pk": "composite — {uid}_{isoWeekStart}",
       "fields": [
         {"name": "uid", "type": "string", "fk": "users.uid"},
@@ -215,7 +215,7 @@
       "fks": ["users.uid"],
       "writers": "central_admin only",
       "readScope": {
-        "get": "owner; central_admin; school leader (to verify mentor candidates in their school); HQ Director (to verify principal/specialist mentor candidates)",
+        "get": "owner; central_admin; school leader (to verify mentor candidates in their school); Eduversal Director (to verify principal/specialist mentor candidates)",
         "list": "central_admin; school leader for same-school candidates"
       },
       "indexes": [
@@ -226,7 +226,7 @@
     },
     {
       "name": "induction_journal_aggregates",
-      "summary": "Cloud-Function-maintained anonymous aggregates for HQ telemetry. Strictly no uid present.",
+      "summary": "Cloud-Function-maintained anonymous aggregates for Eduversal telemetry. Strictly no uid present.",
       "pk": "composite — {programId}_{stageId}_{isoWeek}",
       "fields": [
         {"name": "programId", "type": "string", "fk": "induction_programs.handbookId"},
@@ -240,13 +240,13 @@
       "fks": ["induction_programs.handbookId"],
       "writers": "Cloud Function only (no client write)",
       "readScope": {
-        "get": "any authorised user (HQ telemetry — no PII)",
+        "get": "any authorised user (Eduversal telemetry — no PII)",
         "list": "central_admin"
       },
       "indexes": [
-        {"fields": ["programId", "isoWeek"], "purpose": "HQ dashboard"}
+        {"fields": ["programId", "isoWeek"], "purpose": "Eduversal dashboard"}
       ],
-      "notes": "Aggregator that satisfies HQ analytics needs without violating Charter Non-Negotiable 2."
+      "notes": "Aggregator that satisfies Eduversal analytics needs without violating Charter Non-Negotiable 2."
     }
   ],
   "additionalUserFields": [

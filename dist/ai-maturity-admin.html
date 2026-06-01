@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -319,6 +319,8 @@
 </style>
 </head>
 <body data-page-accent="amber">
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
 <style>
   .btn-my-tasks {
     font-family: 'DM Sans', sans-serif;
@@ -3886,7 +3888,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
 <script type="module" src="auth-guard.js"></script>
 
-<header class="page-hero" data-accent="amber">
+<header class="page-hero" id="main-content" role="main" tabindex="-1" data-accent="amber">
   <div class="page-hero__inner">
     <div class="page-hero__icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V11h2a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3h-1v1a2 2 0 0 1-4 0v-1H9a3 3 0 0 1-3-3v-1a2 2 0 0 1 2-2h2V9.5C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/></svg>
@@ -3959,11 +3961,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   <div class="filter-bar">
     <label>Academic year</label>
     <select id="yearFilter">
-      <option value="2026-2027" selected>2026-2027</option>
+      <option value="2026-2027">2026-2027</option>
       <option value="2025-2026">2025-2026</option>
     </select>
     <label>Search</label>
-    <input type="text" id="searchInput" placeholder="School name…" style="min-width:220px;">
+    <input aria-label="School name…" type="text" id="searchInput" placeholder="School name…" style="min-width:220px;">
     <div class="stats" id="stats">—</div>
   </div>
 
@@ -4335,7 +4337,7 @@ function renderModal() {
       </div>
       <div class="notes-block">
         <label>Appraiser notes <span style="color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;">(visible to the school after the visit)</span></label>
-        <textarea id="appraiserNotes" maxlength="2000" placeholder="Plain notes from the visit — what evidence supported or contradicted the self-rating; specific observations from staff and student conversations…" ${!canAppraise ? 'disabled' : ''}>${escapeHtml(state.appraiserOverride.appraiserNotes)}</textarea>
+        <textarea aria-label="Plain notes from the visit — what evidence supported or contradicted the self-rating; specific observations from staff and student conversations…" id="appraiserNotes" maxlength="2000" placeholder="Plain notes from the visit — what evidence supported or contradicted the self-rating; specific observations from staff and student conversations…" ${!canAppraise ? 'disabled' : ''}>${escapeHtml(state.appraiserOverride.appraiserNotes)}</textarea>
         <div class="hint">Up to 2000 characters.</div>
       </div>
       <div class="notes-block">
@@ -4384,11 +4386,11 @@ function renderAppraiserLists(domainId, app, editable) {
   return `
     <div class="cc-list">
       <div class="cc-sub">Evidence observed during the visit</div>
-      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="evidence" placeholder="One per line. What the team actually saw or read."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.evidence || []).join('\n'))}</textarea>
+      <textarea aria-label="One per line. What the team actually saw or read" class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="evidence" placeholder="One per line. What the team actually saw or read."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.evidence || []).join('\n'))}</textarea>
       <div class="cc-sub" style="margin-top:8px;">Validated strengths</div>
-      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="strengths" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.strengths || []).join('\n'))}</textarea>
+      <textarea aria-label="One per line" class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="strengths" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.strengths || []).join('\n'))}</textarea>
       <div class="cc-sub" style="margin-top:8px;">Validated improvement areas</div>
-      <textarea class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="improvementAreas" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.improvementAreas || []).join('\n'))}</textarea>
+      <textarea aria-label="One per line" class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="improvementAreas" placeholder="One per line."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.improvementAreas || []).join('\n'))}</textarea>
     </div>
   `;
 }
@@ -4557,10 +4559,23 @@ document.addEventListener('keydown', (e) => {
 // page_access_config[ai-maturity-admin].visible_to[]. No in-page sub-role
 // check needed — admin manages visibility via /page-access.
 document.addEventListener('authReady', async () => {
+  // Default filter year from the single source of truth (calendar_settings/current).
+  state.filterYear = (window.getCurrentAcademicYear && window.getCurrentAcademicYear())
+    || (() => { const n = new Date(), y = n.getFullYear(); return n.getMonth() >= 6 ? `${y}-${y+1}` : `${y-1}-${y}`; })();
+  const yfEl = document.getElementById('yearFilter');
+  if (yfEl) {
+    if (![...yfEl.options].some(o => o.value === state.filterYear)) {
+      const o = document.createElement('option');
+      o.value = state.filterYear; o.textContent = state.filterYear;
+      yfEl.insertBefore(o, yfEl.firstChild);
+    }
+    yfEl.value = state.filterYear;
+  }
   await loadSchoolNames();
   await loadAssessments();
 });
 </script>
 <script src="cambridge-crossref.js" defer></script>
+<script src="keyboard-enabler.js" defer></script>
 </body>
 </html>

@@ -671,6 +671,13 @@ function detectSpineChips(hb) {
       || hb.linkedFrameworks?.cts) {
     chips.push({ k: 'cts', label: 'CTS', t: 'Cambridge Teacher Standards' });
   }
+  // CSLS — leadership-track anchor (principal induction handbook). Distinct
+  // from CTS; surfaced as its own spine chip so the bookshelf is honest
+  // about which Cambridge standard set the handbook is tagged against.
+  if (handbookHasField(hb, 'cambridgeSchoolLeaderStandardRefs')
+      || hb.linkedFrameworks?.cambridgeSchoolLeaderStandards2023) {
+    chips.push({ k: 'csls', label: 'CSLS', t: 'Cambridge School Leader Standards' });
+  }
   if (handbookHasField(hb, 'aicfRefs')) {
     chips.push({ k: 'aicf', label: 'AICF', t: 'AI Competency Framework' });
   }
@@ -1572,6 +1579,11 @@ function taskGlyph(t) {
 
 function renderTask(t) {
   const cts  = Array.isArray(t.cambridgeStandardRefs) ? t.cambridgeStandardRefs : [];
+  // CSLS — Cambridge School Leader Standards 2023 (leadership-track anchor,
+  // e.g. the principal induction handbook). Distinct chip family from CTS:
+  // CSLS 1.4 ≠ CTS 1.4. cambridge-crossref.js auto-wires "CSLS X.Y" text +
+  // data-csls-ref into the CSLS popover (school-leader-standards-2023.json).
+  const csls = Array.isArray(t.cambridgeSchoolLeaderStandardRefs) ? t.cambridgeSchoolLeaderStandardRefs : [];
   const skl  = Array.isArray(t.skl_dimensions) ? t.skl_dimensions : [];
   const pigp = Array.isArray(t.pigp_articleRefs) ? t.pigp_articleRefs : [];
   // ES — Eduversal Academic Standards madde refs (4th chip family,
@@ -1604,6 +1616,7 @@ function renderTask(t) {
         ${t.schoolLeaderSignOffRequired ? `<span class="hb-tag signoff">School-leader sign-off</span>` : ''}
         ${t.estimatedMinutes ? `<span class="hb-tag minutes">${t.estimatedMinutes >= 60 ? Math.round(t.estimatedMinutes/60) + ' hr' : t.estimatedMinutes + ' min'}</span>` : ''}
         ${cts.map(c => `<span class="hb-tag cts">CTS ${escapeHtml(c)}</span>`).join('')}
+        ${csls.map(c => `<span class="hb-tag csls csls-pill" data-csls-ref="${escapeHtml(c)}">CSLS ${escapeHtml(c)}</span>`).join('')}
         ${skl.map(s => `<span class="hb-tag skl">SKL: ${escapeHtml(s)}</span>`).join('')}
         ${pigp.map(p => `<span class="hb-tag pigp">PIGP ${escapeHtml(p)}</span>`).join('')}
         ${es.map(e => `<span class="hb-tag es">ES ${escapeHtml(e)}</span>`).join('')}

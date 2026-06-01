@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -664,7 +664,7 @@
       user-select: none;
     }
     .cycle-advanced summary::before {
-      content: '▸'; color: var(--accent); font-size: .8em; transition: transform .15s;
+      content: 'â–¸'; color: var(--accent); font-size: .8em; transition: transform .15s;
     }
     .cycle-advanced[open] summary::before { transform: rotate(90deg); }
     .cycle-advanced summary::-webkit-details-marker { display: none; }
@@ -854,6 +854,8 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
 </head>
 <body data-page-accent="amber">
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
 
 <!-- ===== TOP NAV ===== -->
 <style>
@@ -4423,7 +4425,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
 
 <!-- ===== HERO (canonical .page-hero — Assessment / amber) ===== -->
-<header class="page-hero" data-accent="amber" aria-labelledby="pageTitle">
+<header class="page-hero" id="main-content" role="main" tabindex="-1" data-accent="amber" aria-labelledby="pageTitle">
   <div class="page-hero__inner">
     <div class="page-hero__icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -4744,7 +4746,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               <label class="cycle-form-label" for="cycleYear">Academic Year</label>
               <select class="cycle-form-select" id="cycleYear">
                 <option value="2024/2025">2024/2025</option>
-                <option value="2025/2026" selected>2025/2026</option>
+                <option value="2025/2026">2025/2026</option>
                 <option value="2026/2027">2026/2027</option>
               </select>
             </div>
@@ -4765,7 +4767,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           </div>
           <details class="cycle-advanced">
             <summary>Optional · Note to schools (sent on announcement)</summary>
-            <textarea class="cycle-form-input" id="cycleNote" rows="3" placeholder="e.g. Submission window opens 1 Sept. Self-appraisal due by half-term."></textarea>
+            <textarea aria-label="e.g. Submission window opens 1 Sept. Self-appraisal due by half-term" class="cycle-form-input" id="cycleNote" rows="3" placeholder="e.g. Submission window opens 1 Sept. Self-appraisal due by half-term."></textarea>
             <p class="cycle-advanced-hint">Stored on the cycle doc. Announcement send is on the roadmap — the note is shown to admins in the cycles table for now.</p>
           </details>
           <div class="cycle-err" id="cycleErr"></div>
@@ -4890,9 +4892,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <p style="font-size:0.84rem;color:var(--ink-3);margin-bottom:14px">Record specific actions required after this visit, each with a due date and owner.</p>
         <ul class="action-items-list" id="actionItemsList"></ul>
         <div class="add-action-row">
-          <input type="text" id="newActionText" placeholder="Action description…">
+          <input aria-label="Action description…" type="text" id="newActionText" placeholder="Action description…">
           <input type="date" id="newActionDue" aria-label="Due date">
-          <input type="text" id="newActionOwner" placeholder="Owner" style="width:120px;flex:none">
+          <input aria-label="Owner" type="text" id="newActionOwner" placeholder="Owner" style="width:120px;flex:none">
           <button class="btn-add-ai" id="btnAddAction" type="button">Add</button>
         </div>
       </div>
@@ -5009,7 +5011,9 @@ const ANNUAL_PHASES = [
 /* ===================================================
    APPRAISAL ROLL-UP — moved here from /appraisals 2026-05-26
    =================================================== */
-const APPR_CURRENT_YEAR = '2025/2026';
+// Slash format (`2025/2026`) — appraisals/walkthroughs store academicYear that way.
+// Set in authReady from the single source of truth (calendar_settings/current).
+let APPR_CURRENT_YEAR = '2025/2026';
 let allCycles = [];
 
 function apprFmt(date) {
@@ -5310,6 +5314,17 @@ document.addEventListener('authReady', async ({ detail: { profile } }) => {
   isAdmin = profile?.role_centralhub === 'central_admin';
   window.isAdmin = isAdmin; // exposed for footer CTA inline handler
   const db = window.db;
+
+  // Current academic year from the single source of truth (calendar_settings/current),
+  // converted to the slash format these collections use. Date heuristic as fallback.
+  {
+    const hy = (window.getCurrentAcademicYear && window.getCurrentAcademicYear())
+      || (() => { const n = new Date(), y = n.getFullYear(); return n.getMonth() >= 6 ? `${y}-${y+1}` : `${y-1}-${y}`; })();
+    APPR_CURRENT_YEAR = hy.replace('-', '/');
+    // Default the create-cycle year picker to the current year (option exists in the list).
+    const cyEl = document.getElementById('cycleYear');
+    if (cyEl && [...cyEl.options].some(o => o.value === APPR_CURRENT_YEAR)) cyEl.value = APPR_CURRENT_YEAR;
+  }
 
   if (isAdmin) {
     document.getElementById('btnNewVisit').style.display = '';
@@ -6012,5 +6027,6 @@ function escHtml(str) {
 </footer>
 
 <script src="cambridge-crossref.js" defer></script>
+<script src="keyboard-enabler.js" defer></script>
 </body>
 </html>

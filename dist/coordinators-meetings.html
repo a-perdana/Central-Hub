@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -636,6 +636,8 @@
   </style>
 </head>
 <body data-page-accent="violet">
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
   <script src="firebase-config.js"></script>
   <!-- Quill must load before the module script that references it. -->
   <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
@@ -4207,7 +4209,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 </script>
 
 
-  <header class="page-hero" data-accent="violet" id="pageHero" aria-label="Coordinators meetings header">
+  <header class="page-hero" id="main-content" role="main" tabindex="-1" data-accent="violet" id="pageHero" aria-label="Coordinators meetings header">
     <div class="page-hero__inner">
       <div class="page-hero__text">
         <p class="page-hero__eyebrow">Department Office · CentralHub</p>
@@ -4316,7 +4318,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="agenda-wrap">
           <div class="agenda-summary">
             <div class="agenda-summary-label">Meeting Summary (optional)</div>
-            <textarea class="agenda-summary-input" id="meetingSummary" placeholder="One-paragraph context — what triggered this meeting, broad outcomes…"></textarea>
+            <textarea aria-label="One-paragraph context — what triggered this meeting, broad outcomes…" class="agenda-summary-input" id="meetingSummary" placeholder="One-paragraph context — what triggered this meeting, broad outcomes…"></textarea>
           </div>
 
           <div class="agenda-list" id="agendaList"></div>
@@ -4334,7 +4336,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="cmdp" role="dialog" aria-modal="true" aria-label="Switch meeting">
       <div class="cmdp__search-wrap">
         <svg class="cmdp__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" class="cmdp__search" id="cmdpSearch" placeholder="Search meetings by title, date, or year…" autocomplete="off" spellcheck="false">
+        <input aria-label="Search meetings by title, date, or year…" type="text" class="cmdp__search" id="cmdpSearch" placeholder="Search meetings by title, date, or year…" autocomplete="off" spellcheck="false">
       </div>
       <div class="cmdp__list" id="cmdpList" role="listbox" aria-label="Matching meetings"></div>
       <div class="cmdp__foot">
@@ -4382,7 +4384,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         </div>
         <div class="form-group">
           <label class="form-label">Assignee (optional)</label>
-          <input type="text" class="form-input" id="promoteAssignee" placeholder="Name as it appears on Activities">
+          <input aria-label="Name as it appears on Activities" type="text" class="form-input" id="promoteAssignee" placeholder="Name as it appears on Activities">
         </div>
         <div class="form-hint">Creates a new task in <strong>activity_tasks</strong> with a back-link to this agenda item. Edits to the task itself happen on <strong>/activities</strong>.</div>
       </div>
@@ -4828,7 +4830,9 @@ function wireUI() {
 /* ───── Create / open meeting ──────────────────────────────────── */
 async function createMeeting() {
   const today = new Date();
-  const year = today.getMonth() >= 6 ? `${today.getFullYear()}-${today.getFullYear()+1}` : `${today.getFullYear()-1}-${today.getFullYear()}`;
+  // Single source of truth: calendar_settings/current (via auth-guard).
+  const year = (window.getCurrentAcademicYear && window.getCurrentAcademicYear())
+    || (today.getMonth() >= 6 ? `${today.getFullYear()}-${today.getFullYear()+1}` : `${today.getFullYear()-1}-${today.getFullYear()}`);
   const semester = today.getMonth() >= 6 && today.getMonth() <= 11 ? 'sem1' : 'sem2';
   try {
     const ref = await addDoc(collection(db, 'coordinators_meetings'), {
@@ -4873,7 +4877,7 @@ function paintMeetingHeader() {
   const m = currentMeeting;
   $('meetingTitle').textContent = m.title || 'Untitled meeting';
   $('meetingDate').value = fmtDateInput(m.meetingDate);
-  $('meetingYear').value = m.academicYear || '2025-2026';
+  $('meetingYear').value = m.academicYear || (window.getCurrentAcademicYear && window.getCurrentAcademicYear()) || '2025-2026';
   $('meetingSemester').value = m.semester || 'sem1';
   $('meetingSummary').value = m.summary || '';
   const status = m.status || 'draft';
@@ -5331,8 +5335,8 @@ function renderAgendaItem(it, idx) {
       </button>` : '';
     return `
     <div class="ai-sub-row ${isLink ? 'is-link' : ''}" data-sub-idx="${sIdx}">
-      <input type="text" class="ai-sub-input label" placeholder="Label (e.g. English Department)" value="${escHtml(s.label || '')}">
-      <input type="text" class="ai-sub-input url" placeholder="Link or note" value="${escHtml(rawUrl)}">
+      <input aria-label="Label (e.g. English Department)" type="text" class="ai-sub-input label" placeholder="Label (e.g. English Department)" value="${escHtml(s.label || '')}">
+      <input aria-label="Link or note" type="text" class="ai-sub-input url" placeholder="Link or note" value="${escHtml(rawUrl)}">
       <span class="ai-sub-linkactions">${linkActions}</span>
       <button class="ai-sub-remove" title="Remove">×</button>
     </div>
@@ -5377,7 +5381,7 @@ function renderAgendaItem(it, idx) {
     <div class="${itemClasses}" data-item="${it.id}" data-idx="${idx}">
       <div class="ai-row1">
         <div class="ai-num">${idx + 1}.</div>
-        <input type="text" class="ai-title" data-field="title" value="${escHtml(it.title || '')}" placeholder="Agenda item title…">
+        <input aria-label="Agenda item title…" type="text" class="ai-title" data-field="title" value="${escHtml(it.title || '')}" placeholder="Agenda item title…">
         <div class="ai-actions">
           <button class="ai-icon-btn" data-move="up" title="Move up">↑</button>
           <button class="ai-icon-btn" data-move="down" title="Move down">↓</button>
@@ -5396,7 +5400,7 @@ function renderAgendaItem(it, idx) {
         <button class="ai-extras-toggle" data-extras-toggle aria-expanded="${extrasExpanded}" type="button">
           Details
           ${extrasCount ? `<span class="extras-count">${extrasCount}</span>` : ''}
-          <span class="chev" aria-hidden="true">▾</span>
+          <span class="chev" aria-hidden="true">â–¾</span>
         </button>
       </div>
 
@@ -5824,5 +5828,6 @@ async function confirmPromoteToDecision() {
 })();
 </script>
 <script src="cambridge-crossref.js" defer></script>
+<script src="keyboard-enabler.js" defer></script>
 </body>
 </html>
