@@ -887,9 +887,9 @@ const refAssetMap = [
   // for the May 2026 content-quality sweep. Source-of-truth is now in
   // Firestore; these JSONs are the hand-authored set the seeders read.
   ["audits/competency-content-backfill-v1.json",              path.join("..", "docs", "competency", "competency-content-backfill-v1.json")],
-  ["audits/specialist-content-backfill-v1.json",              path.join("..", "docs", "competency", "specialist-content-backfill-v1.json")],
-  ["audits/specialist-content-backfill-v1-part2.json",        path.join("..", "docs", "competency", "specialist-content-backfill-v1-part2.json")],
-  ["audits/specialist-content-polish-v1.json",                path.join("..", "docs", "competency", "specialist-content-polish-v1.json")],
+  // (3 specialist-content-backfill/polish v1 JSONs removed 2026-06-26 —
+  //  archived to docs/competency/legacy/, no longer surfaced in /references.
+  //  Their manifest entries in references.html were dropped at the same time.)
   // Heyet board proposal — early Round 1 deliverable, archived but
   // kept reachable for executive context.
   ["audits/HEYET-PROPOSAL.md",                                path.join("..", "docs", "principal-development", "HEYET-PROPOSAL.md")],
