@@ -3754,6 +3754,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .pd-doc a.pd-doclink { display: inline-flex; align-items: baseline; gap: 5px; font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; background: #f0eefb; color: #4e3db8; padding: 2px 9px 2px 8px; border-radius: 6px; border: 1px solid #ddd6f5; text-decoration: none; transition: background .12s, border-color .12s; }
     .pd-doc a.pd-doclink::before { content: '📄'; font-size: 11px; }
     .pd-doc a.pd-doclink:hover { background: #e6e1f8; border-color: #c5b9ef; }
+    /* JSON source-framework links route out to /references — cyan-deep so they read as "source/standard", distinct from the mor PD-doc pills */
+    .pd-doc a.pd-doclink--json { background: #e7f3f6; color: #0e7490; border-color: #c5e3ea; }
+    .pd-doc a.pd-doclink--json::before { content: '🔗'; }
+    .pd-doc a.pd-doclink--json:hover { background: #d7ecf1; border-color: #a5d2de; }
     /* Callout-style blockquote with a soft tinted card + lead mark */
     .pd-doc blockquote { border-left: 4px solid var(--accent, #6c5ce7); margin: 18px 0; padding: 14px 18px 14px 20px; background: linear-gradient(90deg, rgba(108,92,231,.07), rgba(8,145,178,.04)); color: #3a3458; border-radius: 0 10px 10px 0; }
     .pd-doc blockquote p { margin: 0; }
@@ -4296,11 +4300,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
 
     /* ── Cross-reference auto-linking ──────────────────────────────────
-       PD guides mention sibling docs as inline `code` like
-       `specialists/train-the-trainer-guide.md`. marked() renders those as
-       plain <code>. Map each mention back to a manifest slug (by basename,
-       ignoring any folder prefix + leading "_") and turn it into a
-       clickable pd?doc=<slug> pill so the reader can jump straight there. */
+       PD guides mention sibling docs + source frameworks as inline `code`:
+         · `specialists/train-the-trainer-guide.md`  → another PD doc
+         · `appraisal-framework-v2.json`             → a /references framework
+       marked() renders both as plain <code>. We map each mention back to a
+       target by BASENAME (ignoring any folder prefix + leading "_") and turn
+       it into a clickable pill. .md → pd?doc=<slug> (in-page reader). .json →
+       the canonical Eduversal /references reader (full 52-doc superset, so a
+       single absolute URL works from CH, AH and TH alike). Unknown refs stay
+       plain <code> — no broken links. */
     const DOCREF_BY_BASENAME = (() => {
       const map = {};
       const key = p => p.split('/').pop().replace(/^_/, '').replace(/\.md$/i, '');
@@ -4309,22 +4317,51 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       map['readme'] = PD_MANIFEST.find(m => m.slug === 'readme') || map['readme'];
       return map;
     })();
+    /* JSON framework basename → { id: /references doc id, title }. Only the
+       source frameworks the PD corpus actually cites AND that exist in the
+       references hub. teacher-kpi-v1.json is intentionally absent (no
+       dedicated references doc — it lives only as the docs/kpi SoT), so it
+       stays plain code per the chosen "matched-only" behaviour. */
+    const REFS_BASE = 'https://centralhub.eduversal.org/references?doc=';
+    const JSONREF_BY_BASENAME = {
+      'appraisal-framework-v2.json':         { id: 'appraisal-v2',                 title: 'Teacher Appraisal v2.1' },
+      'teacher-standards-2023.json':         { id: 'cts-2023',                     title: 'Cambridge Teacher Standards 2023' },
+      'school-leader-standards-2023.json':   { id: 'csls-2023',                    title: 'Cambridge School Leader Standards 2023' },
+      'principal-coaching-framework-v1.json':{ id: 'cm-coaching',                  title: 'Principal Coaching Framework v1' },
+      'teacher-playbook.json':               { id: 'aicf-teacher-playbook',        title: 'AICF Teacher Playbook' },
+      'redFlagsAndRedlines.json':            { id: 'aicf-red-lines',               title: 'AICF Red Lines' },
+      'prompt-library.json':                 { id: 'aicf-prompt-library',          title: 'AICF Prompt Library' },
+      'manifest.json':                       { id: 'eduversal-standards-manifest', title: 'Eduversal Academic Standards — Manifest' },
+    };
     function linkifyDocRefs(root) {
       root.querySelectorAll('code').forEach(code => {
         // skip code already inside a fenced block (the diagram) or an <a>
         if (code.closest('pre') || code.closest('a')) return;
         const raw = code.textContent.trim();
-        if (!/\.md$/i.test(raw)) return;
-        const base = raw.split('/').pop().replace(/^_/, '').replace(/\.md$/i, '');
-        const meta = DOCREF_BY_BASENAME[base];
-        if (!meta) return;  // unknown ref — leave as plain code
-        const a = document.createElement('a');
-        a.className = 'pd-doclink';
-        a.href = 'pd?doc=' + encodeURIComponent(meta.slug);
-        a.title = 'Open: ' + meta.title;
-        a.textContent = meta.title;
-        a.onclick = e => { e.preventDefault(); history.pushState({}, '', a.getAttribute('href')); route(); };
-        code.replaceWith(a);
+        const base = raw.split('/').pop();
+
+        if (/\.md$/i.test(raw)) {
+          const k = base.replace(/^_/, '').replace(/\.md$/i, '');
+          const meta = DOCREF_BY_BASENAME[k];
+          if (!meta) return;  // unknown ref — leave as plain code
+          const a = document.createElement('a');
+          a.className = 'pd-doclink';
+          a.href = 'pd?doc=' + encodeURIComponent(meta.slug);
+          a.title = 'Open: ' + meta.title;
+          a.textContent = meta.title;
+          a.onclick = e => { e.preventDefault(); history.pushState({}, '', a.getAttribute('href')); route(); };
+          code.replaceWith(a);
+        } else if (/\.json$/i.test(raw)) {
+          const ref = JSONREF_BY_BASENAME[base];
+          if (!ref) return;  // source-path-only citation with no references doc — stays plain code
+          const a = document.createElement('a');
+          a.className = 'pd-doclink pd-doclink--json';
+          a.href = REFS_BASE + encodeURIComponent(ref.id);
+          a.target = '_blank'; a.rel = 'noopener';
+          a.title = 'Open in References: ' + ref.title;
+          a.textContent = ref.title;
+          code.replaceWith(a);
+        }
       });
     }
 
