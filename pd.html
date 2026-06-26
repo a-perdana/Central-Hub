@@ -180,6 +180,13 @@
     .pd-doc li::marker { color: var(--accent, #6c5ce7); }
     .pd-doc strong { color: var(--ink, #1a1530); }
     .pd-doc code { font-family: 'DM Mono', monospace; font-size: 13.5px; background: #f4f2fb; padding: 1.5px 6px; border-radius: 4px; color: #5a4bd1; }
+    /* Fenced code blocks (e.g. the "How the pieces connect" diagram) — a soft dark card so the ASCII art reads cleanly instead of unstyled raw text */
+    .pd-doc pre { background: #1d1733; color: #e9e5fb; border: 1px solid #2c2350; border-radius: 12px; padding: 18px 22px; margin: 18px 0; overflow-x: auto; box-shadow: var(--shadow-sm, 0 1px 3px rgba(20,12,50,.06)); }
+    .pd-doc pre code { background: none; color: inherit; padding: 0; border-radius: 0; font-size: 13px; line-height: 1.55; white-space: pre; }
+    /* Cross-reference chips: a `foo/bar.md` mention that maps to another PD doc becomes a clickable pill */
+    .pd-doc a.pd-doclink { display: inline-flex; align-items: baseline; gap: 5px; font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; background: #f0eefb; color: #4e3db8; padding: 2px 9px 2px 8px; border-radius: 6px; border: 1px solid #ddd6f5; text-decoration: none; transition: background .12s, border-color .12s; }
+    .pd-doc a.pd-doclink::before { content: '📄'; font-size: 11px; }
+    .pd-doc a.pd-doclink:hover { background: #e6e1f8; border-color: #c5b9ef; }
     /* Callout-style blockquote with a soft tinted card + lead mark */
     .pd-doc blockquote { border-left: 4px solid var(--accent, #6c5ce7); margin: 18px 0; padding: 14px 18px 14px 20px; background: linear-gradient(90deg, rgba(108,92,231,.07), rgba(8,145,178,.04)); color: #3a3458; border-radius: 0 10px 10px 0; }
     .pd-doc blockquote p { margin: 0; }
@@ -721,6 +728,39 @@
       wrap.focus();
     }
 
+    /* ── Cross-reference auto-linking ──────────────────────────────────
+       PD guides mention sibling docs as inline `code` like
+       `specialists/train-the-trainer-guide.md`. marked() renders those as
+       plain <code>. Map each mention back to a manifest slug (by basename,
+       ignoring any folder prefix + leading "_") and turn it into a
+       clickable pd?doc=<slug> pill so the reader can jump straight there. */
+    const DOCREF_BY_BASENAME = (() => {
+      const map = {};
+      const key = p => p.split('/').pop().replace(/^_/, '').replace(/\.md$/i, '');
+      for (const m of PD_MANIFEST) map[key(m.path)] = m;
+      // README has no manifest path field convention — alias both forms.
+      map['readme'] = PD_MANIFEST.find(m => m.slug === 'readme') || map['readme'];
+      return map;
+    })();
+    function linkifyDocRefs(root) {
+      root.querySelectorAll('code').forEach(code => {
+        // skip code already inside a fenced block (the diagram) or an <a>
+        if (code.closest('pre') || code.closest('a')) return;
+        const raw = code.textContent.trim();
+        if (!/\.md$/i.test(raw)) return;
+        const base = raw.split('/').pop().replace(/^_/, '').replace(/\.md$/i, '');
+        const meta = DOCREF_BY_BASENAME[base];
+        if (!meta) return;  // unknown ref — leave as plain code
+        const a = document.createElement('a');
+        a.className = 'pd-doclink';
+        a.href = 'pd?doc=' + encodeURIComponent(meta.slug);
+        a.title = 'Open: ' + meta.title;
+        a.textContent = meta.title;
+        a.onclick = e => { e.preventDefault(); history.pushState({}, '', a.getAttribute('href')); route(); };
+        code.replaceWith(a);
+      });
+    }
+
     /* ── Reader mode ───────────────────────────────────────────────── */
     async function openDoc(slug) {
       const meta = PD_MANIFEST.find(m => m.slug === slug);
@@ -759,6 +799,7 @@
           `<div id="pdTocRail" class="pd-toc"><p class="pd-toc-lbl">On this page</p><nav id="pdTocNav"></nav></div>` +
           `<div class="pd-doc" id="pdDocBody"><div class="pd-print-brand"><b>Eduversal — Professional Development</b><span>${esc(meta.title)} · ${esc(today)}</span></div>${docHtml}</div>`;
         const docBody = body.querySelector('#pdDocBody');
+        linkifyDocRefs(docBody);
         const heads = [...docBody.querySelectorAll('h2, h3')];
         if (heads.length >= 3) {
           body.classList.add('has-toc');
