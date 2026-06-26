@@ -82,7 +82,8 @@ The order matters. Each session builds on the one before.
         │                     │ (the systems that apply to me)
         │
         └──────────────► LEADERS (Step 3)
-                         evaluation-map · F2 calibration ⭐ · coaching ⭐ · KPI target-setting · leadership competency
+                         evaluation-map · F2 calibration ⭐ · coaching ⭐
+                         · KPI target-setting · leadership competency
                               │ (run the systems + grow as a leader)
 
    ⭐ F2 calibration + coaching together protect the fairness AND usefulness
