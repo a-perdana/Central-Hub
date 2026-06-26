@@ -26,12 +26,12 @@ const A11Y_SKIP_FILES = new Set(["login.html"]);
 // First-content-wrapper candidates, in priority order. The first match in the
 // document that does NOT already carry an id gets the landmark attributes.
 const A11Y_WRAPPER_PATTERNS = [
-  /<header class="page-hero"/,
+  /<header class="page-hero"(?![^>]*\bid=)/,
   /<main\b(?![^>]*\bid=)/,
-  /<section class="page-info-strip"/,
-  /<div class="page-wrap"/,
-  /<div class="main-content"/,
-  /<div class="page-layout"/,
+  /<section class="page-info-strip"(?![^>]*\bid=)/,
+  /<div class="page-wrap"(?![^>]*\bid=)/,
+  /<div class="main-content"(?![^>]*\bid=)/,
+  /<div class="page-layout"(?![^>]*\bid=)/,
   /<div id="mainContent"/,            // AH
   /<div id="navbar-container"><\/div>/ // TH bespoke (fallback handled below)
 ];

@@ -534,25 +534,40 @@ window.db          = db;
 window.storage     = storage;
 
 // ── Academic year — single source of truth ────────────────────────
-// Derives the "YYYY-YYYY" label from `calendar_settings/current.academicYearStart`
-// (an ISO date; Jul–Jun fiscal year). NEVER hardcode or date-guess the academic
-// year in a page — call window.getCurrentAcademicYear() (sync, cached) or await
-// window.academicYearReady (resolves to the label once the doc has loaded).
-// The label is also attached to the authReady event detail as `academicYear`.
-function _academicYearLabelFromIso(iso) {
-  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return '';
-  const y = Number(iso.slice(0, 4));
-  const m = Number(iso.slice(5, 7));
-  // Start in second half (Jul–Dec) → Y/Y+1; first half (Jan–Jun) → Y-1/Y.
-  return m >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+// Derives the "YYYY-YYYY" label from `calendar_settings/current`. NEVER hardcode
+// or date-guess the academic year in a page — call window.getCurrentAcademicYear()
+// (sync, cached) or await window.academicYearReady (resolves to the label once the
+// doc has loaded). The label is also attached to the authReady detail as `academicYear`.
+//
+// Preference order: the term tarihleri (terms[0].start year .. last term .end year)
+// are authoritative because a school year may start in June, July, or August — a
+// month-threshold heuristic on academicYearStart alone mislabels a June start.
+// academicYearStart is the fallback only when terms[] is absent.
+function _deriveAcademicYear(data) {
+  if (!data) return '';
+  const terms = Array.isArray(data.terms) ? data.terms.filter(t => t && (t.start || t.end)) : [];
+  if (terms.length) {
+    const sy = String(terms[0].start || terms[0].end || '').slice(0, 4);
+    const ey = String(terms[terms.length - 1].end || terms[terms.length - 1].start || '').slice(0, 4);
+    if (/^\d{4}$/.test(sy) && /^\d{4}$/.test(ey)) {
+      return sy === ey ? `${sy}-${Number(sy) + 1}` : `${sy}-${ey}`;
+    }
+  }
+  const iso = data.academicYearStart || '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(iso)) {
+    const y = Number(iso.slice(0, 4));
+    const m = Number(iso.slice(5, 7));
+    // Jun–Dec start → opening half (Y/Y+1); Jan–May → second half (Y-1/Y).
+    return m >= 6 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  }
+  return '';
 }
 let _academicYearLabel = '';
 window.getCurrentAcademicYear = () => _academicYearLabel;
 window.academicYearReady = (async () => {
   try {
     const snap = await getDoc(doc(db, 'calendar_settings', 'current'));
-    const iso = (snap.exists() && snap.data().academicYearStart) || '';
-    _academicYearLabel = _academicYearLabelFromIso(iso);
+    _academicYearLabel = _deriveAcademicYear(snap.exists() ? snap.data() : null);
   } catch (e) {
     console.warn('academicYearReady: calendar_settings/current load failed', e);
   }
