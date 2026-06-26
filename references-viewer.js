@@ -144,7 +144,15 @@
      of primitives render as a comma list (or a count chip if long); nested
      objects render as a compact key:value run (or a count chip). This keeps
      card fields readable without dumping rich structure to Raw JSON. */
-  function renderFieldValue(v) {
+  // depth guards against pathological nesting; past ~3 levels we stop
+  // recursing and fall back to the "object · N keys" summary so the modal
+  // can't blow up on a deeply-nested doc. Most reference JSONs (e.g.
+  // coaching-questions: item -> {title, questions -> {level: [strings]}})
+  // are 2-3 deep — recursing makes their actual content visible instead of
+  // a useless "object · 2 keys" placeholder.
+  const MAX_FIELD_DEPTH = 3;
+  function renderFieldValue(v, depth) {
+    depth = depth || 0;
     if (v === null || v === undefined) return '<span class="dv-empty">—</span>';
     if (Array.isArray(v)) {
       if (!v.length) return '<span class="dv-empty">—</span>';
@@ -154,15 +162,30 @@
       // Array of objects: name/label/title preview + count.
       const names = v.map(o => (o && (o.name || o.label || o.title || o.id || o.code)))
         .filter(Boolean).slice(0, 4);
-      return names.length
-        ? `<span class="dv-list">${names.map(n => `<span class="dv-tag">${richString(n)}</span>`).join('')}</span>${v.length > names.length ? ` <span class="doc-view-kv-nested">+${v.length - names.length}</span>` : ''}`
-        : `<span class="doc-view-kv-nested">${v.length} entries</span>`;
+      if (names.length) {
+        return `<span class="dv-list">${names.map(n => `<span class="dv-tag">${richString(n)}</span>`).join('')}</span>${v.length > names.length ? ` <span class="doc-view-kv-nested">+${v.length - names.length}</span>` : ''}`;
+      }
+      // No identity field to preview — recurse into the first few entries
+      // rather than showing a bare "N entries" count.
+      if (depth < MAX_FIELD_DEPTH) {
+        const shown = v.slice(0, 6).map(item =>
+          `<div class="dv-nest-item">${renderFieldValue(item, depth + 1)}</div>`).join('');
+        return `<div class="dv-nest">${shown}${v.length > 6 ? `<span class="doc-view-kv-nested">+${v.length - 6} more</span>` : ''}</div>`;
+      }
+      return `<span class="doc-view-kv-nested">${v.length} entries</span>`;
     }
     if (typeof v === 'object') {
       const subKeys = Object.keys(v);
       const allPrim = subKeys.every(sk => v[sk] === null || typeof v[sk] !== 'object');
       if (allPrim && subKeys.length <= 4) {
         return subKeys.map(sk => `<span class="dv-subk">${escapeHtml(humaniseKey(sk))}:</span> ${richString(v[sk])}`).join('<br>');
+      }
+      // Nested object with object/array children — recurse so the reader
+      // sees the actual structure (e.g. questions -> {induction:[…]}).
+      if (depth < MAX_FIELD_DEPTH) {
+        const rows = subKeys.map(sk =>
+          `<div class="dv-nest-row"><span class="dv-subk">${escapeHtml(humaniseKey(sk))}:</span> <div class="dv-nest-val">${renderFieldValue(v[sk], depth + 1)}</div></div>`).join('');
+        return `<div class="dv-nest">${rows}</div>`;
       }
       return `<span class="doc-view-kv-nested">object · ${subKeys.length} key${subKeys.length === 1 ? '' : 's'}</span>`;
     }
@@ -206,14 +229,14 @@
       } else if (Array.isArray(v)) {
         const primOnly = v.every(x => x === null || typeof x !== 'object');
         if (primOnly && v.length <= 6) valueHtml = v.map(x => richString(x)).join(', ');
-        else valueHtml = `<span class="doc-view-kv-nested">array · ${v.length} item${v.length === 1 ? '' : 's'}</span>`;
+        else valueHtml = renderFieldValue(v, 1);  // recurse into array-of-objects / long arrays
       } else if (typeof v === 'object') {
         const subKeys = Object.keys(v);
         const allPrim = subKeys.every(sk => v[sk] === null || typeof v[sk] !== 'object');
         if (allPrim && subKeys.length <= 3) {
           valueHtml = subKeys.map(sk => `<b style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3);">${escapeHtml(sk)}:</b> ${richString(v[sk])}`).join(' &nbsp;·&nbsp; ');
         } else {
-          valueHtml = `<span class="doc-view-kv-nested">object · ${subKeys.length} key${subKeys.length === 1 ? '' : 's'}</span>`;
+          valueHtml = renderFieldValue(v, 1);  // recurse into nested object (e.g. coaching item -> questions)
         }
       } else {
         valueHtml = richString(v);
