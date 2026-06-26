@@ -47,18 +47,43 @@ function injectA11y(html, fileBase) {
   let out = html.replace(/(<body\b[^>]*>)/, `$1\n${SKIP}`);
 
   // 2) Landmark attributes on the first matching content wrapper.
+  //    Search/replace ONLY in the post-<body> region so example markup inside
+  //    <head> comments or <style> blocks (e.g. a "canonical <header class=
+  //    'page-hero'>" doc comment) can't be mistaken for the real wrapper.
+  //    Past incident: roles-positions + 6 others had the landmark injected into
+  //    a style-block comment, leaving the real <header> landmark-less and the
+  //    skip-link target (#main-content) dangling.
+  const bodyIdx = out.search(/<body\b[^>]*>/);
+  const splitAt = bodyIdx === -1 ? 0 : bodyIdx;
+  let headPart = out.slice(0, splitAt);
+  let bodyPart = out.slice(splitAt);
   let landmarkPlaced = false;
   for (const pat of A11Y_WRAPPER_PATTERNS) {
-    const m = out.match(pat);
+    const m = bodyPart.match(pat);
     if (!m) continue;
     // Skip the TH-only navbar-container sentinel here — handled by fallback.
     if (pat.source.includes("navbar-container")) break;
-    // Inject the attributes just after the matched tag-name token.
     const tag = m[0];
-    out = out.replace(tag, tag + LANDMARK);
+    const existingId = tag.match(/\bid="([^"]+)"/);
+    if (existingId) {
+      // Wrapper already carries an id (e.g. AH's <div id="mainContent">).
+      // Don't add a second id="main-content" — that produces a duplicate-id
+      // element (the browser keeps only the first, getElementById on the page's
+      // own id returns null → crash). Instead reuse the existing id as the
+      // landmark target: add only role/tabindex and point the skip-link there.
+      bodyPart = bodyPart.replace(tag, tag + ' role="main" tabindex="-1"');
+      out = headPart + bodyPart;
+      out = out.replace('href="#main-content"', `href="#${existingId[1]}"`);
+      headPart = out.slice(0, splitAt);
+      bodyPart = out.slice(splitAt);
+    } else {
+      // Inject the full landmark just after the matched tag-name token.
+      bodyPart = bodyPart.replace(tag, tag + LANDMARK);
+    }
     landmarkPlaced = true;
     break;
   }
+  out = headPart + bodyPart;
   // 3) Fallback for bespoke pages with no known wrapper: drop a bare focus
   //    target right after the skip-link so the skip-link still lands.
   if (!landmarkPlaced) {
