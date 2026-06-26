@@ -1398,7 +1398,10 @@
       async function boot() {
         document.body.style.display = '';
         try {
-          var res = await fetch('resources/roles-positions.json', { cache: 'no-store' });
+          // Default HTTP caching: the 204 KB catalogue rarely changes, and
+          // no-store forced a full re-download on every navigation. The
+          // browser now revalidates via ETag / Last-Modified instead.
+          var res = await fetch('resources/roles-positions.json');
           if (!res.ok) throw new Error('HTTP ' + res.status);
           DATA = await res.json();
         } catch (err) {
@@ -2485,7 +2488,15 @@
           opt.textContent = c.label;
           sel.appendChild(opt);
         });
-        $('rpSearch').addEventListener('input', renderCatalogue);
+        // Debounce the search input — renderCatalogue() does an O(n) scan
+        // (concat + lowercase 9 fields per position) on every keystroke,
+        // which lags on slower devices. 140 ms coalesces fast typing.
+        // The <select> filters below stay immediate (one change = one render).
+        var rpSearchTimer;
+        $('rpSearch').addEventListener('input', function () {
+          clearTimeout(rpSearchTimer);
+          rpSearchTimer = setTimeout(renderCatalogue, 140);
+        });
         $('rpFilterCat').addEventListener('change', renderCatalogue);
         $('rpFilterTrack').addEventListener('change', renderCatalogue);
         $('rpFilterSource').addEventListener('change', renderCatalogue);
