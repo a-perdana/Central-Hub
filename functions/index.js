@@ -2042,6 +2042,27 @@ const ASK_CACHE_TTL_HOURS = 24;
 const ASK_EMBED_MODEL = "embed-v4.0";
 const ASK_EMBED_DIMS = 256;
 
+// Per-1M-token USD pricing for the answer cost line shown to users + audit.
+// Claude prices from the claude-api reference (cached 2026-06); Cohere
+// embed-v4 from public pricing. Update if Anthropic/Cohere change rates.
+// (Anthropic model id → {in, out}; embed is the per-query Cohere cost.)
+const ASK_MODEL_PRICES = {
+  "claude-sonnet-4-6":        { in: 3.00,  out: 15.00 },
+  "claude-haiku-4-5-20251001":{ in: 1.00,  out: 5.00  },
+  "claude-opus-4-7":          { in: 5.00,  out: 25.00 },
+};
+const ASK_EMBED_PRICE_PER_M = 0.12; // Cohere embed-v4 per 1M tokens
+// Compute the USD cost of one answer from token usage. Returns a number
+// (USD), rounded to 6 dp. Query-embed cost is a fixed tiny estimate (the
+// query is ~tens of tokens; Cohere doesn't return per-call token counts).
+function askComputeCostUsd(model, tokenUsage) {
+  const p = ASK_MODEL_PRICES[model] || ASK_MODEL_PRICES[ASK_DEFAULT_MODEL];
+  const inCost  = ((tokenUsage.input  || 0) / 1e6) * p.in;
+  const outCost = ((tokenUsage.output || 0) / 1e6) * p.out;
+  const embedCost = (40 / 1e6) * ASK_EMBED_PRICE_PER_M; // ~40-token query
+  return Math.round((inCost + outCost + embedCost) * 1e6) / 1e6;
+}
+
 // Module-level vector cache (survives warm invocations).
 let _askVecCache = null;       // [{ chunkId, ref, title, docId, source, deepLink, embedding:Float32Array }]
 let _askVecFingerprint = null; // ask_meta.corpusFingerprint the cache was built against
@@ -2172,12 +2193,14 @@ exports.askEduversal = onCall(
           question, retrievedRefs: c.citations?.map(x => x.ref) || [],
           citations: c.citations || [], model: c.model || model,
           tokenUsage: { input: 0, output: 0, total: 0 },
+          costUsd: 0, originalCostUsd: c.costUsd || 0,
           latencyMs: Date.now() - t0, cacheHit: true, error: null,
           at: admin.firestore.FieldValue.serverTimestamp(),
         });
         return {
           answer: c.answer, citations: c.citations || [], usedChunkIds: c.usedChunkIds || [],
           cacheHit: true, model: c.model || model, tokenUsage: { input: 0, output: 0, total: 0 },
+          costUsd: 0, originalCostUsd: c.costUsd || 0,
         };
       }
     }
@@ -2247,17 +2270,19 @@ exports.askEduversal = onCall(
       .map(c => ({ ref: c.ref, title: c.title, docId: c.docId, source: c.source, deepLink: c.deepLink }));
 
     // 5. Persist cache + audit.
+    const costUsd = errorMsg ? 0 : askComputeCostUsd(model, tokenUsage);
     if (!errorMsg && answer) {
       const ttlMs = ASK_CACHE_TTL_HOURS * 3600 * 1000;
       await cacheRef.set({
         answer, citations, usedChunkIds: chunks.map(c => c.chunkId), model,
+        tokenUsage, costUsd,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + ttlMs),
       });
     }
     const auditRef = await db.collection("ask_audit").add({
       actorUid: uid, actorEmail: u?.email || request.auth.token?.email || null,
-      question, retrievedRefs, citations, model, tokenUsage,
+      question, retrievedRefs, citations, model, tokenUsage, costUsd,
       latencyMs: Date.now() - t0, cacheHit: false, error: errorMsg,
       at: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -2268,7 +2293,7 @@ exports.askEduversal = onCall(
 
     return {
       answer, citations, usedChunkIds: chunks.map(c => c.chunkId),
-      cacheHit: false, model, tokenUsage, auditId: auditRef.id,
+      cacheHit: false, model, tokenUsage, costUsd, auditId: auditRef.id,
     };
   }
 );

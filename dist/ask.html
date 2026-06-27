@@ -3644,10 +3644,37 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .ask-answer-q::before { content:'Q'; flex-shrink:0; width:20px; height:20px; border-radius:50%;
       background:#6c5ce7; color:#fff; font-size:11px; font-weight:700; display:inline-flex;
       align-items:center; justify-content:center; }
-    .ask-answer-body { padding:16px 20px; font-size:0.93rem; line-height:1.65; color:#374151; }
-    .ask-answer-body p { margin:0 0 10px; }
-    .ask-answer-body ul { margin:0 0 10px; padding-left:20px; }
-    .ask-answer-body strong { color:#1f2937; }
+    .ask-answer-body { padding:18px 22px; font-size:0.94rem; line-height:1.7; color:#374151; }
+    .ask-answer-body > *:first-child { margin-top:0; }
+    .ask-answer-body > *:last-child { margin-bottom:0; }
+    .ask-answer-body p { margin:0 0 12px; }
+    .ask-answer-body strong { color:#1f2937; font-weight:700; }
+    /* Markdown rendering — shared by the live answer card + saved history.
+       Render the model's ##/### / --- / lists instead of dumping raw tokens. */
+    .ask-md .ask-h { font-family:'Lora',serif; color:#1f2937; line-height:1.35; margin:20px 0 8px; font-weight:600; }
+    .ask-md .ask-h:first-child { margin-top:0; }
+    .ask-md .ask-h1 { font-size:1.28rem; padding-bottom:6px; border-bottom:1px solid #ece7f9; }
+    .ask-md .ask-h2 { font-size:1.12rem; }
+    .ask-md .ask-h3 { font-size:1rem; color:#5b21b6; }
+    .ask-md .ask-h4 { font-size:0.92rem; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .ask-md .ask-hr { border:0; border-top:1px solid #ece7f9; margin:16px 0; }
+    .ask-md .ask-list { margin:0 0 12px; padding-left:22px; }
+    .ask-md .ask-list li { margin:0 0 5px; padding-left:3px; }
+    .ask-md ul.ask-list { list-style:none; }
+    .ask-md ul.ask-list li { position:relative; }
+    .ask-md ul.ask-list li::before {
+      content:''; position:absolute; left:-14px; top:0.62em;
+      width:5px; height:5px; border-radius:50%; background:#a78bfa;
+    }
+    .ask-md ol.ask-list { list-style:decimal; }
+    .ask-md ol.ask-list li::marker { color:#8b5cf6; font-weight:600; }
+    .ask-md code {
+      font-family:'DM Mono',monospace; font-size:0.85em;
+      background:#f3f0fb; color:#5b21b6; padding:1.5px 6px; border-radius:5px;
+      border:1px solid #ece7f9; white-space:nowrap;
+    }
+    .ask-md em { font-style:italic; color:#4b5563; }
+    .ask-md p:last-child { margin-bottom:0; }
     .ask-cite {
       font-family:'DM Mono',monospace; font-size:11.5px; padding:2px 7px; border-radius:4px;
       background:#cffafe; color:#0e7490; text-decoration:none; font-weight:600; white-space:nowrap;
@@ -3683,6 +3710,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     .ask-hist-date { margin-left:auto; font-size:0.72rem; color:#9ca3af; font-weight:400; }
     .ask-hist-a { padding:0 16px 14px; font-size:0.88rem; color:#4b5563; line-height:1.6; }
     .ask-hist-a .ask-cite { margin-right:5px; }
+    .ask-hist-meta { padding:0 16px 12px; font-size:0.72rem; color:#9ca3af; }
 
     @media (max-width:768px) {
       main { padding:18px 16px 48px; }
@@ -3792,32 +3820,101 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       return 'references';
     }
 
-    // Render answer text: turn (ref) mentions into clickable chips, basic line breaks.
-    function renderAnswerHtml(answer, citations) {
-      let html = esc(answer);
-      // Bold **x**
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      // Citation chips: replace each cited ref token with a chip link.
-      for (const c of citations) {
+    // Inline markdown on an ALREADY-ESCAPED string: bold, italics, inline code,
+    // then citation chips. Order matters — chips run last so they aren't eaten
+    // by the emphasis regexes.
+    function renderInline(escaped, citations) {
+      let s = escaped;
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');          // `code`
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); // **bold**
+      s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>'); // *italic*
+      for (const c of citations || []) {
         const safe = esc(c.ref).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const re = new RegExp('\\(?\\b' + safe + '\\b\\)?', 'g');
-        html = html.replace(re, `<a class="ask-cite" href="${esc(citeHref(c))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`);
+        s = s.replace(re, `<a class="ask-cite" href="${esc(citeHref(c))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`);
       }
-      // Paragraphs + simple bullets
-      html = html.split(/\n{2,}/).map(blk => {
-        if (/^\s*[-•]\s/m.test(blk)) {
-          const items = blk.split(/\n/).filter(l => l.trim()).map(l => `<li>${l.replace(/^\s*[-•]\s/, '')}</li>`).join('');
-          return `<ul>${items}</ul>`;
+      return s;
+    }
+
+    // Line-based markdown renderer: headings (#/##/###), horizontal rules (---),
+    // ordered + unordered lists, and paragraphs. The model returns GitHub-style
+    // markdown; render it properly instead of dumping the raw ## / --- tokens.
+    function renderAnswerHtml(answer, citations) {
+      const lines = String(answer || '').replace(/\r\n/g, '\n').split('\n');
+      const out = [];
+      let listType = null;       // 'ul' | 'ol' | null
+      let paraBuf = [];
+      const flushPara = () => {
+        if (!paraBuf.length) return;
+        out.push('<p>' + paraBuf.map(l => renderInline(esc(l), citations)).join('<br>') + '</p>');
+        paraBuf = [];
+      };
+      const closeList = () => { if (listType) { out.push('</' + listType + '>'); listType = null; } };
+
+      for (const raw of lines) {
+        const line = raw.replace(/\s+$/, '');
+        if (!line.trim()) { flushPara(); closeList(); continue; }
+
+        // Horizontal rule: --- *** ___
+        if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { flushPara(); closeList(); out.push('<hr class="ask-hr">'); continue; }
+
+        // Headings: #, ##, ###  (level clamps 1-4)
+        const h = line.match(/^\s*(#{1,4})\s+(.*)$/);
+        if (h) {
+          flushPara(); closeList();
+          const lvl = Math.min(h[1].length, 4);
+          out.push('<h' + (lvl + 1) + ' class="ask-h ask-h' + lvl + '">' + renderInline(esc(h[2]), citations) + '</h' + (lvl + 1) + '>');
+          continue;
         }
-        return `<p>${blk.replace(/\n/g, '<br>')}</p>`;
-      }).join('');
-      return html;
+
+        // Ordered list item: "1. text"
+        const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+        if (ol) {
+          flushPara();
+          if (listType !== 'ol') { closeList(); out.push('<ol class="ask-list">'); listType = 'ol'; }
+          out.push('<li>' + renderInline(esc(ol[1]), citations) + '</li>');
+          continue;
+        }
+
+        // Unordered list item: "- " "* " "• "
+        const ul = line.match(/^\s*[-*•]\s+(.*)$/);
+        if (ul) {
+          flushPara();
+          if (listType !== 'ul') { closeList(); out.push('<ul class="ask-list">'); listType = 'ul'; }
+          out.push('<li>' + renderInline(esc(ul[1]), citations) + '</li>');
+          continue;
+        }
+
+        // Plain text → accumulate into a paragraph
+        if (listType) closeList();
+        paraBuf.push(line);
+      }
+      flushPara(); closeList();
+      return out.join('');
     }
 
     function citesRow(citations) {
       if (!citations || !citations.length) return '';
       const chips = citations.map(c => `<a class="ask-cite" href="${esc(citeHref(c))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`).join('');
       return `<div class="ask-answer-cites"><span class="ask-answer-cites-label">Sources</span>${chips}</div>`;
+    }
+
+    // Format a USD cost: very small numbers as fractional cents, else $0.00xx.
+    function fmtUsd(v) {
+      const n = Number(v) || 0;
+      if (n === 0) return '$0';
+      if (n < 0.01) return '$' + n.toFixed(4);
+      return '$' + n.toFixed(2);
+    }
+    // The cost/usage line shown under each answer.
+    function costLine(d) {
+      const tu = d.tokenUsage || { input: 0, output: 0 };
+      if (d.cacheHit) {
+        const orig = d.originalCostUsd ? ` (saved ${fmtUsd(d.originalCostUsd)})` : '';
+        return `Cached answer · ${fmtUsd(0)} cost${orig}`;
+      }
+      const cost = fmtUsd(d.costUsd);
+      return `${cost} · ${(tu.input || 0).toLocaleString()} in / ${(tu.output || 0).toLocaleString()} out tokens`;
     }
 
     document.addEventListener('authReady', async () => {
@@ -3846,9 +3943,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           const rows = snap.docs.map(d => {
             const t = d.data() || {};
             const when = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString('en-GB') : '';
+            const cost = t.cacheHit ? 'Cached · $0' : fmtUsd(t.costUsd);
             return `<details class="ask-hist-item">
               <summary class="ask-hist-q">${esc(t.question || '')}<span class="ask-hist-date">${esc(when)}</span></summary>
-              <div class="ask-hist-a">${renderAnswerHtml(t.answer || '', t.citations || [])}</div>
+              <div class="ask-hist-a ask-md">${renderAnswerHtml(t.answer || '', t.citations || [])}</div>
+              <div class="ask-hist-meta">${esc(cost)}${(t.citations && t.citations.length) ? ' · ' + t.citations.length + ' source' + (t.citations.length === 1 ? '' : 's') : ''}</div>
             </details>`;
           }).join('');
           $('askHistory').innerHTML = rows;
@@ -3885,15 +3984,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           $('askResult').innerHTML = `
             <div class="ask-answer">
               <div class="ask-answer-q">${esc(question)}</div>
-              <div class="ask-answer-body">${renderAnswerHtml(answer, citations)}</div>
+              <div class="ask-answer-body ask-md">${renderAnswerHtml(answer, citations)}</div>
               ${citesRow(citations)}
-              <div class="ask-answer-meta">${d.cacheHit ? 'Cached answer · ' : ''}${citations.length} source${citations.length === 1 ? '' : 's'} cited · always verify against the source.</div>
+              <div class="ask-answer-meta">${costLine(d)} · ${citations.length} source${citations.length === 1 ? '' : 's'} cited · always verify against the source.</div>
             </div>`;
           // Save to the user's own thread (function already audited server-side).
           if (uid) {
             try {
               await addDoc(collection(db, 'ask_threads', uid, 'turns'), {
-                question, answer, citations, model: d.model || null, createdAt: serverTimestamp(),
+                question, answer, citations, model: d.model || null,
+                costUsd: d.costUsd || 0, tokenUsage: d.tokenUsage || null,
+                cacheHit: !!d.cacheHit, createdAt: serverTimestamp(),
               });
               loadHistory();
             } catch (e) { console.warn('save turn', e); }
