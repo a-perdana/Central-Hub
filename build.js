@@ -623,6 +623,7 @@ const htmlFiles = [
   "pd.html",
   "roles-positions.html",
   "chip-families.html",
+  "ask.html",
   "principal-coaching-session.html",
   "principal-coaching-hub.html",
   "principal-360-admin.html",

@@ -582,6 +582,56 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── ASK EDUVERSAL (RAG Q&A agent) ───────────────────────
+    // Corpus + retrieval index live in Firestore; seeded by
+    // scripts/ask/seed-ask-chunks.js (Admin SDK — bypasses these rules).
+    // The askEduversal Cloud Function reads chunks/meta with the Admin
+    // SDK too; the client only needs read for the KPI + deep-links.
+    // See docs/architecture/ASK-EDUVERSAL-RETRIEVAL-SUBPLAN.md.
+
+    // ask_chunks — full-text + embedding per retrieval chunk.
+    // Read by signed-in central_user (page KPI; the function uses Admin
+    // SDK). Write seed/CF only (Admin SDK). Never client-writable —
+    // embeddings + grounding integrity must not be client-mutable.
+    match /ask_chunks/{chunkId} {
+      allow read:  if isCentralUser();
+      allow write: if false;
+    }
+
+    // ask_meta/current — corpus fingerprint + chunk count (cache key +
+    // page KPI). Read signed-in central_user; write seed/CF only.
+    match /ask_meta/{docId} {
+      allow read:  if isCentralUser();
+      allow write: if false;
+    }
+
+    // ask_cache — 24h answer cache keyed on (question + corpus
+    // fingerprint). Cloud Function only, like ai_suggestion_cache.
+    match /ask_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
+    // ask_audit — append-only cost/quality log across ALL users.
+    // Created by the Cloud Function (Admin SDK). Admin reads for review.
+    match /ask_audit/{auditId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // ask_threads/{uid}/turns — each user's OWN saved Q&A history.
+    // A user reads + writes ONLY their own thread; admin may read for
+    // support. The answer the client writes here was already produced +
+    // audited server-side by askEduversal (the client mirrors it for the
+    // user's personal history — it is not a trust boundary for content).
+    match /ask_threads/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      match /turns/{turnId} {
+        allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin());
+        allow create: if isSignedIn() && request.auth.uid == uid;
+        allow update, delete: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
     // -- scheduled_sessions ----------------------------------
     // A teacher schedules a published chapter_test for one of their
     // classes. Each session writes N draft chapter_test_attempts (one

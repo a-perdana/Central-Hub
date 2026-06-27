@@ -2009,3 +2009,266 @@ function isoWeekStart(d) {
   if (day !== 1) date.setHours(-24 * (day - 1));
   return date.toISOString().slice(0, 10);
 }
+
+// ───────────────────────────────────────────────────────────────
+// ASK EDUVERSAL — askEduversal (2026-06-27)
+//   RAG Q&A agent over the indexed reference corpus (ES + handbooks +
+//   frameworks + Cambridge + Permendiknas + AICF). Embeddings retrieval
+//   (Cohere embed-v4.0, 256-dim) + grounded Claude generation with
+//   server-side citation validation. Corpus lives in Firestore
+//   ask_chunks/{id} (seeded by scripts/ask/seed-ask-chunks.js); this
+//   function caches the chunk VECTORS in module memory across warm
+//   invocations and reads the matched chunks' TEXT per question.
+//
+//   Secrets: COHERE_API_KEY (embeddings) + ANTHROPIC_API_KEY (generation).
+//   Auth: signed-in central_user/admin (page-access on /ask is the UI gate).
+//   Anti-hallucination: system rule grounds every claim to a retrieved
+//   chunk; citations validated against the retrieved set before return;
+//   no chunk → "not found", never answered from general knowledge.
+//
+//   Schema: docs/architecture/FIRESTORE_SCHEMA.md (Ask Eduversal block).
+//   Plan: docs/architecture/ASK-EDUVERSAL-RETRIEVAL-SUBPLAN.md
+// ───────────────────────────────────────────────────────────────
+
+const cohereApiKey = defineSecret("COHERE_API_KEY");
+const ASK_DEFAULT_MODEL = "claude-sonnet-4-6";
+const ASK_ALLOWED_MODELS = new Set([
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+  "claude-opus-4-7",
+]);
+const ASK_TOP_K = 12;            // chunks fed to the model
+const ASK_CACHE_TTL_HOURS = 24;
+const ASK_EMBED_MODEL = "embed-v4.0";
+const ASK_EMBED_DIMS = 256;
+
+// Module-level vector cache (survives warm invocations).
+let _askVecCache = null;       // [{ chunkId, ref, title, docId, source, deepLink, embedding:Float32Array }]
+let _askVecFingerprint = null; // ask_meta.corpusFingerprint the cache was built against
+
+async function loadAskVectors(db) {
+  // Cheap freshness check: re-load only if the corpus fingerprint changed.
+  let metaFp = null;
+  try {
+    const meta = await db.collection("ask_meta").doc("current").get();
+    metaFp = meta.exists ? (meta.data() || {}).corpusFingerprint || null : null;
+  } catch (_) { /* fall through — use stale cache if present */ }
+
+  if (_askVecCache && _askVecFingerprint && _askVecFingerprint === metaFp) {
+    return _askVecCache;
+  }
+
+  // Load vectors (NOT text) for every chunk.
+  const snap = await db.collection("ask_chunks")
+    .select("ref", "title", "docId", "source", "deepLink", "embedding")
+    .get();
+  const cache = [];
+  snap.forEach(d => {
+    const x = d.data() || {};
+    if (!Array.isArray(x.embedding) || !x.embedding.length) return;
+    cache.push({
+      chunkId: d.id,
+      ref: x.ref || d.id,
+      title: x.title || x.ref || d.id,
+      docId: x.docId || null,
+      source: x.source || null,
+      deepLink: x.deepLink || "references",
+      embedding: Float32Array.from(x.embedding),
+    });
+  });
+  _askVecCache = cache;
+  _askVecFingerprint = metaFp;
+  return cache;
+}
+
+function cosine(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+async function embedQueryCohere(apiKey, text) {
+  const { CohereClientV2 } = require("cohere-ai");
+  const cohere = new CohereClientV2({ token: apiKey });
+  const resp = await cohere.embed({
+    model: ASK_EMBED_MODEL,
+    inputType: "search_query",
+    outputDimension: ASK_EMBED_DIMS,
+    embeddingTypes: ["float"],
+    texts: [text],
+  });
+  const floats = (resp.embeddings && (resp.embeddings.float || resp.embeddings.float_)) || [];
+  if (!floats.length) throw new Error("Cohere returned no query embedding.");
+  return Float32Array.from(floats[0]);
+}
+
+function buildAskPrompt(question, chunks) {
+  const sources = chunks.map((c, i) =>
+    `[Source ${i + 1}] ref="${c.ref}" (${c.source})\n${c.text}`).join("\n\n");
+  return `You are "Ask Eduversal", a careful assistant that answers staff questions ONLY from Eduversal's own indexed policy and handbook documents. You are answering for Eduversal HQ + partner-school staff.
+
+RULES — follow exactly:
+1. Answer ONLY using the SOURCES below. Do NOT use outside/general knowledge.
+2. If the sources do not contain the answer, say so plainly ("The indexed documents don't define this") and, if there is a related policy, name it. NEVER invent a policy, a number, a frequency, or a citation.
+3. Cite the source ref for every factual claim, inline, like (ES 7.3) or (Director · Overview). Only cite refs that appear in the SOURCES below.
+4. Keep the answer concise, plain English (the audience includes ESL readers). Use short paragraphs or bullets.
+5. End with a one-line "Sources:" list of the refs you actually used.
+
+QUESTION:
+${question}
+
+SOURCES:
+${sources}`;
+}
+
+exports.askEduversal = onCall(
+  {
+    region: "asia-southeast1",
+    secrets: [cohereApiKey, anthropicApiKey],
+    cors: true,
+    timeoutSeconds: 60,
+    memory: "1GiB",
+  },
+  async (request) => {
+    const t0 = Date.now();
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const userSnap = await db.collection("users").doc(uid).get();
+    const u = userSnap.exists ? userSnap.data() : null;
+    const isAdmin = u?.role_centralhub === "central_admin";
+    const isCentralUser = u?.role_centralhub === "central_user";
+    if (!(isAdmin || isCentralUser)) {
+      throw new HttpsError("permission-denied", "Requires CH admin or central_user.");
+    }
+
+    const data = request.data || {};
+    const question = String(data.question || "").trim().slice(0, 600);
+    if (question.length < 3) {
+      throw new HttpsError("invalid-argument", "Ask a question (3+ chars).");
+    }
+    const requestedModel = String(data.model || ASK_DEFAULT_MODEL);
+    const model = ASK_ALLOWED_MODELS.has(requestedModel) ? requestedModel : ASK_DEFAULT_MODEL;
+
+    // Corpus fingerprint (for cache key + freshness).
+    let corpusFp = "none";
+    try {
+      const meta = await db.collection("ask_meta").doc("current").get();
+      corpusFp = (meta.exists && (meta.data() || {}).corpusFingerprint) || "none";
+    } catch (_) { /* tolerate */ }
+
+    // Answer cache (24h, keyed on normalised question + corpus fingerprint).
+    const normQ = question.toLowerCase().replace(/\s+/g, " ").trim();
+    const cacheKey = (await sha256Hex(JSON.stringify({ normQ, model, corpusFp }))).slice(0, 40);
+    const nowMs = Date.now();
+    const cacheRef = db.collection("ask_cache").doc(cacheKey);
+    const cacheSnap = await cacheRef.get();
+    if (cacheSnap.exists) {
+      const c = cacheSnap.data() || {};
+      if ((c.expiresAt?.toMillis?.() || 0) > nowMs && c.answer) {
+        await db.collection("ask_audit").add({
+          actorUid: uid, actorEmail: u?.email || request.auth.token?.email || null,
+          question, retrievedRefs: c.citations?.map(x => x.ref) || [],
+          citations: c.citations || [], model: c.model || model,
+          tokenUsage: { input: 0, output: 0, total: 0 },
+          latencyMs: Date.now() - t0, cacheHit: true, error: null,
+          at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return {
+          answer: c.answer, citations: c.citations || [], usedChunkIds: c.usedChunkIds || [],
+          cacheHit: true, model: c.model || model, tokenUsage: { input: 0, output: 0, total: 0 },
+        };
+      }
+    }
+
+    // 1. Retrieve — embed the question, cosine over cached vectors, top-K.
+    const cohereKey = cohereApiKey.value();
+    if (!cohereKey) throw new HttpsError("failed-precondition", "COHERE_API_KEY secret not set.");
+    const vectors = await loadAskVectors(db);
+    if (!vectors.length) {
+      throw new HttpsError("failed-precondition",
+        "Knowledge pool is empty — run scripts/ask/seed-ask-chunks.js --apply.");
+    }
+    const qVec = await embedQueryCohere(cohereKey, question);
+    const scored = vectors.map(v => ({ v, s: cosine(qVec, v.embedding) }));
+    scored.sort((a, b) => b.s - a.s);
+    const top = scored.slice(0, ASK_TOP_K).map(x => x.v);
+
+    // 2. Pull TEXT for the top-K chunks (the only per-question corpus read).
+    const refs = await db.getAll(...top.map(t => db.collection("ask_chunks").doc(t.chunkId)));
+    const chunks = refs.map((snap, i) => {
+      const x = snap.exists ? snap.data() : {};
+      return {
+        chunkId: top[i].chunkId, ref: x.ref || top[i].ref, title: x.title || top[i].title,
+        docId: x.docId || top[i].docId, source: x.source || top[i].source,
+        deepLink: x.deepLink || top[i].deepLink, text: x.text || "",
+      };
+    }).filter(c => c.text);
+
+    if (!chunks.length) {
+      throw new HttpsError("internal", "Retrieval matched no readable chunks.");
+    }
+
+    // 3. Generate — grounded Claude call.
+    const anthKey = anthropicApiKey.value();
+    if (!anthKey) throw new HttpsError("failed-precondition", "ANTHROPIC_API_KEY secret not set.");
+    const Anthropic = require("@anthropic-ai/sdk");
+    const client = new Anthropic.default({ apiKey: anthKey });
+
+    let answer = "", tokenUsage = { input: 0, output: 0, total: 0 }, errorMsg = null;
+    try {
+      const resp = await client.messages.create({
+        model,
+        max_tokens: 900,
+        messages: [{ role: "user", content: buildAskPrompt(question, chunks) }],
+      });
+      const textBlock = (resp.content || []).find(b => b.type === "text");
+      answer = (textBlock?.text || "").trim();
+      tokenUsage = {
+        input: resp.usage?.input_tokens || 0,
+        output: resp.usage?.output_tokens || 0,
+        total: (resp.usage?.input_tokens || 0) + (resp.usage?.output_tokens || 0),
+      };
+    } catch (err) {
+      errorMsg = String(err?.message || err);
+    }
+
+    // 4. Citation validation — keep only refs that were actually retrieved.
+    const retrievedRefs = chunks.map(c => c.ref);
+    const retrievedSet = new Set(retrievedRefs);
+    const citedInAnswer = new Set();
+    // Match any "(ref)" the model emitted against the retrieved refs.
+    for (const c of chunks) {
+      if (answer.includes(c.ref)) citedInAnswer.add(c.ref);
+    }
+    const citations = chunks
+      .filter(c => citedInAnswer.has(c.ref))
+      .map(c => ({ ref: c.ref, title: c.title, docId: c.docId, source: c.source, deepLink: c.deepLink }));
+
+    // 5. Persist cache + audit.
+    if (!errorMsg && answer) {
+      const ttlMs = ASK_CACHE_TTL_HOURS * 3600 * 1000;
+      await cacheRef.set({
+        answer, citations, usedChunkIds: chunks.map(c => c.chunkId), model,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + ttlMs),
+      });
+    }
+    const auditRef = await db.collection("ask_audit").add({
+      actorUid: uid, actorEmail: u?.email || request.auth.token?.email || null,
+      question, retrievedRefs, citations, model, tokenUsage,
+      latencyMs: Date.now() - t0, cacheHit: false, error: errorMsg,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    if (errorMsg) {
+      throw new HttpsError("internal", `Answer generation failed: ${errorMsg}`, { auditId: auditRef.id });
+    }
+
+    return {
+      answer, citations, usedChunkIds: chunks.map(c => c.chunkId),
+      cacheHit: false, model, tokenUsage, auditId: auditRef.id,
+    };
+  }
+);
