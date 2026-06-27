@@ -3820,18 +3820,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       return 'references';
     }
 
-    // Inline markdown on an ALREADY-ESCAPED string: bold, italics, inline code,
-    // then citation chips. Order matters — chips run last so they aren't eaten
-    // by the emphasis regexes.
+    // Only short "code-shaped" refs actually appear inline in the answer text
+    // (e.g. "ES 7.3", "CTS 4.1", "PIGP pasal-8", "SKL · Knowledge"). Framework /
+    // handbook refs are long titles (e.g. "framework-teaching-competency-framework")
+    // that the model never writes into prose — turning those into inline regexes
+    // matched the chip HTML's own title attribute and exploded the output.
+    // So: inline-link ONLY code-shaped refs; every ref still shows in the
+    // "Sources" row below. A code-shaped ref is letters/digits + a number, short.
+    function isInlineRef(ref) {
+      const r = String(ref || '').trim();
+      return r.length <= 24 && /\d/.test(r) && /^[A-Za-z][A-Za-z0-9 ./·:-]*$/.test(r);
+    }
+
+    // Inline markdown on an ALREADY-ESCAPED string: code, bold, italics, then
+    // citation chips for code-shaped refs only. Chips run last so the emphasis
+    // regexes don't eat them; we also skip refs whose token isn't present.
     function renderInline(escaped, citations) {
       let s = escaped;
       s = s.replace(/`([^`]+)`/g, '<code>$1</code>');          // `code`
       s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); // **bold**
       s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>'); // *italic*
-      for (const c of citations || []) {
-        const safe = esc(c.ref).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp('\\(?\\b' + safe + '\\b\\)?', 'g');
-        s = s.replace(re, `<a class="ask-cite" href="${esc(citeHref(c))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`);
+      // Sort longest-ref-first so "ES 15.1.1" wins over "ES 15" if both cited.
+      const inline = (citations || []).filter(c => isInlineRef(c.ref))
+        .sort((a, b) => String(b.ref).length - String(a.ref).length);
+      for (const c of inline) {
+        const escRef = esc(c.ref);
+        // Plain literal match on the escaped ref; tolerate optional wrapping parens.
+        const safe = escRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Negative lookahead/behind via a guard: don't match inside an attribute
+        // (i.e. when immediately preceded by =" or followed by ">) — chips we just
+        // inserted carry the ref in title/text, and must not be re-matched.
+        const re = new RegExp('\\(?(?<![="\\w-])' + safe + '(?![\\w">-])\\)?', 'g');
+        s = s.replace(re, `<a class="ask-cite" href="${esc(citeHref(c))}" title="${esc(c.title || c.ref)}">${escRef}</a>`);
       }
       return s;
     }
