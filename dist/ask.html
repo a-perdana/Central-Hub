@@ -3675,6 +3675,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     }
     .ask-md em { font-style:italic; color:#4b5563; }
     .ask-md p:last-child { margin-bottom:0; }
+    /* GFM tables (comparison grids the model emits) */
+    .ask-md .ask-table-wrap { overflow-x:auto; margin:0 0 14px; border:1px solid #ece7f9; border-radius:10px; }
+    .ask-md .ask-table { border-collapse:collapse; width:100%; font-size:0.86rem; }
+    .ask-md .ask-table th, .ask-md .ask-table td {
+      padding:8px 12px; text-align:left; vertical-align:top; border-bottom:1px solid #f1f0f9;
+      line-height:1.5; color:#374151;
+    }
+    .ask-md .ask-table th {
+      background:#f5f3ff; color:#5b21b6; font-weight:600; font-size:0.78rem;
+      text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;
+    }
+    .ask-md .ask-table tbody tr:last-child td { border-bottom:0; }
+    .ask-md .ask-table tbody tr:nth-child(even) td { background:#fbfaff; }
     .ask-cite {
       font-family:'DM Mono',monospace; font-size:11.5px; padding:2px 7px; border-radius:4px;
       background:#cffafe; color:#0e7490; text-decoration:none; font-weight:600; white-space:nowrap;
@@ -3871,9 +3884,47 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       };
       const closeList = () => { if (listType) { out.push('</' + listType + '>'); listType = null; } };
 
-      for (const raw of lines) {
+      // Split a "| a | b |" row into trimmed cells, dropping the empty
+      // leading/trailing cells the outer pipes produce.
+      const splitRow = (s) => {
+        let t = s.trim();
+        if (t.startsWith('|')) t = t.slice(1);
+        if (t.endsWith('|')) t = t.slice(0, -1);
+        return t.split('|').map(c => c.trim());
+      };
+      // A GFM table separator row: |---|:--:|---| (each cell is dashes with
+      // optional leading/trailing colons for alignment).
+      const isTableSep = (s) => /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/.test(s) && s.includes('-');
+      const isTableRow = (s) => /\|/.test(s) && s.trim().startsWith('|');
+
+      for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
         const line = raw.replace(/\s+$/, '');
         if (!line.trim()) { flushPara(); closeList(); continue; }
+
+        // GFM table: a header row followed by a |---|---| separator, then body
+        // rows. The model emits these for comparison grids; render as <table>
+        // instead of dumping raw pipes. (Past incident: the table renderer was
+        // missing entirely, so tables showed as literal "| col | col |" text.)
+        if (isTableRow(line) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+          flushPara(); closeList();
+          const headers = splitRow(line);
+          const bodyRows = [];
+          let j = i + 2;
+          while (j < lines.length && isTableRow(lines[j]) && lines[j].trim()) {
+            bodyRows.push(splitRow(lines[j]));
+            j++;
+          }
+          const th = headers.map(c => '<th>' + renderInline(esc(c), citations) + '</th>').join('');
+          const trs = bodyRows.map(cells => {
+            // Pad/truncate to header width so the grid stays rectangular.
+            const tds = headers.map((_, k) => '<td>' + renderInline(esc(cells[k] || ''), citations) + '</td>').join('');
+            return '<tr>' + tds + '</tr>';
+          }).join('');
+          out.push('<div class="ask-table-wrap"><table class="ask-table"><thead><tr>' + th + '</tr></thead><tbody>' + trs + '</tbody></table></div>');
+          i = j - 1; // resume after the consumed table block
+          continue;
+        }
 
         // Horizontal rule: --- *** ___
         if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { flushPara(); closeList(); out.push('<hr class="ask-hr">'); continue; }
