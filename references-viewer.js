@@ -718,7 +718,100 @@
     return { html: out.join(''), consumed };
   }
 
-  function renderSchemaAware(parsed) {
+  /* Competency-framework shape: a top-level ARRAY of
+       { id, levels: { <levelName>: { reading, keyTakeaways[], selfAssessment[],
+                                      activity:{task,output,duration,evidence} } } }
+     Used by teaching-/leadership-competency-framework.json. Without this the
+     whole array falls through to raw JSON (renderSchemaAware bails on arrays).
+     Renders each competency as a card whose CPD levels are a <details>
+     accordion (first level open), mirroring renderSubsectionsSection. */
+  const COMPETENCY_LEVEL_LABELS = {
+    awareness:    'Awareness',
+    practitioner: 'Practitioner',
+    advanced:     'Advanced',
+    lead:         'Lead / Mentor',
+    expert:       'Expert',
+  };
+  // Stable display order — render whatever subset of these keys is present,
+  // in CPD-ladder order, then any unrecognised level keys after.
+  const COMPETENCY_LEVEL_ORDER = ['awareness', 'practitioner', 'advanced', 'lead', 'expert'];
+
+  function isCompetencyArray(arr) {
+    return Array.isArray(arr) && arr.length > 0 && arr.every(e =>
+      e && typeof e === 'object' && !Array.isArray(e) &&
+      typeof e.id === 'string' &&
+      e.levels && typeof e.levels === 'object' && !Array.isArray(e.levels) &&
+      Object.values(e.levels).some(l => l && typeof l === 'object'));
+  }
+
+  function renderCompetencyLevelBody(level) {
+    if (!level || typeof level !== 'object') return '';
+    const parts = [];
+    if (typeof level.reading === 'string' && level.reading.trim()) {
+      parts.push(`<div class="doc-view-block doc-view-block-text"><p>${richString(level.reading)}</p></div>`);
+    }
+    const ktSection = renderStringArraySection('Key Takeaways', level.keyTakeaways);
+    if (ktSection) parts.push(ktSection);
+    const saSection = renderStringArraySection('Self-Assessment', level.selfAssessment);
+    if (saSection) parts.push(saSection);
+    const act = level.activity;
+    if (act && typeof act === 'object' && !Array.isArray(act)) {
+      const rows = [
+        act.task     && `<div class="dv-act-row"><span class="dv-act-k">Task</span><span class="dv-act-v">${richString(act.task)}</span></div>`,
+        act.output   && `<div class="dv-act-row"><span class="dv-act-k">Output</span><span class="dv-act-v">${richString(act.output)}</span></div>`,
+        act.duration && `<div class="dv-act-row"><span class="dv-act-k">Duration</span><span class="dv-act-v">${richString(act.duration)}</span></div>`,
+        act.evidence && `<div class="dv-act-row"><span class="dv-act-k">Evidence</span><span class="dv-act-v">${richString(act.evidence)}</span></div>`,
+      ].filter(Boolean).join('');
+      if (rows) {
+        parts.push(`<section class="doc-view-section"><h3>Activity</h3><div class="doc-view-activity">${rows}</div></section>`);
+      }
+    }
+    return parts.join('');
+  }
+
+  function renderCompetencyArray(arr, title) {
+    const orderedKeys = (levels) => {
+      const present = Object.keys(levels);
+      const known = COMPETENCY_LEVEL_ORDER.filter(k => present.includes(k));
+      const extra = present.filter(k => !COMPETENCY_LEVEL_ORDER.includes(k));
+      return known.concat(extra);
+    };
+    const cards = arr.map(comp => {
+      const levelKeys = orderedKeys(comp.levels);
+      const levelHtml = levelKeys.map((lk, idx) => {
+        const label = COMPETENCY_LEVEL_LABELS[lk] || humaniseKey(lk);
+        const body  = renderCompetencyLevelBody(comp.levels[lk]);
+        const openAttr = idx === 0 ? ' open' : '';
+        return `
+          <details class="doc-view-subsection"${openAttr}>
+            <summary class="doc-view-subsection-head">
+              <span class="doc-view-subsection-title">${escapeHtml(label)}</span>
+              <span class="doc-view-subsection-chevron" aria-hidden="true">▸</span>
+            </summary>
+            ${body ? `<div class="doc-view-subsection-body">${body}</div>` : ''}
+          </details>`;
+      }).join('');
+      const compTitle = comp.title || comp.name || comp.label || '';
+      return `
+        <section class="doc-view-competency">
+          <div class="doc-view-competency-head">
+            <span class="doc-view-competency-id">${escapeHtml(comp.id)}</span>
+            ${compTitle ? `<span class="doc-view-competency-title">${richString(compTitle)}</span>` : ''}
+            <span class="doc-view-competency-levelcount">${levelKeys.length} level${levelKeys.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="doc-view-subsections">${levelHtml}</div>
+        </section>`;
+    }).join('');
+    const header = title
+      ? `<header class="doc-view-header"><h2>${escapeHtml(title)}</h2><p>${arr.length} competencies · expand each to read its CPD ladder (Awareness → Practitioner → Advanced → Lead).</p></header>`
+      : '';
+    return `<div class="doc-view doc-view-competencies">${header}${cards}</div>`;
+  }
+
+  function renderSchemaAware(parsed, title) {
+    if (isCompetencyArray(parsed)) {
+      return renderCompetencyArray(parsed, title);
+    }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return `<pre class="json-render">${formatJsonHtml(parsed)}</pre>`;
     }

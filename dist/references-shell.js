@@ -946,7 +946,7 @@ async function openDoc(MANIFEST, ctx, { path, kind, title }) {
         try { parsed = JSON.parse(text); } catch (_) {}
         inner = parsed === null
           ? `<pre class="json-render">${injectCrossrefChips(escapeHtml(text))}</pre>`
-          : viewer.renderSchemaAware(parsed);
+          : viewer.renderSchemaAware(parsed, title);
       } else {
         let pretty = text;
         try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (_) {}

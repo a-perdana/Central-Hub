@@ -144,7 +144,15 @@
      of primitives render as a comma list (or a count chip if long); nested
      objects render as a compact key:value run (or a count chip). This keeps
      card fields readable without dumping rich structure to Raw JSON. */
-  function renderFieldValue(v) {
+  // depth guards against pathological nesting; past ~3 levels we stop
+  // recursing and fall back to the "object · N keys" summary so the modal
+  // can't blow up on a deeply-nested doc. Most reference JSONs (e.g.
+  // coaching-questions: item -> {title, questions -> {level: [strings]}})
+  // are 2-3 deep — recursing makes their actual content visible instead of
+  // a useless "object · 2 keys" placeholder.
+  const MAX_FIELD_DEPTH = 3;
+  function renderFieldValue(v, depth) {
+    depth = depth || 0;
     if (v === null || v === undefined) return '<span class="dv-empty">—</span>';
     if (Array.isArray(v)) {
       if (!v.length) return '<span class="dv-empty">—</span>';
@@ -154,15 +162,30 @@
       // Array of objects: name/label/title preview + count.
       const names = v.map(o => (o && (o.name || o.label || o.title || o.id || o.code)))
         .filter(Boolean).slice(0, 4);
-      return names.length
-        ? `<span class="dv-list">${names.map(n => `<span class="dv-tag">${richString(n)}</span>`).join('')}</span>${v.length > names.length ? ` <span class="doc-view-kv-nested">+${v.length - names.length}</span>` : ''}`
-        : `<span class="doc-view-kv-nested">${v.length} entries</span>`;
+      if (names.length) {
+        return `<span class="dv-list">${names.map(n => `<span class="dv-tag">${richString(n)}</span>`).join('')}</span>${v.length > names.length ? ` <span class="doc-view-kv-nested">+${v.length - names.length}</span>` : ''}`;
+      }
+      // No identity field to preview — recurse into the first few entries
+      // rather than showing a bare "N entries" count.
+      if (depth < MAX_FIELD_DEPTH) {
+        const shown = v.slice(0, 6).map(item =>
+          `<div class="dv-nest-item">${renderFieldValue(item, depth + 1)}</div>`).join('');
+        return `<div class="dv-nest">${shown}${v.length > 6 ? `<span class="doc-view-kv-nested">+${v.length - 6} more</span>` : ''}</div>`;
+      }
+      return `<span class="doc-view-kv-nested">${v.length} entries</span>`;
     }
     if (typeof v === 'object') {
       const subKeys = Object.keys(v);
       const allPrim = subKeys.every(sk => v[sk] === null || typeof v[sk] !== 'object');
       if (allPrim && subKeys.length <= 4) {
         return subKeys.map(sk => `<span class="dv-subk">${escapeHtml(humaniseKey(sk))}:</span> ${richString(v[sk])}`).join('<br>');
+      }
+      // Nested object with object/array children — recurse so the reader
+      // sees the actual structure (e.g. questions -> {induction:[…]}).
+      if (depth < MAX_FIELD_DEPTH) {
+        const rows = subKeys.map(sk =>
+          `<div class="dv-nest-row"><span class="dv-subk">${escapeHtml(humaniseKey(sk))}:</span> <div class="dv-nest-val">${renderFieldValue(v[sk], depth + 1)}</div></div>`).join('');
+        return `<div class="dv-nest">${rows}</div>`;
       }
       return `<span class="doc-view-kv-nested">object · ${subKeys.length} key${subKeys.length === 1 ? '' : 's'}</span>`;
     }
@@ -206,14 +229,14 @@
       } else if (Array.isArray(v)) {
         const primOnly = v.every(x => x === null || typeof x !== 'object');
         if (primOnly && v.length <= 6) valueHtml = v.map(x => richString(x)).join(', ');
-        else valueHtml = `<span class="doc-view-kv-nested">array · ${v.length} item${v.length === 1 ? '' : 's'}</span>`;
+        else valueHtml = renderFieldValue(v, 1);  // recurse into array-of-objects / long arrays
       } else if (typeof v === 'object') {
         const subKeys = Object.keys(v);
         const allPrim = subKeys.every(sk => v[sk] === null || typeof v[sk] !== 'object');
         if (allPrim && subKeys.length <= 3) {
           valueHtml = subKeys.map(sk => `<b style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3);">${escapeHtml(sk)}:</b> ${richString(v[sk])}`).join(' &nbsp;·&nbsp; ');
         } else {
-          valueHtml = `<span class="doc-view-kv-nested">object · ${subKeys.length} key${subKeys.length === 1 ? '' : 's'}</span>`;
+          valueHtml = renderFieldValue(v, 1);  // recurse into nested object (e.g. coaching item -> questions)
         }
       } else {
         valueHtml = richString(v);
@@ -695,7 +718,100 @@
     return { html: out.join(''), consumed };
   }
 
-  function renderSchemaAware(parsed) {
+  /* Competency-framework shape: a top-level ARRAY of
+       { id, levels: { <levelName>: { reading, keyTakeaways[], selfAssessment[],
+                                      activity:{task,output,duration,evidence} } } }
+     Used by teaching-/leadership-competency-framework.json. Without this the
+     whole array falls through to raw JSON (renderSchemaAware bails on arrays).
+     Renders each competency as a card whose CPD levels are a <details>
+     accordion (first level open), mirroring renderSubsectionsSection. */
+  const COMPETENCY_LEVEL_LABELS = {
+    awareness:    'Awareness',
+    practitioner: 'Practitioner',
+    advanced:     'Advanced',
+    lead:         'Lead / Mentor',
+    expert:       'Expert',
+  };
+  // Stable display order — render whatever subset of these keys is present,
+  // in CPD-ladder order, then any unrecognised level keys after.
+  const COMPETENCY_LEVEL_ORDER = ['awareness', 'practitioner', 'advanced', 'lead', 'expert'];
+
+  function isCompetencyArray(arr) {
+    return Array.isArray(arr) && arr.length > 0 && arr.every(e =>
+      e && typeof e === 'object' && !Array.isArray(e) &&
+      typeof e.id === 'string' &&
+      e.levels && typeof e.levels === 'object' && !Array.isArray(e.levels) &&
+      Object.values(e.levels).some(l => l && typeof l === 'object'));
+  }
+
+  function renderCompetencyLevelBody(level) {
+    if (!level || typeof level !== 'object') return '';
+    const parts = [];
+    if (typeof level.reading === 'string' && level.reading.trim()) {
+      parts.push(`<div class="doc-view-block doc-view-block-text"><p>${richString(level.reading)}</p></div>`);
+    }
+    const ktSection = renderStringArraySection('Key Takeaways', level.keyTakeaways);
+    if (ktSection) parts.push(ktSection);
+    const saSection = renderStringArraySection('Self-Assessment', level.selfAssessment);
+    if (saSection) parts.push(saSection);
+    const act = level.activity;
+    if (act && typeof act === 'object' && !Array.isArray(act)) {
+      const rows = [
+        act.task     && `<div class="dv-act-row"><span class="dv-act-k">Task</span><span class="dv-act-v">${richString(act.task)}</span></div>`,
+        act.output   && `<div class="dv-act-row"><span class="dv-act-k">Output</span><span class="dv-act-v">${richString(act.output)}</span></div>`,
+        act.duration && `<div class="dv-act-row"><span class="dv-act-k">Duration</span><span class="dv-act-v">${richString(act.duration)}</span></div>`,
+        act.evidence && `<div class="dv-act-row"><span class="dv-act-k">Evidence</span><span class="dv-act-v">${richString(act.evidence)}</span></div>`,
+      ].filter(Boolean).join('');
+      if (rows) {
+        parts.push(`<section class="doc-view-section"><h3>Activity</h3><div class="doc-view-activity">${rows}</div></section>`);
+      }
+    }
+    return parts.join('');
+  }
+
+  function renderCompetencyArray(arr, title) {
+    const orderedKeys = (levels) => {
+      const present = Object.keys(levels);
+      const known = COMPETENCY_LEVEL_ORDER.filter(k => present.includes(k));
+      const extra = present.filter(k => !COMPETENCY_LEVEL_ORDER.includes(k));
+      return known.concat(extra);
+    };
+    const cards = arr.map(comp => {
+      const levelKeys = orderedKeys(comp.levels);
+      const levelHtml = levelKeys.map((lk, idx) => {
+        const label = COMPETENCY_LEVEL_LABELS[lk] || humaniseKey(lk);
+        const body  = renderCompetencyLevelBody(comp.levels[lk]);
+        const openAttr = idx === 0 ? ' open' : '';
+        return `
+          <details class="doc-view-subsection"${openAttr}>
+            <summary class="doc-view-subsection-head">
+              <span class="doc-view-subsection-title">${escapeHtml(label)}</span>
+              <span class="doc-view-subsection-chevron" aria-hidden="true">▸</span>
+            </summary>
+            ${body ? `<div class="doc-view-subsection-body">${body}</div>` : ''}
+          </details>`;
+      }).join('');
+      const compTitle = comp.title || comp.name || comp.label || '';
+      return `
+        <section class="doc-view-competency">
+          <div class="doc-view-competency-head">
+            <span class="doc-view-competency-id">${escapeHtml(comp.id)}</span>
+            ${compTitle ? `<span class="doc-view-competency-title">${richString(compTitle)}</span>` : ''}
+            <span class="doc-view-competency-levelcount">${levelKeys.length} level${levelKeys.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="doc-view-subsections">${levelHtml}</div>
+        </section>`;
+    }).join('');
+    const header = title
+      ? `<header class="doc-view-header"><h2>${escapeHtml(title)}</h2><p>${arr.length} competencies · expand each to read its CPD ladder (Awareness → Practitioner → Advanced → Lead).</p></header>`
+      : '';
+    return `<div class="doc-view doc-view-competencies">${header}${cards}</div>`;
+  }
+
+  function renderSchemaAware(parsed, title) {
+    if (isCompetencyArray(parsed)) {
+      return renderCompetencyArray(parsed, title);
+    }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return `<pre class="json-render">${formatJsonHtml(parsed)}</pre>`;
     }
