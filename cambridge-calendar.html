@@ -244,6 +244,17 @@
     .access-denied h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
     .access-denied p  { font-size: 0.875rem; color: var(--ink-3); }
 
+    /* ── Coming-soon notice (un-seeded year/series) ── */
+    .coming-soon {
+      text-align: center; padding: 48px 24px; background: var(--white);
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      max-width: 560px; margin: 8px auto 0;
+    }
+    .coming-soon-icon { font-size: 2rem; margin-bottom: 12px; }
+    .coming-soon-title { font-size: 1.05rem; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    .coming-soon-text { font-size: 0.875rem; color: var(--ink-3); line-height: 1.55; }
+    .coming-soon-text strong { color: var(--ink-2); font-weight: 600; }
+
     /* ── Loading ── */
     .loading-state { text-align: center; padding: 56px; color: var(--ink-3); }
     .spinner {
@@ -375,6 +386,19 @@
 
     <!-- Month cards -->
     <div class="section-label" id="seriesLabel">IGCSE — May/June Series 2026</div>
+
+    <!-- Coming-soon notice (shown when the selected year/series has no seeded doc) -->
+    <div class="coming-soon" id="comingSoon" style="display:none">
+      <div class="coming-soon-icon">🗓️</div>
+      <h3 class="coming-soon-title">Calendar not yet available</h3>
+      <p class="coming-soon-text">
+        The <strong id="comingSoonLabel">this series</strong> calendar hasn't been added yet.
+        Cambridge International publishes each year's official exam timetable and key dates
+        around November of the previous year. This series will appear here once those dates
+        are confirmed and seeded.
+      </p>
+    </div>
+
     <div class="months-grid" id="monthsGrid"></div>
 
   </div>
@@ -483,6 +507,7 @@ let currentSeries  = 'igcse_june';
 let currentYear    = 2026;
 let firestoreDates = {}; // { fieldKey: { date: 'YYYY-MM-DD', date_end?: 'YYYY-MM-DD' } }
 let currentMeta    = { months: {} }; // loaded from Firestore meta field
+let docExists      = false; // whether the current year/series doc is seeded in Firestore
 let editingKey     = null; // currently open edit modal key
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -535,7 +560,8 @@ function fsDocRef() {
 
 async function loadDates() {
   const snap = await getDoc(fsDocRef());
-  const data = snap.exists() ? snap.data() : {};
+  docExists      = snap.exists();
+  const data     = docExists ? snap.data() : {};
   firestoreDates = data.dates || {};
   currentMeta    = data.meta  || { months: {} };
 }
@@ -554,6 +580,25 @@ function renderPage() {
   const label = SERIES_LABELS[currentSeries] || currentSeries;
   document.getElementById('seriesLabel').textContent = `${label} ${currentYear}`;
 
+  // No seeded doc for this year/series → show a "coming soon" notice instead of
+  // 12 empty month cards, which read as a broken page. Cambridge publishes each
+  // year's official timetable ~November of the prior year; until it's seeded the
+  // year selector still lists it, so an un-seeded year lands here.
+  const seeded = docExists && currentMeta.months && Object.keys(currentMeta.months).length > 0;
+  const comingSoon = document.getElementById('comingSoon');
+  const grid       = document.getElementById('monthsGrid');
+  const banner     = document.getElementById('urgentBanner');
+
+  if (!seeded) {
+    document.getElementById('comingSoonLabel').textContent = `${label} ${currentYear}`;
+    comingSoon.style.display = '';
+    grid.style.display   = 'none';
+    banner.classList.add('hidden');
+    return;
+  }
+
+  comingSoon.style.display = 'none';
+  grid.style.display   = '';
   buildUrgentBanner();
   buildMonthGrid();
 }
@@ -916,6 +961,8 @@ async function confirmReset() {
   try {
     await deleteDoc(fsDocRef());
     firestoreDates = {};
+    currentMeta    = { months: {} };
+    docExists      = false;
     showToast('Series dates reset.');
     closeResetModal();
     renderPage();
