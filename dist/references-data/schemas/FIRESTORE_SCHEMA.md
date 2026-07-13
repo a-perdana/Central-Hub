@@ -1154,6 +1154,48 @@ Three collections + one Cloud Function:
 **Writers / Read:** Cloud Function only (rule denies all client access).
 **Notes:** 24h soft TTL. The candidate-pool fingerprint is the key invariant — without it, an item archive/import would silently leak stale suggestions for up to 24h.
 
+#### Ask Eduversal (RAG Q&A agent) — `ask_chunks` · `ask_meta` · `ask_cache` · `ask_audit` · `ask_threads`
+
+The `/ask` page + `askEduversal` Cloud Function answer natural-language questions over the whole indexed reference corpus (ES + handbooks + frameworks + Cambridge + Permendiknas + AICF) using embeddings retrieval (Cohere embed-v4.0, 256-dim) + grounded Claude generation. Corpus is seeded by `scripts/ask/seed-ask-chunks.js` (run it to GROW the knowledge pool after authoring docs). Full design: `docs/architecture/ASK-EDUVERSAL-RETRIEVAL-SUBPLAN.md`.
+
+#### `ask_chunks/{chunkId}`
+**PK:** Deterministic — `${docId}__${nn}` (e.g. `eduversal-standards-section-07__0003`). Idempotent re-seed.
+**Fields:**
+- `chunkId` (mirror of PK)
+- `source` (`'eduversalStandards' | 'handbooks' | 'frameworks' | 'cambridge' | 'permendiknas' | 'aicf'`)
+- `docId` (MANIFEST id / handbook programId — the citation deep-link target)
+- `ref` (citation label — `'ES 7.3'`, handbook task title)
+- `title`, `text` (≤ ~1,800 chars — long ES maddes are sub-chunked)
+- `deepLink` (`'references' | 'handbook'` — which reader the chip opens)
+- `contentHash` (sha256 of text — re-seed skips unchanged chunks, saving embed cost)
+- `embedding[]` (256 floats, Cohere embed-v4.0 `search_document`)
+- `embedModel`, `dims`, `updatedAt`
+
+**Writers:** seed script + Cloud Function (Admin SDK — rule denies client write). **Read:** signed-in `central_user` (page KPI / deep-links; the function reads via Admin SDK). **Notes:** ~12–14k docs. The function caches the vectors (NOT text) in module memory across warm invocations; per question it reads only the top-12 matched chunks' text. NEVER client-writable — embeddings + grounding integrity must stay server-controlled.
+
+#### `ask_meta/current`
+**PK:** Fixed doc id `current`.
+**Fields:** `corpusFingerprint` (sha256 of all chunk ids+hashes — flips on any content change → answer cache auto-invalidates), `chunkCount`, `embedModel`, `dims`, `seededAt`.
+**Writers:** seed/CF only. **Read:** signed-in `central_user`.
+
+#### `ask_cache/{cacheId}`
+**PK:** `sha256(normalisedQuestion + model + corpusFingerprint).slice(0,40)`.
+**Fields:** `answer`, `citations[]`, `usedChunkIds[]`, `model`, `createdAt`, `expiresAt` (24h).
+**Writers / Read:** Cloud Function only (rule denies all client access). **Notes:** popular questions cost zero; a re-seed (fingerprint flip) auto-invalidates.
+
+#### `ask_audit/{auditId}`
+**PK:** Auto-id. Append-only cost/quality log across ALL users.
+**Fields:** `actorUid → users.uid`, `actorEmail`, `question`, `retrievedRefs[]`, `citations[]`, `model`, `tokenUsage` (map), `latencyMs`, `cacheHit`, `error`, `at`.
+**Writers:** Cloud Function (Admin SDK). **Read:** `central_admin` only. **Notes:** distinct from `ask_threads` (admin log vs the user's own history).
+
+#### `ask_threads/{uid}/turns/{turnId}`
+**PK:** `uid` = `users.uid`; `turnId` auto-id. Each user's OWN saved Q&A history.
+**Fields:** `question`, `answer`, `citations[]`, `model`, `createdAt`.
+**Writers / Read:** the owner only (`request.auth.uid == uid`); `central_admin` may read for support. **Notes:** the answer mirrored here was already produced + audited server-side by `askEduversal` — this collection is the user's personal transcript, not a content trust boundary.
+
+#### Cloud Function: `askEduversal` (asia-southeast1, callable)
+Secrets `COHERE_API_KEY` (embeddings) + `ANTHROPIC_API_KEY` (generation). Auth: signed-in `central_user`/`central_admin`. Flow: embed question (Cohere `search_query`, 256-dim) → cosine over the module-cached `ask_chunks` vectors → top-12 → read those 12 chunks' text → grounded Claude call (default `claude-sonnet-4-6`) → validate citations against the retrieved refs (strip invented) → return `{answer, citations[], usedChunkIds[], tokenUsage, cacheHit}` + write `ask_audit` + cache. Anti-hallucination: system rule answers ONLY from provided sources, says "not defined" when absent, never invents a policy/number/citation.
+
 #### Cloud Function: `practiceBankAiSuggest` (asia-southeast1, callable)
 **Auth gate:** `request.auth` exists AND profile has `role_centralhub == 'central_admin'` OR `'director' ∈ ch_sub_roles[]` OR `'coordinator' ∈ ch_sub_roles[]`. Coordinators additionally constrained to subjects in their `ch_subjects[]`.
 **Secret:** `ANTHROPIC_API_KEY` (Secret Manager).

@@ -8,7 +8,7 @@
 ## Resolution status: HAND-AUTHORED (Phase-2 polish pending)
 
 **Update 2026-05-08:** The hand-authoring sprint described below has been completed.
-- Source: `docs/competency/specialist-content-backfill-v1.json` + `specialist-content-backfill-v1-part2.json`
+- Source: `docs/competency/legacy/specialist-content-backfill-v1.json` + `specialist-content-backfill-v1-part2.json` (archived to `legacy/` — these v1 backfills were superseded by the v2/v3 hand-authored sets; they no longer ship to `/references` as of 2026-06-26)
 - Seeder: `scripts/competency/seed-specialist-content.js`
 - Result: 96/96 hand-authored entries seeded (replacing 72 generated)
 - Audit metric: Indonesia-context density 0 → 1.0; reading length 70% of TH+AH baseline

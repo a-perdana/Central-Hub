@@ -297,5 +297,46 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
              .data.role_centralhub == 'central_admin';
     }
+
+    // Published dashboards (2026-07-13). Single-page HTML files uploaded
+    // by CH users and rendered in a SANDBOXED iframe (no allow-same-origin)
+    // by /dashboard-view — the HTML never runs in the CH origin.
+    // Path: published_dashboards/{dashboardId}/index.html
+    //   - read is gated by the PARENT Firestore doc's `visibility` field
+    //     (public / ch_only / private) — same Firestore-gates-Storage
+    //     pattern as user_notes above.
+    //   - write: any signed-in user, ≤3 MB, must be text/html. The rule
+    //     can't verify ownerUid at upload time (the Firestore doc may be
+    //     created after the file), so ownership is enforced on the
+    //     Firestore doc + delete path; a stray upload to an id the user
+    //     doesn't own is harmless (unreferenced, unreadable without a
+    //     matching public/ch_only doc).
+    //   - delete: dashboard owner (via parent doc) or central_admin.
+    match /published_dashboards/{dashboardId}/{fileName} {
+      function dashDoc() {
+        return firestore.get(
+          /databases/(default)/documents/published_dashboards/$(dashboardId)
+        ).data;
+      }
+      function dashDocExists() {
+        return firestore.exists(
+          /databases/(default)/documents/published_dashboards/$(dashboardId)
+        );
+      }
+      allow read: if dashDocExists() && (
+             dashDoc().visibility == 'public'
+          || (request.auth != null && dashDoc().visibility == 'ch_only')
+          || (request.auth != null && dashDoc().ownerUid == request.auth.uid)
+        );
+      allow write: if request.auth != null
+        && request.resource.size <= 3 * 1024 * 1024
+        && request.resource.contentType.matches('text/html.*');
+      allow delete: if request.auth != null
+        && (
+             (dashDocExists() && dashDoc().ownerUid == request.auth.uid)
+          || firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+               .data.role_centralhub == 'central_admin'
+        );
+    }
   }
 }

@@ -3263,5 +3263,46 @@ service cloud.firestore {
                            || (isAHSchoolLeader(resource.data.schoolId)
                                && resource.data.createdBy == request.auth.uid);
     }
+
+    // ==========================================================
+    // PUBLISHED DASHBOARDS (2026-07-13)
+    // ----------------------------------------------------------
+    // Self-serve HTML dashboard publishing. Any signed-in CH user
+    // uploads a single-page HTML file (stored in Firebase Storage at
+    // published_dashboards/{id}/index.html) and gets a shareable link.
+    // The HTML is NEVER executed in the CH origin — the viewer page
+    // (/dashboard-view) renders it inside a sandboxed <iframe srcdoc>
+    // WITHOUT allow-same-origin, so a malicious/careless <script> in an
+    // uploaded file can't touch CH's Firebase session, cookies, or DOM.
+    //
+    // visibility ∈ {'public','ch_only','private'}:
+    //   public   — anyone (login-less shareable link)
+    //   ch_only  — any signed-in user (the doc is only reachable via CH,
+    //              which is @eduversal.org-gated; no per-role check needed)
+    //   private  — owner only
+    // Default (set by the UI) is 'public'. Owner + central_admin manage.
+    match /published_dashboards/{dashboardId} {
+      function dashOwner() {
+        return resource != null && resource.data.ownerUid == request.auth.uid;
+      }
+      allow get: if (resource != null && resource.data.visibility == 'public')
+                    || (isSignedIn() && resource != null
+                        && resource.data.visibility == 'ch_only')
+                    || (isSignedIn() && dashOwner());
+      // list is used only by the manager page (own + ch_only + public
+      // grids). Requires sign-in; the client query scopes the results.
+      allow list: if isSignedIn();
+      allow create: if isSignedIn()
+                       && request.resource.data.ownerUid == request.auth.uid
+                       && request.resource.data.visibility in ['public','ch_only','private'];
+      // Owner may edit title/description/visibility/updatedAt/sizeBytes.
+      // ownerUid, storagePath, createdAt are pinned (immutable).
+      allow update: if isSignedIn()
+                       && (dashOwner() || isAdmin())
+                       && request.resource.data.ownerUid == resource.data.ownerUid
+                       && request.resource.data.storagePath == resource.data.storagePath
+                       && request.resource.data.visibility in ['public','ch_only','private'];
+      allow delete: if isSignedIn() && (dashOwner() || isAdmin());
+    }
   }
 }

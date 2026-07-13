@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+  <style>
+    /* Standalone viewer — deliberately NO shared-styles / navbar / auth-guard.
+       The uploaded HTML is rendered inside a sandboxed <iframe srcdoc> so it
+       can never touch this page's Firebase session, cookies, or DOM. */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0f0e17; color: #e8e6f0; display: flex; flex-direction: column;
+    }
+
+    /* Slim top bar — provenance + back link. Kept minimal so the dashboard
+       gets almost the full viewport. */
+    .dv-bar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+      padding: 8px 16px; background: #1a1530; border-bottom: 1px solid rgba(255,255,255,.08);
+      font-size: 13px;
+    }
+    .dv-bar .dv-brand { display: flex; align-items: center; gap: 8px; color: #b8b2d8; font-weight: 600; white-space: nowrap; }
+    .dv-bar .dv-brand svg { flex: 0 0 auto; }
+    .dv-title { color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dv-sep { width: 1px; height: 16px; background: rgba(255,255,255,.15); flex: 0 0 auto; }
+    .dv-meta { color: #8b85ad; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dv-spacer { flex: 1 1 auto; }
+    .dv-link {
+      color: #b8b2d8; text-decoration: none; font-size: 12.5px; font-weight: 500;
+      padding: 5px 11px; border: 1px solid rgba(255,255,255,.14); border-radius: 7px;
+      transition: border-color .12s, color .12s; white-space: nowrap;
+    }
+    .dv-link:hover { color: #fff; border-color: rgba(255,255,255,.35); }
+
+    .dv-frame-wrap { flex: 1 1 auto; position: relative; background: #fff; }
+    #dvFrame { width: 100%; height: 100%; border: none; display: block; background: #fff; }
+
+    /* State screens (loading / error) */
+    .dv-state {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px; text-align: center;
+      padding: 40px; background: #0f0e17; color: #e8e6f0;
+    }
+    .dv-state[hidden] { display: none; }
+    .dv-state .icon { color: #6c5ce7; }
+    .dv-state h1 { font-size: 1.3rem; font-weight: 600; color: #fff; }
+    .dv-state p { font-size: 0.92rem; color: #b8b2d8; max-width: 440px; line-height: 1.55; }
+    .dv-state .cta {
+      margin-top: 6px; display: inline-flex; align-items: center; gap: 7px;
+      background: linear-gradient(135deg, #7c3aed, #0891b2); color: #fff;
+      text-decoration: none; padding: 10px 20px; border-radius: 9px;
+      font-size: 0.9rem; font-weight: 600;
+    }
+    .spinner {
+      width: 34px; height: 34px; border: 3px solid rgba(108,92,231,.25);
+      border-top-color: #6c5ce7; border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="dv-bar">
+    <span class="dv-brand">
+      <svg width="18" height="18" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="#1a1530"/><polygon points="50,25 90,45 50,65 10,45" fill="#6c5ce7"/></svg>
+      CentralHub
+    </span>
+    <span class="dv-sep"></span>
+    <span class="dv-title" id="dvTitle">Dashboard</span>
+    <span class="dv-meta" id="dvMeta"></span>
+    <span class="dv-spacer"></span>
+    <a class="dv-link" id="dvManage" href="/dashboards" hidden>Manage dashboards</a>
+  </div>
+
+  <div class="dv-frame-wrap">
+    <iframe id="dvFrame" title="Dashboard content" sandbox="allow-scripts allow-popups allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
+
+    <div class="dv-state" id="dvLoading">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Loading dashboard…</p>
+    </div>
+
+    <div class="dv-state" id="dvError" hidden>
+      <div class="icon" aria-hidden="true">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+      <h1 id="dvErrTitle">Dashboard not found</h1>
+      <p id="dvErrMsg">This dashboard may have been removed, or the link is incorrect.</p>
+      <a class="cta" id="dvErrCta" href="/dashboards" hidden>Sign in to view <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getStorage, ref, getBytes } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+    const E = window.ENV || {};
+    const app = getApps().length ? getApps()[0] : initializeApp({
+      apiKey: E.FIREBASE_API_KEY,
+      authDomain: E.FIREBASE_AUTH_DOMAIN,
+      projectId: E.FIREBASE_PROJECT_ID,
+      storageBucket: E.FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: E.FIREBASE_MESSAGING_SENDER_ID,
+      appId: E.FIREBASE_APP_ID,
+    });
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+
+    function showError(title, msg, { needsAuth } = {}) {
+      $('dvLoading').hidden = true;
+      $('dvFrame').hidden = true;
+      const err = $('dvError');
+      $('dvErrTitle').textContent = title;
+      $('dvErrMsg').textContent = msg;
+      if (needsAuth) {
+        const cta = $('dvErrCta');
+        cta.hidden = false;
+        cta.href = '/login';
+      }
+      err.hidden = false;
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
+    }
+
+    // Wait for the (possibly anonymous) auth state to settle once, then load.
+    // Public dashboards work with no user; ch_only / private need a signed-in
+    // (and, for private, matching) user — enforced by rules AND re-checked here
+    // for a friendly message.
+    let loaded = false;
+    onAuthStateChanged(auth, (user) => {
+      if (loaded) return;      // only run the load once
+      loaded = true;
+      load(user);
+    });
+
+    async function load(user) {
+      if (!id) {
+        showError('No dashboard specified', 'This link is missing a dashboard id.');
+        return;
+      }
+      let snap;
+      try {
+        snap = await getDoc(doc(db, 'published_dashboards', id));
+      } catch (err) {
+        // A rules rejection on get typically means the doc is private/ch_only
+        // and the visitor isn't allowed. Give an auth-aware message.
+        if (!user) {
+          showError('Sign in to view this dashboard',
+            'This dashboard is shared with signed-in Eduversal users. Please sign in and try again.',
+            { needsAuth: true });
+        } else {
+          showError('You don’t have access',
+            'This dashboard is private or restricted to its owner.');
+        }
+        return;
+      }
+
+      if (!snap.exists()) {
+        showError('Dashboard not found',
+          'This dashboard may have been removed, or the link is incorrect.');
+        return;
+      }
+      const d = snap.data();
+
+      // Friendly client-side gate (rules are the real enforcement).
+      if (d.visibility === 'private' && (!user || user.uid !== d.ownerUid)) {
+        showError('This dashboard is private',
+          user ? 'Only the owner can open this dashboard.'
+               : 'This dashboard is private. If it belongs to you, sign in to view it.',
+          { needsAuth: !user });
+        return;
+      }
+      if (d.visibility === 'ch_only' && !user) {
+        showError('Sign in to view this dashboard',
+          'This dashboard is shared with signed-in Eduversal users. Please sign in and try again.',
+          { needsAuth: true });
+        return;
+      }
+
+      $('dvTitle').textContent = d.title || 'Dashboard';
+      document.title = (d.title ? d.title + ' — ' : '') + 'Dashboard · CentralHub';
+      const bits = [];
+      if (d.ownerName) bits.push('by ' + d.ownerName);
+      if (d.updatedAt?.toDate) bits.push(d.updatedAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
+      $('dvMeta').textContent = bits.length ? '· ' + bits.join(' · ') : '';
+      if (user) $('dvManage').hidden = false;
+
+      // Fetch the raw HTML via the SDK (CORS-safe) and drop it into a
+      // sandboxed iframe. sandbox WITHOUT allow-same-origin = the content
+      // runs in an opaque origin: it can execute scripts and render charts,
+      // but cannot read this page's cookies, localStorage, Firebase session,
+      // or reach window.parent.
+      const path = d.storagePath || `published_dashboards/${id}/index.html`;
+      try {
+        const bytes = await getBytes(ref(storage, path));
+        const html = new TextDecoder('utf-8').decode(bytes);
+        const frame = $('dvFrame');
+        frame.srcdoc = html;
+        frame.hidden = false;
+        $('dvLoading').hidden = true;
+      } catch (err) {
+        console.error('[dashboard-view] file load failed', err);
+        showError('Could not load the dashboard file',
+          'The dashboard record exists but its file could not be read. It may still be uploading, or was removed.');
+      }
+    }
+  </script>
+</body>
+</html>

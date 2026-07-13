@@ -613,6 +613,12 @@ const htmlFiles = [
   "settings.html",
   "mail-composer.html",
   "library.html",
+  // Self-serve dashboard publishing (2026-07-13). `dashboards` is the
+  // auth-guarded manager/upload page (normal CH chrome). `dashboard-view`
+  // is a STANDALONE sandboxed viewer — no navbar / shared-styles / auth-guard /
+  // cambridge-crossref (see STANDALONE_VIEWER handling below).
+  "dashboards.html",
+  "dashboard-view.html",
   "network-health.html",
   "students-overview.html",
   "competency-admin.html",
@@ -688,11 +694,24 @@ const htmlFiles = [
   "walkthrough-review.html",
 ];
 
+// Standalone pages copied verbatim — NO navbar / shared-styles / auth-guard /
+// cambridge-crossref / keyboard-enabler / a11y injection. The dashboard viewer
+// renders untrusted uploaded HTML inside a sandboxed iframe and must stay a
+// minimal, self-contained shell (no shared JS that could be reached from the
+// page chrome). firebase-config.js is loaded by the page itself.
+const STANDALONE_VERBATIM = new Set(["dashboard-view.html"]);
+
 htmlFiles.forEach((file) => {
   let source = generatedPacing[file] || null;
   if (!source) {
     if (!fs.existsSync(file)) return;
     source = fs.readFileSync(file, "utf8");
+  }
+
+  if (STANDALONE_VERBATIM.has(file)) {
+    fs.writeFileSync(path.join("dist", file), source);
+    console.log(`Copied (standalone): ${file}`);
+    return;
   }
 
   // Inject shared-styles.css before the first <style> or </head> tag

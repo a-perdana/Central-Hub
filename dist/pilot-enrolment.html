@@ -97,6 +97,8 @@
   .summary-card[data-system="competency"] { --card-accent: #d97706; }
   .summary-card[data-system="induction"]  { --card-accent: #16a34a; }
   .summary-card[data-system="aicf"]       { --card-accent: #f97316; }
+  .summary-card[data-system="students_assessment"] { --card-accent: #e11d48; }
+  .summary-card[data-system="curriculum"] { --card-accent: #14b8a6; }
   .summary-card[data-system="total"]      { --card-accent: #4f46e5; }
 
   .summary-card .lbl {
@@ -201,7 +203,18 @@
   table.matrix {
     width: 100%;
     border-collapse: collapse;
-    min-width: 760px;
+    /* 7 system cols @ 96px + a comfortable school col; if the viewport can't
+       fit it the .matrix-table-scroll wrapper scrolls horizontally instead of
+       squeezing the school name into a wrap. */
+    min-width: 940px;
+  }
+  /* School column — keep the name on one line; let the scroll wrapper handle
+     overflow rather than wrapping long names like "Cahaya Rancamaya Islamic
+     School". */
+  table.matrix thead th:first-child,
+  table.matrix tbody td:first-child {
+    min-width: 240px;
+    white-space: nowrap;
   }
   table.matrix thead th {
     background: #fbfaf6;
@@ -217,7 +230,7 @@
   }
   table.matrix thead th.system {
     text-align: center;
-    width: 120px;
+    width: 96px;
   }
   table.matrix thead th.system .col-icon {
     display: inline-flex;
@@ -237,6 +250,8 @@
   table.matrix thead th.system[data-system="competency"] { --col-color: #d97706; }
   table.matrix thead th.system[data-system="induction"]  { --col-color: #16a34a; }
   table.matrix thead th.system[data-system="aicf"]       { --col-color: #f97316; }
+  table.matrix thead th.system[data-system="students_assessment"] { --col-color: #e11d48; }
+  table.matrix thead th.system[data-system="curriculum"] { --col-color: #14b8a6; }
 
   table.matrix tbody td {
     padding: 14px 16px;
@@ -257,7 +272,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    white-space: nowrap;
   }
   .school-meta {
     font-size: 11px;
@@ -326,6 +342,12 @@
   }
   .pilot-toggle[data-system="aicf"] input:checked + .slider {
     background: linear-gradient(135deg, #f97316, #ea580c);
+  }
+  .pilot-toggle[data-system="students_assessment"] input:checked + .slider {
+    background: linear-gradient(135deg, #e11d48, #be123c);
+  }
+  .pilot-toggle[data-system="curriculum"] input:checked + .slider {
+    background: linear-gradient(135deg, #14b8a6, #0d9488);
   }
 
   /* ── Row badges ─────────────────────────────────────────── */
@@ -1706,6 +1728,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
           <span class="nav-item-label">Library</span>
         </a>
+        <a href="dashboards" class="ch-dd-item" data-nav-page="dashboards" data-nav-key="dashboards">
+          <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          <span class="nav-item-label">Dashboards</span>
+        </a>
         <div class="ch-dd-divider"></div>
         <div class="ch-dd-col-header" style="padding-top:4px;">Workspace</div>
         <a href="surveys" class="ch-dd-item" data-nav-page="surveys" data-nav-key="surveys">
@@ -2750,6 +2777,7 @@
           <div class="mob-nav-subheader">Documents</div>
           <a href="inventory"        class="mobile-nav-link" data-mob-page="inventory" data-mobile-nav-key="inventory">Inventory</a>
           <a href="library"          class="mobile-nav-link" data-mob-page="library"   data-mobile-nav-key="library">Library</a>
+          <a href="dashboards"       class="mobile-nav-link" data-mob-page="dashboards" data-mobile-nav-key="dashboards">Dashboards</a>
           <div class="mob-nav-subheader">Workspace</div>
           <a href="surveys"          class="mobile-nav-link" data-mob-page="surveys" data-mobile-nav-key="surveys">Surveys</a>
         </div>
@@ -3058,7 +3086,7 @@
         // local dashboard slug just has to be appended (no trigger-highlight refactor).
         dashboards: [],
         comms:      ['schools','staff','students-overview',
-                     'announcements','messageboard','inventory','library','notifications',
+                     'announcements','messageboard','inventory','library','dashboards','notifications',
                      'surveys'],
         curriculum: ['academic-calendar','school-events','cambridge-calendar',
                      'igcse-syllabus','as-alevel-syllabus',
@@ -4075,8 +4103,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         Network-wide view of which pilot systems each partner school is opted into.
         Toggling a cell rewrites <code>partner_schools.{schoolId}.enabled_systems[]</code>.
         Teachers Hub and Academic Hub honour this list when gating dashboard cards,
-        navbar items and direct URL access. Missing field = all 5 systems enabled
-        (back-compat). Empty array = all 5 disabled.
+        navbar items and direct URL access. Missing field = all 7 systems enabled
+        (back-compat). Empty array = all 7 disabled.
       </p>
     </div>
     <div class="legend-row">
@@ -4095,14 +4123,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="summary-card" data-system="competency"><div class="lbl">Competency enabled</div><div class="val" id="cntCompetency">–</div><div class="sub">opted-in or back-compat</div></div>
     <div class="summary-card" data-system="induction"><div class="lbl">Induction enabled</div><div class="val" id="cntInduction">–</div><div class="sub">opted-in or back-compat</div></div>
     <div class="summary-card" data-system="aicf"><div class="lbl">AICF enabled</div><div class="val" id="cntAicf">–</div><div class="sub">opted-in or back-compat</div></div>
+    <div class="summary-card" data-system="students_assessment"><div class="lbl">SH Assessment enabled</div><div class="val" id="cntStudentsAssessment">–</div><div class="sub">opted-in or back-compat</div></div>
+    <div class="summary-card" data-system="curriculum"><div class="lbl">Curriculum enabled</div><div class="val" id="cntCurriculum">–</div><div class="sub">opted-in or back-compat</div></div>
   </section>
 
   <section class="matrix-wrap">
     <div class="matrix-toolbar">
       <input aria-label="Filter schools by name…" type="search" class="filter-input" id="filterInput" placeholder="Filter schools by name…">
       <span class="toolbar-spacer"></span>
-      <button class="small-btn" id="btnEnableAllVisible" type="button" title="Tick all 5 systems for every visible school">Enable all (filtered)</button>
-      <button class="small-btn" id="btnDisableAllVisible" type="button" title="Untick all 5 systems for every visible school">Disable all (filtered)</button>
+      <button class="small-btn" id="btnEnableAllVisible" type="button" title="Tick all 7 systems for every visible school">Enable all (filtered)</button>
+      <button class="small-btn" id="btnDisableAllVisible" type="button" title="Untick all 7 systems for every visible school">Disable all (filtered)</button>
       <button class="small-btn is-danger" id="btnReset" type="button" title="Delete enabled_systems[] field — visible rows revert to back-compat">Reset back-compat</button>
     </div>
     <div class="matrix-table-scroll">
@@ -4115,6 +4145,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <th class="system" data-system="competency"><span class="col-icon">Competency</span></th>
             <th class="system" data-system="induction"><span class="col-icon">Induction</span></th>
             <th class="system" data-system="aicf"><span class="col-icon">AICF</span></th>
+            <th class="system" data-system="students_assessment"><span class="col-icon">SH Assessment</span></th>
+            <th class="system" data-system="curriculum"><span class="col-icon">Curriculum</span></th>
           </tr>
         </thead>
         <tbody id="matrixBody">
@@ -4143,7 +4175,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
   import { deleteField } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-  const SYSTEMS = ['kpi', 'appraisal', 'competency', 'induction', 'aicf'];
+  const SYSTEMS = ['kpi', 'appraisal', 'competency', 'induction', 'aicf', 'students_assessment', 'curriculum'];
 
   // schoolId → {
   //   name, original: Set|null (Set => persisted enabled_systems[];
@@ -4182,7 +4214,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   }
 
   function refreshSummary() {
-    const counts = { kpi: 0, appraisal: 0, competency: 0, induction: 0, aicf: 0 };
+    const counts = { kpi: 0, appraisal: 0, competency: 0, induction: 0, aicf: 0, students_assessment: 0, curriculum: 0 };
     let total = 0;
     state.forEach(row => {
       total++;
@@ -4200,6 +4232,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     $('cntCompetency').textContent  = counts.competency;
     $('cntInduction').textContent   = counts.induction;
     $('cntAicf').textContent        = counts.aicf;
+    $('cntStudentsAssessment').textContent = counts.students_assessment;
+    $('cntCurriculum').textContent  = counts.curriculum;
   }
 
   function refreshSaveBar() {
