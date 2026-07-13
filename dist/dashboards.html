@@ -20,8 +20,14 @@
     }
 
     /* width:100% guards the body:has(>.page-footer) flex-column collapse (#54) */
-    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 36px 40px 72px; width: 100%; }
-    @media (max-width: 768px) { .page-wrap { padding: 24px 20px 48px; } }
+    /* Extra top padding gives the info strip breathing room below the hero. */
+    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 52px 40px 72px; width: 100%; }
+    @media (max-width: 768px) { .page-wrap { padding: 32px 20px 48px; } }
+
+    /* Info strip lives INSIDE .page-wrap so it shares the exact same content
+       rail as the upload card below it (same width, same left/right edges).
+       Override the shared 1200px-centred layout to fill the page-wrap column. */
+    .page-info-strip { max-width: none; margin: 0 0 26px; }
 
     /* ── Info strip callout (nested inside canonical .page-info-strip__body) ── */
     .info-callout {
@@ -3717,25 +3723,25 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   </div>
 </header>
 
-<section class="page-info-strip" data-accent="cyan">
-  <div class="page-info-strip__icon" aria-hidden="true">📊</div>
-  <div class="page-info-strip__text">
-    <span class="page-info-strip__title">What this page does</span>
-    <div class="page-info-strip__body">
-      This page lets any CentralHub user host a self-contained HTML dashboard.
-      Your file is displayed inside a secure sandbox, so it is safe to share widely.
-      You choose the visibility: <strong>Public</strong> (anyone with the link, no login),
-      <strong>CH only</strong> (signed-in Eduversal users), or <strong>Private</strong> (only you).
-      <div class="info-callout">
-        Security note — uploaded HTML runs in an isolated sandbox and cannot access
-        Eduversal data, your login session, or other pages. Keep dashboards self-contained:
-        embed your data and chart libraries directly in the file (live Firestore data is not available inside the sandbox).
+<div class="page-wrap">
+
+  <section class="page-info-strip" data-accent="cyan">
+    <div class="page-info-strip__icon" aria-hidden="true">📊</div>
+    <div class="page-info-strip__text">
+      <span class="page-info-strip__title">What this page does</span>
+      <div class="page-info-strip__body">
+        This page lets any CentralHub user host a self-contained HTML dashboard.
+        Your file is displayed inside a secure sandbox, so it is safe to share widely.
+        You choose the visibility: <strong>Public</strong> (anyone with the link, no login),
+        <strong>CH only</strong> (signed-in Eduversal users), or <strong>Private</strong> (only you).
+        <div class="info-callout">
+          Security note — uploaded HTML runs in an isolated sandbox and cannot access
+          Eduversal data, your login session, or other pages. Keep dashboards self-contained:
+          embed your data and chart libraries directly in the file (live Firestore data is not available inside the sandbox).
+        </div>
       </div>
     </div>
-  </div>
-</section>
-
-<div class="page-wrap">
+  </section>
 
   <!-- Upload card -->
   <div class="upload-card">
@@ -3841,7 +3847,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 <script type="module">
   import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import {
-    getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
+    getFirestore, collection, doc, setDoc, updateDoc, deleteDoc,
     query, where, orderBy, getDocs, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import {
@@ -3946,25 +3952,30 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     msg.textContent = 'Publishing…'; msg.className = 'up-msg';
 
     try {
-      // 1) Create the Firestore doc first so we own the id, then upload the
-      //    file under that id. The Storage read rule reads the doc's
-      //    visibility, so the doc must exist before the file is readable.
-      const docRef = await addDoc(collection(db, 'published_dashboards'), {
+      // Pre-generate the doc id (no write yet) so we can build the storage
+      // path AND the final doc in one shot. This avoids a follow-up
+      // updateDoc({storagePath}) — the update rule pins storagePath immutable,
+      // so writing it as '' then changing it would be rejected. The Storage
+      // WRITE rule only needs a signed-in user (it doesn't read the doc), so
+      // uploading before the doc exists is fine; the doc lands immediately
+      // after, before anyone reads the file.
+      const docRef = doc(collection(db, 'published_dashboards'));
+      const storagePath = `published_dashboards/${docRef.id}/index.html`;
+
+      const fileRef = ref(storage, storagePath);
+      await uploadBytes(fileRef, selectedFile, { contentType: 'text/html' });
+
+      await setDoc(docRef, {
         title,
         description: $('descInput').value.trim(),
         visibility: selectedVisibility(),
         ownerUid: me,
         ownerName: meName,
         sizeBytes: selectedFile.size,
-        storagePath: '',            // filled below once we know the id
+        storagePath,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-
-      const storagePath = `published_dashboards/${docRef.id}/index.html`;
-      const fileRef = ref(storage, storagePath);
-      await uploadBytes(fileRef, selectedFile, { contentType: 'text/html' });
-      await updateDoc(docRef, { storagePath });
 
       msg.textContent = '✓ Published.'; msg.className = 'up-msg ok';
       // Reset form
