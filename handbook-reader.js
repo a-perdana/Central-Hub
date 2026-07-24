@@ -147,6 +147,69 @@
   }
 
 
+/* ── Academic Standards shelf (2026-07-24) ──────────────────────────
+   The 23-section Eduversal Academic Standards manual — the network-wide
+   policy authority. It is NOT an induction_programs handbook; it lives in
+   the canonical research archive (docs/research/eduversal/academic-
+   standards/) and is read through the References hub. The /handbook
+   bookshelf surfaces each section as a spine that DEEP-LINKS into that
+   reader (references?doc=eduversal-standards-section-NN) in a new tab, so
+   the archive stays the single source of truth — the shelf is a discovery
+   layer only. Section titles + madde counts mirror manifest.json.sections;
+   if a section is renamed there, update it here too. */
+const ES_STANDARDS_SECTIONS = [
+  { n: '01', title: 'Front Matter and Governance Charter', madde: 10 },
+  { n: '02', title: 'Legal and Regulatory Compliance', madde: 22 },
+  { n: '03', title: 'Cambridge Centre Compliance', madde: 20 },
+  { n: '04', title: 'Strategic Planning and School Improvement', madde: 11 },
+  { n: '05', title: 'Curriculum Architecture', madde: 17 },
+  { n: '06', title: 'Assessment and Reporting', madde: 19 },
+  { n: '07', title: 'Teaching Quality and Practice', madde: 27 },
+  { n: '08', title: 'Inclusion, EAL, and Learning Support', madde: 18 },
+  { n: '09', title: 'Safeguarding, Child Protection, and Wellbeing', madde: 22 },
+  { n: '10', title: 'Cambridge Examinations Management', madde: 18 },
+  { n: '11', title: 'Admissions, Enrollment, and Marketing Ethics', madde: 12 },
+  { n: '12', title: 'Staff Lifecycle: Recruitment, Induction, Appraisal, PD, Wellbeing', madde: 14 },
+  { n: '13', title: 'Operations, Finance, and Resources', madde: 12 },
+  { n: '14', title: 'Data Protection, Records, and Information Systems', madde: 11 },
+  { n: '15', title: 'Risk Management, Emergency Preparedness, and Business Continuity', madde: 50 },
+  { n: '16', title: 'Parent, Student, and Community Engagement', madde: 12 },
+  { n: '17', title: 'Quality Assurance and Internal Review', madde: 18 },
+  { n: '18', title: 'Accreditation Toolkit (CIS/WASC)', madde: 11 },
+  { n: '19', title: 'Templates and Operational Tools (Appendices)', madde: 12 },
+  { n: '20', title: 'References and Compliance Library', madde: 11 },
+  { n: '21', title: 'Digital Learning and Technology Infrastructure', madde: 18 },
+  { n: '22', title: 'Student Conduct, Discipline, and Restorative Practices', madde: 16 },
+  { n: '23', title: 'External Partnerships and Student Pathways', madde: 12 },
+];
+
+/* Render the Academic Standards rail. Unlike renderShelfRail (which builds
+   spines that open the in-hub /handbook reader via a modal), these spines
+   deep-link straight into the References hub and open in a NEW TAB — they
+   carry data-external="1" so the shelf-rail click delegate skips the modal
+   path and lets native navigation run. Spines still use .hb-spine so the
+   facet-dim + search-filter logic in applyBrowserFacet/applyBrowserSearch
+   works on them unchanged (both operate on generic .hb-spine text). */
+function renderStandardsRail() {
+  const rail = document.getElementById('hbShelfStandards');
+  if (!rail) return;
+  rail.innerHTML = ES_STANDARDS_SECTIONS.map(s => {
+    const href = `references?doc=eduversal-standards-section-${s.n}`;
+    const title = `${s.n} · ${s.title}`;
+    return `
+      <a class="hb-spine" data-kind="standards" data-external="1"
+         href="${href}" target="_blank" rel="noopener"
+         title="${escapeHtml(title)} — opens in References (new tab)">
+        <span class="hb-spine-kind">📘</span>
+        <span class="hb-spine-title">${escapeHtml(title)}</span>
+        <span class="hb-spine-audience">Section ${s.n}</span>
+        <span class="hb-spine-thickness">📑 ${s.madde}</span>
+        <span class="hb-spine-chips"><span class="hb-spine-chip" data-chip="es" title="Eduversal Academic Standards">ES</span></span>
+      </a>
+    `;
+  }).join('');
+}
+
 /* ── Reader mode (existing single-handbook detail view) ──────────── */
 // Group spec shared by the dropdown population + the toolbar kind badge.
 // Native <optgroup> renders label as bold-italic-grey (browser default);
@@ -409,11 +472,17 @@ function bootBrowserMode() {
   if (heroKpiSchool) heroKpiSchool.textContent = school.length;
 
   if (!allHandbooks.length) {
-    // Empty-bank case — bookshelf rails get a single muted "no books"
-    // line via renderShelfRail's own empty branch. No accordion to fill.
+    // Empty-bank case — the induction_programs-fed rails get a single muted
+    // "no books" line. The Academic Standards rail is independent of that
+    // fetch, so render it normally and leave it out of the empty message.
     document.querySelectorAll('.hb-shelf-rail').forEach(r => {
+      if (r.id === 'hbShelfStandards') return;
       r.innerHTML = '<div style="padding:12px 4px;color:var(--ink-3);font-size:12px;font-style:italic;">No handbooks indexed yet. Run <code>scripts/induction/seed-induction-programs.js</code>.</div>';
     });
+    renderStandardsRail();
+    const setCnt = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+    setCnt('shelfCntStandards', ES_STANDARDS_SECTIONS.length);
+    setCnt('cntStandards', ES_STANDARDS_SECTIONS.length);
     return;
   }
 
@@ -426,6 +495,11 @@ function bootBrowserMode() {
   renderShelfRail('hbShelfInduction', induction);
   renderShelfRail('hbShelfRole', role);
   renderShelfRail('hbShelfSchool', school);
+  // Academic Standards rail — static 23-section deep-link shelf (not from
+  // induction_programs). Rendered even when the handbook bank is otherwise
+  // empty, since it doesn't depend on the Firestore fetch.
+  renderStandardsRail();
+  const standardsCount = ES_STANDARDS_SECTIONS.length;
   const setShelfCount = (id, n) => {
     const el = document.getElementById(id);
     if (el) el.textContent = n;
@@ -433,13 +507,15 @@ function bootBrowserMode() {
   setShelfCount('shelfCntInduction', induction.length);
   setShelfCount('shelfCntRole', role.length);
   setShelfCount('shelfCntSchool', school.length);
+  setShelfCount('shelfCntStandards', standardsCount);
   // Empty shelves hide entirely so we don't render a wood-edge with no
   // books on it.
   document.querySelectorAll('.hb-shelf').forEach(shelf => {
     const railId = shelf.querySelector('.hb-shelf-rail')?.id;
     const n = railId === 'hbShelfInduction' ? induction.length
             : railId === 'hbShelfRole'      ? role.length
-            : railId === 'hbShelfSchool'    ? school.length : 0;
+            : railId === 'hbShelfSchool'    ? school.length
+            : railId === 'hbShelfStandards' ? standardsCount : 0;
     shelf.classList.toggle('is-empty', n === 0);
   });
 
@@ -451,6 +527,8 @@ function bootBrowserMode() {
   document.getElementById('cntRole').textContent = role.length;
   const cntSchool = document.getElementById('cntSchool');
   if (cntSchool) cntSchool.textContent = school.length;
+  const cntStandards = document.getElementById('cntStandards');
+  if (cntStandards) cntStandards.textContent = standardsCount;
   // Dim facet chip when its category is empty (defensive — if role
   // section is empty during early Round 2 transitions).
   document.querySelectorAll('.hb-facet').forEach(b => {
@@ -489,6 +567,9 @@ function bootBrowserMode() {
     rail.addEventListener('click', ev => {
       const spine = ev.target.closest('.hb-spine');
       if (!spine) return;
+      // Academic Standards spines deep-link into the References hub and
+      // open in a new tab — no in-hub modal. Let native navigation run.
+      if (spine.dataset.external === '1') return;
       // Honour ctrl/cmd/middle-click + shift = native browser navigation.
       if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1) return;
       ev.preventDefault();
