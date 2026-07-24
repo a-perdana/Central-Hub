@@ -692,6 +692,13 @@ const htmlFiles = [
   // feedback, flips notesState 'submitted' → 'mentor_reviewed' (or back to
   // 'draft' for revision).
   "walkthrough-review.html",
+  // Programme hubs (2026-07-24) — one page per Management-Module programme card
+  // on /index. Thin shell + partials/programme-hub-core.js + programme-config.js;
+  // scoped by a fixed programKey. Integrates with the Coordinators/Department
+  // Office ecosystem via a programKey discriminator on the shared collections
+  // (coordinators_meetings, department_artifacts, calendar_events). EASE Growth
+  // is the pilot; the other 7 hubs clone the same shell.
+  "ease-growth.html",
 ];
 
 // Standalone pages copied verbatim — NO navbar / shared-styles / auth-guard /
@@ -1225,7 +1232,7 @@ if (fs.existsSync("eduversal-logo-white.png")) {
 // -- Copy partials/*.js shared modules + shared partial CSS
 const partialsDistDir = path.join("dist", "partials");
 if (!fs.existsSync(partialsDistDir)) fs.mkdirSync(partialsDistDir, { recursive: true });
-const partialsAssets = ["pacing-core.js", "syllabus-core.js", "syllabus-styles.css", "question-editor.js", "subject-config.js", "department-core.js"];
+const partialsAssets = ["pacing-core.js", "syllabus-core.js", "syllabus-styles.css", "question-editor.js", "subject-config.js", "department-core.js", "programme-config.js", "programme-hub-core.js"];
 for (const fname of partialsAssets) {
   const src = path.join("partials", fname);
   if (fs.existsSync(src)) {
