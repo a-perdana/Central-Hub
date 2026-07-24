@@ -415,7 +415,7 @@ function bindCalendar() {
     calendarEventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const evts = calendarEventsCache.filter(e => e.programKey === programKey);
     if (!evts.length) {
-      slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">No programme events yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “+ Add event” to put window openings, review days, or deadlines on this programme's calendar.' : 'Programme calendar events will appear here once added.'}</div></div>`;
+      slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">No programme events yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “+ Add event” to put window openings, review days, or deadlines on this programme’s calendar.' : 'Programme calendar events will appear here once added.'}</div></div>`;
       return;
     }
     slot.innerHTML = evts.map(renderEventRow).join('');
