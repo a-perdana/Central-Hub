@@ -27,7 +27,7 @@
 
 import {
   collection, query, where, orderBy, onSnapshot,
-  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, limit,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc, serverTimestamp, limit,
   getCountFromServer
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
@@ -217,6 +217,15 @@ function renderHub() {
       ${linksBlock}
     </section>
 
+    <!-- Notes — free-text G-Docs-style pad -->
+    <section class="dw-section" data-section="notes" aria-label="Notes">
+      <div class="dw-section-head">
+        <h3 class="dw-section-title">Notes</h3>
+        <span class="dw-section-mode">Free-text · Shared pad</span>
+      </div>
+      <div id="progNotes" class="dw-notes-slot"><div class="dw-loading">Loading…</div></div>
+    </section>
+
     <!-- Documentation -->
     <section class="dw-section" data-section="documentation" aria-label="Documentation">
       <div class="dw-section-head">
@@ -263,6 +272,7 @@ function renderHub() {
 
   // Bind data
   bindOverviewKpi();
+  bindNotes();
   bindDocs();
   bindCalendar();
   bindMeetings();
@@ -324,6 +334,91 @@ async function bindOverviewKpi() {
 }
 
 function setText(id, txt) { const el = $(id); if (el) el.textContent = txt; }
+
+// ---------------------------------------------------------------------------
+// Section: Notes — free-text G-Docs-style pad.
+// programme_notes/{programKey}/sections/notes, contentMd. Mirrors the
+// department-workspace Discussion Topics pattern but on a permissive
+// (admin || central_user) collection so coordinators can write too.
+// ---------------------------------------------------------------------------
+
+function bindNotes() {
+  const slot = $('progNotes');
+  if (!slot) return;
+  const ref = doc(db, 'programme_notes', programKey, 'sections', 'notes');
+  const unsub = onSnapshot(ref, (snap) => {
+    renderNotes(slot, ref, snap.exists() ? snap.data() : null);
+  }, (err) => {
+    console.warn('[bindNotes]', err);
+    slot.innerHTML = `<div class="dw-empty">Could not load notes (${escHtml(err.code || err.message || 'error')}).</div>`;
+  });
+  unsubFns.push(unsub);
+}
+
+function renderNotes(slot, ref, data) {
+  const body = data?.contentMd || '';
+  const lastEdit = data?.lastEditedAt ? fmtRelative(data.lastEditedAt) : null;
+  const lastBy = data?.lastEditedByName ? escHtml(data.lastEditedByName) : '';
+
+  if (!canWrite) {
+    slot.innerHTML = `
+      <div class="dw-notes-readonly">
+        ${body
+          ? `<div class="dw-notes-body">${escHtml(body)}</div>`
+          : `<div class="dw-empty"><div class="dw-empty-title">No notes yet.</div><div class="dw-empty-desc">Programme notes will appear here once added.</div></div>`}
+        ${lastEdit ? `<div class="dw-notes-meta">Last edit ${lastEdit}${lastBy ? ` · by ${lastBy}` : ''}</div>` : ''}
+      </div>`;
+    return;
+  }
+
+  slot.innerHTML = `
+    <div class="dw-notes-editor">
+      <textarea class="dw-notes-textarea" id="progNotesText"
+                placeholder="Working notes for this programme — running list, agenda seeds, reminders. Free-form; one item per line works well."
+                rows="8">${escHtml(body)}</textarea>
+      <div class="dw-notes-foot">
+        <div class="dw-notes-meta">
+          ${lastEdit ? `Last saved ${lastEdit}${lastBy ? ` · by ${lastBy}` : ''}` : 'Not saved yet'}
+        </div>
+        <div class="dw-notes-actions">
+          <button class="dw-btn-secondary" id="progNotesReset" type="button">Reset</button>
+          <button class="dw-btn-primary" id="progNotesSave" type="button">Save notes</button>
+        </div>
+      </div>
+    </div>`;
+
+  const textarea = $('progNotesText');
+  const btnSave = $('progNotesSave');
+  const btnReset = $('progNotesReset');
+  const originalBody = body;
+
+  btnSave.addEventListener('click', async () => {
+    const newBody = textarea.value;
+    if (newBody === originalBody) { showToast('No changes.'); return; }
+    btnSave.disabled = true;
+    btnSave.textContent = 'Saving…';
+    try {
+      await setDoc(ref, {
+        programKey,
+        sectionId: 'notes',
+        contentMd: newBody,
+        lastEditedBy: currentUser.uid,
+        lastEditedByName: userProfile.displayName || currentUser.email || 'Unknown',
+        lastEditedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      showToast('Notes saved.');
+    } catch (err) {
+      console.warn('[notes save]', err);
+      showToast('Save failed: ' + (err.code || err.message || 'error'));
+      btnSave.disabled = false;
+      btnSave.textContent = 'Save notes';
+    }
+    // onSnapshot re-renders on the next pass and resets originalBody.
+  });
+
+  btnReset.addEventListener('click', () => { textarea.value = originalBody; });
+}
 
 // ---------------------------------------------------------------------------
 // Section: Documentation — department_artifacts where programKey==KEY

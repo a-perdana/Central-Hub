@@ -3106,6 +3106,33 @@ service cloud.firestore {
       }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // PROGRAMME NOTES (2026-07-24) — free-text G-Docs-style pad per
+    // programme hub (/ease-growth, …). programKey scopes the doc, NOT a
+    // subject, so this deliberately does NOT reuse isSubjectOwner()
+    // (which is director/subject-gated). Permissive to match the rest of
+    // the programme-hub ecosystem: any Department Office member (admin ||
+    // central_user) reads AND writes. Page-access is the real gate.
+    // programme_notes/{programKey}/sections/{sectionId}
+    match /programme_notes/{programKey} {
+      allow get, list: if isDeptOfficeMember();
+      allow create, update: if isDeptOfficeMember();
+      allow delete: if isAdmin();
+
+      match /sections/{sectionId} {
+        allow get, list: if isDeptOfficeMember();
+        // CREATE/UPDATE pin programKey + sectionId to the path so a writer
+        // can't shadow another programme's section.
+        allow create: if isDeptOfficeMember()
+                         && request.resource.data.programKey == programKey
+                         && request.resource.data.sectionId == sectionId;
+        allow update: if isDeptOfficeMember()
+                         && request.resource.data.programKey == programKey
+                         && request.resource.data.sectionId == sectionId;
+        allow delete: if isAdmin();
+      }
+    }
+
     // ═════════════════════════════════════════════════════════════
     // ACADEMIC HUB SCHOOL LEADERSHIP WORKSPACE (2026-05-21)
     // ─────────────────────────────────────────────────────────────

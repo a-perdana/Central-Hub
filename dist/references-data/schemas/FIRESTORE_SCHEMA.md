@@ -1681,6 +1681,32 @@ Director + Subject Coordinator workspace replacing the long-running Google Docs 
 
 ---
 
+#### `programme_notes/{programKey}` + subcollection `sections/{sectionId}` (2026-07-24)
+**PK:** `programKey` ∈ the 8-value programme enum `{ease_growth, ease_assessment, ease_academic, appraisal_system, induction_programs, dtp, aft, atc}` (canonical list in [`Central Hub/partials/programme-config.js`](Central%20Hub/partials/programme-config.js) `PROGRAMMES`).
+
+**Scope:** Free-text G-Docs-style scratch pad rendered on each **programme hub** (`/ease-growth`, …) — the programme sibling of `department_notes`. Where `department_notes` is scoped by *subject*, this is scoped by *programme*. Parent doc is optional (flat aggregate stamp); content lives in the `sections/` subcollection.
+
+**Section ids (open-string, current shipped set):**
+- `notes` — the programme's shared running notes (agenda seeds, reminders, working list).
+- *(future additions write into new section ids without schema change.)*
+
+**`sections/{sectionId}` fields:**
+- Identity: `programKey` (must equal the parent doc id — rule pinned), `sectionId` (must equal the path segment — rule pinned).
+- Content: `contentMd` (markdown body, free-form).
+- Audit: `lastEditedBy →users.uid`, `lastEditedByName` (denormalised display name), `lastEditedAt`, `updatedAt`.
+
+**FKs:** `users.uid` (via `lastEditedBy`).
+
+**Read scope (loose):** any `isDeptOfficeMember()` (admin + every signed-in central_user reaching through `/page-access`).
+
+**Write scope (permissive — matches the rest of the programme hub, NOT the subject-gated `department_notes`):**
+- **CREATE + UPDATE:** any `isDeptOfficeMember()` (`central_admin` || `central_user`). Deliberately NOT `isSubjectOwner()` — a programme is not a subject, so subject-gating would lock coordinators out. `/page-access` on the `ease-growth` slug is the real gate. Rule pins `programKey` + `sectionId` to the path so a writer can't shadow another programme's section.
+- **DELETE:** `central_admin` only.
+
+**Companion module:** [`Central Hub/partials/programme-hub-core.js`](Central%20Hub/partials/programme-hub-core.js) `bindNotes()`; [`Central Hub/partials/programme-config.js`](Central%20Hub/partials/programme-config.js) is the canonical 8-programme taxonomy.
+
+---
+
 ### 23. Academic Hub — School Leadership Workspace (2026-05-21)
 
 Mirrors §22 (CH Coordinators / Department Office) but **school-scoped**: every record carries a required `schoolId` field and rules enforce same-school visibility via `isAHSchoolLeader(schoolId)` (Foundation Rep + School Principal + Academic Coordinator + Cambridge Coordinator at that school). `academic_admin` + `central_admin` bypass via `isAHAdmin()`.
