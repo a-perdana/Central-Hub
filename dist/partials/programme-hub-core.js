@@ -52,6 +52,8 @@ let unsubFns = [];         // Firestore listener cleanup
 let editingArtifactId = null;
 let editingEventId = null;
 let calendarEventsCache = [];   // full calendar_events set (client-filtered by programKey)
+let notesEditing = false;       // true while the Notes Quill editor is open
+let notesData = null;           // latest programme_notes/notes snapshot data
 
 // ---------------------------------------------------------------------------
 // Utilities (copied from department-core.js — the ecosystem convention is that
@@ -107,6 +109,54 @@ function todayISO() {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// HTML allowlist sanitiser for the Notes rich text (ported from
+// coordinators-meetings.html sanitiseAgendaHtml). Runs on SAVE and RENDER so
+// stored HTML is always clean and no stored markup can inject script/attrs.
+const NOTES_ALLOWED_TAGS = new Set([
+  'P', 'BR', 'STRONG', 'EM', 'B', 'I', 'U', 'S', 'STRIKE',
+  'UL', 'OL', 'LI',
+  'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'A', 'BLOCKQUOTE', 'CODE', 'PRE', 'SPAN', 'DIV',
+]);
+const NOTES_ALLOWED_ATTRS = {
+  A: new Set(['href', 'title', 'target', 'rel']),
+  '*': new Set([]),
+};
+
+function sanitiseNotesHtml(html) {
+  if (!html) return '';
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html);
+  (function walk(node) {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType !== 1) continue;
+      if (!NOTES_ALLOWED_TAGS.has(child.tagName)) {
+        // Lift children up + drop the disallowed tag itself.
+        while (child.firstChild) child.parentNode.insertBefore(child.firstChild, child);
+        child.remove();
+        continue;
+      }
+      const okSet = NOTES_ALLOWED_ATTRS[child.tagName] || NOTES_ALLOWED_ATTRS['*'];
+      for (const attr of [...child.attributes]) {
+        if (!okSet.has(attr.name)) child.removeAttribute(attr.name);
+      }
+      if (child.tagName === 'A') {
+        const href = child.getAttribute('href') || '';
+        if (!/^(https?:|mailto:|\/|#)/i.test(href)) child.removeAttribute('href');
+        child.setAttribute('rel', 'noopener noreferrer');
+        if (/^https?:/i.test(href)) child.setAttribute('target', '_blank');
+      }
+      walk(child);
+    }
+  })(tpl.content);
+  return tpl.innerHTML.trim();
+}
+
+// Is the sanitised HTML effectively empty (Quill leaves "<p><br></p>")?
+function isBlankHtml(html) {
+  return !html || /^(\s|<p>|<\/p>|<br\s*\/?>)*$/i.test(html);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,13 +235,9 @@ function renderHub() {
     : '';
 
   host.innerHTML = `
-    <!-- Overview -->
-    <section class="dw-section" data-section="overview" aria-label="Overview">
-      <div class="dw-section-head">
-        <h3 class="dw-section-title">Overview</h3>
-        <span class="dw-section-mode">Live · Read-only</span>
-      </div>
-      <div class="dw-kpi-grid" id="progKpiGrid">
+    ${sectionShell('overview', 'Overview',
+      `<span class="dw-section-mode">Live · Read-only</span>`,
+      `<div class="dw-kpi-grid" id="progKpiGrid">
         <div class="dw-kpi">
           <div class="dw-kpi-val" id="kpiWindow">—</div>
           <div class="dw-kpi-lbl">Active Window</div>
@@ -214,56 +260,40 @@ function renderHub() {
         </div>
       </div>
       ${picsBlock}
-      ${linksBlock}
-    </section>
+      ${linksBlock}`)}
 
-    <!-- Notes — free-text G-Docs-style pad -->
-    <section class="dw-section" data-section="notes" aria-label="Notes">
-      <div class="dw-section-head">
-        <h3 class="dw-section-title">Notes</h3>
-        <span class="dw-section-mode">Free-text · Shared pad</span>
-      </div>
-      <div id="progNotes" class="dw-notes-slot"><div class="dw-loading">Loading…</div></div>
-    </section>
+    ${sectionShell('notes', 'Notes',
+      `<span class="dw-section-mode">Rich text · Shared pad</span>`,
+      `<div id="progNotes" class="dw-notes-slot"><div class="dw-loading">Loading…</div></div>`)}
 
-    <!-- Documentation -->
-    <section class="dw-section" data-section="documentation" aria-label="Documentation">
-      <div class="dw-section-head">
-        <h3 class="dw-section-title">Documentation</h3>
-        <div class="dw-section-actions">
-          <span class="dw-section-mode">Versioned · Artifacts</span>
-          ${canWrite ? `<button class="btn-add prog-add" type="button" id="btnAddDoc">+ Add document</button>` : ''}
-        </div>
-      </div>
-      <div id="progDocs" class="prog-slot"><div class="dw-loading">Loading…</div></div>
-    </section>
+    ${sectionShell('documentation', 'Documentation',
+      `<div class="dw-section-actions">
+        <span class="dw-section-mode">Versioned · Artifacts</span>
+        ${canWrite ? `<button class="btn-add prog-add" type="button" id="btnAddDoc">+ Add document</button>` : ''}
+      </div>`,
+      `<div id="progDocs" class="prog-slot"><div class="dw-loading">Loading…</div></div>`)}
 
-    <!-- Calendar -->
-    <section class="dw-section" data-section="calendar" aria-label="Calendar">
-      <div class="dw-section-head">
-        <h3 class="dw-section-title">Calendar</h3>
-        <div class="dw-section-actions">
-          <span class="dw-section-mode">Programme events</span>
-          ${canWrite ? `<button class="btn-add prog-add" type="button" id="btnAddEvent">+ Add event</button>` : ''}
-        </div>
-      </div>
-      <div id="progCalendar" class="prog-slot"><div class="dw-loading">Loading…</div></div>
-    </section>
+    ${sectionShell('calendar', 'Calendar',
+      `<div class="dw-section-actions">
+        <span class="dw-section-mode">Programme events</span>
+        ${canWrite ? `<button class="btn-add prog-add" type="button" id="btnAddEvent">+ Add event</button>` : ''}
+      </div>`,
+      `<div id="progCalendar" class="prog-slot"><div class="dw-loading">Loading…</div></div>`)}
 
-    <!-- Meetings -->
-    <section class="dw-section" data-section="meetings" aria-label="Meeting records">
-      <div class="dw-section-head">
-        <h3 class="dw-section-title">Meeting Records</h3>
-        <div class="dw-section-actions">
-          <span class="dw-section-mode">Shared pool · Coordinators Meetings</span>
-          ${canWrite ? `<button class="btn-add prog-add" type="button" id="btnAddMeeting">+ New meeting</button>` : ''}
-        </div>
-      </div>
-      <div id="progMeetings" class="prog-slot"><div class="dw-loading">Loading…</div></div>
-    </section>
+    ${sectionShell('meetings', 'Meeting Records',
+      `<div class="dw-section-actions">
+        <span class="dw-section-mode">Shared pool · Coordinators Meetings</span>
+        ${canWrite ? `<button class="btn-add prog-add" type="button" id="btnAddMeeting">+ New meeting</button>` : ''}
+      </div>`,
+      `<div id="progMeetings" class="prog-slot"><div class="dw-loading">Loading…</div></div>`)}
   `;
 
-  // Wire buttons
+  // Wire collapsible toggles (localStorage-persisted per section).
+  wireCollapse(host);
+
+  // Wire buttons — actions live in the head's right cluster; clicking them
+  // must NOT toggle collapse (handled in wireCollapse by targeting only the
+  // left cluster).
   if (canWrite) {
     const bDoc = $('btnAddDoc'); if (bDoc) bDoc.addEventListener('click', () => openDocModal(null));
     const bEvt = $('btnAddEvent'); if (bEvt) bEvt.addEventListener('click', () => openEventModal(null));
@@ -278,12 +308,72 @@ function renderHub() {
   bindMeetings();
 }
 
+// Collapsible section shell — chevron + clickable title (left cluster) collapse
+// the .dw-section-body; header actions stay in the right cluster. Default open;
+// per-section collapsed state persisted in localStorage.
+function sectionShell(key, title, headRight, bodyHtml) {
+  const collapsed = getCollapsed(key);
+  return `
+    <section class="dw-section${collapsed ? ' is-collapsed' : ''}" data-section="${key}" aria-label="${escHtml(title)}">
+      <div class="dw-section-head">
+        <div class="dw-section-head-left" role="button" tabindex="0" data-collapse-toggle="${key}"
+             aria-expanded="${collapsed ? 'false' : 'true'}">
+          <svg class="dw-section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h3 class="dw-section-title">${escHtml(title)}</h3>
+        </div>
+        ${headRight || ''}
+      </div>
+      <div class="dw-section-body">${bodyHtml}</div>
+    </section>`;
+}
+
+function collapseKey(key) { return `progHub:collapsed:${programKey}:${key}`; }
+
+function getCollapsed(key) {
+  try { return localStorage.getItem(collapseKey(key)) === '1'; }
+  catch (e) { return false; }  // default open
+}
+
+function setCollapsed(key, val) {
+  try {
+    if (val) localStorage.setItem(collapseKey(key), '1');
+    else localStorage.removeItem(collapseKey(key));
+  } catch (e) { /* ignore */ }
+}
+
+function wireCollapse(host) {
+  host.querySelectorAll('[data-collapse-toggle]').forEach(toggle => {
+    const key = toggle.dataset.collapseToggle;
+    const section = toggle.closest('.dw-section');
+    const apply = () => {
+      const collapsed = section.classList.toggle('is-collapsed');
+      toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      setCollapsed(key, collapsed);
+    };
+    toggle.addEventListener('click', apply);
+    toggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apply(); }
+    });
+  });
+}
+
 function deepLinkScroll() {
   const targetHash = window.location.hash.replace(/^#/, '');
   if (!targetHash) return;
   setTimeout(() => {
     const target = document.querySelector(`[data-section="${CSS.escape(targetHash)}"]`);
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!target) return;
+    // A deep-linked section should be open even if the user collapsed it before.
+    if (target.classList.contains('is-collapsed')) {
+      target.classList.remove('is-collapsed');
+      const toggle = target.querySelector('[data-collapse-toggle]');
+      if (toggle) toggle.setAttribute('aria-expanded', 'true');
+      setCollapsed(target.dataset.section, false);
+    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 140);
 }
 
@@ -347,7 +437,11 @@ function bindNotes() {
   if (!slot) return;
   const ref = doc(db, 'programme_notes', programKey, 'sections', 'notes');
   const unsub = onSnapshot(ref, (snap) => {
-    renderNotes(slot, ref, snap.exists() ? snap.data() : null);
+    notesData = snap.exists() ? snap.data() : null;
+    // While the editor is open, don't clobber the in-progress edit — the
+    // save path re-renders explicitly on success. Only live-refresh the
+    // read view.
+    if (!notesEditing) renderNotesRead(slot, ref, notesData);
   }, (err) => {
     console.warn('[bindNotes]', err);
     slot.innerHTML = `<div class="dw-empty">Could not load notes (${escHtml(err.code || err.message || 'error')}).</div>`;
@@ -355,69 +449,118 @@ function bindNotes() {
   unsubFns.push(unsub);
 }
 
-function renderNotes(slot, ref, data) {
-  const body = data?.contentMd || '';
+// Read view: rendered rich HTML (sanitised) with an Edit affordance for writers.
+function renderNotesRead(slot, ref, data) {
+  const rawHtml = data?.contentHtml || '';
+  const cleanHtml = sanitiseNotesHtml(rawHtml);
+  const plain = data?.contentMd || '';
   const lastEdit = data?.lastEditedAt ? fmtRelative(data.lastEditedAt) : null;
   const lastBy = data?.lastEditedByName ? escHtml(data.lastEditedByName) : '';
+  const hasContent = !isBlankHtml(cleanHtml) || !!plain;
 
-  if (!canWrite) {
-    slot.innerHTML = `
-      <div class="dw-notes-readonly">
-        ${body
-          ? `<div class="dw-notes-body">${escHtml(body)}</div>`
-          : `<div class="dw-empty"><div class="dw-empty-title">No notes yet.</div><div class="dw-empty-desc">Programme notes will appear here once added.</div></div>`}
-        ${lastEdit ? `<div class="dw-notes-meta">Last edit ${lastEdit}${lastBy ? ` · by ${lastBy}` : ''}</div>` : ''}
-      </div>`;
-    return;
+  // Body: prefer sanitised rich HTML; fall back to plain text (legacy /
+  // pre-rich saves) rendered with line breaks preserved.
+  const bodyHtml = !isBlankHtml(cleanHtml)
+    ? `<div class="dw-notes-rich">${cleanHtml}</div>`
+    : (plain ? `<div class="dw-notes-body">${escHtml(plain)}</div>` : '');
+
+  slot.innerHTML = `
+    <div class="dw-notes-readonly">
+      ${hasContent
+        ? bodyHtml
+        : `<div class="dw-empty"><div class="dw-empty-title">No notes yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “Edit” to start the programme’s running notes — rich text, links, lists.' : 'Programme notes will appear here once added.'}</div></div>`}
+      <div class="dw-notes-foot">
+        <div class="dw-notes-meta">${lastEdit ? `Last edit ${lastEdit}${lastBy ? ` · by ${lastBy}` : ''}` : (canWrite ? 'Not saved yet' : '')}</div>
+        ${canWrite ? `<div class="dw-notes-actions"><button class="dw-btn-primary" id="progNotesEdit" type="button">${hasContent ? 'Edit' : 'Add notes'}</button></div>` : ''}
+      </div>
+    </div>`;
+
+  if (canWrite) {
+    const btn = $('progNotesEdit');
+    if (btn) btn.addEventListener('click', () => renderNotesEdit(slot, ref, data));
   }
+}
+
+// Edit view: Quill rich editor + Save / Cancel.
+function renderNotesEdit(slot, ref, data) {
+  notesEditing = true;
+  const seedHtml = sanitiseNotesHtml(data?.contentHtml || '') || (data?.contentMd ? `<p>${escHtml(data.contentMd).replace(/\n/g, '<br>')}</p>` : '');
 
   slot.innerHTML = `
     <div class="dw-notes-editor">
-      <textarea class="dw-notes-textarea" id="progNotesText"
-                placeholder="Working notes for this programme — running list, agenda seeds, reminders. Free-form; one item per line works well."
-                rows="8">${escHtml(body)}</textarea>
+      <div class="dw-notes-quill" id="progNotesQuill"></div>
       <div class="dw-notes-foot">
-        <div class="dw-notes-meta">
-          ${lastEdit ? `Last saved ${lastEdit}${lastBy ? ` · by ${lastBy}` : ''}` : 'Not saved yet'}
-        </div>
+        <div class="dw-notes-meta">Rich text — bold, lists, links. Saved to everyone on this hub.</div>
         <div class="dw-notes-actions">
-          <button class="dw-btn-secondary" id="progNotesReset" type="button">Reset</button>
+          <button class="dw-btn-secondary" id="progNotesCancel" type="button">Cancel</button>
           <button class="dw-btn-primary" id="progNotesSave" type="button">Save notes</button>
         </div>
       </div>
     </div>`;
 
-  const textarea = $('progNotesText');
-  const btnSave = $('progNotesSave');
-  const btnReset = $('progNotesReset');
-  const originalBody = body;
+  const mount = $('progNotesQuill');
+  let quill = null;
+  let fallbackTa = null;
 
-  btnSave.addEventListener('click', async () => {
-    const newBody = textarea.value;
-    if (newBody === originalBody) { showToast('No changes.'); return; }
+  if (typeof Quill !== 'undefined') {
+    quill = new Quill(mount, {
+      theme: 'snow',
+      placeholder: 'Working notes for this programme — running list, agenda seeds, reminders…',
+      modules: {
+        toolbar: [
+          [{ header: [2, 3, false] }],
+          ['bold', 'italic', 'underline'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          ['link', 'blockquote', 'code-block'],
+          ['clean'],
+        ],
+      },
+    });
+    if (seedHtml) quill.clipboard.dangerouslyPasteHTML(seedHtml);
+    quill.focus();
+    quill.setSelection(quill.getLength(), 0);
+  } else {
+    // CDN failed — degrade to a plain textarea so notes still work.
+    mount.innerHTML = `<textarea class="dw-notes-textarea" id="progNotesFallback" rows="8">${escHtml(data?.contentMd || '')}</textarea>`;
+    fallbackTa = $('progNotesFallback');
+  }
+
+  const finish = () => { notesEditing = false; renderNotesRead(slot, ref, notesData); };
+  $('progNotesCancel').addEventListener('click', finish);
+
+  $('progNotesSave').addEventListener('click', async () => {
+    const btnSave = $('progNotesSave');
+    let cleanHtml, plain;
+    if (quill) {
+      cleanHtml = sanitiseNotesHtml(quill.root.innerHTML);
+      plain = quill.getText().replace(/\n+$/, '');
+    } else {
+      plain = fallbackTa ? fallbackTa.value : '';
+      cleanHtml = plain ? `<p>${escHtml(plain).replace(/\n/g, '<br>')}</p>` : '';
+    }
     btnSave.disabled = true;
     btnSave.textContent = 'Saving…';
     try {
       await setDoc(ref, {
         programKey,
         sectionId: 'notes',
-        contentMd: newBody,
+        contentHtml: cleanHtml,
+        contentMd: plain,
         lastEditedBy: currentUser.uid,
         lastEditedByName: userProfile.displayName || currentUser.email || 'Unknown',
         lastEditedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
       showToast('Notes saved.');
+      notesEditing = false;
+      renderNotesRead(slot, ref, { ...(notesData || {}), contentHtml: cleanHtml, contentMd: plain });
     } catch (err) {
       console.warn('[notes save]', err);
       showToast('Save failed: ' + (err.code || err.message || 'error'));
       btnSave.disabled = false;
       btnSave.textContent = 'Save notes';
     }
-    // onSnapshot re-renders on the next pass and resets originalBody.
   });
-
-  btnReset.addEventListener('click', () => { textarea.value = originalBody; });
 }
 
 // ---------------------------------------------------------------------------
