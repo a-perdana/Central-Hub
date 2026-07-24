@@ -200,6 +200,7 @@ function renderStandardsRail() {
       <a class="hb-spine" data-kind="standards" data-external="1"
          href="${href}" target="_blank" rel="noopener"
          title="${escapeHtml(title)} — opens in References (new tab)">
+        <span class="hb-spine-ext" aria-hidden="true" title="Opens in References (new tab)">↗</span>
         <span class="hb-spine-kind">📘</span>
         <span class="hb-spine-title">${escapeHtml(title)}</span>
         <span class="hb-spine-audience">Section ${s.n}</span>
