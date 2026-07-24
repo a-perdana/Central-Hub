@@ -198,6 +198,14 @@ The catalogue below groups collections by the business domain they serve. Within
 #### `central_documents/{docId}`
 Central Hub's own document repository. Same shape as `documents` but admin-managed for HQ-wide files. **Renamed from `documents` historically** — the old name now belongs to AH.
 
+#### `published_dashboards/{dashboardId}`
+**PK:** auto-id.
+**Fields:** `title`, `description`, `visibility` (`'public'`/`'ch_only'`/`'private'`), `ownerUid →users.uid`, `ownerName` (denormalised), `storagePath` (`published_dashboards/{id}/index.html`), `sizeBytes`, `createdAt`, `updatedAt`.
+**Purpose:** Self-serve HTML dashboard publishing (2026-07-13). Any signed-in CH user uploads a single-page HTML file (stored in Storage at `storagePath`) and gets a shareable link `/dashboard-view?id={id}`. The uploaded HTML is **NEVER executed in the CH origin** — the standalone viewer `/dashboard-view` renders it inside a sandboxed `<iframe srcdoc>` (no `allow-same-origin`), so a malicious/careless `<script>` in an uploaded file can't touch CH's Firebase session, cookies, or DOM.
+**Writers:** any signed-in CH user (own doc; `ownerUid`/`storagePath`/`createdAt` pinned on update). `central_admin` may update/delete any.
+**Read:** `public` → anyone (login-less); `ch_only` → any signed-in user; `private` → owner. Storage read mirrors the parent doc's `visibility` (Firestore-gates-Storage pattern, like `user_notes`).
+**Storage rule:** `published_dashboards/{dashboardId}/{fileName}` — write ≤3 MB, `text/html` only; read gated by parent doc `visibility`. Delete: owner or `central_admin`.
+
 #### `doc_likes/{likeId}` + `doc_ratings/{ratingId}` (AH)
 **Fields:** `userId →users.uid`, `docId →documents.id`, plus `liked` (bool) or `rating` (1–5).
 **Writers:** any authorised user (own row only).
