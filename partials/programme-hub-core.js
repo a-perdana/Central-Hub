@@ -225,8 +225,10 @@ function renderHub() {
     ? `<div class="prog-pics"><span class="prog-pics-lbl">Lead Specialists</span>${pics}</div>`
     : '';
 
-  const links = (PROGRAMME_LINKS[programKey] || []).map(l => `
-    <a class="prog-link-card" href="${escHtml(l.slug)}">
+  const LINK_EMOJI = ['✍️', '🪟', '🔎', '🗣️', '⚖️', '🔗', '📌', '⭐'];
+  const links = (PROGRAMME_LINKS[programKey] || []).map((l, i) => `
+    <a class="prog-link-card" data-idx="${i % 6}" href="${escHtml(l.slug)}">
+      <div class="prog-link-emoji" aria-hidden="true">${LINK_EMOJI[i % LINK_EMOJI.length]}</div>
       <div class="prog-link-title">${escHtml(l.label)} <span class="prog-link-arr" aria-hidden="true">→</span></div>
       <div class="prog-link-desc">${escHtml(l.desc || '')}</div>
     </a>`).join('');
@@ -238,22 +240,26 @@ function renderHub() {
     ${sectionShell('overview', 'Overview',
       `<span class="dw-section-mode">Live · Read-only</span>`,
       `<div class="dw-kpi-grid" id="progKpiGrid">
-        <div class="dw-kpi">
+        <div class="dw-kpi" data-kpi="window">
+          <div class="dw-kpi-ico" aria-hidden="true">🗓️</div>
           <div class="dw-kpi-val" id="kpiWindow">—</div>
           <div class="dw-kpi-lbl">Active Window</div>
           <div class="dw-kpi-sub" id="kpiWindowSub">EASE Growth term</div>
         </div>
-        <div class="dw-kpi">
+        <div class="dw-kpi" data-kpi="items">
+          <div class="dw-kpi-ico" aria-hidden="true">🧩</div>
           <div class="dw-kpi-val" id="kpiItems">—</div>
           <div class="dw-kpi-lbl">Item Bank</div>
           <div class="dw-kpi-sub">calibrated + bootstrap</div>
         </div>
-        <div class="dw-kpi">
+        <div class="dw-kpi" data-kpi="docs">
+          <div class="dw-kpi-ico" aria-hidden="true">📄</div>
           <div class="dw-kpi-val" id="kpiDocs">—</div>
           <div class="dw-kpi-lbl">Documents</div>
           <div class="dw-kpi-sub">in this hub</div>
         </div>
-        <div class="dw-kpi">
+        <div class="dw-kpi" data-kpi="meetings">
+          <div class="dw-kpi-ico" aria-hidden="true">👥</div>
           <div class="dw-kpi-val" id="kpiMeetings">—</div>
           <div class="dw-kpi-lbl">Meetings</div>
           <div class="dw-kpi-sub">logged for this programme</div>
@@ -313,11 +319,22 @@ function renderHub() {
   bindMeetings();
 }
 
+// Per-section emoji icon — colour comes from CSS keyed on [data-section].
+const SECTION_ICON = {
+  overview: '📊',
+  notes: '📝',
+  documentation: '📄',
+  calendar: '📅',
+  meetings: '👥',
+};
+
 // Collapsible section shell — chevron + clickable title (left cluster) collapse
 // the .dw-section-body; header actions stay in the right cluster. Default open;
-// per-section collapsed state persisted in localStorage.
+// per-section collapsed state persisted in localStorage. Each section carries
+// a colour identity via [data-section] (styled in ease-growth.html).
 function sectionShell(key, title, headRight, bodyHtml) {
   const collapsed = getCollapsed(key);
+  const icon = SECTION_ICON[key] || '•';
   return `
     <section class="dw-section${collapsed ? ' is-collapsed' : ''}" data-section="${key}" aria-label="${escHtml(title)}">
       <div class="dw-section-head">
@@ -327,6 +344,7 @@ function sectionShell(key, title, headRight, bodyHtml) {
                stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9" />
           </svg>
+          <span class="dw-section-icon" aria-hidden="true">${icon}</span>
           <h3 class="dw-section-title">${escHtml(title)}</h3>
         </div>
         ${headRight || ''}
