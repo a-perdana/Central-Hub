@@ -820,7 +820,7 @@ async function openDocModal(id) {
   }
   const host = ensureModalHost();
   host.innerHTML = `
-    <div class="modal-overlay" id="docOverlay">
+    <div class="modal-overlay open" id="docOverlay">
       <div class="modal" role="dialog" aria-modal="true" aria-label="Document">
         <div class="modal-head">
           <span>${id ? 'Edit document' : 'Add document'}</span>
@@ -914,7 +914,7 @@ async function openEventModal(id) {
   }
   const host = ensureModalHost();
   host.innerHTML = `
-    <div class="modal-overlay" id="evtOverlay">
+    <div class="modal-overlay open" id="evtOverlay">
       <div class="modal" role="dialog" aria-modal="true" aria-label="Calendar event">
         <div class="modal-head">
           <span>${id ? 'Edit event' : 'Add event'}</span>
