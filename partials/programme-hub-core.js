@@ -291,13 +291,18 @@ function renderHub() {
   // Wire collapsible toggles (localStorage-persisted per section).
   wireCollapse(host);
 
-  // Wire buttons — actions live in the head's right cluster; clicking them
-  // must NOT toggle collapse (handled in wireCollapse by targeting only the
-  // left cluster).
+  // Wire add buttons via delegation on hubRoot so it survives any section
+  // re-render and never depends on the buttons existing at wire-time.
   if (canWrite) {
-    const bDoc = $('btnAddDoc'); if (bDoc) bDoc.addEventListener('click', () => openDocModal(null));
-    const bEvt = $('btnAddEvent'); if (bEvt) bEvt.addEventListener('click', () => openEventModal(null));
-    const bMtg = $('btnAddMeeting'); if (bMtg) bMtg.addEventListener('click', createMeeting);
+    host.addEventListener('click', (e) => {
+      const btn = e.target.closest('#btnAddDoc, #btnAddEvent, #btnAddMeeting');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (btn.id === 'btnAddDoc') openDocModal(null);
+      else if (btn.id === 'btnAddEvent') openEventModal(null);
+      else if (btn.id === 'btnAddMeeting') createMeeting();
+    });
   }
 
   // Bind data
