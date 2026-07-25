@@ -126,10 +126,11 @@ export const PROGRAMME_PICS = {
 };
 
 // Related-tool deep-links surfaced in the hub's Overview section. Each link:
-//   - slug:  canonical URL slug (page basename minus .html)
+//   - slug:  canonical URL slug (page basename minus .html — page MUST exist)
 //   - label: display string
 //   - desc:  one-line "what this tool does"
-// Only ease_growth is populated for the pilot; the rest fill in when built.
+// All slugs verified to exist (2026-07-25). AFT + ATC have no dedicated tool
+// pages — they point at the closest generic surfaces (references / pd).
 export const PROGRAMME_LINKS = {
   ease_growth: [
     { slug: 'ease-item-author',   label: 'EASE Item Author',  desc: 'Author the 3-band adaptive item bank (Math / English / Science).' },
@@ -138,13 +139,53 @@ export const PROGRAMME_LINKS = {
     { slug: 'coordinators-meetings', label: 'Coordinators Meetings', desc: 'Full meeting editor with agenda items — shared HQ meeting pool.' },
     { slug: 'decisions-register', label: 'Decisions & Policies', desc: 'Network-wide decisions surfaced from coordinator meetings.' },
   ],
-  ease_assessment:    [],
-  ease_academic:      [],
-  appraisal_system:   [],
-  induction_programs: [],
-  dtp:                [],
-  aft:                [],
-  atc:                [],
+  ease_assessment: [
+    { slug: 'chapter-test-author',        label: 'Chapter Tests',          desc: 'Author network-uniform chapter mastery tests anchored to Cambridge pacing units.' },
+    { slug: 'question-bank',              label: 'Chapter Test Item Bank', desc: 'Standalone CRUD + reuse bank for chapter-test items with Cambridge metadata.' },
+    { slug: 'assessment-management',      label: 'Pacing Assessments',     desc: 'Manage chapter-end assessments and topic activities embedded in the pacing guides.' },
+    { slug: 'practice-assessment-author', label: 'Practice Tests',         desc: 'Compose or AI-rank practice assessments for Students Hub tournaments and leaderboards.' },
+    { slug: 'practice-bank-admin',        label: 'Practice Questions',     desc: 'CRUD for supplemental practice items powering SH gamification (never formal grading).' },
+  ],
+  ease_academic: [
+    { slug: 'teaching-progress',             label: 'Teaching Progress',    desc: 'Real-time view of teacher pacing progress across all subjects, live from Teachers Hub.' },
+    { slug: 'curriculum-map',                label: 'Curriculum Map',       desc: 'Week-by-week visual of all subjects and Cambridge syllabus coverage.' },
+    { slug: 'students-overview',             label: 'Students Overview',    desc: 'Network-wide roster of every Students Hub account across partner schools.' },
+    { slug: 'primary-checkpoint-syllabus',   label: 'Primary Checkpoint',   desc: 'Manage chapter, topic, and syllabus-objective structure for Primary Checkpoint subjects.' },
+    { slug: 'secondary-checkpoint-syllabus', label: 'Secondary Checkpoint', desc: 'Manage chapter, topic, and syllabus-objective structure for Secondary Checkpoint subjects.' },
+  ],
+  appraisal_system: [
+    { slug: 'school-appraisals',    label: 'School Appraisals',    desc: 'Five-domain self-appraisal for partner schools; coordinators review and validate.' },
+    { slug: 'teacher-appraisals',   label: 'Teacher Appraisals',   desc: 'All formal appraisal records and classroom walkthroughs across every school.' },
+    { slug: 'school-visits',        label: 'School Visits',        desc: 'Log on-site monitoring, mid-year check-ins, and validation visits network-wide.' },
+    { slug: 'principal-appraisals', label: 'Principal Appraisals', desc: 'Network-wide roll-up of every Foundation Rep annual appraisal on principals.' },
+    { slug: 'walkthroughs',         label: 'Walkthroughs',         desc: 'Your personal appraisal walkthrough lens across the schools you serve.' },
+    { slug: 'principal-360-admin',  label: 'Principal 360°',       desc: 'Launch 360 survey cycles, distribute invite links, and monitor response progress.' },
+  ],
+  induction_programs: [
+    { slug: 'induction-admin',   label: 'Induction Admin',   desc: 'Assign mentors, track first-year cohorts, and manage the three induction handbook templates.' },
+    { slug: 'my-induction',      label: 'My Induction',      desc: 'Specialist mentee dashboard with a 4-window Year-1 timeline and 10-walkthrough cycle.' },
+    { slug: 'handbook',          label: 'Handbooks',         desc: 'Guided role handbooks: Year-1 induction tracks and first-90-day operational guides.' },
+    { slug: 'orientation-admin', label: 'Orientation Admin', desc: 'Manage resources, competency questions, and incoming partner-school teacher registrations.' },
+  ],
+  dtp: [
+    { slug: 'pd',                   label: 'PD Materials',         desc: 'Ready-to-present professional-development materials for PD days, visits, and online sessions.' },
+    { slug: 'learning-path',        label: 'Learning Path',        desc: 'Specialist CPD course: 29 competencies across 6 domains, staged Awareness to Lead.' },
+    { slug: 'competency-framework', label: 'Competency Framework', desc: 'Hybrid coaching and subject-deepening framework for HQ Subject Specialists.' },
+    { slug: 'competency-admin',     label: 'Competency Admin',     desc: 'Review evidence, approve or reject competency claims, and issue certificates.' },
+    { slug: 'certificates',         label: 'Certificate Tracking', desc: 'Search, filter, and audit every issued partner-school workshop certificate.' },
+  ],
+  // AFT — no dedicated page; generic reference surfaces.
+  aft: [
+    { slug: 'references',      label: 'References & Standards', desc: 'Searchable archive of every framework, standard, and regulation across the network.' },
+    { slug: 'roles-positions', label: 'Roles & Positions',     desc: 'Network-wide HR catalogue mapping positions to role architecture and Cambridge/Indonesian anchors.' },
+    { slug: 'handbook',        label: 'Handbooks',             desc: 'Guided role handbooks for induction tracks and operational guides.' },
+  ],
+  // ATC — no dedicated page; pd is the only strong fit.
+  atc: [
+    { slug: 'pd',               label: 'PD Materials',      desc: 'Facilitator session guides, decks, and workbooks for delivering training sessions.' },
+    { slug: 'learning-path',    label: 'Learning Path',     desc: 'Structured CPD course learners progress through, Awareness to Lead.' },
+    { slug: 'orientation-admin',label: 'Orientation Admin', desc: 'Manage training resources, competency questions, and teacher registrations.' },
+  ],
 };
 
 // Eduversal Academic Standards (ES) madde anchors — for documentation
