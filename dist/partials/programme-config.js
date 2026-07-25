@@ -50,6 +50,18 @@ export const PROGRAMME_ACRONYM = {
   atc:                'Academy Training Center — centralised training delivery, facilitation, and capacity programmes.',
 };
 
+// One-line "what this hub is" used in the page info-strip + footer CTA.
+export const PROGRAMME_TAGLINE = {
+  ease_growth:        'adaptive growth assessment in Math, English, and Science',
+  ease_assessment:    'network-wide common assessments across partner schools',
+  ease_academic:      'per-subject achievement tracking across the Cambridge curriculum',
+  appraisal_system:   'staff performance evaluations, objectives, and appraisal cycles',
+  induction_programs: 'year-1 staff support with mentors, windows, and certification',
+  dtp:                'Development of Teaching Proficiency — professional learning pathways',
+  aft:                'Academy of Future Teachers — pre-service teacher development',
+  atc:                'Academy Training Center — centralised training delivery',
+};
+
 // Two-letter mono badge (matches subject-config's SUBJECT_BADGE convention).
 export const PROGRAMME_BADGE = {
   ease_growth:        'EG',

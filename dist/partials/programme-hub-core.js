@@ -32,9 +32,9 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 import {
-  PROGRAMME_LABELS, PROGRAMME_ACRONYM, PROGRAMME_EMOJI, PROGRAMME_ACCENT,
-  PROGRAMME_ACCENT_COLOR, PROGRAMME_PICS, PROGRAMME_LINKS, isValidProgramme,
-  programmeLabel
+  PROGRAMME_LABELS, PROGRAMME_ACRONYM, PROGRAMME_TAGLINE, PROGRAMME_EMOJI,
+  PROGRAMME_ACCENT, PROGRAMME_ACCENT_COLOR, PROGRAMME_PICS, PROGRAMME_LINKS,
+  isValidProgramme, programmeLabel
 } from './programme-config.js';
 
 // ---------------------------------------------------------------------------
@@ -199,13 +199,28 @@ function paintHero() {
   const label = programmeLabel(programKey);
   const grad = PROGRAMME_ACCENT[programKey];
   const emoji = PROGRAMME_EMOJI[programKey] || '📦';
+  const tagline = PROGRAMME_TAGLINE[programKey] || '';
+
   const titleEl = $('heroTitle');
   const descEl = $('heroDesc');
   const iconEl = $('heroIcon');
   if (titleEl) titleEl.textContent = label;
   if (descEl) descEl.textContent = PROGRAMME_ACRONYM[programKey] || '';
   if (iconEl) iconEl.textContent = emoji;
-  // Thread the programme accent onto the root so section accent bars pick it up.
+
+  // Info-strip body (config-driven, so every hub shell is byte-identical).
+  const stripBody = $('hubStripBody');
+  if (stripBody) {
+    stripBody.innerHTML = `The programme hub for <strong>${escHtml(label)}</strong> — a single home for its <strong>notes, documentation, calendar, and meeting records</strong>${tagline ? ` (${escHtml(tagline)})` : ''}. Meetings join the shared <a href="coordinators-meetings">Coordinators Meetings</a> pool; decisions surface on <a href="decisions-register">Decisions</a>.`;
+  }
+
+  // Footer CTA (config-driven).
+  const fEyebrow = $('hubFooterEyebrow');
+  if (fEyebrow) fEyebrow.textContent = `Programme Hub · ${label}`;
+  const fDesc = $('hubFooterDesc');
+  if (fDesc) fDesc.textContent = `Notes, documentation, calendar, and meeting records for ${label} in one place${tagline ? ` — ${tagline}` : ''}.`;
+
+  // Thread the programme accent onto the root so any accent hook picks it up.
   const root = $('hubRoot');
   if (root && grad) root.style.setProperty('--prog-grad', grad);
   document.title = `${label} — CentralHub`;

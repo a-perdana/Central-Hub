@@ -696,9 +696,16 @@ const htmlFiles = [
   // on /index. Thin shell + partials/programme-hub-core.js + programme-config.js;
   // scoped by a fixed programKey. Integrates with the Coordinators/Department
   // Office ecosystem via a programKey discriminator on the shared collections
-  // (coordinators_meetings, department_artifacts, calendar_events). EASE Growth
-  // is the pilot; the other 7 hubs clone the same shell.
+  // (coordinators_meetings, department_artifacts, calendar_events). All 8 share
+  // one shell + module; they differ only by their initProgrammeHub('<key>') call.
   "ease-growth.html",
+  "ease-assessment.html",
+  "ease-academic.html",
+  "appraisal-system.html",
+  "induction-programs.html",
+  "dtp.html",
+  "aft.html",
+  "atc.html",
 ];
 
 // Standalone pages copied verbatim — NO navbar / shared-styles / auth-guard /
