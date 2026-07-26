@@ -85,6 +85,17 @@
       display: flex; flex-direction: column; gap: 10px;
     }
     .filter-bar-row { display: flex; gap: 8px; align-items: center; }
+    /* A record with only some blocks scored must not read as a final result. */
+    .partial-flag {
+      display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+      font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+      background: #fffbeb; color: #92400e; border: 1px solid #fde68a; vertical-align: middle;
+    }
+    .partial-note {
+      margin: 10px 0 4px; padding: 10px 12px; border-radius: 8px;
+      background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #d97706;
+      font-size: .78rem; color: #78350f; line-height: 1.55;
+    }
     /* Amber to match the page family — this is the only authoring action on an
        otherwise read-only roll-up, so it reads as a primary control. */
     .btn-new-entry {
@@ -703,12 +714,15 @@
   <script type="module" src="auth-guard.js"></script>
   <script type="module">
 import {
-  collection, getDocs, doc, updateDoc, query, orderBy, serverTimestamp
+  collection, getDocs, doc, updateDoc, query, orderBy, limit, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 let allAppraisals  = [];
 let allWalkthroughs = [];
 let isAdmin = false;
+// partner_schools doc id -> display name. Records carry schoolId only.
+let schoolNames = {};
+const schoolLabel = (id) => id ? (schoolNames[id] || id) : '—';
 
 // ── HELPERS ──────────────────────────────────────────────
 function fmt(date) {
@@ -805,7 +819,7 @@ function renderAppraisals() {
         <div class="td-meta">${a.observationDate ? fmt(a.observationDate) : '—'}</div>
       </td>
       <td>
-        <div>${a.schoolId || '—'}</div>
+        <div>${schoolLabel(a.schoolId)}</div>
         <div class="td-meta">${a.subject || '—'}</div>
       </td>
       <td>${a.academicYear || '—'}</td>
@@ -813,7 +827,7 @@ function renderAppraisals() {
       <td>${scoreBar(a.f1Score)}</td>
       <td>${scoreBar(a.f2Score)}</td>
       <td>${scoreBar(a.f3Score)}</td>
-      <td><strong>${a.compositePercent?.toFixed(1)||'—'}%</strong></td>
+      <td><strong>${a.compositePercent?.toFixed(1)||'—'}%</strong>${a.isPartial ? '<span class="partial-flag" title="Not all blocks scored yet — weights of the missing blocks are excluded">partial</span>' : ''}</td>
       <td><span class="${predClass(a.predicate)}">${a.predicate||'—'}</span></td>
       <td>${statusPill(a.status)}</td>
       <td>
@@ -872,13 +886,44 @@ function renderWalkthroughs() {
 }
 
 // ── APPRAISAL DETAIL MODAL ───────────────────────────────
+// appraiserNarrative is a Glow/Grow/Go object (strengths / development /
+// actions / growItemLabel / goDate / goCheck), not free text — dumping it
+// through JSON.stringify printed raw JSON in the modal. Empty fields and the
+// internal bookkeeping keys (goIsComplete, goCollectedAt) are skipped.
+function renderNarrative(n) {
+  if (!n) return '';
+  if (typeof n === 'string') {
+    return `<div class="detail-section-title">Appraiser Narrative</div>
+            <div class="detail-narrative">${n}</div>`;
+  }
+  if (typeof n !== 'object') return '';
+  if (n.text) {
+    return `<div class="detail-section-title">Appraiser Narrative</div>
+            <div class="detail-narrative">${n.text}</div>`;
+  }
+  const parts = [
+    ['Glow — strengths',        n.strengths],
+    ['Grow — development',      n.development],
+    ['Grow — focus item',       n.growItemLabel || n.growItem],
+    ['Go — agreed action',      n.actions],
+    ['Go — by when',            n.goDate],
+    ['Go — how it is checked',  n.goCheck]
+  ].filter(([, v]) => v != null && String(v).trim() !== '');
+
+  if (!parts.length) return '';
+  return `<div class="detail-section-title">Appraiser Narrative</div>
+    <div class="detail-narrative">${parts.map(([label, val]) =>
+      `<div style="margin-bottom:8px;"><strong style="display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin-bottom:2px;">${label}</strong>${val}</div>`
+    ).join('')}</div>`;
+}
+
 window.openAppraisalModal = function(id) {
   const a = allAppraisals.find(x => x.id === id);
   if (!a) return;
 
   document.getElementById('modalTitle').textContent = a.teacherName || 'Teacher Appraisal';
   document.getElementById('modalSub').textContent =
-    `${a.schoolId || ''} · ${a.subject || ''} · ${a.academicYear || ''} · ${(a.level||'').charAt(0).toUpperCase()+(a.level||'').slice(1)}`;
+    `${schoolLabel(a.schoolId)} · ${a.subject || ''} · ${a.academicYear || ''} · ${(a.level||'').charAt(0).toUpperCase()+(a.level||'').slice(1)}`;
 
   const predColors = {A:'#16a34a',B:'#1d4ed8',C:'#ca8a04',D:'#f97316',F:'#dc2626'};
   const pc = predColors[a.predicate] || '#7c3aed';
@@ -901,12 +946,17 @@ window.openAppraisalModal = function(id) {
         <div class="dss-val">${a.f3Score?.toFixed(2)||'—'}</div>
       </div>
       <div class="dss-item dss-final">
-        <div class="dss-label">Final Score</div>
+        <div class="dss-label">${a.isPartial ? 'Score so far' : 'Final Score'}</div>
         <div class="dss-val">${a.compositePercent?.toFixed(1)||'—'}%
           <span style="font-size:.9rem;color:${pc};"> ${a.predicate||''}</span>
         </div>
       </div>
     </div>
+    ${a.isPartial ? `<div class="partial-note">
+      Not all blocks are scored yet. This percentage covers only the blocks that have been
+      completed — the weights of the missing ones are excluded rather than counted as zero,
+      so it will move as the remaining blocks are added.
+    </div>` : ''}
 
     <div class="detail-section-title">Appraisal Info</div>
     <div class="detail-info-grid">
@@ -920,10 +970,7 @@ window.openAppraisalModal = function(id) {
       <div class="detail-info-item"><div class="detail-info-label">Appraiser UID</div><div class="detail-info-val" style="font-size:.72rem;word-break:break-all;">${a.appraiserUid || '—'}</div></div>
     </div>
 
-    ${a.appraiserNarrative ? `
-      <div class="detail-section-title">Appraiser Narrative</div>
-      <div class="detail-narrative">${typeof a.appraiserNarrative === 'object' ? (a.appraiserNarrative.text || JSON.stringify(a.appraiserNarrative)) : a.appraiserNarrative}</div>
-    ` : ''}
+    ${renderNarrative(a.appraiserNarrative)}
 
     ${a.teacherResponse ? `
       <div class="detail-section-title">Teacher Response</div>
@@ -1099,7 +1146,7 @@ function renderTrends() {
       const tData = data.filter(a => a.teacherName === name && a.compositePercent && a.academicYear);
       if (tData.length < 1) return '';
       tData.sort((a,b) => a.academicYear?.localeCompare(b.academicYear));
-      const school  = tData[tData.length-1]?.schoolId || '';
+      const school  = schoolLabel(tData[tData.length-1]?.schoolId);
       const subject = tData[tData.length-1]?.subject || '';
       const scores  = tData.map(a => a.compositePercent);
       const first   = scores[0], last = scores[scores.length-1];
@@ -1141,7 +1188,9 @@ function populateTrendFilters() {
   const schoolSel  = document.getElementById('trendSchool');
   const teacherSel = document.getElementById('trendTeacher');
 
-  schools.forEach(s  => { const o = new Option(s, s); schoolSel.appendChild(o); });
+  // Label shows the school name; the option VALUE stays the schoolId because
+  // the filters below compare against a.schoolId.
+  schools.forEach(s  => { const o = new Option(schoolLabel(s), s); schoolSel.appendChild(o); });
   teachers.forEach(t => { const o = new Option(t, t); teacherSel.appendChild(o); });
 
   schoolSel.addEventListener('change', () => {
@@ -1168,18 +1217,32 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
   isAdmin = profile?.role_centralhub === 'central_admin';
   const db = window.db;
 
-  // Fetch both collections in parallel
-  const [appraisalSnap, wtSnap] = await Promise.all([
+  // Fetch both collections in parallel, plus the school directory: records
+  // store schoolId only, so without this the table shows a raw Firestore id.
+  const [appraisalSnap, wtSnap, schoolSnap] = await Promise.all([
     getDocs(query(collection(db, 'teacher_appraisals'), orderBy('createdAt', 'desc'))),
-    getDocs(query(collection(db, 'teacher_walkthroughs'), orderBy('createdAt', 'desc')))
+    getDocs(query(collection(db, 'teacher_walkthroughs'), orderBy('createdAt', 'desc'))),
+    getDocs(query(collection(db, 'partner_schools'), limit(100)))
   ]);
+  schoolNames = {};
+  schoolSnap.docs.forEach(d => { schoolNames[d.id] = d.data()?.name || d.id; });
 
   allAppraisals   = appraisalSnap.docs.map(d => {
     const data = d.data();
-    // Compute compositePercent if missing: F1=20%, F2=60%, F3=20%, each out of 4
+    // Compute compositePercent if missing: F1=20%, F2=60%, F3=20%, each out of 4.
+    // Missing blocks are EXCLUDED and the remaining weights re-normalised —
+    // treating an unscored block as 0 made a partial record look like failure.
+    // A record carrying only F2 at 3.34 read as 50.1% ("D") instead of 83.5%.
+    // Partial records are flagged so the UI can label them (see isPartial).
     if (data.compositePercent == null && (data.f1Score != null || data.f2Score != null || data.f3Score != null)) {
-      const f1 = data.f1Score ?? 0, f2 = data.f2Score ?? 0, f3 = data.f3Score ?? 0;
-      data.compositePercent = ((f1*0.2 + f2*0.6 + f3*0.2) / 4) * 100;
+      const blocks = [
+        { v: data.f1Score, w: 0.2 },
+        { v: data.f2Score, w: 0.6 },
+        { v: data.f3Score, w: 0.2 }
+      ].filter(b => b.v != null);
+      const totalW = blocks.reduce((s, b) => s + b.w, 0);
+      data.compositePercent = ((blocks.reduce((s, b) => s + b.v * b.w, 0) / totalW) / 4) * 100;
+      data.isPartial = blocks.length < 3;
       if (!data.predicate) {
         const p = data.compositePercent;
         data.predicate = p >= 86 ? 'A' : p >= 66 ? 'B' : p >= 51 ? 'C' : p >= 36 ? 'D' : 'F';
