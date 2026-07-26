@@ -258,8 +258,9 @@ function renderHub() {
         <div class="dw-kpi" data-kpi="window">
           <div class="dw-kpi-ico" aria-hidden="true">🗓️</div>
           <div class="dw-kpi-val" id="kpiWindow">—</div>
-          <div class="dw-kpi-lbl">Active Window</div>
-          <div class="dw-kpi-sub" id="kpiWindowSub">EASE Growth term</div>
+          <div class="dw-kpi-semester" id="kpiWindowSemester"></div>
+          <div class="dw-kpi-lbl" id="kpiWindowLbl">Active Window</div>
+          <div class="dw-kpi-sub" id="kpiWindowSub">Loading…</div>
         </div>
         <div class="dw-kpi" data-kpi="items">
           <div class="dw-kpi-ico" aria-hidden="true">🧩</div>
@@ -419,8 +420,45 @@ function deepLinkScroll() {
 // Section: Overview KPIs (read-only)
 // ---------------------------------------------------------------------------
 
+// 'term1' → 'Term 1'; legacy 'fall'/'winter'/'spring' → 'Fall' etc. Mirrors
+// windowLabel() in /ease-window-admin so the two surfaces read identically.
+function windowTermLabel(raw) {
+  const s = String(raw || '').replace(/_/g, ' ').trim();
+  const m = /^term\s*([123])$/i.exec(s);
+  if (m) return `Term ${m[1]}`;
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
+// The academic period (semester + year) is network-wide — it comes from
+// calendar_settings/current, NOT from any programme's own collection — so every
+// hub shows it. Only the top "Term N" line is EASE-window-specific.
+function renderPeriodKpi({ termLine, subLine, muted }) {
+  const sem = (typeof window.getCurrentSemester === 'function')
+    ? window.getCurrentSemester() : null;
+  const ay = (typeof window.getCurrentAcademicYear === 'function')
+    ? window.getCurrentAcademicYear() : '';
+
+  // Big line: the EASE term when there is one, else fall back to the semester so
+  // the tile still leads with something meaningful on non-EASE hubs.
+  const big = termLine || (sem ? sem.label : '—');
+  setText('kpiWindow', big);
+
+  // A hub with no test window isn't showing a "window" — label it honestly.
+  setText('kpiWindowLbl', termLine ? 'Active Window' : 'Academic Period');
+
+  // Second line: semester — suppressed when it would just repeat the big line.
+  const semText = sem ? sem.label : '';
+  setText('kpiWindowSemester', semText && semText !== big ? semText : '');
+
+  setText('kpiWindowSub', subLine || (ay ? `AY ${ay}` : 'no academic year set'));
+
+  const el = $('kpiWindow');
+  if (el) el.classList.toggle('dw-kpi-val--muted', !!muted);
+}
+
 async function bindOverviewKpi() {
-  // Active EASE window (ease_growth only — other programmes just show "—").
+  // Active EASE window — the term line is ease_growth-only; the semester + AY
+  // lines below it are network-wide and render on every programme hub.
   if (programKey === 'ease_growth') {
     try {
       const wq = query(
@@ -432,14 +470,15 @@ async function bindOverviewKpi() {
       if (!wsnap.empty) {
         const w = wsnap.docs[0].data();
         const winLabel = w.window || w.windowLabel || wsnap.docs[0].id;
-        setText('kpiWindow', String(winLabel).replace(/_/g, ' '));
-        setText('kpiWindowSub', w.academicYear ? `AY ${w.academicYear}` : 'open now');
+        renderPeriodKpi({
+          termLine: windowTermLabel(winLabel),
+          subLine: w.academicYear ? `AY ${w.academicYear}` : 'open now',
+        });
       } else {
-        setText('kpiWindow', 'Closed');
-        setText('kpiWindowSub', 'no open window');
+        renderPeriodKpi({ termLine: 'No open window', muted: true });
       }
     } catch (e) {
-      setText('kpiWindow', '—');
+      renderPeriodKpi({ termLine: '—', muted: true });
     }
 
     // Item bank size — count query (cheap, no full read).
@@ -454,8 +493,9 @@ async function bindOverviewKpi() {
       setText('kpiItems', '—');
     }
   } else {
-    setText('kpiWindow', '—');
-    setText('kpiWindowSub', 'not applicable');
+    // Non-EASE hubs have no test window, but the academic period still applies
+    // to them — show semester + AY rather than a dead "—".
+    renderPeriodKpi({});
     setText('kpiItems', '—');
   }
   // Docs + Meetings counts are filled by their own binds (bindDocs/bindMeetings).

@@ -562,12 +562,41 @@ function _deriveAcademicYear(data) {
   }
   return '';
 }
+// Which entry of terms[] contains `when` (default: now). Returns
+// { index, number, label, start, end } or null when the calendar has no terms
+// or the date falls outside every term (holidays, between semesters).
+// Dates in calendar_settings are plain 'YYYY-MM-DD' strings — compared as
+// strings so no timezone shift can move a boundary day.
+function _deriveSemester(data, when) {
+  if (!data || !Array.isArray(data.terms)) return null;
+  const terms = data.terms.filter(t => t && t.start && t.end);
+  if (!terms.length) return null;
+  const d = when instanceof Date ? when : new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const idx = terms.findIndex(t => String(t.start) <= iso && iso <= String(t.end));
+  if (idx === -1) return null;
+  const t = terms[idx];
+  return {
+    index: idx,
+    number: idx + 1,
+    label: t.label || `Semester ${idx + 1}`,
+    start: t.start,
+    end: t.end,
+  };
+}
+
 let _academicYearLabel = '';
+let _calendarSettings = null;
 window.getCurrentAcademicYear = () => _academicYearLabel;
+// Current semester per calendar_settings/current.terms[] — null outside term
+// time. Call after `await window.academicYearReady` (same doc, same read).
+window.getCurrentSemester = (when) => _deriveSemester(_calendarSettings, when);
+window.getCalendarSettings = () => _calendarSettings;
 window.academicYearReady = (async () => {
   try {
     const snap = await getDoc(doc(db, 'calendar_settings', 'current'));
-    _academicYearLabel = _deriveAcademicYear(snap.exists() ? snap.data() : null);
+    _calendarSettings = snap.exists() ? snap.data() : null;
+    _academicYearLabel = _deriveAcademicYear(_calendarSettings);
   } catch (e) {
     console.warn('academicYearReady: calendar_settings/current load failed', e);
   }
