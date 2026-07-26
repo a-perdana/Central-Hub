@@ -390,6 +390,23 @@
       max-width: 880px;
       position: relative; z-index: 1;
     }
+    /* The academic basis runs to several screens of framework cards, quotes and
+       references. Collapsed by default: eyebrow + title + lede stay visible,
+       everything from the framework cards down is behind the toggle. */
+    .ab-toggle {
+      display: inline-flex; align-items: center; gap: 8px; margin-top: 4px;
+      padding: 8px 15px; border-radius: 999px; cursor: pointer;
+      font-family: inherit; font-size: .82rem; font-weight: 600; color: #ede9fe;
+      background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.22);
+      transition: background .15s, border-color .15s;
+    }
+    .ab-toggle:hover { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.34); }
+    .ab-toggle:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 2px; }
+    .ab-toggle-chev { transition: transform .18s; }
+    .ab-toggle[aria-expanded="true"] .ab-toggle-chev { transform: rotate(90deg); }
+    /* Explicit [hidden] rule — a display value would otherwise beat it. */
+    #abDetail[hidden] { display: none; }
+
     .academic-basis-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -723,6 +740,11 @@ let isAdmin = false;
 // partner_schools doc id -> display name. Records carry schoolId only.
 let schoolNames = {};
 const schoolLabel = (id) => id ? (schoolNames[id] || id) : '—';
+// auth uid -> display name. AH's entry form stores appraiserUid but no name,
+// so the modal resolved to a raw uid; CH's own form does write appraiserName.
+let appraiserNames = {};
+const appraiserLabel = (a) =>
+  a.appraiserName || appraiserNames[a.appraiserUid] || a.appraiserUid || '—';
 
 // ── HELPERS ──────────────────────────────────────────────
 function fmt(date) {
@@ -967,7 +989,7 @@ window.openAppraisalModal = function(id) {
       <div class="detail-info-item"><div class="detail-info-label">Lesson Topic</div><div class="detail-info-val">${a.lessonTopic || '—'}</div></div>
       <div class="detail-info-item"><div class="detail-info-label">Duration</div><div class="detail-info-val">${a.lessonDuration ? a.lessonDuration+' min' : '—'}</div></div>
       <div class="detail-info-item"><div class="detail-info-label">Created</div><div class="detail-info-val">${fmt(a.createdAt)}</div></div>
-      <div class="detail-info-item"><div class="detail-info-label">Appraiser UID</div><div class="detail-info-val" style="font-size:.72rem;word-break:break-all;">${a.appraiserUid || '—'}</div></div>
+      <div class="detail-info-item"><div class="detail-info-label">Appraiser</div><div class="detail-info-val">${appraiserLabel(a)}</div></div>
     </div>
 
     ${renderNarrative(a.appraiserNarrative)}
@@ -1212,6 +1234,20 @@ function populateTrendFilters() {
   document.getElementById(id).addEventListener('input', renderWalkthroughs);
 });
 
+// ── ACADEMIC BASIS TOGGLE ────────────────────────────────
+// Static content, so this is wired at module load rather than on authReady.
+{
+  const abBtn = document.getElementById('abToggle');
+  const abBox = document.getElementById('abDetail');
+  const abLbl = abBtn?.querySelector('.ab-toggle-lbl');
+  abBtn?.addEventListener('click', () => {
+    const open = abBtn.getAttribute('aria-expanded') === 'true';
+    abBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    abBox.hidden = open;
+    if (abLbl) abLbl.textContent = open ? 'Show the frameworks behind it' : 'Hide the frameworks';
+  });
+}
+
 // ── AUTH READY ────────────────────────────────────────────
 document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
   isAdmin = profile?.role_centralhub === 'central_admin';
@@ -1226,6 +1262,19 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
   ]);
   schoolNames = {};
   schoolSnap.docs.forEach(d => { schoolNames[d.id] = d.data()?.name || d.id; });
+
+  // Resolve appraiser uids to names. Non-fatal: if the users list query is
+  // refused the modal simply falls back to the uid, as it did before.
+  try {
+    const userSnap = await getDocs(query(collection(db, 'users'), limit(1000)));
+    appraiserNames = {};
+    userSnap.docs.forEach(d => {
+      const u = d.data() || {};
+      appraiserNames[d.id] = u.displayName || u.name || u.email || '';
+    });
+  } catch (e) {
+    console.warn('appraiser name lookup unavailable', e);
+  }
 
   allAppraisals   = appraisalSnap.docs.map(d => {
     const data = d.data();
@@ -1277,6 +1326,13 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
         satisfying Indonesia's legal <strong>PKG / PMM</strong> teacher performance regulations.
       </p>
 
+      <button type="button" class="ab-toggle" id="abToggle" aria-expanded="false" aria-controls="abDetail">
+        <span class="ab-toggle-lbl">Show the frameworks behind it</span>
+        <svg class="ab-toggle-chev" width="15" height="15" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+
+      <div id="abDetail" hidden>
       <div class="academic-basis-grid">
         <div class="ab-frame">
           <span class="ab-frame-flag">🌍 Global</span>
@@ -1363,6 +1419,7 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
           inspection lives in the entry tool where the appraiser worked.
         </p>
       </div>
+      </div><!-- /#abDetail -->
     </div>
   </section>
 
