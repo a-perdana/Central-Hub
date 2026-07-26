@@ -423,6 +423,12 @@
     }
     .save-status { font-size: 0.82rem; color: var(--ink-3); }
     .save-status.is-error { color: #b91c1c; font-weight: 600; }
+    .readonly-note {
+      margin-top: 14px; padding: 10px 12px;
+      background: #f8fafc; border: 1px solid var(--border);
+      border-left: 3px solid var(--ink-3); border-radius: 8px;
+      font-size: 0.8rem; color: var(--ink-2); line-height: 1.5;
+    }
     .footer-btns { display: flex; gap: 8px; }
 
     /* New appraisal modal */
@@ -4623,19 +4629,32 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       document.getElementById('modalSubtitle').textContent = `${a.academicYear || ''} · ${a.appraiser || ''}`;
       document.getElementById('saveStatus').textContent = 'All changes saved';
 
-      // Show/hide action buttons.
+      // Two different edit scopes on this screen — the school's answers and
+      // Eduversal's response to them are NOT the same permission.
       //
-      // canEdit is role-gated: the school_appraisals_v2 update rule allows only
-      // isAdmin() OR an isAcademicUser() whose schoolId matches, so a plain
-      // central_user (coordinator) cannot write here at all. Showing them an
-      // enabled control produced a permission-denied on click — the buttons now
-      // match what the rule actually permits.
+      //   canEdit          the school's own self-appraisal content (ratings,
+      //                    evidence, strengths, improvements). Owned by the
+      //                    school in Academic Hub; admin can correct it here.
+      //   canWriteFeedback the "Eduversal Coordinator Recommendations" box —
+      //                    Eduversal's reply TO the school. Academic Hub renders
+      //                    this field disabled, so it is ours to fill in.
+      //
+      // Both are central_admin-only, because the school_appraisals_v2 update
+      // rule allows only isAdmin() OR an isAcademicUser() at the same school —
+      // a plain central_user (coordinator) matches neither and its write is
+      // refused. Enabling the box for coordinators would promise a permission
+      // the rule does not grant. Widening review to coordinators is a rules
+      // change first, not a UI change.
+      //
+      // Both stop once the appraisal is 'reviewed' — that closes the record.
       //
       // "Submit for Review" is deliberately NOT surfaced in Central Hub at all:
       // submitting is the school's own declaration that its self-appraisal is
       // finished, made from Academic Hub. Eduversal's action on this screen is
       // "Mark as Reviewed" once the school has submitted.
-      const canEdit = state.isAdmin && a.status !== 'reviewed';
+      const isOpen = a.status !== 'reviewed';
+      const canEdit = state.isAdmin && isOpen;
+      const canWriteFeedback = state.isAdmin && isOpen;
       document.getElementById('btnSaveDraft').style.display = canEdit ? 'inline-flex' : 'none';
       document.getElementById('btnSubmit').style.display = 'none';
       document.getElementById('btnMarkReviewed').style.display = (state.isAdmin && a.status === 'submitted') ? 'inline-flex' : 'none';
@@ -4665,7 +4684,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const overviewPanel = document.createElement('div');
       overviewPanel.className = 'modal-tab-panel' + (state.activeTab === 0 ? ' active' : '');
       overviewPanel.dataset.panel = '0';
-      overviewPanel.innerHTML = buildOverviewPanel(a);
+      overviewPanel.innerHTML = buildOverviewPanel(a, canEdit, canWriteFeedback);
       panelsEl.appendChild(overviewPanel);
 
       // Domain tabs
@@ -4737,12 +4756,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       });
 
-      // Wire overview textareas
+      // Wire overview textareas. recommendations is Eduversal's reply to the
+      // school, so it follows canWriteFeedback; the other two are the school's
+      // own answers and follow canEdit.
       ['strengths', 'improvements', 'recommendations'].forEach(field => {
         const el = panelsEl.querySelector(`[data-overview-field="${field}"]`);
         if (el) {
+          const allowed = field === 'recommendations' ? canWriteFeedback : canEdit;
           el.addEventListener('input', () => {
-            if (!canEdit) return;
+            if (!allowed) return;
             state.currentAppraisal[field] = el.value;
             document.getElementById('saveStatus').textContent = 'Unsaved changes';
           });
@@ -4750,7 +4772,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       });
     }
 
-    function buildOverviewPanel(a) {
+    function buildOverviewPanel(a, canEdit, canWriteFeedback) {
       const overall = avgScore(a);
       const overallN = overall ? Math.round(parseFloat(overall)) : 0;
       const overallLabel = overallN ? (FRAMEWORK.meta.rating_scale[overallN]?.label || '—') : 'No ratings yet';
@@ -4796,17 +4818,18 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="overview-fields">
           <div class="field-group">
             <label>Key Strengths</label>
-            <textarea aria-label="What does this school do particularly well?" data-overview-field="strengths" placeholder="What does this school do particularly well?">${a.strengths || ''}</textarea>
+            <textarea aria-label="What does this school do particularly well?" data-overview-field="strengths" placeholder="${canEdit ? 'What does this school do particularly well?' : 'Written by the school in Academic Hub'}" ${!canEdit ? 'disabled' : ''}>${a.strengths || ''}</textarea>
           </div>
           <div class="field-group">
             <label>Areas for Improvement</label>
-            <textarea aria-label="What are the priority areas to develop?" data-overview-field="improvements" placeholder="What are the priority areas to develop?">${a.improvements || ''}</textarea>
+            <textarea aria-label="What are the priority areas to develop?" data-overview-field="improvements" placeholder="${canEdit ? 'What are the priority areas to develop?' : 'Written by the school in Academic Hub'}" ${!canEdit ? 'disabled' : ''}>${a.improvements || ''}</textarea>
           </div>
         </div>
         <div class="field-group">
           <label>Eduversal Coordinator Recommendations</label>
-          <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" style="min-height:80px;" placeholder="Recommendations for the school following review…">${a.recommendations || ''}</textarea>
+          <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" style="min-height:80px;" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
         </div>
+        ${state.isAdmin ? '' : `<div class="readonly-note">You are viewing this appraisal in read-only mode. Ratings and evidence are written by the school in Academic Hub; recommendations and sign-off are made by a Central Hub admin.</div>`}
         ${refs ? `<div class="ref-row">${refs}</div>` : ''}`;
     }
 
