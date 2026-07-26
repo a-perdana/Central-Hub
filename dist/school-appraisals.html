@@ -422,6 +422,7 @@
       border-radius: 0 0 16px 16px;
     }
     .save-status { font-size: 0.82rem; color: var(--ink-3); }
+    .save-status.is-error { color: #b91c1c; font-weight: 600; }
     .footer-btns { display: flex; gap: 8px; }
 
     /* New appraisal modal */
@@ -4622,10 +4623,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       document.getElementById('modalSubtitle').textContent = `${a.academicYear || ''} · ${a.appraiser || ''}`;
       document.getElementById('saveStatus').textContent = 'All changes saved';
 
-      // Show/hide action buttons
-      const canEdit = state.isAdmin || a.status !== 'reviewed';
+      // Show/hide action buttons.
+      //
+      // canEdit is role-gated: the school_appraisals_v2 update rule allows only
+      // isAdmin() OR an isAcademicUser() whose schoolId matches, so a plain
+      // central_user (coordinator) cannot write here at all. Showing them an
+      // enabled control produced a permission-denied on click — the buttons now
+      // match what the rule actually permits.
+      //
+      // "Submit for Review" is deliberately NOT surfaced in Central Hub at all:
+      // submitting is the school's own declaration that its self-appraisal is
+      // finished, made from Academic Hub. Eduversal's action on this screen is
+      // "Mark as Reviewed" once the school has submitted.
+      const canEdit = state.isAdmin && a.status !== 'reviewed';
       document.getElementById('btnSaveDraft').style.display = canEdit ? 'inline-flex' : 'none';
-      document.getElementById('btnSubmit').style.display = (canEdit && a.status === 'draft') ? 'inline-flex' : 'none';
+      document.getElementById('btnSubmit').style.display = 'none';
       document.getElementById('btnMarkReviewed').style.display = (state.isAdmin && a.status === 'submitted') ? 'inline-flex' : 'none';
 
       // Build tabs
@@ -4946,7 +4958,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         updatedAt: serverTimestamp(),
         updatedBy: window.currentUser?.email || ''
       };
-      await setDoc(doc(window.db, 'school_appraisals_v2', state.currentDocId), data, { merge: true });
+      // A rejected write must be visible. Without this catch the promise
+      // rejected, the lines below never ran, and the footer sat on "Saving…"
+      // forever — the user had no way to tell the save had failed and could
+      // leave the page believing their ratings were stored.
+      try {
+        await setDoc(doc(window.db, 'school_appraisals_v2', state.currentDocId), data, { merge: true });
+      } catch (e) {
+        const el = document.getElementById('saveStatus');
+        el.textContent = e?.code === 'permission-denied'
+          ? 'Not saved — you do not have permission to edit this appraisal.'
+          : 'Not saved — please try again.';
+        el.classList.add('is-error');
+        return;
+      }
+      document.getElementById('saveStatus').classList.remove('is-error');
       state.currentAppraisal.status = data.status;
       document.getElementById('saveStatus').textContent = 'Saved ✓';
       // Refresh table row
@@ -4956,11 +4982,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
       applyFilters();
       updateStats();
-      // Update buttons if status changed
+      // Update buttons if status changed. Mirrors the same role gate as
+      // openAppraisal() above — btnSubmit stays hidden in CH by design.
       if (newStatus) {
-        document.getElementById('btnSubmit').style.display = newStatus === 'draft' ? 'inline-flex' : 'none';
         document.getElementById('btnMarkReviewed').style.display = (state.isAdmin && newStatus === 'submitted') ? 'inline-flex' : 'none';
-        document.getElementById('btnSaveDraft').style.display = newStatus === 'reviewed' ? 'none' : 'inline-flex';
+        document.getElementById('btnSaveDraft').style.display = (state.isAdmin && newStatus !== 'reviewed') ? 'inline-flex' : 'none';
       }
     }
 
