@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Class Observation Entry — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 24px 40px 48px; }
+
+    /* ── Setup card ─────────────────────────────────────────── */
+    .setup-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .sc-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+    .sc-head h2 { font-family: 'Lora', serif; font-size: 1.05rem; color: var(--ink); }
+    .sc-head-sub { font-size: 0.8rem; color: var(--ink-3); }
+
+    /* Teacher picker */
+    .tp-wrap { position: relative; }
+    .tp-results {
+      position: absolute; z-index: 30; top: 100%; left: 0; right: 0;
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto; margin-top: 4px;
+    }
+    .tp-results[hidden] { display: none; }
+    .tp-row { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .tp-row:last-child { border-bottom: none; }
+    .tp-row:hover, .tp-row.active { background: var(--paper); }
+    .tp-row-name { font-size: 0.88rem; font-weight: 600; color: var(--ink); }
+    .tp-row-meta { font-size: 0.74rem; color: var(--ink-3); margin-top: 1px; }
+    .tp-empty { padding: 12px; font-size: 0.82rem; color: var(--ink-3); text-align: center; }
+
+    .selected-teacher {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 13px; border-radius: 10px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      font-size: 0.85rem; color: #78350f;
+    }
+    .selected-teacher[hidden] { display: none; }
+    .st-name { font-weight: 700; }
+    .st-clear {
+      margin-left: auto; background: none; border: none; cursor: pointer;
+      color: #92400e; font-size: 0.78rem; font-weight: 600; text-decoration: underline;
+      font-family: inherit;
+    }
+
+    /* ── Progress rail ──────────────────────────────────────── */
+    .prog-rail {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; margin-bottom: 18px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      box-shadow: var(--shadow-sm);
+    }
+    .pr-bar-wrap { flex: 1; min-width: 160px; height: 7px; background: var(--paper); border-radius: 99px; overflow: hidden; }
+    .pr-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#d97706,#b45309); transition: width .25s; }
+    .pr-count { font-size: 0.82rem; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+    .pr-mean { font-size: 0.82rem; color: var(--ink-3); white-space: nowrap; }
+    .pr-mean strong { color: #b45309; font-size: 1rem; }
+
+    /* ── Domain + item cards ────────────────────────────────── */
+    .domain-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 4px solid var(--d-col, #d97706);
+      border-radius: 12px; margin-bottom: 14px; overflow: hidden;
+    }
+    .domain-head {
+      width: 100%; font-family: inherit; text-align: left; cursor: pointer;
+      border: none; border-bottom: 1px solid var(--border);
+      padding: 15px 18px; background: var(--white);
+      display: flex; justify-content: space-between; align-items: center; gap: 14px;
+      transition: background .14s;
+    }
+    .domain-head:hover { background: var(--paper); }
+    .domain-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .dh-title { font-family: 'Lora', serif; font-size: 1rem; font-weight: 600; color: var(--ink); }
+    .dh-sub { font-size: 0.76rem; color: var(--ink-3); margin-top: 2px; }
+    .dh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .dh-chev { color: var(--ink-3); transition: transform .18s; }
+    .domain-head[aria-expanded="true"] .dh-chev { transform: rotate(90deg); }
+    .domain-body { padding: 4px 18px 18px; }
+    .domain-body[hidden] { display: none; }
+
+    .dh-pill {
+      font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      background: var(--paper); color: var(--ink-3); border: 1px solid var(--border);
+    }
+    .dh-pill.is-done { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+
+    .item-row { padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .item-row:last-child { border-bottom: none; }
+    .item-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 4px; flex-wrap: wrap; }
+    .item-id {
+      font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500;
+      color: var(--ink-3); background: var(--paper); padding: 2px 7px; border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+    .item-title { font-size: 0.9rem; font-weight: 600; color: var(--ink); flex: 1; min-width: 200px; }
+    .item-rubric {
+      font-size: 0.79rem; color: var(--ink-2); line-height: 1.55;
+      background: var(--paper); border-radius: 8px; padding: 9px 11px; margin: 8px 0 10px;
+      border: 1px solid var(--border);
+    }
+    .item-rubric[hidden] { display: none; }
+    .rubric-toggle {
+      background: none; border: none; cursor: pointer; font-family: inherit;
+      font-size: 0.73rem; font-weight: 700; color: #b45309; padding: 0;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    .score-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .score-btn {
+      flex: 1; min-width: 92px; padding: 9px 8px; border-radius: 9px;
+      border: 2px solid var(--border); background: var(--paper); cursor: pointer;
+      font-family: inherit; text-align: center; color: var(--ink-3);
+      display: flex; flex-direction: column; gap: 2px; transition: all .14s;
+    }
+    .score-btn:hover { border-color: var(--ink-2); color: var(--ink); background: var(--white); }
+    .score-btn .sb-num { font-size: 1.15rem; font-weight: 900; line-height: 1; }
+    .score-btn .sb-lbl { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+    .score-btn.sel-1 { background: #fef2f2; border-color: #dc2626; color: #991b1b; }
+    .score-btn.sel-2 { background: #fffbeb; border-color: #d97706; color: #92400e; }
+    .score-btn.sel-3 { background: #ecfdf5; border-color: #059669; color: #065f46; }
+    .score-btn.sel-4 { background: #eff6ff; border-color: #2563eb; color: #1e40af; }
+    .score-btn.is-na { flex: none; min-width: 70px; }
+    .score-btn.sel-na { background: #f1f5f9; border-color: #64748b; color: #334155; }
+
+    .item-note {
+      width: 100%; margin-top: 9px; padding: 8px 11px; min-height: 54px;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      font-family: inherit; font-size: 0.84rem; color: var(--ink);
+      resize: vertical; line-height: 1.5; background: var(--white);
+    }
+    .item-note:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
+
+    /* ── Narrative + actions ────────────────────────────────── */
+    .narr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .narr-grid { grid-template-columns: 1fr; } }
+    .narr-block label {
+      display: block; font-size: 0.76rem; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .narr-block textarea {
+      width: 100%; min-height: 120px; padding: 10px 12px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      font-family: inherit; font-size: 0.875rem; color: var(--ink);
+      resize: vertical; line-height: 1.55; background: var(--white);
+    }
+    .narr-block textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
+    .narr-hint { font-size: 0.74rem; color: var(--ink-3); margin-top: 4px; line-height: 1.45; }
+
+    .action-bar {
+      position: sticky; bottom: 0; z-index: 25;
+      background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+      padding: 13px 18px; margin-top: 20px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      box-shadow: 0 -3px 14px rgba(15,23,42,0.07);
+    }
+    .ab-status { font-size: 0.82rem; color: var(--ink-3); }
+    .ab-status.is-error { color: #b91c1c; font-weight: 600; }
+    .ab-status.is-ok { color: #065f46; font-weight: 600; }
+    .ab-btns { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .gate-msg {
+      background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #d97706;
+      border-radius: 10px; padding: 14px 16px; font-size: 0.86rem;
+      color: #78350f; line-height: 1.6;
+    }
+    .gate-msg[hidden] { display: none; }
+    #formArea[hidden] { display: none; }
+  </style>
+</head>
+<body data-page-accent="amber">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <header class="page-hero" data-accent="amber">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <div class="page-hero__eyebrow">Appraisal System · F2</div>
+        <h1 class="page-hero__title">Class Observation Entry</h1>
+        <p class="page-hero__desc">
+          Score a teacher's lesson against F2 — Class Observation — during your on-site visit.
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <section class="page-info-strip" data-accent="amber">
+    <div class="page-info-strip__inner">
+      <p>
+        This page records <strong>F2 — Class Observation</strong> only: the 45-item lesson observation
+        an Eduversal Subject Specialist scores live during an announced lesson. Items are filtered to
+        the teacher's appraisal level. F2 carries 50% of the formal appraisal.
+      </p>
+      <div class="page-info-strip__pills">
+        <span class="pip">Written by you — the observing specialist</span>
+        <span class="pip">Read by the teacher once shared</span>
+        <span class="pip">Framework: Appraisal v2.0</span>
+        <span class="pip" data-es-ref="17.8" role="button" tabindex="0" title="Eduversal Academic Standards madde 17.8">ES 17.8</span>
+      </div>
+      <p class="page-info-strip__callout">
+        F1 (Administration), F3 (Work Inspection) and F4 (Student Survey) are collected on their own
+        schedule by the partner school and are not part of this form.
+      </p>
+    </div>
+  </section>
+
+  <div class="page-wrap">
+    <div class="gate-msg" id="gateMsg" hidden></div>
+
+    <div id="formArea" hidden>
+      <!-- Setup -->
+      <div class="setup-card">
+        <div class="sc-head">
+          <h2>Observation Setup</h2>
+          <span class="sc-head-sub">Who you observed, and when</span>
+        </div>
+
+        <div class="selected-teacher" id="selectedTeacher" hidden>
+          <span class="st-name" id="stName">—</span>
+          <span id="stMeta">—</span>
+          <button type="button" class="st-clear" id="stClear">change teacher</button>
+        </div>
+
+        <div class="setup-grid" id="setupGrid">
+          <div class="form-group tp-wrap" id="tpGroup">
+            <label class="form-label" for="teacherSearch">Teacher</label>
+            <input class="form-input" id="teacherSearch" type="text" autocomplete="off"
+                   placeholder="Search by name or email…">
+            <div class="tp-results" id="tpResults" hidden></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="obsDate">Observation date</label>
+            <input class="form-input" id="obsDate" type="date">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="obsClass">Class / year group</label>
+            <input class="form-input" id="obsClass" type="text" placeholder="e.g. Year 8B">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="obsTopic">Lesson topic</label>
+            <input class="form-input" id="obsTopic" type="text" placeholder="e.g. Linear equations">
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="prog-rail">
+        <span class="pr-count" id="prCount">0 / 0 scored</span>
+        <div class="pr-bar-wrap"><div class="pr-bar" id="prBar"></div></div>
+        <span class="pr-mean">F2 mean <strong id="prMean">—</strong></span>
+      </div>
+
+      <!-- Domains render here -->
+      <div id="domainHost"></div>
+
+      <!-- Narrative -->
+      <div class="setup-card">
+        <div class="sc-head">
+          <h2>Feedback</h2>
+          <span class="sc-head-sub">What the teacher will read when you share this</span>
+        </div>
+        <div class="narr-grid">
+          <div class="narr-block">
+            <label for="narrGlow">Glow — what worked</label>
+            <textarea id="narrGlow" placeholder="Name the specific practice you saw and its effect on learning…"></textarea>
+            <div class="narr-hint">Be concrete: what happened, and what it did for the students.</div>
+          </div>
+          <div class="narr-block">
+            <label for="narrGrow">Grow — what to develop</label>
+            <textarea id="narrGrow" placeholder="Name the one thing that would most improve the next lesson…"></textarea>
+            <div class="narr-hint">One priority, not a list.</div>
+          </div>
+        </div>
+        <div class="narr-block" style="margin-top:16px;">
+          <label for="narrGo">Go — the agreed next action</label>
+          <textarea id="narrGo" style="min-height:90px;"
+                    placeholder="What the teacher will do, by when, and how you will both check it…"></textarea>
+          <div class="narr-hint">All three parts — what, by when, how checked — so it can be followed up next visit.</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="action-bar">
+        <span class="ab-status" id="abStatus">Not saved yet</span>
+        <div class="ab-btns">
+          <button class="btn-cancel" id="btnSaveDraft">Save Draft</button>
+          <button class="btn-primary" id="btnShare">Share with teacher</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      collection, query, where, orderBy, limit, getDocs,
+      doc, addDoc, setDoc, serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    // F2 is frameworks['1'] in appraisal-framework-v2.json. The file is already
+    // mirrored into dist/references-data/frameworks/ by build.js (it is read
+    // from Academic Hub/resources), so this page reads it there rather than
+    // adding a fourth copy of the framework to the repo.
+    const FRAMEWORK_URL = 'references-data/frameworks/appraisal-framework-v2.json';
+    const LEVEL_ORDER   = ['induction', 'developing', 'proficient', 'lead'];
+    const DOMAIN_COLS   = ['#4338ca', '#7c3aed', '#0891b2', '#059669'];
+
+    let F2 = null;              // { title, domains: {...} }
+    let SCALE = [];             // [{value,label}]
+    let profile = null;
+    let teacher = null;         // { uid, name, email, school, schoolId, subject, level }
+    let scores = {};            // itemId -> 1..4 | 'na'
+    let notes  = {};            // itemId -> string
+    let docId  = null;          // set after first save
+    let allTeachers = null;     // lazy-loaded cache
+
+    // ── Level filtering ────────────────────────────────────────
+    // Each item carries visible_from; an item shows when the teacher's level is
+    // at or above it. Unknown/missing level falls back to the widest set
+    // (induction) so nothing is silently dropped.
+    function itemVisible(item, level) {
+      const need = LEVEL_ORDER.indexOf(item.visible_from || 'induction');
+      const have = LEVEL_ORDER.indexOf(level || 'induction');
+      if (need < 0) return true;
+      return have >= need;
+    }
+    function visibleItems() {
+      if (!F2) return [];
+      const lvl = teacher?.level || 'induction';
+      return Object.values(F2.domains)
+        .flatMap(d => (d.items || []).filter(i => itemVisible(i, lvl)));
+    }
+
+    // ── Scoring ────────────────────────────────────────────────
+    // 'na' means not observed — it is excluded from the mean rather than
+    // counted as zero, which would silently punish the teacher.
+    function scoredValues() {
+      return visibleItems()
+        .map(i => scores[i.id])
+        .filter(v => typeof v === 'number');
+    }
+    function f2Mean() {
+      const v = scoredValues();
+      if (!v.length) return null;
+      return (v.reduce((a, b) => a + b, 0) / v.length).toFixed(2);
+    }
+    function addressedCount() {
+      return visibleItems().filter(i => scores[i.id] !== undefined).length;
+    }
+
+    function refreshProgress() {
+      const total = visibleItems().length;
+      const done  = addressedCount();
+      $('prCount').textContent = `${done} / ${total} scored`;
+      $('prBar').style.width = total ? `${(done / total) * 100}%` : '0%';
+      $('prMean').textContent = f2Mean() || '—';
+      // Per-domain pills
+      Object.entries(F2.domains).forEach(([key, d]) => {
+        const items = (d.items || []).filter(i => itemVisible(i, teacher?.level));
+        const n = items.filter(i => scores[i.id] !== undefined).length;
+        const pill = document.querySelector(`[data-dpill="${key}"]`);
+        if (pill) {
+          pill.textContent = `${n}/${items.length}`;
+          pill.classList.toggle('is-done', items.length > 0 && n === items.length);
+        }
+      });
+    }
+
+    // ── Render ─────────────────────────────────────────────────
+    function renderDomains() {
+      const host = $('domainHost');
+      const lvl = teacher?.level || 'induction';
+
+      host.innerHTML = Object.entries(F2.domains).map(([key, d], di) => {
+        const items = (d.items || []).filter(i => itemVisible(i, lvl));
+        if (!items.length) return '';
+
+        const rows = items.map(item => {
+          const btns = SCALE.map(s => `
+            <button type="button" class="score-btn" data-item="${esc(item.id)}" data-val="${s.value}">
+              <span class="sb-num">${s.value}</span>
+              <span class="sb-lbl">${esc(s.label)}</span>
+            </button>`).join('') + `
+            <button type="button" class="score-btn is-na" data-item="${esc(item.id)}" data-val="na">
+              <span class="sb-num">–</span>
+              <span class="sb-lbl">Not seen</span>
+            </button>`;
+
+          const rubricHtml = Object.keys(item.rubric || {})
+            .sort((a, b) => Number(b) - Number(a))
+            .map(k => `<div><strong>${esc(k)} — ${esc((SCALE.find(s => String(s.value) === String(k)) || {}).label || '')}:</strong> ${esc(item.rubric[k])}</div>`)
+            .join('');
+
+          return `
+            <div class="item-row">
+              <div class="item-head">
+                <span class="item-id">${esc(item.id)}</span>
+                <span class="item-title">${esc(item.title)}</span>
+                ${rubricHtml ? `<button type="button" class="rubric-toggle" data-rubric="${esc(item.id)}">rubric</button>` : ''}
+              </div>
+              ${rubricHtml ? `<div class="item-rubric" id="rub-${esc(item.id)}" hidden>${rubricHtml}</div>` : ''}
+              <div class="score-row">${btns}</div>
+              <textarea class="item-note" data-note="${esc(item.id)}"
+                        placeholder="Evidence for this score — what you actually saw…"></textarea>
+            </div>`;
+        }).join('');
+
+        return `
+          <div class="domain-card" style="--d-col:${DOMAIN_COLS[di % DOMAIN_COLS.length]};">
+            <button type="button" class="domain-head" aria-expanded="${di === 0 ? 'true' : 'false'}"
+                    aria-controls="dom-${esc(key)}" data-domain-toggle>
+              <span>
+                <span class="dh-title">${esc(d.title || d.name || 'Domain')}</span>
+                <span class="dh-sub">${items.length} item${items.length === 1 ? '' : 's'} at this level</span>
+              </span>
+              <span class="dh-right">
+                <span class="dh-pill" data-dpill="${esc(key)}">0/${items.length}</span>
+                <svg class="dh-chev" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+              </span>
+            </button>
+            <div class="domain-body" id="dom-${esc(key)}" ${di === 0 ? '' : 'hidden'}>${rows}</div>
+          </div>`;
+      }).join('');
+
+      wireDomainEvents();
+      restoreInputs();
+      refreshProgress();
+    }
+
+    function restoreInputs() {
+      Object.entries(scores).forEach(([id, val]) => {
+        document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
+          b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
+          if (String(b.dataset.val) === String(val)) b.classList.add(val === 'na' ? 'sel-na' : `sel-${val}`);
+        });
+      });
+      Object.entries(notes).forEach(([id, txt]) => {
+        const ta = document.querySelector(`[data-note="${CSS.escape(id)}"]`);
+        if (ta) ta.value = txt;
+      });
+    }
+
+    function wireDomainEvents() {
+      document.querySelectorAll('[data-domain-toggle]').forEach(head => {
+        head.addEventListener('click', () => {
+          const body = document.getElementById(head.getAttribute('aria-controls'));
+          if (!body) return;
+          const open = head.getAttribute('aria-expanded') === 'true';
+          head.setAttribute('aria-expanded', open ? 'false' : 'true');
+          body.hidden = open;
+        });
+      });
+
+      document.querySelectorAll('[data-rubric]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const el = document.getElementById(`rub-${btn.dataset.rubric}`);
+          if (el) el.hidden = !el.hidden;
+        });
+      });
+
+      document.querySelectorAll('.score-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.item;
+          const raw = btn.dataset.val;
+          const val = raw === 'na' ? 'na' : Number(raw);
+          // Clicking the selected score again clears it.
+          if (scores[id] === val) delete scores[id]; else scores[id] = val;
+          document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
+            b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
+          });
+          if (scores[id] !== undefined) {
+            btn.classList.add(scores[id] === 'na' ? 'sel-na' : `sel-${scores[id]}`);
+          }
+          markDirty();
+          refreshProgress();
+        });
+      });
+
+      document.querySelectorAll('[data-note]').forEach(ta => {
+        ta.addEventListener('input', () => { notes[ta.dataset.note] = ta.value; markDirty(); });
+      });
+    }
+
+    function markDirty() {
+      const el = $('abStatus');
+      el.className = 'ab-status';
+      el.textContent = 'Unsaved changes';
+    }
+
+    // ── Teacher picker ─────────────────────────────────────────
+    // Reads users/{uid} for Teachers Hub accounts. Loaded once and filtered in
+    // memory — the network is a few hundred teachers, so a query per keystroke
+    // would be wasteful and would need an index per field.
+    async function loadTeachers() {
+      if (allTeachers) return allTeachers;
+      const snap = await getDocs(query(
+        collection(window.db, 'users'),
+        where('role_teachershub', 'in', ['teachers_user', 'teachers_admin']),
+        limit(600)
+      ));
+      allTeachers = snap.docs.map(d => {
+        const u = d.data();
+        return {
+          // Local view-model, not a Firestore payload; it reaches Firestore as
+          // teacherUid. d.id IS the auth uid. // @lint-allow-uid
+          uid: d.id,
+          name: u.displayName || u.name || u.email || '(no name)',
+          email: (u.email || '').toLowerCase(),
+          school: u.school || '',
+          schoolId: u.schoolId || '',
+          subject: u.subject || '',
+          level: u.appraisal_level || 'induction'
+        };
+      });
+      return allTeachers;
+    }
+
+    function renderResults(list) {
+      const box = $('tpResults');
+      if (!list.length) {
+        box.innerHTML = '<div class="tp-empty">No teacher matches that search.</div>';
+        box.hidden = false;
+        return;
+      }
+      box.innerHTML = list.slice(0, 25).map(t => `
+        <div class="tp-row" data-uid="${esc(t.uid)}">
+          <div class="tp-row-name">${esc(t.name)}</div>
+          <div class="tp-row-meta">${esc([t.school, t.subject, t.email].filter(Boolean).join(' · '))}</div>
+        </div>`).join('');
+      box.hidden = false;
+      box.querySelectorAll('.tp-row').forEach(row => {
+        row.addEventListener('click', () => selectTeacher(row.dataset.uid));
+      });
+    }
+
+    function selectTeacher(uid) {
+      const t = (allTeachers || []).find(x => x.uid === uid);
+      if (!t) return;
+      teacher = t;
+      $('stName').textContent = t.name;
+      $('stMeta').textContent = [t.school, t.subject, `level: ${t.level}`].filter(Boolean).join(' · ');
+      $('selectedTeacher').hidden = false;
+      $('tpGroup').style.display = 'none';
+      $('tpResults').hidden = true;
+      // Level changes which items are visible, so re-render.
+      renderDomains();
+      markDirty();
+    }
+
+    // ── Save ───────────────────────────────────────────────────
+    function buildPayload(status) {
+      return {
+        // Identity — appraiserUid must be this user; the create rule pins it.
+        appraiserUid: window.currentUser.uid,
+        appraiserName: profile?.displayName || window.currentUser.email || '',
+        appraiserHub: 'centralhub',
+        teacherUid: teacher.uid,
+        teacherName: teacher.name,
+        schoolId: teacher.schoolId || null,
+        school: teacher.school || '',
+        subject: teacher.subject || '',
+        level: teacher.level || 'induction',
+        academicYear: (window.getCurrentAcademicYear && window.getCurrentAcademicYear()) || '',
+        // This form records F2 only — flagged so downstream readers do not
+        // mistake a partial record for a complete four-block appraisal.
+        sessionType: 'observation',
+        blocks: ['F2'],
+        partial: true,
+        observation: {
+          date: $('obsDate').value || '',
+          classGroup: $('obsClass').value || '',
+          topic: $('obsTopic').value || ''
+        },
+        scores: { ...scores },
+        notes: { ...notes },
+        f2Mean: f2Mean() ? Number(f2Mean()) : null,
+        narrative: {
+          glow: $('narrGlow').value || '',
+          grow: $('narrGrow').value || '',
+          go:   $('narrGo').value   || ''
+        },
+        status,
+        updatedAt: serverTimestamp()
+      };
+    }
+
+    async function save(status) {
+      const el = $('abStatus');
+      if (!teacher) {
+        el.className = 'ab-status is-error';
+        el.textContent = 'Pick a teacher before saving.';
+        return;
+      }
+      if (status === 'shared' && !scoredValues().length) {
+        el.className = 'ab-status is-error';
+        el.textContent = 'Score at least one item before sharing with the teacher.';
+        return;
+      }
+
+      el.className = 'ab-status';
+      el.textContent = 'Saving…';
+      const payload = buildPayload(status);
+
+      try {
+        if (docId) {
+          await setDoc(doc(window.db, 'teacher_appraisals', docId), payload, { merge: true });
+        } else {
+          const ref = await addDoc(collection(window.db, 'teacher_appraisals'), {
+            ...payload, createdAt: serverTimestamp()
+          });
+          docId = ref.id;
+        }
+      } catch (e) {
+        console.error(e);
+        el.className = 'ab-status is-error';
+        el.textContent = e?.code === 'permission-denied'
+          ? 'Not saved — you do not have permission to record this observation.'
+          : 'Not saved — please try again.';
+        return;
+      }
+
+      el.className = 'ab-status is-ok';
+      el.textContent = status === 'shared'
+        ? 'Shared with the teacher ✓'
+        : 'Draft saved ✓';
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    // CH dispatches authReady on `document`, not `window` (Common Mistake #13).
+    document.addEventListener('authReady', async ({ detail }) => {
+      profile = detail?.profile || window.userProfile || null;
+
+      try {
+        const fw = await fetch(FRAMEWORK_URL).then(r => {
+          if (!r.ok) throw new Error(`framework ${r.status}`);
+          return r.json();
+        });
+        F2 = fw.frameworks['1'];
+        SCALE = (fw.scoring_scale || []).slice().sort((a, b) => a.value - b.value);
+        if (!F2 || !F2.domains) throw new Error('F2 block missing from framework');
+      } catch (e) {
+        console.error(e);
+        $('gateMsg').innerHTML =
+          '<strong>Could not load the appraisal framework.</strong> The F2 item set is served from ' +
+          '<code>references-data/frameworks/appraisal-framework-v2.json</code>. Reload the page; if it keeps failing, tell an admin.';
+        $('gateMsg').hidden = false;
+        return;
+      }
+
+      $('formArea').hidden = false;
+      $('obsDate').value = new Date().toISOString().slice(0, 10);
+      renderDomains();
+
+      // Teacher search
+      let tmr = null;
+      $('teacherSearch').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        clearTimeout(tmr);
+        if (!q) { $('tpResults').hidden = true; return; }
+        tmr = setTimeout(async () => {
+          const list = await loadTeachers();
+          renderResults(list.filter(t =>
+            t.name.toLowerCase().includes(q) || t.email.includes(q) || (t.school || '').toLowerCase().includes(q)
+          ));
+        }, 180);
+      });
+      document.addEventListener('click', (e) => {
+        if (!$('tpGroup').contains(e.target)) $('tpResults').hidden = true;
+      });
+      $('stClear').addEventListener('click', () => {
+        teacher = null;
+        $('selectedTeacher').hidden = true;
+        $('tpGroup').style.display = '';
+        $('teacherSearch').value = '';
+        renderDomains();
+      });
+
+      ['obsDate', 'obsClass', 'obsTopic', 'narrGlow', 'narrGrow', 'narrGo']
+        .forEach(id => $(id).addEventListener('input', markDirty));
+
+      $('btnSaveDraft').addEventListener('click', () => save('draft'));
+      $('btnShare').addEventListener('click', () => save('shared'));
+    });
+  </script>
+</body>
+</html>

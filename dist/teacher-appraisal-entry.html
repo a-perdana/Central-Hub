@@ -1,14 +1,189 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Competency Admin — CentralHub</title>
+  <title>Class Observation Entry — CentralHub</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 24px 40px 48px; }
+
+    /* ── Setup card ─────────────────────────────────────────── */
+    .setup-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .sc-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+    .sc-head h2 { font-family: 'Lora', serif; font-size: 1.05rem; color: var(--ink); }
+    .sc-head-sub { font-size: 0.8rem; color: var(--ink-3); }
+
+    /* Teacher picker */
+    .tp-wrap { position: relative; }
+    .tp-results {
+      position: absolute; z-index: 30; top: 100%; left: 0; right: 0;
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto; margin-top: 4px;
+    }
+    .tp-results[hidden] { display: none; }
+    .tp-row { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .tp-row:last-child { border-bottom: none; }
+    .tp-row:hover, .tp-row.active { background: var(--paper); }
+    .tp-row-name { font-size: 0.88rem; font-weight: 600; color: var(--ink); }
+    .tp-row-meta { font-size: 0.74rem; color: var(--ink-3); margin-top: 1px; }
+    .tp-empty { padding: 12px; font-size: 0.82rem; color: var(--ink-3); text-align: center; }
+
+    .selected-teacher {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 13px; border-radius: 10px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      font-size: 0.85rem; color: #78350f;
+    }
+    .selected-teacher[hidden] { display: none; }
+    .st-name { font-weight: 700; }
+    .st-clear {
+      margin-left: auto; background: none; border: none; cursor: pointer;
+      color: #92400e; font-size: 0.78rem; font-weight: 600; text-decoration: underline;
+      font-family: inherit;
+    }
+
+    /* ── Progress rail ──────────────────────────────────────── */
+    .prog-rail {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; margin-bottom: 18px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      box-shadow: var(--shadow-sm);
+    }
+    .pr-bar-wrap { flex: 1; min-width: 160px; height: 7px; background: var(--paper); border-radius: 99px; overflow: hidden; }
+    .pr-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#d97706,#b45309); transition: width .25s; }
+    .pr-count { font-size: 0.82rem; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+    .pr-mean { font-size: 0.82rem; color: var(--ink-3); white-space: nowrap; }
+    .pr-mean strong { color: #b45309; font-size: 1rem; }
+
+    /* ── Domain + item cards ────────────────────────────────── */
+    .domain-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 4px solid var(--d-col, #d97706);
+      border-radius: 12px; margin-bottom: 14px; overflow: hidden;
+    }
+    .domain-head {
+      width: 100%; font-family: inherit; text-align: left; cursor: pointer;
+      border: none; border-bottom: 1px solid var(--border);
+      padding: 15px 18px; background: var(--white);
+      display: flex; justify-content: space-between; align-items: center; gap: 14px;
+      transition: background .14s;
+    }
+    .domain-head:hover { background: var(--paper); }
+    .domain-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .dh-title { font-family: 'Lora', serif; font-size: 1rem; font-weight: 600; color: var(--ink); }
+    .dh-sub { font-size: 0.76rem; color: var(--ink-3); margin-top: 2px; }
+    .dh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .dh-chev { color: var(--ink-3); transition: transform .18s; }
+    .domain-head[aria-expanded="true"] .dh-chev { transform: rotate(90deg); }
+    .domain-body { padding: 4px 18px 18px; }
+    .domain-body[hidden] { display: none; }
+
+    .dh-pill {
+      font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      background: var(--paper); color: var(--ink-3); border: 1px solid var(--border);
+    }
+    .dh-pill.is-done { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+
+    .item-row { padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .item-row:last-child { border-bottom: none; }
+    .item-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 4px; flex-wrap: wrap; }
+    .item-id {
+      font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500;
+      color: var(--ink-3); background: var(--paper); padding: 2px 7px; border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+    .item-title { font-size: 0.9rem; font-weight: 600; color: var(--ink); flex: 1; min-width: 200px; }
+    .item-rubric {
+      font-size: 0.79rem; color: var(--ink-2); line-height: 1.55;
+      background: var(--paper); border-radius: 8px; padding: 9px 11px; margin: 8px 0 10px;
+      border: 1px solid var(--border);
+    }
+    .item-rubric[hidden] { display: none; }
+    .rubric-toggle {
+      background: none; border: none; cursor: pointer; font-family: inherit;
+      font-size: 0.73rem; font-weight: 700; color: #b45309; padding: 0;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    .score-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .score-btn {
+      flex: 1; min-width: 92px; padding: 9px 8px; border-radius: 9px;
+      border: 2px solid var(--border); background: var(--paper); cursor: pointer;
+      font-family: inherit; text-align: center; color: var(--ink-3);
+      display: flex; flex-direction: column; gap: 2px; transition: all .14s;
+    }
+    .score-btn:hover { border-color: var(--ink-2); color: var(--ink); background: var(--white); }
+    .score-btn .sb-num { font-size: 1.15rem; font-weight: 900; line-height: 1; }
+    .score-btn .sb-lbl { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+    .score-btn.sel-1 { background: #fef2f2; border-color: #dc2626; color: #991b1b; }
+    .score-btn.sel-2 { background: #fffbeb; border-color: #d97706; color: #92400e; }
+    .score-btn.sel-3 { background: #ecfdf5; border-color: #059669; color: #065f46; }
+    .score-btn.sel-4 { background: #eff6ff; border-color: #2563eb; color: #1e40af; }
+    .score-btn.is-na { flex: none; min-width: 70px; }
+    .score-btn.sel-na { background: #f1f5f9; border-color: #64748b; color: #334155; }
+
+    .item-note {
+      width: 100%; margin-top: 9px; padding: 8px 11px; min-height: 54px;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      font-family: inherit; font-size: 0.84rem; color: var(--ink);
+      resize: vertical; line-height: 1.5; background: var(--white);
+    }
+    .item-note:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
+
+    /* ── Narrative + actions ────────────────────────────────── */
+    .narr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .narr-grid { grid-template-columns: 1fr; } }
+    .narr-block label {
+      display: block; font-size: 0.76rem; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .narr-block textarea {
+      width: 100%; min-height: 120px; padding: 10px 12px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      font-family: inherit; font-size: 0.875rem; color: var(--ink);
+      resize: vertical; line-height: 1.55; background: var(--white);
+    }
+    .narr-block textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
+    .narr-hint { font-size: 0.74rem; color: var(--ink-3); margin-top: 4px; line-height: 1.45; }
+
+    .action-bar {
+      position: sticky; bottom: 0; z-index: 25;
+      background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+      padding: 13px 18px; margin-top: 20px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      box-shadow: 0 -3px 14px rgba(15,23,42,0.07);
+    }
+    .ab-status { font-size: 0.82rem; color: var(--ink-3); }
+    .ab-status.is-error { color: #b91c1c; font-weight: 600; }
+    .ab-status.is-ok { color: #065f46; font-weight: 600; }
+    .ab-btns { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .gate-msg {
+      background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #d97706;
+      border-radius: 10px; padding: 14px 16px; font-size: 0.86rem;
+      color: #78350f; line-height: 1.6;
+    }
+    .gate-msg[hidden] { display: none; }
+    #formArea[hidden] { display: none; }
+  </style>
+</head>
+<body data-page-accent="amber">
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
   <style>
   .btn-my-tasks {
     font-family: 'DM Sans', sans-serif;
@@ -3650,1276 +3825,522 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 });
 </script>
 
-  <style>
-    :root { --accent: #0d9488; --accent-dk: #0f766e; --accent-2: #ccfbf1; }
 
-    /* ===== HERO ===== */
-    /* Competency Admin — Operations family (slate). Canonical .page-hero
-       comes from shared-styles.css; see docs/architecture/DESIGN_SYSTEM.md. */
-
-    /* ===== PAGE WRAP ===== */
-    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 28px 40px 64px; }
-
-    /* ===== INFO STRIP (hero-altı bilgilendirme — reviewer'a akışı + sorumluluğu anlatır) ===== */
-    .info-strip {
-      background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
-      border: 1px solid #99f6e4;
-      border-left: 4px solid #0d9488;
-      border-radius: 12px;
-      padding: 16px 20px;
-      margin: 0 0 24px;
-      display: flex; gap: 14px; align-items: flex-start;
-    }
-    .info-strip__icon { font-size: 22px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
-    .info-strip__body { flex: 1; min-width: 0; }
-    .info-strip__title {
-      font-size: 15px; font-weight: 700; color: #0f766e;
-      margin: 0 0 4px; letter-spacing: -0.01em;
-    }
-    .info-strip__lede {
-      font-size: 13px; color: #134e4a; line-height: 1.55;
-      margin: 0 0 12px;
-    }
-    .info-strip__lede strong { color: #0f766e; font-weight: 700; }
-
-    /* Numbered flow — vertical list of "1 → 2 → 3" steps. Each step is one sentence. */
-    .info-strip__flow {
-      display: grid; gap: 8px;
-      margin: 0 0 12px;
-      padding: 0; list-style: none;
-      counter-reset: flow-step;
-    }
-    .info-strip__flow > li {
-      position: relative;
-      padding: 8px 12px 8px 38px;
-      background: rgba(255,255,255,0.55);
-      border: 1px solid rgba(13,148,136,0.18);
-      border-radius: 8px;
-      font-size: 12.5px; color: #134e4a; line-height: 1.5;
-      counter-increment: flow-step;
-    }
-    .info-strip__flow > li::before {
-      content: counter(flow-step);
-      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-      width: 20px; height: 20px; border-radius: 50%;
-      background: #0d9488; color: #fff;
-      font-size: 11px; font-weight: 700;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .info-strip__flow strong { color: #0f766e; font-weight: 700; }
-
-    /* Status pills — inline mini-badges for review states */
-    .info-strip__pill {
-      display: inline-block;
-      padding: 1px 7px; border-radius: 4px;
-      font-size: 11px; font-weight: 600; letter-spacing: 0.01em;
-      vertical-align: 1px;
-    }
-    .info-strip__pill--pending  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-    .info-strip__pill--review   { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
-    .info-strip__pill--approved { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-    .info-strip__pill--rejected { background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3; }
-
-    /* Footnote block — what's NOT in scope, who can use, where to look for the rest */
-    .info-strip__foot {
-      display: flex; flex-wrap: wrap; gap: 8px 16px;
-      padding-top: 10px;
-      border-top: 1px dashed rgba(13,148,136,0.25);
-      font-size: 12px; color: #134e4a;
-    }
-    .info-strip__foot strong { color: #0f766e; font-weight: 700; }
-    .info-strip__foot code {
-      background: rgba(13,148,136,0.10); color: #0f766e;
-      padding: 1px 5px; border-radius: 3px;
-      font-family: 'DM Mono', monospace; font-size: 11.5px;
-    }
-
-    .info-strip__links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; font-weight: 600; }
-    .info-strip__links a {
-      color: #0d9488; text-decoration: none;
-      padding: 5px 10px; border-radius: 6px;
-      background: rgba(255,255,255,0.65);
-      border: 1px solid rgba(13,148,136,0.22);
-      transition: all 0.15s;
-    }
-    .info-strip__links a:hover {
-      background: #0d9488; color: #fff; border-color: #0d9488;
-    }
-
-    /* ===== STATS ===== */
-    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
-    .stat-card {
-      background: linear-gradient(145deg, #fff 0%, #fbfaf8 100%);
-      border: 1px solid #e5e0d8; border-radius: var(--radius);
-      padding: 20px 22px; box-shadow: var(--shadow-sm);
-      transition: box-shadow 0.2s, transform 0.2s;
-    }
-    .stat-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
-    .stat-card:nth-child(1) { background: linear-gradient(145deg,#fff 0%,#f0fdfa 100%); border-color: #99f6e4; }
-    .stat-card:nth-child(2) { background: linear-gradient(145deg,#fff 0%,#fef9f0 100%); border-color: #fed7aa; }
-    .stat-card:nth-child(3) { background: linear-gradient(145deg,#fff 0%,#f0fdf4 100%); border-color: #bbf7d0; }
-    .stat-card:nth-child(4) { background: linear-gradient(145deg,#fff 0%,#f5f3ff 100%); border-color: #ddd6fe; }
-    .stat-num { font-size: 2rem; font-weight: 800; color: var(--ink); line-height: 1; margin-bottom: 4px; }
-    .stat-label { font-size: 0.78rem; color: var(--ink-3); font-weight: 500; }
-
-    /* ===== TABS ===== */
-    .tab-bar {
-      display: flex; gap: 2px; border-bottom: 2px solid var(--border);
-      margin-bottom: 24px;
-    }
-    .tab {
-      padding: 10px 20px; font-size: 13px; font-weight: 600; color: var(--ink-3);
-      cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;
-      transition: color .15s; white-space: nowrap;
-    }
-    .tab:hover { color: var(--ink); }
-    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-    /* ===== EVIDENCE REVIEW LIST ===== */
-    .evidence-list { display: flex; flex-direction: column; gap: 12px; }
-
-    .ev-card {
-      background: #fff; border: 1px solid var(--border); border-radius: 14px;
-      overflow: hidden; box-shadow: var(--shadow-sm); transition: box-shadow .2s;
-    }
-    .ev-card:hover { box-shadow: var(--shadow); }
-    .ev-card.status-pending { border-left: 3px solid #f59e0b; }
-    .ev-card.status-approved { border-left: 3px solid #22c55e; }
-    .ev-card.status-rejected { border-left: 3px solid #ef4444; }
-    .ev-card.status-under-review { border-left: 3px solid #3b82f6; }
-
-    .ev-card-header {
-      padding: 16px 18px; display: flex; align-items: flex-start; gap: 12px;
-    }
-    .ev-avatar {
-      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(135deg, var(--accent), #14b8a6);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: #fff;
-    }
-    .ev-body { flex: 1; min-width: 0; }
-    .ev-user { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
-    .ev-comp { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
-    .ev-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin-bottom: 8px; }
-    .ev-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .ev-date { font-size: 11px; color: var(--ink-3); }
-    .ev-file { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--accent); font-weight: 600; }
-
-    .platform-tag {
-      display: inline-flex; padding: 2px 8px; border-radius: 50px;
-      font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
-    }
-    .platform-tag.teachers { background: #ede9fe; color: #7c3aed; }
-    .platform-tag.academic { background: #ccfbf1; color: #0f766e; }
-
-    .ev-status-badge {
-      display: inline-flex; padding: 3px 10px; border-radius: 50px;
-      font-size: 11px; font-weight: 700;
-    }
-    .ev-status-badge.pending { background: #fef3c7; color: #92400e; }
-    .ev-status-badge.approved { background: #dcfce7; color: #15803d; }
-    .ev-status-badge.rejected { background: #ffe4e6; color: #be123c; }
-    .ev-status-badge.under-review { background: #dbeafe; color: #1d4ed8; }
-
-    .level-badge {
-      display: inline-flex; padding: 2px 8px; border-radius: 50px;
-      font-size: 10px; font-weight: 700;
-    }
-    .lvl-awareness { background: #e0f2fe; color: #0369a1; }
-    .lvl-practitioner { background: #fef3c7; color: #92400e; }
-    .lvl-advanced { background: #ede9fe; color: #6d28d9; }
-    .lvl-lead { background: #dcfce7; color: #15803d; }
-
-    /* ===== ACTION PANEL ===== */
-    .ev-actions {
-      padding: 14px 18px; border-top: 1px solid var(--border);
-      background: #fafaf8; display: flex; gap: 10px; align-items: flex-start;
-      flex-wrap: wrap;
-    }
-    .ev-note-input {
-      flex: 1; min-width: 200px; padding: 9px 12px; border-radius: 9px;
-      border: 1.5px solid var(--border); background: #fff;
-      font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink);
-      transition: border-color .15s;
-    }
-    .ev-note-input:focus { outline: none; border-color: var(--accent); }
-    .ev-note-input::placeholder { color: var(--ink-3); }
-    .btn-approve {
-      padding: 9px 18px; border-radius: 9px; border: none;
-      background: #22c55e; color: #fff; font-size: 13px; font-weight: 700;
-      cursor: pointer; font-family: 'DM Sans', sans-serif;
-      transition: all .15s; display: flex; align-items: center; gap: 6px;
-      white-space: nowrap;
-    }
-    .btn-approve:hover { background: #16a34a; }
-    .btn-reject {
-      padding: 9px 18px; border-radius: 9px; border: none;
-      background: #ef4444; color: #fff; font-size: 13px; font-weight: 700;
-      cursor: pointer; font-family: 'DM Sans', sans-serif;
-      transition: all .15s; display: flex; align-items: center; gap: 6px;
-      white-space: nowrap;
-    }
-    .btn-reject:hover { background: #dc2626; }
-    .btn-review {
-      padding: 9px 18px; border-radius: 9px;
-      border: 1.5px solid #3b82f6; background: #eff6ff; color: #1d4ed8;
-      font-size: 13px; font-weight: 700; cursor: pointer;
-      font-family: 'DM Sans', sans-serif; transition: all .15s; white-space: nowrap;
-    }
-    .btn-review:hover { background: #dbeafe; }
-
-    /* ===== CERTIFICATE ISSUE PANEL ===== */
-    .cert-issue-card {
-      background: #fff; border: 1px solid var(--border); border-radius: 14px;
-      padding: 22px; box-shadow: var(--shadow-sm); margin-bottom: 12px;
-    }
-    .cert-issue-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
-    .cert-issue-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-    .cert-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 180px; }
-    .cert-label { font-size: 11px; font-weight: 700; color: var(--ink-3); letter-spacing: .05em; text-transform: uppercase; }
-    .cert-select, .cert-input {
-      padding: 9px 12px; border-radius: 9px; border: 1.5px solid var(--border);
-      background: var(--paper); font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink);
-      transition: border-color .15s;
-    }
-    .cert-select:focus, .cert-input:focus { outline: none; border-color: var(--accent); background: #fff; }
-    .btn-issue-cert {
-      padding: 10px 22px; border-radius: 10px; border: none;
-      background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
-      cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .18s;
-      white-space: nowrap;
-    }
-    .btn-issue-cert:hover { background: var(--accent-dk); transform: translateY(-1px); }
-    .btn-issue-cert:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-
-    /* ===== ISSUED CERTS TABLE ===== */
-    .certs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .certs-table th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .07em; border-bottom: 2px solid var(--border); background: var(--paper); }
-    .certs-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); color: var(--ink); vertical-align: top; }
-    .certs-table tr:last-child td { border-bottom: none; }
-    .certs-table tr:hover td { background: #fafaf8; }
-
-    /* ===== FILTER BAR ===== */
-    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
-    .filter-chip {
-      padding: 6px 14px; border-radius: 50px; border: 1.5px solid var(--border);
-      background: #fff; font-size: 12px; font-weight: 600; color: var(--ink-3);
-      cursor: pointer; transition: all .15s;
-    }
-    .filter-chip:hover { border-color: var(--accent); color: var(--accent); }
-    .filter-chip.active { border-color: var(--accent); background: var(--accent-2); color: var(--accent); }
-
-    /* ===== EMPTY STATE ===== */
-    .empty-state { text-align: center; padding: 52px 20px; color: var(--ink-3); font-size: 14px; }
-    .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
-
-    /* ===== REVOKE CONFIRM ===== */
-    [data-confirming] { background: #ef4444 !important; }
-
-    /* ===== INLINE ERROR ===== */
-    .inline-err {
-      font-size: 12px; color: #dc2626; font-weight: 600;
-      background: #fee2e2; border-radius: 8px; padding: 7px 12px;
-      margin-top: 6px; display: none;
-    }
-    .inline-err.visible { display: block; }
-
-    /* ===== COMMENT THREAD ===== */
-    .ev-comments {
-      border-top: 1px solid var(--border);
-      background: #f9faf8;
-    }
-    .ev-comments-toggle {
-      width: 100%; padding: 9px 18px; background: none; border: none;
-      text-align: left; font-family: 'DM Sans', sans-serif; font-size: 12px;
-      font-weight: 600; color: var(--accent); cursor: pointer;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .ev-comments-toggle:hover { background: #f0fdf9; }
-    .ev-comments-body { display: none; padding: 10px 18px 14px; }
-    .ev-comments-body.open { display: block; }
-    .comment-item {
-      display: flex; gap: 8px; margin-bottom: 8px;
-    }
-    .comment-avatar {
-      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(135deg, #0d9488, #14b8a6);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 800; color: #fff;
-    }
-    .comment-bubble {
-      background: #fff; border: 1px solid var(--border);
-      border-radius: 10px; padding: 7px 11px; flex: 1;
-    }
-    .comment-author { font-size: 11px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
-    .comment-text { font-size: 12px; color: var(--ink-2); line-height: 1.5; }
-    .comment-date { font-size: 10px; color: var(--ink-3); margin-top: 3px; }
-    .comment-form { display: flex; gap: 8px; margin-top: 8px; }
-    .comment-input {
-      flex: 1; padding: 7px 11px; border-radius: 9px;
-      border: 1.5px solid var(--border); font-family: 'DM Sans', sans-serif;
-      font-size: 12px; color: var(--ink);
-    }
-    .comment-input:focus { outline: none; border-color: var(--accent); }
-    .btn-comment {
-      padding: 7px 14px; border-radius: 9px; border: none;
-      background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
-      cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap;
-    }
-    .btn-comment:hover { background: var(--accent-dk); }
-
-    /* ===== PAGE FOOTER (canonical — teal CTA accent matches admin hero) ===== */
-    .page-footer__cta-btn {
-      background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
-      box-shadow: 0 4px 14px rgba(13,148,136,0.35);
-    }
-    .page-footer__cta-btn:hover { box-shadow: 0 6px 18px rgba(13,148,136,0.48); }
-
-    /* ===== HEATMAP TAB ===== */
-    .heatmap-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
-    .hm-select {
-      padding: 7px 12px; border-radius: 9px; border: 1.5px solid var(--border);
-      background: #fff; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink);
-      cursor: pointer;
-    }
-    .hm-select:focus { outline: none; border-color: var(--accent); }
-
-    .heatmap-grid {
-      display: grid; gap: 12px;
-    }
-    .hm-domain-row {
-      background: #fff; border: 1px solid var(--border); border-radius: 12px;
-      overflow: hidden; box-shadow: var(--shadow-sm);
-    }
-    .hm-domain-head {
-      padding: 13px 18px; display: flex; align-items: center; justify-content: space-between;
-      cursor: pointer; user-select: none;
-    }
-    .hm-domain-head:hover { background: #f9faf8; }
-    .hm-domain-name { font-size: 13px; font-weight: 700; color: var(--ink); }
-    .hm-domain-pct { font-size: 12px; font-weight: 700; }
-    .hm-domain-bar-wrap { padding: 0 18px 14px; }
-    .hm-bar { height: 8px; background: #e5e7eb; border-radius: 99px; overflow: hidden; margin-bottom: 10px; }
-    .hm-bar-fill { height: 100%; border-radius: 99px; transition: width .5s; }
-
-    .hm-comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-    .hm-comp-cell {
-      border-radius: 9px; padding: 10px 12px; border: 1px solid transparent;
-      position: relative; overflow: hidden;
-    }
-    .hm-comp-name { font-size: 11px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
-    .hm-comp-bar { height: 4px; border-radius: 99px; margin-bottom: 4px; }
-    .hm-comp-count { font-size: 10px; color: var(--ink-3); }
-    .hm-heat-0 { background: #fef2f2; border-color: #fecaca; }
-    .hm-heat-1 { background: #fff7ed; border-color: #fed7aa; }
-    .hm-heat-2 { background: #fefce8; border-color: #fef08a; }
-    .hm-heat-3 { background: #f0fdf4; border-color: #bbf7d0; }
-    .hm-heat-4 { background: #f0fdfa; border-color: #99f6e4; }
-
-    /* ===== COHORT TAB ===== */
-    .cohort-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
-    .cohort-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-    .cohort-card {
-      background: #fff; border: 1px solid var(--border); border-radius: 12px;
-      overflow: hidden; box-shadow: var(--shadow-sm);
-    }
-    .cohort-card-head {
-      padding: 13px 18px; border-bottom: 1px solid var(--border);
-      font-size: 13px; font-weight: 700; color: var(--ink);
-    }
-    .cohort-card-body { padding: 14px 18px; }
-
-    .cohort-domain-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .cohort-domain-label { font-size: 11px; color: #64748b; min-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .cohort-bar-a { height: 7px; border-radius: 99px; transition: width .4s; }
-    .cohort-bar-b { height: 7px; border-radius: 99px; transition: width .4s; }
-    .cohort-pct { font-size: 11px; font-weight: 700; color: var(--ink); min-width: 32px; text-align: right; }
-
-    .cohort-legend { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-    .cohort-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
-    .cohort-legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
-
-    .cohort-compare-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .cohort-compare-table th { padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); border-bottom: 2px solid var(--border); background: #f8faf9; }
-    .cohort-compare-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    .cohort-compare-table tr:last-child td { border-bottom: none; }
-    .cohort-compare-table tr:hover td { background: #f9faf8; }
-    .cohort-diff-pos { color: #16a34a; font-weight: 700; }
-    .cohort-diff-neg { color: #dc2626; font-weight: 700; }
-    .cohort-diff-flat { color: #94a3b8; }
-
-    @media (max-width: 900px) {
-      .stats-row { grid-template-columns: repeat(2,1fr); }
-      .page-wrap { padding: 20px 16px 60px; }
-      .cohort-grid { grid-template-columns: 1fr; }
-    }
-  </style>
-</head>
-<body data-page-accent="slate">
-<a class="skip-link" href="#main-content">Skip to main content</a>
-
-
-<header class="page-hero" id="main-content" role="main" tabindex="-1" data-accent="slate" aria-label="Competency Admin header">
-  <div class="page-hero__inner">
-    <div class="page-hero__text">
-      <p class="page-hero__eyebrow">CentralHub · Admin</p>
-      <h1 class="page-hero__title">Competency Admin</h1>
-      <p class="page-hero__desc">Review evidence submissions, approve or reject competency claims, and issue official certificates to teachers and administrators.</p>
+  <header class="page-hero" id="main-content" role="main" tabindex="-1" data-accent="amber">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <div class="page-hero__eyebrow">Appraisal System · F2</div>
+        <h1 class="page-hero__title">Class Observation Entry</h1>
+        <p class="page-hero__desc">
+          Score a teacher's lesson against F2 — Class Observation — during your on-site visit.
+        </p>
+      </div>
     </div>
-  </div>
-</header>
+  </header>
 
-<div class="page-wrap">
-
-  <!-- INFO STRIP — HQ review queue context: where evidence comes from, what approval writes, who is responsible -->
-  <aside class="info-strip" role="note" aria-label="How Competency Admin works">
-    <div class="info-strip__icon" aria-hidden="true">🛡️</div>
-    <div class="info-strip__body">
-      <h2 class="info-strip__title">HQ review queue — all 3 hubs feed into here</h2>
-      <p class="info-strip__lede">
-        Each row is a user's claim: <strong>"I did X, please grant me a level on competency Y."</strong>
-        Your job is to read the evidence, decide, and leave guidance if you reject.
+  <section class="page-info-strip" data-accent="amber">
+    <div class="page-info-strip__inner">
+      <p>
+        This page records <strong>F2 — Class Observation</strong> only: the 45-item lesson observation
+        an Eduversal Subject Specialist scores live during an announced lesson. Items are filtered to
+        the teacher's appraisal level. F2 carries 50% of the formal appraisal.
       </p>
+      <div class="page-info-strip__pills">
+        <span class="pip">Written by you — the observing specialist</span>
+        <span class="pip">Read by the teacher once shared</span>
+        <span class="pip">Framework: Appraisal v2.0</span>
+        <span class="pip" data-es-ref="17.8" role="button" tabindex="0" title="Eduversal Academic Standards madde 17.8">ES 17.8</span>
+      </div>
+      <p class="page-info-strip__callout">
+        F1 (Administration), F3 (Work Inspection) and F4 (Student Survey) are collected on their own
+        schedule by the partner school and are not part of this form.
+      </p>
+    </div>
+  </section>
 
-      <ol class="info-strip__flow">
-        <li>A user submits evidence from <strong>their hub's Portfolio</strong> page (TH / AH / CH). It lands here as <span class="info-strip__pill info-strip__pill--pending">Pending</span></li>
-        <li>You mark it <span class="info-strip__pill info-strip__pill--review">Under Review</span>, read the description + attached file, then <span class="info-strip__pill info-strip__pill--approved">Approve</span> or <span class="info-strip__pill info-strip__pill--rejected">Reject</span> with a note</li>
-        <li>On <strong>Approve</strong>: the level is written to <code>user_competencies/{uid}.earned*</code> → user's Learning Path + Certificates update instantly</li>
-      </ol>
+  <div class="page-wrap">
+    <div class="gate-msg" id="gateMsg" hidden></div>
 
-      <div class="info-strip__foot">
-        <span><strong>Not in scope here:</strong> self-assessment ratings (private, live on each hub's Competency Framework page)</span>
-        <span><strong>Reviewers:</strong> <code>central_admin</code> only (other CH users see read-only)</span>
-        <span><strong>Other tabs:</strong> Heatmap spots under-represented competencies; Cohort Comparison contrasts two schools</span>
+    <div id="formArea" hidden>
+      <!-- Setup -->
+      <div class="setup-card">
+        <div class="sc-head">
+          <h2>Observation Setup</h2>
+          <span class="sc-head-sub">Who you observed, and when</span>
+        </div>
+
+        <div class="selected-teacher" id="selectedTeacher" hidden>
+          <span class="st-name" id="stName">—</span>
+          <span id="stMeta">—</span>
+          <button type="button" class="st-clear" id="stClear">change teacher</button>
+        </div>
+
+        <div class="setup-grid" id="setupGrid">
+          <div class="form-group tp-wrap" id="tpGroup">
+            <label class="form-label" for="teacherSearch">Teacher</label>
+            <input class="form-input" id="teacherSearch" type="text" autocomplete="off"
+                   placeholder="Search by name or email…">
+            <div class="tp-results" id="tpResults" hidden></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="obsDate">Observation date</label>
+            <input class="form-input" id="obsDate" type="date">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="obsClass">Class / year group</label>
+            <input class="form-input" id="obsClass" type="text" placeholder="e.g. Year 8B">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="obsTopic">Lesson topic</label>
+            <input class="form-input" id="obsTopic" type="text" placeholder="e.g. Linear equations">
+          </div>
+        </div>
       </div>
 
-      <div class="info-strip__links">
-        <a href="?track=teachers">Filter → Teachers</a>
-        <a href="?track=leaders">Filter → Leaders</a>
-        <a href="?track=specialists">Filter → Specialists</a>
+      <!-- Progress -->
+      <div class="prog-rail">
+        <span class="pr-count" id="prCount">0 / 0 scored</span>
+        <div class="pr-bar-wrap"><div class="pr-bar" id="prBar"></div></div>
+        <span class="pr-mean">F2 mean <strong id="prMean">—</strong></span>
+      </div>
+
+      <!-- Domains render here -->
+      <div id="domainHost"></div>
+
+      <!-- Narrative -->
+      <div class="setup-card">
+        <div class="sc-head">
+          <h2>Feedback</h2>
+          <span class="sc-head-sub">What the teacher will read when you share this</span>
+        </div>
+        <div class="narr-grid">
+          <div class="narr-block">
+            <label for="narrGlow">Glow — what worked</label>
+            <textarea id="narrGlow" placeholder="Name the specific practice you saw and its effect on learning…"></textarea>
+            <div class="narr-hint">Be concrete: what happened, and what it did for the students.</div>
+          </div>
+          <div class="narr-block">
+            <label for="narrGrow">Grow — what to develop</label>
+            <textarea id="narrGrow" placeholder="Name the one thing that would most improve the next lesson…"></textarea>
+            <div class="narr-hint">One priority, not a list.</div>
+          </div>
+        </div>
+        <div class="narr-block" style="margin-top:16px;">
+          <label for="narrGo">Go — the agreed next action</label>
+          <textarea id="narrGo" style="min-height:90px;"
+                    placeholder="What the teacher will do, by when, and how you will both check it…"></textarea>
+          <div class="narr-hint">All three parts — what, by when, how checked — so it can be followed up next visit.</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="action-bar">
+        <span class="ab-status" id="abStatus">Not saved yet</span>
+        <div class="ab-btns">
+          <button class="btn-cancel" id="btnSaveDraft">Save Draft</button>
+          <button class="btn-primary" id="btnShare">Share with teacher</button>
+        </div>
       </div>
     </div>
-  </aside>
-
-  <!-- STATS -->
-  <div class="stats-row" id="statsRow">
-    <div class="stat-card"><div class="skel" style="height:50px;"></div></div>
-    <div class="stat-card"><div class="skel" style="height:50px;"></div></div>
-    <div class="stat-card"><div class="skel" style="height:50px;"></div></div>
-    <div class="stat-card"><div class="skel" style="height:50px;"></div></div>
   </div>
 
-  <!-- TABS -->
-  <div class="tab-bar">
-    <div role="button" tabindex="0" class="tab active" onclick="switchTab('review', this)">Evidence Review</div>
-    <div role="button" tabindex="0" class="tab" onclick="switchTab('heatmap', this)">Network Heatmap</div>
-    <div role="button" tabindex="0" class="tab" onclick="switchTab('cohort', this)">Cohort Comparison</div>
-    <div role="button" tabindex="0" class="tab" onclick="switchTab('issue', this)">Issue Certificates</div>
-    <div role="button" tabindex="0" class="tab" onclick="switchTab('issued', this)">Issued Certificates</div>
-  </div>
+  <script type="module">
+    import {
+      collection, query, where, orderBy, limit, getDocs,
+      doc, addDoc, setDoc, serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-  <!-- TAB: EVIDENCE REVIEW -->
-  <div id="tab-review">
-    <div class="filter-bar">
-      <span style="font-size:12px;font-weight:600;color:var(--ink-3);">Status:</span>
-      <button class="filter-chip active" onclick="setEvFilter('all',this)">All</button>
-      <button class="filter-chip" onclick="setEvFilter('pending',this)">Pending</button>
-      <button class="filter-chip" onclick="setEvFilter('under-review',this)">Under Review</button>
-      <button class="filter-chip" onclick="setEvFilter('approved',this)">Approved</button>
-      <button class="filter-chip" onclick="setEvFilter('rejected',this)">Rejected</button>
-      <span style="font-size:12px;font-weight:600;color:var(--ink-3);margin-left:8px;">Platform:</span>
-      <button class="filter-chip active" onclick="setPlatFilter('all',this)">All</button>
-      <button class="filter-chip" onclick="setPlatFilter('teachers',this)">Teachers</button>
-      <button class="filter-chip" onclick="setPlatFilter('academic',this)">Academic</button>
-      <button class="filter-chip" onclick="setPlatFilter('central',this)">Specialists</button>
-    </div>
-    <div class="evidence-list" id="evidenceList">
-      <div class="skel" style="height:100px;border-radius:14px;"></div>
-      <div class="skel" style="height:100px;border-radius:14px;"></div>
-    </div>
-  </div>
-
-  <!-- TAB: NETWORK HEATMAP -->
-  <div id="tab-heatmap" style="display:none;">
-    <div class="heatmap-filters">
-      <select class="hm-select" id="hmPlatform" onchange="renderHeatmap()">
-        <option value="teachers">Teachers Hub</option>
-        <option value="academic">Academic Hub</option>
-        <option value="central">Central Hub (Specialists)</option>
-      </select>
-      <select class="hm-select" id="hmMetric" onchange="renderHeatmap()">
-        <option value="approved">Approved submissions</option>
-        <option value="pending">Pending submissions</option>
-        <option value="users">Unique users</option>
-      </select>
-    </div>
-    <div class="heatmap-grid" id="heatmapGrid">
-      <div class="skel" style="height:80px;border-radius:12px;"></div>
-      <div class="skel" style="height:80px;border-radius:12px;"></div>
-    </div>
-  </div>
-
-  <!-- TAB: COHORT COMPARISON -->
-  <div id="tab-cohort" style="display:none;">
-    <div class="cohort-filters">
-      <select class="hm-select" id="cohortPlatform" onchange="renderCohort()">
-        <option value="teachers">Teachers Hub</option>
-        <option value="academic">Academic Hub</option>
-        <option value="central">Central Hub (Specialists)</option>
-      </select>
-      <select class="hm-select" id="cohortA" onchange="renderCohort()">
-        <option value="">School A — select</option>
-      </select>
-      <select class="hm-select" id="cohortB" onchange="renderCohort()">
-        <option value="">School B — select</option>
-      </select>
-    </div>
-    <div class="cohort-legend">
-      <div class="cohort-legend-item"><div class="cohort-legend-dot" style="background:#0d9488;"></div><span id="legendA">School A</span></div>
-      <div class="cohort-legend-item"><div class="cohort-legend-dot" style="background:#7c3aed;"></div><span id="legendB">School B</span></div>
-    </div>
-    <div id="cohortContent">
-      <div style="color:var(--ink-3);font-size:13px;">Select two schools to compare their competency progress.</div>
-    </div>
-  </div>
-
-  <!-- TAB: ISSUE CERTIFICATES -->
-  <div id="tab-issue" style="display:none;">
-    <div class="cert-issue-card">
-      <div class="cert-issue-title">Issue Certificate Manually</div>
-      <div class="cert-issue-form">
-        <div class="cert-field">
-          <label class="cert-label">Platform</label>
-          <select class="cert-select" id="certPlatform">
-            <option value="teachers">Teachers Hub</option>
-            <option value="academic">Academic Hub</option>
-            <option value="central">Central Hub (Specialists)</option>
-          </select>
-        </div>
-        <div class="cert-field">
-          <label class="cert-label">User Email</label>
-          <input aria-label="user@school.sch.id" class="cert-input" id="certUserEmail" type="email" placeholder="user@school.sch.id">
-        </div>
-        <div class="cert-field">
-          <label class="cert-label">Domain</label>
-          <select class="cert-select" id="certDomain">
-            <option value="">— select platform first —</option>
-          </select>
-        </div>
-        <div class="cert-field">
-          <label class="cert-label">Note (optional)</label>
-          <input aria-label="e.g. Issued after portfolio review" class="cert-input" id="certNote" type="text" placeholder="e.g. Issued after portfolio review">
-        </div>
-        <button class="btn-issue-cert" onclick="issueCertificate()">🎓 Issue Certificate</button>
-      </div>
-      <div id="certIssueError" style="font-size:12px;color:#dc2626;margin-top:10px;display:none;"></div>
-      <div id="certIssueSuccess" style="font-size:13px;font-weight:600;color:#15803d;margin-top:10px;background:#dcfce7;border-radius:10px;padding:12px 14px;display:none;"></div>
-    </div>
-  </div>
-
-  <!-- TAB: ISSUED CERTIFICATES -->
-  <div id="tab-issued" style="display:none;">
-    <div id="issuedCertsWrap">
-      <div class="skel" style="height:60px;border-radius:10px;margin-bottom:8px;"></div>
-    </div>
-  </div>
-
-</div>
-
-<script src="firebase-config.js"></script>
-<script type="module" src="auth-guard.js"></script>
-<script type="module">
-import {
-  collection, doc, getDoc, getDocs, updateDoc, addDoc,
-  query, where, orderBy, serverTimestamp, limit, deleteDoc
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-// Domain catalogs aligned with the Cambridge-grounded competency_framework
-// Firestore docs (teachers/leaders/specialists). The legacy IDs that lived
-// here previously (curriculum/assessment/classroom/... + data-leadership/
-// curriculum-oversight/...) were no longer written by any app — fixed
-// alongside the same TH+AH legacy-ID Phase 1.1 / C.4.A bugs.
-const TEACHERS_DOMAINS = [
-  {id:'smc',name:'Subject Mastery & Curriculum Design'},
-  {id:'lcp',name:'Learner-Centred Pedagogy'},
-  {id:'afl',name:'Assessment for Learning'},
-  {id:'icp',name:'Innovative Classroom Practice'},
-  {id:'pie',name:'Professional Identity & Ethics'},
-  {id:'cce',name:'Collaboration & Community Engagement'},
-];
-const ACADEMIC_DOMAINS = [
-  {id:'evsi',name:'Educational Vision & School Improvement'},
-  {id:'cial',name:'Curriculum, Instruction & Assessment Leadership'},
-  {id:'pdpc',name:'People Development & Professional Capacity'},
-  {id:'ewsc',name:'Equity, Wellbeing & School Culture'},
-  {id:'eao',name:'Ethics, Accountability & Operations'},
-  {id:'fcep',name:'Family, Community & External Partnerships'},
-];
-const SPECIALISTS_DOMAINS = [
-  {id:'csm',name:'Cambridge Subject Mastery'},
-  {id:'cof',name:'Classroom Observation & Feedback'},
-  {id:'tpd',name:'Teacher Professional Development'},
-  {id:'cqa',name:'Curriculum & Quality Assurance'},
-  {id:'nls',name:'Network Leadership & Strategy'},
-  {id:'xen',name:'External Expertise & Network'},
-];
-
-// Map a competency_evidence doc's platform field to its domain catalog.
-// 'teachers' → TH classroom track, 'academic' → AH leadership track,
-// 'central' → CH Subject Specialist hybrid track.
-function domainsForPlatform(platform) {
-  if (platform === 'academic') return ACADEMIC_DOMAINS;
-  if (platform === 'central')  return SPECIALISTS_DOMAINS;
-  return TEACHERS_DOMAINS;
-}
-
-function platformLabel(p) {
-  if (p === 'academic') return 'Academic Hub';
-  if (p === 'central')  return 'Central Hub';
-  return 'Teachers Hub';
-}
-const LEVEL_LABEL = {awareness:'Awareness',practitioner:'Practitioner',advanced:'Advanced',lead:'Lead / Mentor'};
-
-let isAdmin = false;
-let allEvidence = [];
-let evFilter = 'all';
-let platFilter = 'all';
-let allCerts = [];
-
-document.addEventListener('authReady', async ({ detail: { user, profile } }) => {
-  isAdmin = profile?.role_centralhub === 'central_admin';
-  if (!isAdmin) {
-    const heroDesc = document.querySelector('.page-hero__desc');
-    if (heroDesc) heroDesc.textContent = 'Read-only view — admin access required to review or issue certificates.';
-  }
-  applyTrackParamFromUrl();
-  await Promise.all([loadEvidence(), loadIssuedCerts()]);
-  renderStats();
-  renderEvidence();
-  populateDomainDropdown();
-});
-
-// `competency-admin?track=teachers|leaders|specialists` → preselect the
-// matching platform filter chip + show a banner with a deep-link to the
-// dedicated framework viewer page (live since 2026-05-22 / 2026-05-23).
-// Track → competency_evidence.platform mapping:
-//   teachers    → 'teachers'   (TH subject_teacher / subject_leader)
-//   leaders     → 'academic'   (AH leadership sub-roles)
-//   specialists → 'central'    (CH HQ Subject Specialists)
-function applyTrackParamFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const track = params.get('track');
-  if (!track) return;
-  const TRACK_TO_PLATFORM = { teachers: 'teachers', leaders: 'academic', specialists: 'central' };
-  const TRACK_LABEL = { teachers: 'Teachers Framework (CTS 2023)', leaders: 'Leaders Framework (CSLS 2023)', specialists: 'Specialist Framework (hybrid)' };
-  // Per-track deep-link into the framework viewer + learning-path page
-  // (shared slugs across hubs via page_access_config.platforms[]).
-  const TRACK_VIEWER = {
-    teachers:    { framework: 'https://teachershub.eduversal.org/competency-framework', path: 'https://teachershub.eduversal.org/learning-path' },
-    leaders:     { framework: 'https://academichub.eduversal.org/CompetencyFramework', path: 'https://academichub.eduversal.org/LearningPath' },
-    specialists: { framework: '/competency-framework',                                   path: '/learning-path' },
-  };
-  const platform = TRACK_TO_PLATFORM[track];
-  if (!platform) return;
-  platFilter = platform;
-  // Reflect in chip UI — find the chip by its text label and toggle 'active'.
-  const labelByTrack = { teachers: 'Teachers', leaders: 'Academic', specialists: 'Specialists' };
-  const targetLabel = labelByTrack[track];
-  document.querySelectorAll('.filter-chip').forEach(c => {
-    if (['All', 'Teachers', 'Academic', 'Specialists'].includes(c.textContent.trim())) {
-      c.classList.toggle('active', c.textContent.trim() === targetLabel);
-    }
-  });
-  // Banner — sits at the top of the page main, dismissable per session.
-  const viewer = TRACK_VIEWER[track];
-  const isCrossHub = track !== 'specialists';
-  const banner = document.createElement('div');
-  banner.style.cssText = 'background:linear-gradient(135deg,#6c5ce7 0%,#0891b2 100%);color:#fff;padding:14px 20px;margin:0 0 20px;border-radius:10px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 12px rgba(108,92,231,0.18)';
-  banner.innerHTML = `
-    <div style="font-size:22px;line-height:1">🎯</div>
-    <div style="flex:1">
-      <div style="font-weight:600;font-size:15px;margin-bottom:2px">${TRACK_LABEL[track]}</div>
-      <div style="font-size:13px;opacity:0.92">Filtered to the ${track} track. Open the framework viewer or learning path to see what the user sees — this page is the HQ-side review queue.</div>
-    </div>
-    <a href="${viewer.framework}"${isCrossHub ? ' target="_blank" rel="noopener"' : ''} style="background:rgba(255,255,255,0.18);border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">Framework →</a>
-    <a href="${viewer.path}"${isCrossHub ? ' target="_blank" rel="noopener"' : ''} style="background:rgba(255,255,255,0.18);border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">Learning Path →</a>
-    <button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1" aria-label="Dismiss">×</button>
-  `;
-  const main = document.querySelector('main') || document.body;
-  main.insertBefore(banner, main.firstChild);
-}
-
-async function loadEvidence() {
-  const q = query(
-    collection(window.db, 'competency_evidence'),
-    orderBy('createdAt', 'desc'),
-    limit(200)
-  );
-  const snap = await getDocs(q);
-  allEvidence = snap.docs.map(d => ({ id: d.id, ...d.data(), _comments: [] }));
-
-  // Load comments sub-collections in parallel (batch, not N+1)
-  await Promise.all(allEvidence.map(async ev => {
-    const cSnap = await getDocs(query(
-      collection(window.db, 'competency_evidence', ev.id, 'comments'),
-      orderBy('createdAt', 'asc')
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
-    ev._comments = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }));
-}
 
-async function loadIssuedCerts() {
-  const q = query(collection(window.db, 'competency_certificates'), orderBy('issuedAt', 'desc'), limit(200));
-  const snap = await getDocs(q);
-  allCerts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
+    // F2 is frameworks['1'] in appraisal-framework-v2.json. The file is already
+    // mirrored into dist/references-data/frameworks/ by build.js (it is read
+    // from Academic Hub/resources), so this page reads it there rather than
+    // adding a fourth copy of the framework to the repo.
+    const FRAMEWORK_URL = 'references-data/frameworks/appraisal-framework-v2.json';
+    const LEVEL_ORDER   = ['induction', 'developing', 'proficient', 'lead'];
+    const DOMAIN_COLS   = ['#4338ca', '#7c3aed', '#0891b2', '#059669'];
 
-function renderStats() {
-  const pending = allEvidence.filter(e => e.status === 'pending').length;
-  const underReview = allEvidence.filter(e => e.status === 'under-review').length;
-  const approved = allEvidence.filter(e => e.status === 'approved').length;
-  const certs = allCerts.length;
-  document.getElementById('statsRow').innerHTML = `
-    <div class="stat-card"><div class="stat-num">${pending}</div><div class="stat-label">Pending Review</div></div>
-    <div class="stat-card"><div class="stat-num">${underReview}</div><div class="stat-label">Under Review</div></div>
-    <div class="stat-card"><div class="stat-num">${approved}</div><div class="stat-label">Approved Submissions</div></div>
-    <div class="stat-card"><div class="stat-num">${certs}</div><div class="stat-label">Certificates Issued</div></div>
-  `;
-}
+    let F2 = null;              // { title, domains: {...} }
+    let SCALE = [];             // [{value,label}]
+    let profile = null;
+    let teacher = null;         // { uid, name, email, school, schoolId, subject, level }
+    let scores = {};            // itemId -> 1..4 | 'na'
+    let notes  = {};            // itemId -> string
+    let docId  = null;          // set after first save
+    let allTeachers = null;     // lazy-loaded cache
 
-function renderEvidence() {
-  let filtered = allEvidence;
-  if (evFilter !== 'all') filtered = filtered.filter(e => e.status === evFilter);
-  if (platFilter !== 'all') filtered = filtered.filter(e => e.platform === platFilter);
+    // ── Level filtering ────────────────────────────────────────
+    // Each item carries visible_from; an item shows when the teacher's level is
+    // at or above it. Unknown/missing level falls back to the widest set
+    // (induction) so nothing is silently dropped.
+    function itemVisible(item, level) {
+      const need = LEVEL_ORDER.indexOf(item.visible_from || 'induction');
+      const have = LEVEL_ORDER.indexOf(level || 'induction');
+      if (need < 0) return true;
+      return have >= need;
+    }
+    function visibleItems() {
+      if (!F2) return [];
+      const lvl = teacher?.level || 'induction';
+      return Object.values(F2.domains)
+        .flatMap(d => (d.items || []).filter(i => itemVisible(i, lvl)));
+    }
 
-  const list = document.getElementById('evidenceList');
-  if (!filtered.length) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📂</div>No evidence submissions found.</div>';
-    return;
-  }
+    // ── Scoring ────────────────────────────────────────────────
+    // 'na' means not observed — it is excluded from the mean rather than
+    // counted as zero, which would silently punish the teacher.
+    function scoredValues() {
+      return visibleItems()
+        .map(i => scores[i.id])
+        .filter(v => typeof v === 'number');
+    }
+    function f2Mean() {
+      const v = scoredValues();
+      if (!v.length) return null;
+      return (v.reduce((a, b) => a + b, 0) / v.length).toFixed(2);
+    }
+    function addressedCount() {
+      return visibleItems().filter(i => scores[i.id] !== undefined).length;
+    }
 
-  const statusMap = {pending:'Pending Review','under-review':'Under Review',approved:'Approved',rejected:'Revise & Resubmit'};
+    function refreshProgress() {
+      const total = visibleItems().length;
+      const done  = addressedCount();
+      $('prCount').textContent = `${done} / ${total} scored`;
+      $('prBar').style.width = total ? `${(done / total) * 100}%` : '0%';
+      $('prMean').textContent = f2Mean() || '—';
+      // Per-domain pills
+      Object.entries(F2.domains).forEach(([key, d]) => {
+        const items = (d.items || []).filter(i => itemVisible(i, teacher?.level));
+        const n = items.filter(i => scores[i.id] !== undefined).length;
+        const pill = document.querySelector(`[data-dpill="${key}"]`);
+        if (pill) {
+          pill.textContent = `${n}/${items.length}`;
+          pill.classList.toggle('is-done', items.length > 0 && n === items.length);
+        }
+      });
+    }
 
-  list.innerHTML = filtered.map(ev => {
-    const initials = (ev.userDisplayName || ev.userEmail || '?').substring(0, 2).toUpperCase();
-    const date = ev.createdAt?.toDate?.()?.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) || '';
-    const comments = ev._comments || [];
-    const commentCount = comments.length;
+    // ── Render ─────────────────────────────────────────────────
+    function renderDomains() {
+      const host = $('domainHost');
+      const lvl = teacher?.level || 'induction';
 
-    return `
-      <div class="ev-card status-${ev.status}" id="ev-${ev.id}">
-        <div class="ev-card-header">
-          <div class="ev-avatar">${initials}</div>
-          <div class="ev-body">
-            <div class="ev-user">${ev.userDisplayName || ev.userEmail || 'Unknown User'}</div>
-            <div class="ev-comp">${ev.domain} — ${ev.compName}</div>
-            <div class="ev-desc">${ev.description}</div>
-            <div class="ev-meta">
-              <span class="platform-tag ${ev.platform}">${ev.platform}</span>
-              <span class="ev-status-badge ${ev.status}">${statusMap[ev.status] || ev.status}</span>
-              <span class="level-badge lvl-${ev.level}">${LEVEL_LABEL[ev.level] || ev.level}</span>
-              <span class="ev-date">${date}</span>
-              ${ev.fileName ? `<a class="ev-file" href="${ev.fileUrl||'#'}" target="_blank" rel="noopener">📎 ${ev.fileName}</a>` : ''}
-            </div>
-            ${ev.reviewerNote ? `<div style="margin-top:8px;font-size:12px;font-style:italic;color:var(--ink-3);">Reviewer note: ${ev.reviewerNote}</div>` : ''}
-          </div>
-        </div>
-        ${isAdmin && ev.status !== 'approved' ? `
-        <div class="ev-actions">
-          <input aria-label="Optional note to the user (shown with your decision)" class="ev-note-input" id="note-${ev.id}" placeholder="Optional note to the user (shown with your decision)">
-          <button class="btn-review" onclick="setUnderReview('${ev.id}')">👁 Mark Under Review</button>
-          <button class="btn-approve" onclick="approveEvidence('${ev.id}','${ev.userId}','${ev.compId}','${ev.level}','${ev.platform}')">✓ Approve</button>
-          <button class="btn-reject" onclick="rejectEvidence('${ev.id}')">✕ Reject</button>
-          <div class="inline-err" id="rej-err-${ev.id}"></div>
-        </div>
-        ` : ''}
-        <div class="ev-comments">
-          <button class="ev-comments-toggle" onclick="toggleComments('${ev.id}')">
-            💬 ${commentCount ? commentCount + ' comment' + (commentCount !== 1 ? 's' : '') : 'Add comment'}
-          </button>
-          <div class="ev-comments-body" id="comments-${ev.id}">
-            <div id="comments-list-${ev.id}">
-              ${comments.map(c => {
-                const ci = (c.authorName || c.authorEmail || '?').substring(0,2).toUpperCase();
-                const cd = c.createdAt?.toDate?.()?.toLocaleDateString('en-GB', {day:'numeric',month:'short'}) || '';
-                return `<div class="comment-item">
-                  <div class="comment-avatar">${ci}</div>
-                  <div class="comment-bubble">
-                    <div class="comment-author">${c.authorName || c.authorEmail || 'Admin'}</div>
-                    <div class="comment-text">${c.text}</div>
-                    <div class="comment-date">${cd}</div>
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>
-            ${isAdmin ? `<div class="comment-form">
-              <input aria-label="Write a comment…" class="comment-input" id="comment-input-${ev.id}" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')addComment('${ev.id}')">
-              <button class="btn-comment" onclick="addComment('${ev.id}')">Send</button>
-            </div>` : ''}
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
+      host.innerHTML = Object.entries(F2.domains).map(([key, d], di) => {
+        const items = (d.items || []).filter(i => itemVisible(i, lvl));
+        if (!items.length) return '';
 
-window.setUnderReview = async function(evId) {
-  await updateDoc(doc(window.db, 'competency_evidence', evId), {
-    status: 'under-review', updatedAt: serverTimestamp()
-  });
-  const idx = allEvidence.findIndex(e => e.id === evId);
-  if (idx >= 0) allEvidence[idx].status = 'under-review';
-  renderStats(); renderEvidence();
-};
+        const rows = items.map(item => {
+          const btns = SCALE.map(s => `
+            <button type="button" class="score-btn" data-item="${esc(item.id)}" data-val="${s.value}">
+              <span class="sb-num">${s.value}</span>
+              <span class="sb-lbl">${esc(s.label)}</span>
+            </button>`).join('') + `
+            <button type="button" class="score-btn is-na" data-item="${esc(item.id)}" data-val="na">
+              <span class="sb-num">–</span>
+              <span class="sb-lbl">Not seen</span>
+            </button>`;
 
-window.approveEvidence = async function(evId, userUid, compId, level, platform) {
-  const note = document.getElementById(`note-${evId}`)?.value?.trim() || null;
+          const rubricHtml = Object.keys(item.rubric || {})
+            .sort((a, b) => Number(b) - Number(a))
+            .map(k => `<div><strong>${esc(k)} — ${esc((SCALE.find(s => String(s.value) === String(k)) || {}).label || '')}:</strong> ${esc(item.rubric[k])}</div>`)
+            .join('');
 
-  // 1. Mark evidence as approved
-  await updateDoc(doc(window.db, 'competency_evidence', evId), {
-    status: 'approved',
-    reviewerNote: note,
-    reviewedBy: window.currentUser.uid,
-    updatedAt: serverTimestamp(),
-  });
-
-  // 2. Update user's earned competencies — per-platform field on user_competencies/{uid}.
-  //    'teachers' → earned         (TH learning-path, TH MyCertificates)
-  //    'academic' → earned_academic (AH LearningPath, AH MyCertificates)
-  //    'central'  → earned_central  (CH specialist-* pages)
-  const earnedField = platform === 'academic' ? 'earned_academic'
-                    : platform === 'central'  ? 'earned_central'
-                    : 'earned';
-  const ucRef = doc(window.db, 'user_competencies', userUid);
-  const ucSnap = await getDoc(ucRef);
-  const existing = ucSnap.exists() ? (ucSnap.data()[earnedField] || {}) : {};
-  existing[compId] = { level, approvedAt: new Date().toISOString(), evidenceId: evId };
-  await updateDoc(ucRef, { [earnedField]: existing });
-
-  const idx = allEvidence.findIndex(e => e.id === evId);
-  if (idx >= 0) { allEvidence[idx].status = 'approved'; allEvidence[idx].reviewerNote = note; }
-  renderStats(); renderEvidence();
-};
-
-window.rejectEvidence = async function(evId) {
-  const note = document.getElementById(`note-${evId}`)?.value?.trim() || '';
-  const errEl = document.getElementById(`rej-err-${evId}`);
-  if (!note) {
-    if (errEl) { errEl.textContent = 'Please add a note explaining what needs improvement.'; errEl.classList.add('visible'); }
-    document.getElementById(`note-${evId}`)?.focus();
-    return;
-  }
-  if (errEl) errEl.classList.remove('visible');
-  await updateDoc(doc(window.db, 'competency_evidence', evId), {
-    status: 'rejected',
-    reviewerNote: note,
-    reviewedBy: window.currentUser.uid,
-    updatedAt: serverTimestamp(),
-  });
-  const idx = allEvidence.findIndex(e => e.id === evId);
-  if (idx >= 0) { allEvidence[idx].status = 'rejected'; allEvidence[idx].reviewerNote = note; }
-  renderStats(); renderEvidence();
-};
-
-// ─── CERTIFICATE ISSUANCE ─────────────────────────────────────────────────────
-function populateDomainDropdown() {
-  const platSel = document.getElementById('certPlatform');
-  const updateDomains = () => {
-    const domains = domainsForPlatform(platSel.value);
-    document.getElementById('certDomain').innerHTML =
-      '<option value="">— select domain —</option>' +
-      domains.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-  };
-  platSel.addEventListener('change', updateDomains);
-  updateDomains();
-}
-
-window.issueCertificate = async function() {
-  const platform = document.getElementById('certPlatform').value;
-  const email = document.getElementById('certUserEmail').value.trim().toLowerCase();
-  const domainId = document.getElementById('certDomain').value;
-  const note = document.getElementById('certNote').value.trim();
-
-  const errEl = document.getElementById('certIssueError');
-  const succEl = document.getElementById('certIssueSuccess');
-  errEl.style.display = 'none'; succEl.style.display = 'none';
-
-  if (!email) { errEl.textContent = 'User email is required.'; errEl.style.display = 'block'; return; }
-  if (!domainId) { errEl.textContent = 'Please select a domain.'; errEl.style.display = 'block'; return; }
-
-  // Look up user by email
-  const usersQ = query(collection(window.db, 'users'), where('email', '==', email), limit(1));
-  const usersSnap = await getDocs(usersQ);
-  if (usersSnap.empty) { errEl.textContent = 'No user found with that email address.'; errEl.style.display = 'block'; return; }
-
-  const userDoc = usersSnap.docs[0];
-  const userData = userDoc.data();
-  const uid = userDoc.id;
-
-  const domainObj = domainsForPlatform(platform).find(d => d.id === domainId);
-
-  // Check for duplicate
-  const dupQ = query(
-    collection(window.db, 'competency_certificates'),
-    where('uid', '==', uid),
-    where('platform', '==', platform),
-    where('domainId', '==', domainId)
-  );
-  const dupSnap = await getDocs(dupQ);
-  if (!dupSnap.empty) {
-    errEl.textContent = 'This user already has a certificate for this domain on this platform.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  const btn = document.querySelector('.btn-issue-cert');
-  btn.disabled = true; btn.textContent = 'Issuing…';
-  try {
-    const certRef = await addDoc(collection(window.db, 'competency_certificates'), {
-      userId: uid,
-      userEmail: userData.email,
-      userDisplayName: userData.displayName || '',
-      platform,
-      domainId,
-      domainName: domainObj?.name || domainId,
-      issuedBy: window.currentUser.email,
-      issuedByUid: window.currentUser.uid,
-      note: note || null,
-      issuedAt: serverTimestamp(),
-    });
-    succEl.textContent = `✓ Certificate issued to ${userData.displayName || email} for "${domainObj?.name}" (${platform}). ID: ${certRef.id.substring(0,8).toUpperCase()}`;
-    succEl.style.display = 'block';
-    await loadIssuedCerts();
-    renderStats();
-    renderIssuedCerts();
-  } catch (err) {
-    errEl.textContent = 'Failed to issue certificate: ' + err.message;
-    errEl.style.display = 'block';
-  } finally {
-    btn.disabled = false; btn.textContent = '🎓 Issue Certificate';
-  }
-};
-
-function renderIssuedCerts() {
-  const wrap = document.getElementById('issuedCertsWrap');
-  if (!allCerts.length) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📜</div>No certificates issued yet.</div>';
-    return;
-  }
-  wrap.innerHTML = `
-    <table class="certs-table">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th>Platform</th>
-          <th>Domain</th>
-          <th>Issued</th>
-          <th>Issued By</th>
-          <th>Cert ID</th>
-          ${isAdmin ? '<th>Actions</th>' : ''}
-        </tr>
-      </thead>
-      <tbody>
-        ${allCerts.map(cert => {
-          const date = cert.issuedAt?.toDate?.()?.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) || '';
           return `
-            <tr>
-              <td><div style="font-weight:600;">${cert.userDisplayName || cert.userEmail}</div><div style="font-size:11px;color:var(--ink-3);">${cert.userEmail}</div></td>
-              <td><span class="platform-tag ${cert.platform}">${cert.platform}</span></td>
-              <td style="font-size:13px;">${cert.domainName}</td>
-              <td style="font-size:12px;color:var(--ink-3);">${date}</td>
-              <td style="font-size:12px;color:var(--ink-3);">${cert.issuedBy || '—'}</td>
-              <td><span style="font-family:'DM Mono',monospace;font-size:11px;">${cert.id.substring(0,8).toUpperCase()}</span></td>
-              ${isAdmin ? `<td><button style="padding:5px 12px;border-radius:8px;border:1px solid #fca5a5;background:#ffe4e6;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="revokeCert('${cert.id}',this)">Revoke</button></td>` : ''}
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-}
+            <div class="item-row">
+              <div class="item-head">
+                <span class="item-id">${esc(item.id)}</span>
+                <span class="item-title">${esc(item.title)}</span>
+                ${rubricHtml ? `<button type="button" class="rubric-toggle" data-rubric="${esc(item.id)}">rubric</button>` : ''}
+              </div>
+              ${rubricHtml ? `<div class="item-rubric" id="rub-${esc(item.id)}" hidden>${rubricHtml}</div>` : ''}
+              <div class="score-row">${btns}</div>
+              <textarea class="item-note" data-note="${esc(item.id)}"
+                        placeholder="Evidence for this score — what you actually saw…"></textarea>
+            </div>`;
+        }).join('');
 
-window.revokeCert = async function(certId, btn) {
-  if (!btn.dataset.confirming) {
-    btn.dataset.confirming = '1';
-    btn.textContent = 'Confirm Revoke';
-    setTimeout(() => { if (btn.dataset.confirming) { btn.dataset.confirming = ''; btn.textContent = 'Revoke'; } }, 3000);
-    return;
-  }
-  // Actually would deleteDoc — but instead we mark revoked to keep audit trail
-  await updateDoc(doc(window.db, 'competency_certificates', certId), {
-    revoked: true, revokedAt: serverTimestamp(), revokedBy: window.currentUser.uid
-  });
-  const idx = allCerts.findIndex(c => c.id === certId);
-  if (idx >= 0) allCerts.splice(idx, 1);
-  renderIssuedCerts(); renderStats();
-};
+        return `
+          <div class="domain-card" style="--d-col:${DOMAIN_COLS[di % DOMAIN_COLS.length]};">
+            <button type="button" class="domain-head" aria-expanded="${di === 0 ? 'true' : 'false'}"
+                    aria-controls="dom-${esc(key)}" data-domain-toggle>
+              <span>
+                <span class="dh-title">${esc(d.title || d.name || 'Domain')}</span>
+                <span class="dh-sub">${items.length} item${items.length === 1 ? '' : 's'} at this level</span>
+              </span>
+              <span class="dh-right">
+                <span class="dh-pill" data-dpill="${esc(key)}">0/${items.length}</span>
+                <svg class="dh-chev" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+              </span>
+            </button>
+            <div class="domain-body" id="dom-${esc(key)}" ${di === 0 ? '' : 'hidden'}>${rows}</div>
+          </div>`;
+      }).join('');
 
-// ─── COMMENTS ─────────────────────────────────────────────────────────────────
-window.toggleComments = function(evId) {
-  const body = document.getElementById(`comments-${evId}`);
-  body.classList.toggle('open');
-};
-
-window.addComment = async function(evId) {
-  const input = document.getElementById(`comment-input-${evId}`);
-  const text = input?.value?.trim();
-  if (!text) return;
-  input.value = '';
-  input.disabled = true;
-
-  const commentData = {
-    text,
-    authorUid: window.currentUser.uid,
-    authorName: window.currentUser.displayName || '',
-    authorEmail: window.currentUser.email,
-    createdAt: serverTimestamp()
-  };
-  const ref = await addDoc(
-    collection(window.db, 'competency_evidence', evId, 'comments'),
-    commentData
-  );
-
-  const ev = allEvidence.find(e => e.id === evId);
-  if (ev) {
-    ev._comments.push({ id: ref.id, ...commentData, createdAt: { toDate: () => new Date() } });
-    const listEl = document.getElementById(`comments-list-${evId}`);
-    if (listEl) {
-      const ci = (window.currentUser.displayName || window.currentUser.email || '?').substring(0,2).toUpperCase();
-      listEl.insertAdjacentHTML('beforeend', `
-        <div class="comment-item">
-          <div class="comment-avatar">${ci}</div>
-          <div class="comment-bubble">
-            <div class="comment-author">${window.currentUser.displayName || window.currentUser.email}</div>
-            <div class="comment-text">${text}</div>
-            <div class="comment-date">Just now</div>
-          </div>
-        </div>`);
+      wireDomainEvents();
+      restoreInputs();
+      refreshProgress();
     }
-    const toggle = document.querySelector(`#ev-${evId} .ev-comments-toggle`);
-    if (toggle) toggle.textContent = `💬 ${ev._comments.length} comment${ev._comments.length !== 1 ? 's' : ''}`;
-  }
-  input.disabled = false;
-};
 
-// ─── NETWORK HEATMAP ──────────────────────────────────────────────────────────
-// Heatmap + cohort tabs reuse the same canonical domain catalogs as the
-// review/issue tabs — TEACHERS_DOMAINS / ACADEMIC_DOMAINS / SPECIALISTS_DOMAINS
-// defined at the top of this script. Keeping the heatmap in sync with the
-// rest of the page avoids the past name drift (e.g. "Inclusive Classroom
-// Practice" vs the actual ICP name "Innovative Classroom Practice").
+    function restoreInputs() {
+      Object.entries(scores).forEach(([id, val]) => {
+        document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
+          b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
+          if (String(b.dataset.val) === String(val)) b.classList.add(val === 'na' ? 'sel-na' : `sel-${val}`);
+        });
+      });
+      Object.entries(notes).forEach(([id, txt]) => {
+        const ta = document.querySelector(`[data-note="${CSS.escape(id)}"]`);
+        if (ta) ta.value = txt;
+      });
+    }
 
-window.renderHeatmap = function() {
-  const platform = document.getElementById('hmPlatform').value;
-  const metric   = document.getElementById('hmMetric').value;
-  const domains  = domainsForPlatform(platform);
+    function wireDomainEvents() {
+      document.querySelectorAll('[data-domain-toggle]').forEach(head => {
+        head.addEventListener('click', () => {
+          const body = document.getElementById(head.getAttribute('aria-controls'));
+          if (!body) return;
+          const open = head.getAttribute('aria-expanded') === 'true';
+          head.setAttribute('aria-expanded', open ? 'false' : 'true');
+          body.hidden = open;
+        });
+      });
 
-  const data = allEvidence.filter(e => e.platform === platform);
-  // Per-platform expected (compId, level) catalog mirrors the seed scripts.
-  const compIds = platform === 'academic'
-    ? ['evsi-1','evsi-2','evsi-3','evsi-4','cial-1','cial-2','cial-3','cial-4','pdpc-1','pdpc-2','pdpc-3','pdpc-4','ewsc-1','ewsc-2','ewsc-3','ewsc-4','eao-1','eao-2','eao-3','eao-4','fcep-1','fcep-2','fcep-3','fcep-4']
-    : platform === 'central'
-    ? ['csm-1','csm-2','csm-3','csm-4','cof-1','cof-2','cof-3','cof-4','tpd-1','tpd-2','tpd-3','tpd-4','cqa-1','cqa-2','cqa-3','cqa-4','nls-1','nls-2','nls-3','nls-4','xen-1','xen-2','xen-3','xen-4']
-    : ['smc-1','smc-2','smc-3','smc-4','lcp-1','lcp-2','lcp-3','lcp-4','afl-1','afl-2','afl-3','afl-4','icp-1','icp-2','icp-3','icp-4','pie-1','pie-2','pie-3','pie-4','cce-1','cce-2','cce-3','cce-4'];
+      document.querySelectorAll('[data-rubric]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const el = document.getElementById(`rub-${btn.dataset.rubric}`);
+          if (el) el.hidden = !el.hidden;
+        });
+      });
 
-  // Build per-domain stats
-  const domainStats = domains.map(dom => {
-    const domComps = compIds.filter(c => c.startsWith(dom.id));
-    const compStats = domComps.map(compId => {
-      const compData = data.filter(e => e.compId === compId);
-      let count;
-      if (metric === 'approved') count = compData.filter(e => e.status === 'approved').length;
-      else if (metric === 'pending') count = compData.filter(e => e.status === 'pending').length;
-      else count = new Set(compData.map(e => e.userId)).size;
-      return { compId, count };
+      document.querySelectorAll('.score-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.item;
+          const raw = btn.dataset.val;
+          const val = raw === 'na' ? 'na' : Number(raw);
+          // Clicking the selected score again clears it.
+          if (scores[id] === val) delete scores[id]; else scores[id] = val;
+          document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
+            b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
+          });
+          if (scores[id] !== undefined) {
+            btn.classList.add(scores[id] === 'na' ? 'sel-na' : `sel-${scores[id]}`);
+          }
+          markDirty();
+          refreshProgress();
+        });
+      });
+
+      document.querySelectorAll('[data-note]').forEach(ta => {
+        ta.addEventListener('input', () => { notes[ta.dataset.note] = ta.value; markDirty(); });
+      });
+    }
+
+    function markDirty() {
+      const el = $('abStatus');
+      el.className = 'ab-status';
+      el.textContent = 'Unsaved changes';
+    }
+
+    // ── Teacher picker ─────────────────────────────────────────
+    // Reads users/{uid} for Teachers Hub accounts. Loaded once and filtered in
+    // memory — the network is a few hundred teachers, so a query per keystroke
+    // would be wasteful and would need an index per field.
+    async function loadTeachers() {
+      if (allTeachers) return allTeachers;
+      const snap = await getDocs(query(
+        collection(window.db, 'users'),
+        where('role_teachershub', 'in', ['teachers_user', 'teachers_admin']),
+        limit(600)
+      ));
+      allTeachers = snap.docs.map(d => {
+        const u = d.data();
+        return {
+          // Local view-model, not a Firestore payload; it reaches Firestore as
+          // teacherUid. d.id IS the auth uid. // @lint-allow-uid
+          uid: d.id,
+          name: u.displayName || u.name || u.email || '(no name)',
+          email: (u.email || '').toLowerCase(),
+          school: u.school || '',
+          schoolId: u.schoolId || '',
+          subject: u.subject || '',
+          level: u.appraisal_level || 'induction'
+        };
+      });
+      return allTeachers;
+    }
+
+    function renderResults(list) {
+      const box = $('tpResults');
+      if (!list.length) {
+        box.innerHTML = '<div class="tp-empty">No teacher matches that search.</div>';
+        box.hidden = false;
+        return;
+      }
+      box.innerHTML = list.slice(0, 25).map(t => `
+        <div class="tp-row" data-uid="${esc(t.uid)}">
+          <div class="tp-row-name">${esc(t.name)}</div>
+          <div class="tp-row-meta">${esc([t.school, t.subject, t.email].filter(Boolean).join(' · '))}</div>
+        </div>`).join('');
+      box.hidden = false;
+      box.querySelectorAll('.tp-row').forEach(row => {
+        row.addEventListener('click', () => selectTeacher(row.dataset.uid));
+      });
+    }
+
+    function selectTeacher(uid) {
+      const t = (allTeachers || []).find(x => x.uid === uid);
+      if (!t) return;
+      teacher = t;
+      $('stName').textContent = t.name;
+      $('stMeta').textContent = [t.school, t.subject, `level: ${t.level}`].filter(Boolean).join(' · ');
+      $('selectedTeacher').hidden = false;
+      $('tpGroup').style.display = 'none';
+      $('tpResults').hidden = true;
+      // Level changes which items are visible, so re-render.
+      renderDomains();
+      markDirty();
+    }
+
+    // ── Save ───────────────────────────────────────────────────
+    function buildPayload(status) {
+      return {
+        // Identity — appraiserUid must be this user; the create rule pins it.
+        appraiserUid: window.currentUser.uid,
+        appraiserName: profile?.displayName || window.currentUser.email || '',
+        appraiserHub: 'centralhub',
+        teacherUid: teacher.uid,
+        teacherName: teacher.name,
+        schoolId: teacher.schoolId || null,
+        school: teacher.school || '',
+        subject: teacher.subject || '',
+        level: teacher.level || 'induction',
+        academicYear: (window.getCurrentAcademicYear && window.getCurrentAcademicYear()) || '',
+        // This form records F2 only — flagged so downstream readers do not
+        // mistake a partial record for a complete four-block appraisal.
+        sessionType: 'observation',
+        blocks: ['F2'],
+        partial: true,
+        observation: {
+          date: $('obsDate').value || '',
+          classGroup: $('obsClass').value || '',
+          topic: $('obsTopic').value || ''
+        },
+        scores: { ...scores },
+        notes: { ...notes },
+        f2Mean: f2Mean() ? Number(f2Mean()) : null,
+        narrative: {
+          glow: $('narrGlow').value || '',
+          grow: $('narrGrow').value || '',
+          go:   $('narrGo').value   || ''
+        },
+        status,
+        updatedAt: serverTimestamp()
+      };
+    }
+
+    async function save(status) {
+      const el = $('abStatus');
+      if (!teacher) {
+        el.className = 'ab-status is-error';
+        el.textContent = 'Pick a teacher before saving.';
+        return;
+      }
+      if (status === 'shared' && !scoredValues().length) {
+        el.className = 'ab-status is-error';
+        el.textContent = 'Score at least one item before sharing with the teacher.';
+        return;
+      }
+
+      el.className = 'ab-status';
+      el.textContent = 'Saving…';
+      const payload = buildPayload(status);
+
+      try {
+        if (docId) {
+          await setDoc(doc(window.db, 'teacher_appraisals', docId), payload, { merge: true });
+        } else {
+          const ref = await addDoc(collection(window.db, 'teacher_appraisals'), {
+            ...payload, createdAt: serverTimestamp()
+          });
+          docId = ref.id;
+        }
+      } catch (e) {
+        console.error(e);
+        el.className = 'ab-status is-error';
+        el.textContent = e?.code === 'permission-denied'
+          ? 'Not saved — you do not have permission to record this observation.'
+          : 'Not saved — please try again.';
+        return;
+      }
+
+      el.className = 'ab-status is-ok';
+      el.textContent = status === 'shared'
+        ? 'Shared with the teacher ✓'
+        : 'Draft saved ✓';
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    // CH dispatches authReady on `document`, not `window` (Common Mistake #13).
+    document.addEventListener('authReady', async ({ detail }) => {
+      profile = detail?.profile || window.userProfile || null;
+
+      try {
+        const fw = await fetch(FRAMEWORK_URL).then(r => {
+          if (!r.ok) throw new Error(`framework ${r.status}`);
+          return r.json();
+        });
+        F2 = fw.frameworks['1'];
+        SCALE = (fw.scoring_scale || []).slice().sort((a, b) => a.value - b.value);
+        if (!F2 || !F2.domains) throw new Error('F2 block missing from framework');
+      } catch (e) {
+        console.error(e);
+        $('gateMsg').innerHTML =
+          '<strong>Could not load the appraisal framework.</strong> The F2 item set is served from ' +
+          '<code>references-data/frameworks/appraisal-framework-v2.json</code>. Reload the page; if it keeps failing, tell an admin.';
+        $('gateMsg').hidden = false;
+        return;
+      }
+
+      $('formArea').hidden = false;
+      $('obsDate').value = new Date().toISOString().slice(0, 10);
+      renderDomains();
+
+      // Teacher search
+      let tmr = null;
+      $('teacherSearch').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        clearTimeout(tmr);
+        if (!q) { $('tpResults').hidden = true; return; }
+        tmr = setTimeout(async () => {
+          const list = await loadTeachers();
+          renderResults(list.filter(t =>
+            t.name.toLowerCase().includes(q) || t.email.includes(q) || (t.school || '').toLowerCase().includes(q)
+          ));
+        }, 180);
+      });
+      document.addEventListener('click', (e) => {
+        if (!$('tpGroup').contains(e.target)) $('tpResults').hidden = true;
+      });
+      $('stClear').addEventListener('click', () => {
+        teacher = null;
+        $('selectedTeacher').hidden = true;
+        $('tpGroup').style.display = '';
+        $('teacherSearch').value = '';
+        renderDomains();
+      });
+
+      ['obsDate', 'obsClass', 'obsTopic', 'narrGlow', 'narrGrow', 'narrGo']
+        .forEach(id => $(id).addEventListener('input', markDirty));
+
+      $('btnSaveDraft').addEventListener('click', () => save('draft'));
+      $('btnShare').addEventListener('click', () => save('shared'));
     });
-    const total = compStats.reduce((a,b) => a + b.count, 0);
-    return { ...dom, compStats, total };
-  });
-
-  const maxTotal = Math.max(...domainStats.map(d => d.total), 1);
-
-  const grid = document.getElementById('heatmapGrid');
-  if (!data.length) {
-    grid.innerHTML = '<div style="color:var(--ink-3);font-size:13px;padding:20px 0;">No evidence data for this platform yet.</div>';
-    return;
-  }
-
-  grid.innerHTML = domainStats.map(dom => {
-    const pct = Math.round(dom.total / maxTotal * 100);
-    const barColor = pct >= 70 ? '#0d9488' : pct >= 40 ? '#ca8a04' : '#ef4444';
-    const maxComp = Math.max(...dom.compStats.map(c => c.count), 1);
-
-    const compCells = dom.compStats.map(cs => {
-      const heatLevel = maxComp === 0 ? 0 : Math.round((cs.count / maxComp) * 4);
-      return `<div class="hm-comp-cell hm-heat-${heatLevel}">
-        <div class="hm-comp-name">${cs.compId.toUpperCase()}</div>
-        <div class="hm-comp-bar" style="width:${maxComp?Math.round(cs.count/maxComp*100):0}%;background:${barColor};"></div>
-        <div class="hm-comp-count">${cs.count} ${metric === 'users' ? 'user' : metric === 'approved' ? 'approved' : 'pending'}${cs.count !== 1 ? 's' : ''}</div>
-      </div>`;
-    }).join('');
-
-    return `<div class="hm-domain-row">
-      <div role="button" tabindex="0" class="hm-domain-head" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-        <div class="hm-domain-name">${dom.name}</div>
-        <div class="hm-domain-pct" style="color:${barColor};">${dom.total} total</div>
-      </div>
-      <div class="hm-domain-bar-wrap">
-        <div class="hm-bar"><div class="hm-bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
-        <div class="hm-comp-grid">${compCells}</div>
-      </div>
-    </div>`;
-  }).join('');
-};
-
-// ─── COHORT COMPARISON ────────────────────────────────────────────────────────
-function populateCohortSelects() {
-  const schools = [...new Set(allEvidence.map(e => e.schoolId || e.school || '').filter(Boolean))].sort();
-  const selA = document.getElementById('cohortA');
-  const selB = document.getElementById('cohortB');
-  schools.forEach(s => {
-    selA.appendChild(new Option(s, s));
-    selB.appendChild(new Option(s, s));
-  });
-}
-
-window.renderCohort = function() {
-  const platform = document.getElementById('cohortPlatform').value;
-  const schoolA  = document.getElementById('cohortA').value;
-  const schoolB  = document.getElementById('cohortB').value;
-  const domains  = domainsForPlatform(platform);
-
-  document.getElementById('legendA').textContent = schoolA || 'School A';
-  document.getElementById('legendB').textContent = schoolB || 'School B';
-
-  const content = document.getElementById('cohortContent');
-  if (!schoolA && !schoolB) {
-    content.innerHTML = '<div style="color:var(--ink-3);font-size:13px;">Select two schools to compare.</div>';
-    return;
-  }
-
-  const dataA = allEvidence.filter(e => e.platform === platform && (e.schoolId === schoolA || e.school === schoolA));
-  const dataB = allEvidence.filter(e => e.platform === platform && (e.schoolId === schoolB || e.school === schoolB));
-
-  function domainScore(evData, domainId) {
-    const domEvs = evData.filter(e => e.compId && e.compId.startsWith(domainId));
-    const approved = domEvs.filter(e => e.status === 'approved').length;
-    const total    = domEvs.length;
-    return { approved, total, pct: total ? Math.round(approved/total*100) : 0 };
-  }
-
-  const rows = domains.map(dom => {
-    const a = domainScore(dataA, dom.id);
-    const b = domainScore(dataB, dom.id);
-    const diff = a.pct - b.pct;
-    const diffCls = diff > 5 ? 'cohort-diff-pos' : diff < -5 ? 'cohort-diff-neg' : 'cohort-diff-flat';
-    const diffTxt = diff > 0 ? `+${diff}%` : diff < 0 ? `${diff}%` : '—';
-    const maxPct = Math.max(a.pct, b.pct, 1);
-    return `<tr>
-      <td style="font-size:12px;font-weight:600;">${dom.name}</td>
-      <td>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <div style="flex:1;height:7px;background:#e5e7eb;border-radius:99px;overflow:hidden;">
-            <div style="height:100%;width:${a.pct}%;background:#0d9488;border-radius:99px;"></div>
-          </div>
-          <span style="font-size:11px;font-weight:700;min-width:28px;">${a.pct}%</span>
-        </div>
-        <div style="font-size:10px;color:var(--ink-3);margin-top:2px;">${a.approved}/${a.total} approved</div>
-      </td>
-      <td>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <div style="flex:1;height:7px;background:#e5e7eb;border-radius:99px;overflow:hidden;">
-            <div style="height:100%;width:${b.pct}%;background:#7c3aed;border-radius:99px;"></div>
-          </div>
-          <span style="font-size:11px;font-weight:700;min-width:28px;">${b.pct}%</span>
-        </div>
-        <div style="font-size:10px;color:var(--ink-3);margin-top:2px;">${b.approved}/${b.total} approved</div>
-      </td>
-      <td class="${diffCls}">${diffTxt}</td>
-    </tr>`;
-  }).join('');
-
-  content.innerHTML = `<table class="cohort-compare-table">
-    <thead>
-      <tr>
-        <th>Domain</th>
-        <th>${schoolA || 'School A'}</th>
-        <th>${schoolB || 'School B'}</th>
-        <th>Diff (A vs B)</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-};
-
-// ─── TAB SWITCHING ────────────────────────────────────────────────────────────
-window.switchTab = function(tab, el) {
-  ['review','heatmap','cohort','issue','issued'].forEach(t => {
-    document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
-  });
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  if (tab === 'issued') renderIssuedCerts();
-  if (tab === 'heatmap') renderHeatmap();
-  if (tab === 'cohort') { populateCohortSelects(); renderCohort(); }
-};
-
-window.setEvFilter = function(f, btn) {
-  evFilter = f;
-  document.querySelectorAll('.filter-chip').forEach(c => {
-    if (['all','pending','under-review','approved','rejected'].includes(c.textContent.toLowerCase().replace(' ','')) ||
-        c.textContent === 'All' || c.textContent === 'Pending' || c.textContent.includes('Review') ||
-        c.textContent === 'Approved' || c.textContent === 'Rejected') {
-      c.classList.remove('active');
-    }
-  });
-  btn.classList.add('active');
-  renderEvidence();
-};
-window.setPlatFilter = function(f, btn) {
-  platFilter = f;
-  document.querySelectorAll('.filter-chip').forEach(c => {
-    const t = c.textContent.trim();
-    if (t === 'All' || t === 'Teachers' || t === 'Academic' || t === 'Specialists') {
-      c.classList.remove('active');
-    }
-  });
-  btn.classList.add('active');
-  renderEvidence();
-};
-</script>
-
-<footer class="page-footer" data-accent="slate" role="contentinfo">
-  <div class="page-footer__inner">
-    <div class="page-footer__cta">
-      <span class="page-footer__cta-eyebrow">HQ Admin · Review</span>
-      <h2 class="page-footer__cta-title">See what the users see.</h2>
-      <p class="page-footer__cta-desc">After reviewing the queue, open the Competency Framework page to see how earned levels appear to teachers, leaders, and specialists. Approval rates and gaps surface in the Heatmap tab above.</p>
-      <a href="/competency-framework" class="page-footer__cta-btn">Open Competency Framework <span aria-hidden="true">→</span></a>
-    </div>
-    <nav class="page-footer__nav" aria-label="Competency Admin footer navigation">
-      <div class="page-footer__nav-group">
-        <span class="page-footer__nav-heading">Admin Tooling</span>
-        <a href="/console" class="page-footer__nav-link">User Console</a>
-        <a href="/page-access" class="page-footer__nav-link">Page Access</a>
-        <a href="/induction-admin" class="page-footer__nav-link">Induction Admin</a>
-        <a href="/kpi-admin" class="page-footer__nav-link">KPI Admin</a>
-      </div>
-      <div class="page-footer__nav-group">
-        <span class="page-footer__nav-heading">References</span>
-        <a href="/references" class="page-footer__nav-link">References &amp; Standards</a>
-        <a href="/handbook" class="page-footer__nav-link">Handbooks</a>
-        <a href="/cambridge-standards" class="page-footer__nav-link">Cambridge Standards</a>
-        <a href="/rules-viewer" class="page-footer__nav-link">Firestore Rules Viewer</a>
-      </div>
-    </nav>
-  </div>
-  <div class="page-footer__meta">
-    <span class="page-footer__meta-left">© Eduversal · Central Hub</span>
-    <span class="page-footer__meta-right">Reviewer: central_admin · Audit trail in user_competencies/{uid}.earned*</span>
-  </div>
-</footer>
-
+  </script>
 <script src="cambridge-crossref.js" defer></script>
 <script src="keyboard-enabler.js" defer></script>
 </body>

@@ -1235,9 +1235,16 @@ service cloud.firestore {
     }
 
     // -- teacher_appraisals (Formal Appraisal v2.0) ----------
-    // Create:  academic_admin or academic_user with school_principal/academic_coordinator/cambridge_coordinator sub-role
+    // Create:  academic_admin or academic_user with school_principal/academic_coordinator/cambridge_coordinator
+    //          sub-role; ALSO any central_user — Eduversal Subject Specialists
+    //          observe teachers in their subject during on-site visits
+    //          (ES 17.8.2 "Day 1: Subject Teacher Appraisals and Walkthroughs"),
+    //          entered from CH /teacher-appraisal-entry. Central creators must
+    //          stamp themselves as the appraiser so the update branch below
+    //          scopes them to their own records.
     // Read:    the teacher who owns it (teacherUid == uid), any AH admin, any TH admin, central_admin
     // Update:  appraiser (AH admin/sub-role) can update any field while status != finalised;
+    //          a central_user may update their OWN record until it is finalised;
     //          teacher can update teacherResponse + status (shared → acknowledged) only
     // Delete:  central_admin only
     match /teacher_appraisals/{docId} {
@@ -1249,12 +1256,17 @@ service cloud.firestore {
                   || (isAcademicUser() && resource.data.appraiserUid == request.auth.uid);
       allow create: if isAHAdmin()
                     || (isAcademicUser()
-                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
+                    || (isCentralUser()
+                        && request.resource.data.appraiserUid == request.auth.uid);
       allow update: if isAdmin()
                     || isAHAdmin()
                     || (isAcademicUser()
                         && resource.data.appraiserUid == request.auth.uid
                         && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
+                    || (isCentralUser()
+                        && resource.data.appraiserUid == request.auth.uid
+                        && resource.data.status != 'finalised')
                     || (isTeachersUser()
                         && resource.data.teacherUid == request.auth.uid
                         && resource.data.status == 'shared'
