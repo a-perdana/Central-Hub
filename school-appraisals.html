@@ -421,6 +421,22 @@
     }
     .save-status { font-size: 0.82rem; color: var(--ink-3); }
     .save-status.is-error { color: #b91c1c; font-weight: 600; }
+    /* [hidden] override is required — an explicit display rule otherwise beats
+       the HTML hidden attribute and the warning would show for everyone. */
+    .school-edit-warn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.8rem; font-weight: 600; color: #b45309;
+      background: #fffbeb; border: 1px solid #fde68a;
+      padding: 4px 10px; border-radius: 999px; margin-left: 10px;
+    }
+    .school-edit-warn[hidden] { display: none; }
+    .school-owned-note {
+      margin: 16px 0 4px; padding: 11px 13px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-left: 3px solid #d97706; border-radius: 8px;
+      font-size: 0.8rem; color: #78350f; line-height: 1.55;
+    }
+    .school-owned-note strong { color: #7c2d12; }
     .readonly-note {
       margin-top: 14px; padding: 10px 12px;
       background: #f8fafc; border: 1px solid var(--border);
@@ -735,8 +751,11 @@
 
       <div class="modal-footer-bar">
         <span class="save-status" id="saveStatus">Unsaved changes</span>
+        <span class="school-edit-warn" id="schoolEditWarn" hidden>⚠ You are changing the school's own submission</span>
         <div class="footer-btns">
-          <button class="btn-secondary" id="btnSaveDraft">Save Draft</button>
+          <!-- Labelled "Save", not "Save Draft": this button no longer changes
+               status, so on a submitted record it saves without demoting it. -->
+          <button class="btn-secondary" id="btnSaveDraft">Save</button>
           <button class="btn-primary" id="btnSubmit" style="display:none;">Submit for Review</button>
           <button class="btn-primary" id="btnMarkReviewed" style="display:none;">Mark as Reviewed</button>
         </div>
@@ -1016,6 +1035,12 @@
       const isOpen = a.status !== 'reviewed';
       const canEdit = state.isAdmin && isOpen;
       const canWriteFeedback = isOpen;
+
+      // Per-record flag — clear it so the warning does not carry over from the
+      // previously opened school.
+      state.schoolDataEdited = false;
+      const warnEl = document.getElementById('schoolEditWarn');
+      if (warnEl) warnEl.hidden = true;
       document.getElementById('btnSaveDraft').style.display = (canEdit || canWriteFeedback) ? 'inline-flex' : 'none';
       document.getElementById('btnSubmit').style.display = 'none';
       document.getElementById('btnMarkReviewed').style.display = (state.isAdmin && a.status === 'submitted') ? 'inline-flex' : 'none';
@@ -1081,6 +1106,7 @@
           const val = parseInt(btn.value);
           if (!state.currentAppraisal.ratings) state.currentAppraisal.ratings = {};
           state.currentAppraisal.ratings[aspectId] = val;
+          markSchoolDataEdited();
           document.getElementById('saveStatus').textContent = 'Unsaved changes';
           // Update visual state
           const group = btn.closest('.rating-options');
@@ -1113,6 +1139,7 @@
           const aspectId = ta.dataset.aspect;
           if (!state.currentAppraisal.evidence) state.currentAppraisal.evidence = {};
           state.currentAppraisal.evidence[aspectId] = ta.value;
+          markSchoolDataEdited();
           document.getElementById('saveStatus').textContent = 'Unsaved changes';
         });
       });
@@ -1127,6 +1154,9 @@
           el.addEventListener('input', () => {
             if (!allowed) return;
             state.currentAppraisal[field] = el.value;
+            // Editing the school's own answers is allowed but consequential —
+            // flag it live so it is a deliberate act, not an accident.
+            if (field !== 'recommendations') markSchoolDataEdited();
             document.getElementById('saveStatus').textContent = 'Unsaved changes';
           });
         }
@@ -1176,6 +1206,9 @@
           </div>
         </div>
         <div class="overview-grid">${overviewCards}</div>
+        ${canEdit ? `<div class="school-owned-note">
+          <strong>These are the school's own words.</strong> Ratings, evidence, Key Strengths and Areas for Improvement were written by the school in Academic Hub. You can correct them as an admin, but the school will not be told they changed — prefer writing your response under <em>Eduversal Coordinator Recommendations</em> below.
+        </div>` : ''}
         <div class="overview-fields">
           <div class="field-group">
             <label>Key Strengths</label>
@@ -1330,6 +1363,17 @@
         </div>`;
     }
 
+    // Raised the first time this session's edits touch the school's own
+    // submission (ratings / evidence / strengths / improvements) rather than
+    // Eduversal's recommendations. Drives the footer warning so overwriting a
+    // school's words is a visible, deliberate act. Reset when a modal opens.
+    function markSchoolDataEdited() {
+      if (state.schoolDataEdited) return;
+      state.schoolDataEdited = true;
+      const el = document.getElementById('schoolEditWarn');
+      if (el) el.hidden = false;
+    }
+
     // ===== SAVE =====
     async function saveAppraisal(newStatus) {
       if (!state.currentDocId || !state.currentAppraisal) return;
@@ -1472,7 +1516,11 @@
 
       // Appraisal modal controls
       document.getElementById('modalClose').addEventListener('click', () => { document.getElementById('appraisalModal').style.display = 'none'; });
-      document.getElementById('btnSaveDraft').addEventListener('click', () => saveAppraisal('draft'));
+      // Save must NOT pass a status. Passing 'draft' here silently demoted a
+      // record the school had already submitted — erasing their declaration
+      // that the self-appraisal was finished. Omitting it makes saveAppraisal
+      // keep the current status.
+      document.getElementById('btnSaveDraft').addEventListener('click', () => saveAppraisal());
       document.getElementById('btnSubmit').addEventListener('click', () => saveAppraisal('submitted'));
       document.getElementById('btnMarkReviewed').addEventListener('click', () => saveAppraisal('reviewed'));
 
