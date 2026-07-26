@@ -237,9 +237,18 @@ service cloud.firestore {
       // (covers school-domain Teachers Hub / Academic Hub users logging in via Google)
       allow get:    if isSignedIn() && (request.auth.uid == uid || isAdmin());
       // List (collection query) for CentralHub console (central_admin),
-      // AH appraisal teacher search (academic_admin), and CH coordinators
-      // who need to view per-teacher pacing progress.
-      allow list:   if isAdmin() || isAHAdmin() || isCHCoordinator();
+      // AH appraisal teacher search, and CH coordinators who need to view
+      // per-teacher pacing progress.
+      //
+      // AH school leadership (FR / SP / AC / CC) is included because the
+      // appraisal + walkthrough entry pages let a principal pick the teacher
+      // they are appraising. Previously only academic_admin could run this
+      // query, so a school_principal hit "Missing or insufficient permissions"
+      // and the teacher picker stayed empty. `list` cannot inspect the matched
+      // docs, so the school scope is enforced by the client query
+      // (where('schoolId','==',<own school>)) rather than here.
+      allow list:   if isAdmin() || isAHAdmin() || isCHCoordinator()
+                       || isAHSchoolLeaderAnySchool();
       allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
@@ -1555,6 +1564,22 @@ service cloud.firestore {
     // call site.
     function isAHSchoolLeader(schoolId) {
       return isAHUserAtSchool(schoolId)
+             && userProfile().ah_sub_roles is list
+             && userProfile().ah_sub_roles.hasAny([
+                  'foundation_representative',
+                  'school_principal',
+                  'academic_coordinator',
+                  'cambridge_coordinator'
+                ]);
+    }
+
+    // School-agnostic variant for `list` rules, which cannot inspect the
+    // matched docs' fields (a query has no single `resource`). The caller must
+    // constrain the query itself — AH teacher search adds
+    // where('schoolId','==',<own school>) — so this grants "may run a
+    // leadership-scoped query", not "may read every doc".
+    function isAHSchoolLeaderAnySchool() {
+      return isAcademicUser()
              && userProfile().ah_sub_roles is list
              && userProfile().ah_sub_roles.hasAny([
                   'foundation_representative',
