@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Walkthrough Entry — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-wrap { width: 100%; max-width: var(--container-max, 1200px); margin: 0 auto; padding: 28px 40px 48px; }
+    .page-wrap > .page-info-strip { margin: 6px 0 14px; }
+
+    /* .es-pill matches the canonical chip in chip-families.html (cyan-deep).
+       Not in shared-styles.css — each page using an ES chip carries it. */
+    .es-pill {
+      font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 8px;
+      background: #cffafe; color: #0e7490; border-radius: 4px; font-weight: 600;
+      white-space: nowrap; cursor: pointer;
+    }
+
+    .setup-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 22px; margin-bottom: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    .sc-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .sc-head h2 { font-family: 'Lora', serif; font-size: 1.05rem; color: var(--ink); }
+    .sc-head-sub { font-size: 0.8rem; color: var(--ink-3); }
+
+    /* Teacher picker */
+    .tp-wrap { position: relative; }
+    .tp-results {
+      position: absolute; z-index: 30; top: 100%; left: 0; right: 0;
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto; margin-top: 4px;
+    }
+    .tp-results[hidden] { display: none; }
+    .tp-row { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .tp-row:last-child { border-bottom: none; }
+    .tp-row:hover { background: var(--paper); }
+    .tp-row-name { font-size: 0.88rem; font-weight: 600; color: var(--ink); }
+    .tp-row-meta { font-size: 0.74rem; color: var(--ink-3); margin-top: 1px; }
+    .tp-empty { padding: 12px; font-size: 0.82rem; color: var(--ink-3); text-align: center; }
+
+    .selected-teacher {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 13px; border-radius: 10px; margin-bottom: 14px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      font-size: 0.85rem; color: #78350f;
+    }
+    .selected-teacher[hidden] { display: none; }
+    .st-name { font-weight: 700; }
+    .st-clear {
+      margin-left: auto; background: none; border: none; cursor: pointer;
+      color: #92400e; font-size: 0.78rem; font-weight: 600; text-decoration: underline;
+      font-family: inherit;
+    }
+
+    /* Progress */
+    .prog-rail {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      box-shadow: var(--shadow-sm);
+    }
+    .pr-bar-wrap { flex: 1; min-width: 150px; height: 7px; background: var(--paper); border-radius: 99px; overflow: hidden; }
+    .pr-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#d97706,#b45309); transition: width .25s; }
+    .pr-count { font-size: 0.82rem; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+
+    /* Focus cards */
+    .focus-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 4px solid var(--f-col, #d97706);
+      border-radius: 12px; margin-bottom: 12px; padding: 16px 18px;
+    }
+    .fc-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 3px; }
+    .fc-id {
+      font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500;
+      color: var(--ink-3); background: var(--paper); padding: 2px 7px; border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+    .fc-title { font-size: 0.94rem; font-weight: 600; color: var(--ink); }
+    .fc-question { font-size: 0.82rem; color: var(--ink-2); font-style: italic; margin-bottom: 10px; line-height: 1.5; }
+    .fc-detail {
+      font-size: 0.79rem; color: var(--ink-2); line-height: 1.55;
+      background: var(--paper); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 11px; margin-bottom: 10px;
+    }
+    .fc-detail[hidden] { display: none; }
+    .fc-more {
+      background: none; border: none; cursor: pointer; font-family: inherit;
+      font-size: 0.72rem; font-weight: 700; color: #b45309; padding: 0 0 8px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    .opt-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .opt-btn {
+      flex: 1; min-width: 120px; padding: 9px 10px; border-radius: 9px;
+      border: 2px solid var(--border); background: var(--paper); cursor: pointer;
+      font-family: inherit; text-align: left; color: var(--ink-3); transition: all .14s;
+    }
+    .opt-btn:hover { border-color: var(--ink-2); color: var(--ink); background: var(--white); }
+    .opt-btn .ob-lbl { display: block; font-size: 0.82rem; font-weight: 700; }
+    .opt-btn .ob-desc { display: block; font-size: 0.68rem; margin-top: 2px; line-height: 1.35; }
+    .opt-btn.sel-E { background: #ecfdf5; border-color: #059669; color: #065f46; }
+    .opt-btn.sel-D { background: #fffbeb; border-color: #d97706; color: #92400e; }
+    .opt-btn.sel-N { background: #f1f5f9; border-color: #64748b; color: #334155; }
+
+    .fc-note {
+      width: 100%; margin-top: 9px; padding: 8px 11px; min-height: 56px;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      font-family: inherit; font-size: 0.84rem; color: var(--ink);
+      resize: vertical; line-height: 1.5; background: var(--white);
+    }
+    .fc-note:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
+
+    /* Narrative */
+    .narr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 720px) { .narr-grid { grid-template-columns: 1fr; } }
+    .narr-block label {
+      display: block; font-size: 0.76rem; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .narr-block textarea {
+      width: 100%; min-height: 110px; padding: 10px 12px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      font-family: inherit; font-size: 0.875rem; color: var(--ink);
+      resize: vertical; line-height: 1.55; background: var(--white);
+    }
+    .narr-block textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
+    .narr-hint { font-size: 0.74rem; color: var(--ink-3); margin-top: 4px; line-height: 1.45; }
+
+    .action-bar {
+      position: sticky; bottom: 0; z-index: 25;
+      background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+      padding: 13px 18px; margin-top: 18px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      box-shadow: 0 -3px 14px rgba(15,23,42,0.07);
+    }
+    .ab-status { font-size: 0.82rem; color: var(--ink-3); }
+    .ab-status.is-error { color: #b91c1c; font-weight: 600; }
+    .ab-status.is-ok { color: #065f46; font-weight: 600; }
+    .ab-btns { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .gate-msg {
+      background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #d97706;
+      border-radius: 10px; padding: 14px 16px; font-size: 0.86rem;
+      color: #78350f; line-height: 1.6;
+    }
+    .gate-msg[hidden] { display: none; }
+    #formArea[hidden] { display: none; }
+  </style>
+</head>
+<body data-page-accent="amber">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth-guard.js"></script>
+
+  <!-- SHARED_NAVBAR -->
+
+  <header class="page-hero" data-accent="amber">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <div class="page-hero__eyebrow">Appraisal System · Walkthrough</div>
+        <h1 class="page-hero__title">Walkthrough Entry</h1>
+        <p class="page-hero__desc">
+          Record a short, low-stakes classroom visit against the five walkthrough foci.
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-wrap">
+    <aside class="page-info-strip" data-accent="amber" role="note">
+      <div class="page-info-strip__icon" aria-hidden="true">ℹ️</div>
+      <div class="page-info-strip__text">
+        <span class="page-info-strip__title">About this page</span>
+        <div class="page-info-strip__body">
+          A walkthrough is a brief drop-in — typically 10–15 minutes — scored Evident / Developing /
+          Not Observed across five foci, plus Glow, Grow and Go. You write it; the teacher and their
+          subject leader read it. Anchored to
+          <span class="es-pill" data-es-ref="17.8" role="button" tabindex="0"
+                title="Eduversal Academic Standards madde 17.8">ES 17.8</span>.
+          <br>
+          <em>Walkthroughs never feed the formal appraisal score — records carry
+          <code>contributes_to_formal_score: false</code>. The formal lesson observation is F2, on
+          the Class Observation Entry page.</em>
+        </div>
+      </div>
+    </aside>
+
+    <div class="gate-msg" id="gateMsg" hidden></div>
+
+    <div id="formArea" hidden>
+      <div class="setup-card">
+        <div class="sc-head">
+          <h2>Visit Details</h2>
+          <span class="sc-head-sub">Who you visited, and when</span>
+        </div>
+
+        <div class="selected-teacher" id="selectedTeacher" hidden>
+          <span class="st-name" id="stName">—</span>
+          <span id="stMeta">—</span>
+          <button type="button" class="st-clear" id="stClear">change teacher</button>
+        </div>
+
+        <div class="setup-grid" id="setupGrid">
+          <div class="form-group tp-wrap" id="tpGroup">
+            <label class="form-label" for="teacherSearch">Teacher</label>
+            <input class="form-input" id="teacherSearch" type="text" autocomplete="off"
+                   placeholder="Search by name or email…">
+            <div class="tp-results" id="tpResults" hidden></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="visitDate">Visit date</label>
+            <input class="form-input" id="visitDate" type="date">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="visitTime">Time</label>
+            <input class="form-input" id="visitTime" type="time">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="duration">Duration (minutes)</label>
+            <input class="form-input" id="duration" type="number" min="1" max="60" value="10">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="yearGroup">Year group</label>
+            <input class="form-input" id="yearGroup" type="text" placeholder="e.g. Year 8B">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="lessonPhase">Lesson phase</label>
+            <select class="form-select" id="lessonPhase">
+              <option value="">—</option>
+              <option value="starter">Starter / opening</option>
+              <option value="main">Main activity</option>
+              <option value="plenary">Plenary / closing</option>
+              <option value="mixed">Across phases</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="prog-rail">
+        <span class="pr-count" id="prCount">0 / 5 foci recorded</span>
+        <div class="pr-bar-wrap"><div class="pr-bar" id="prBar"></div></div>
+      </div>
+
+      <div id="fociHost"></div>
+
+      <div class="setup-card">
+        <div class="sc-head">
+          <h2>Feedback</h2>
+          <span class="sc-head-sub">What the teacher will read</span>
+        </div>
+        <div class="narr-grid">
+          <div class="narr-block">
+            <label for="narrGlow">Glow — what worked</label>
+            <textarea id="narrGlow" placeholder="Name the specific practice you saw and its effect on learning…"></textarea>
+            <div class="narr-hint">Be concrete: what happened, and what it did for the students.</div>
+          </div>
+          <div class="narr-block">
+            <label for="narrGrow">Grow — what to develop</label>
+            <textarea id="narrGrow" placeholder="Name the one thing that would most improve the next lesson…"></textarea>
+            <div class="narr-hint">One priority, not a list.</div>
+          </div>
+        </div>
+        <div class="narr-block" style="margin-top:16px;">
+          <label for="narrGo">Go — the agreed next action</label>
+          <textarea id="narrGo" style="min-height:90px;"
+                    placeholder="What the teacher will try next, and when you will look for it…"></textarea>
+          <div class="narr-hint">A walkthrough Go is small and quick to try — not a term-long target.</div>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <span class="ab-status" id="abStatus">Not saved yet</span>
+        <div class="ab-btns">
+          <button class="btn-primary" id="btnSave">Save walkthrough</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      collection, query, where, limit, getDocs,
+      addDoc, serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    // build.js mirrors AH/resources into dist/references-data/frameworks/, so
+    // the rubric is read from there rather than adding a second copy.
+    const RUBRIC_URL = 'references-data/frameworks/walkthrough-rubric.json';
+    const FOCUS_COLS = ['#4338ca', '#7c3aed', '#0891b2', '#059669', '#d97706'];
+
+    let RUBRIC = null;
+    let profile = null;
+    let teacher = null;
+    let responses = {};        // focusId -> { response: 'E'|'D'|'N', note: string }
+    let allTeachers = null;
+    let saved = false;         // one walkthrough per page load — no doc id reuse
+
+    function recordedCount() {
+      return (RUBRIC?.foci || []).filter(f => responses[f.id]?.response).length;
+    }
+    function refreshProgress() {
+      const total = (RUBRIC?.foci || []).length;
+      const done = recordedCount();
+      $('prCount').textContent = `${done} / ${total} foci recorded`;
+      $('prBar').style.width = total ? `${(done / total) * 100}%` : '0%';
+    }
+
+    function renderFoci() {
+      const opts = RUBRIC.response_options || [];
+      $('fociHost').innerHTML = (RUBRIC.foci || []).map((f, i) => {
+        const btns = opts.map(o => `
+          <button type="button" class="opt-btn" data-focus="${esc(f.id)}" data-code="${esc(o.code)}">
+            <span class="ob-lbl">${esc(o.label)}</span>
+            <span class="ob-desc">${esc(o.description || '')}</span>
+          </button>`).join('');
+
+        const detail = [f.description, f.prompt_for_observer].filter(Boolean)
+          .map(t => `<div style="margin-bottom:6px;">${esc(t)}</div>`).join('');
+
+        return `
+          <div class="focus-card" style="--f-col:${FOCUS_COLS[i % FOCUS_COLS.length]};">
+            <div class="fc-head">
+              <span class="fc-id">${esc(f.id)}</span>
+              <span class="fc-title">${esc(f.title)}</span>
+            </div>
+            ${f.guiding_question ? `<div class="fc-question">${esc(f.guiding_question)}</div>` : ''}
+            ${detail ? `<button type="button" class="fc-more" data-more="${esc(f.id)}">what to look for</button>
+                        <div class="fc-detail" id="det-${esc(f.id)}" hidden>${detail}</div>` : ''}
+            <div class="opt-row">${btns}</div>
+            <textarea class="fc-note" data-note="${esc(f.id)}"
+                      placeholder="What you actually saw for this focus…"></textarea>
+          </div>`;
+      }).join('');
+
+      $('fociHost').querySelectorAll('[data-more]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const el = document.getElementById(`det-${btn.dataset.more}`);
+          if (el) el.hidden = !el.hidden;
+        });
+      });
+
+      $('fociHost').querySelectorAll('.opt-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.focus, code = btn.dataset.code;
+          if (!responses[id]) responses[id] = {};
+          // Clicking the selected option again clears it.
+          responses[id].response = responses[id].response === code ? undefined : code;
+          $('fociHost').querySelectorAll(`[data-focus="${CSS.escape(id)}"]`)
+            .forEach(b => { b.className = 'opt-btn'; });
+          if (responses[id].response) btn.classList.add(`sel-${code}`);
+          markDirty();
+          refreshProgress();
+        });
+      });
+
+      $('fociHost').querySelectorAll('[data-note]').forEach(ta => {
+        ta.addEventListener('input', () => {
+          const id = ta.dataset.note;
+          if (!responses[id]) responses[id] = {};
+          responses[id].note = ta.value;
+          markDirty();
+        });
+      });
+
+      refreshProgress();
+    }
+
+    function markDirty() {
+      if (saved) return;
+      const el = $('abStatus');
+      el.className = 'ab-status';
+      el.textContent = 'Unsaved changes';
+    }
+
+    // ── Teacher picker ─────────────────────────────────────────
+    async function loadTeachers() {
+      if (allTeachers) return allTeachers;
+      const snap = await getDocs(query(
+        collection(window.db, 'users'),
+        where('role_teachershub', 'in', ['teachers_user', 'teachers_admin']),
+        limit(600)
+      ));
+      allTeachers = snap.docs.map(d => {
+        const u = d.data();
+        return {
+          // Local view-model; reaches Firestore as teacherUid. // @lint-allow-uid
+          uid: d.id,
+          name: u.displayName || u.name || u.email || '(no name)',
+          email: (u.email || '').toLowerCase(),
+          school: u.school || '',
+          schoolId: u.schoolId || '',
+          subject: u.subject || ''
+        };
+      });
+      return allTeachers;
+    }
+
+    function renderResults(list) {
+      const box = $('tpResults');
+      if (!list.length) {
+        box.innerHTML = '<div class="tp-empty">No teacher matches that search.</div>';
+        box.hidden = false;
+        return;
+      }
+      box.innerHTML = list.slice(0, 25).map(t => `
+        <div class="tp-row" data-uid="${esc(t.uid)}">
+          <div class="tp-row-name">${esc(t.name)}</div>
+          <div class="tp-row-meta">${esc([t.school, t.subject, t.email].filter(Boolean).join(' · '))}</div>
+        </div>`).join('');
+      box.hidden = false;
+      box.querySelectorAll('.tp-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const t = (allTeachers || []).find(x => x.uid === row.dataset.uid);
+          if (!t) return;
+          teacher = t;
+          $('stName').textContent = t.name;
+          $('stMeta').textContent = [t.school, t.subject].filter(Boolean).join(' · ');
+          $('selectedTeacher').hidden = false;
+          $('tpGroup').style.display = 'none';
+          $('tpResults').hidden = true;
+          markDirty();
+        });
+      });
+    }
+
+    // ── Save ───────────────────────────────────────────────────
+    async function save() {
+      const el = $('abStatus');
+      if (saved) return;
+      if (!teacher) {
+        el.className = 'ab-status is-error';
+        el.textContent = 'Pick a teacher before saving.';
+        return;
+      }
+      if (!recordedCount()) {
+        el.className = 'ab-status is-error';
+        el.textContent = 'Record at least one focus before saving.';
+        return;
+      }
+
+      const dateVal = $('visitDate').value;
+      const timeVal = $('visitTime').value;
+      const visitDate = dateVal
+        ? new Date(`${dateVal}T${timeVal || '00:00'}:00`)
+        : new Date();
+
+      const glow = $('narrGlow').value.trim();
+      const grow = $('narrGrow').value.trim();
+      const go   = $('narrGo').value.trim();
+
+      // Shape mirrors Academic Hub's TeacherWalkthroughEntry payload so both
+      // hubs' records render identically on /teacher-appraisals.
+      const payload = {
+        teacherUid: teacher.uid,
+        observerUid: window.currentUser.uid,
+        schoolId: teacher.schoolId || null,
+        academicYear: (window.getCurrentAcademicYear && window.getCurrentAcademicYear()) || '',
+        visitDate,
+        duration: parseInt($('duration').value, 10) || 10,
+        metadata: {
+          teacherName: teacher.name,
+          subject: teacher.subject || '',
+          yearGroup: $('yearGroup').value.trim(),
+          observerName: profile?.displayName || window.currentUser.email || '',
+          observerRole: 'subject_specialist',
+          observerHub: 'centralhub',
+          lessonPhase: $('lessonPhase').value || ''
+        },
+        fociResponses: JSON.parse(JSON.stringify(responses)),
+        narrative: {
+          glow, grow, go,
+          glowGrowGoComplete: !!(glow && grow && go)
+        },
+        // Legacy fields AH also writes — /teacher-appraisals reads these.
+        keyObservation: glow,
+        suggestedFocus: go,
+        // A walkthrough is developmental and never contributes to the formal
+        // appraisal score. Same boundary AH enforces.
+        contributes_to_formal_score: false,
+        createdAt: serverTimestamp()
+      };
+
+      el.className = 'ab-status';
+      el.textContent = 'Saving…';
+      try {
+        await addDoc(collection(window.db, 'teacher_walkthroughs'), payload);
+      } catch (e) {
+        console.error(e);
+        el.className = 'ab-status is-error';
+        el.textContent = e?.code === 'permission-denied'
+          ? 'Not saved — you do not have permission to record this walkthrough.'
+          : 'Not saved — please try again.';
+        return;
+      }
+
+      saved = true;
+      el.className = 'ab-status is-ok';
+      el.textContent = 'Walkthrough saved ✓';
+      $('btnSave').disabled = true;
+      $('btnSave').textContent = 'Saved';
+    }
+
+    // CH dispatches authReady on `document`, not `window` (Common Mistake #13).
+    document.addEventListener('authReady', async ({ detail }) => {
+      profile = detail?.profile || window.userProfile || null;
+
+      try {
+        RUBRIC = await fetch(RUBRIC_URL).then(r => {
+          if (!r.ok) throw new Error(`rubric ${r.status}`);
+          return r.json();
+        });
+        if (!RUBRIC?.foci?.length) throw new Error('rubric has no foci');
+      } catch (e) {
+        console.error(e);
+        $('gateMsg').innerHTML =
+          '<strong>Could not load the walkthrough rubric.</strong> It is served from ' +
+          '<code>references-data/frameworks/walkthrough-rubric.json</code>. Reload the page; if it keeps failing, tell an admin.';
+        $('gateMsg').hidden = false;
+        return;
+      }
+
+      $('formArea').hidden = false;
+      const now = new Date();
+      $('visitDate').value = now.toISOString().slice(0, 10);
+      $('visitTime').value = now.toTimeString().slice(0, 5);
+      renderFoci();
+
+      let tmr = null;
+      $('teacherSearch').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        clearTimeout(tmr);
+        if (!q) { $('tpResults').hidden = true; return; }
+        tmr = setTimeout(async () => {
+          const list = await loadTeachers();
+          renderResults(list.filter(t =>
+            t.name.toLowerCase().includes(q) || t.email.includes(q) || (t.school || '').toLowerCase().includes(q)
+          ));
+        }, 180);
+      });
+      document.addEventListener('click', (e) => {
+        if (!$('tpGroup').contains(e.target)) $('tpResults').hidden = true;
+      });
+      $('stClear').addEventListener('click', () => {
+        teacher = null;
+        $('selectedTeacher').hidden = true;
+        $('tpGroup').style.display = '';
+        $('teacherSearch').value = '';
+      });
+
+      ['visitDate','visitTime','duration','yearGroup','lessonPhase','narrGlow','narrGrow','narrGo']
+        .forEach(id => $(id).addEventListener('input', markDirty));
+
+      $('btnSave').addEventListener('click', save);
+    });
+  </script>
+</body>
+</html>

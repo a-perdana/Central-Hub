@@ -1325,14 +1325,23 @@ service cloud.firestore {
                   || isTeachersAdmin()
                   || (isTeachersUser() && resource.data.teacherUid == request.auth.uid)
                   || (isAcademicUser() && resource.data.observerUid == request.auth.uid);
+      // central_user branch: Eduversal Subject Specialists run walkthroughs
+      // alongside the formal observation on an on-site visit (ES 17.8.2,
+      // "Day 1: Subject Teacher Appraisals and Walkthroughs"), entered from
+      // CH /walkthrough-entry. Creators must stamp themselves as the observer
+      // so the update branch scopes them to their own records.
       allow create: if isAHAdmin()
                     || (isAcademicUser()
-                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
+                    || (isCentralUser()
+                        && request.resource.data.observerUid == request.auth.uid);
       allow update: if isAdmin()
                     || isAHAdmin()
                     || (isAcademicUser()
                         && resource.data.observerUid == request.auth.uid
-                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
+                        && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']))
+                    || (isCentralUser()
+                        && resource.data.observerUid == request.auth.uid);
       allow delete: if isAdmin() || isAHAdmin();
     }
 
