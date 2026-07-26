@@ -34,6 +34,7 @@ import {
 import {
   PROGRAMME_LABELS, PROGRAMME_ACRONYM, PROGRAMME_TAGLINE, PROGRAMME_EMOJI,
   PROGRAMME_ACCENT, PROGRAMME_ACCENT_COLOR, PROGRAMME_PICS, PROGRAMME_LINKS,
+  PROGRAMME_ES_REFS, PROGRAMME_SIBLINGS, PROGRAMME_BOUNDARY,
   isValidProgramme, programmeLabel
 } from './programme-config.js';
 
@@ -66,6 +67,10 @@ const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
 ));
 
 function safeUrl(url) { return /^https?:\/\//i.test(url) ? url : '#'; }
+
+// programKey → its hub page slug. The eight hub pages are named after their
+// key with underscores swapped for hyphens (verified 2026-07-26: all 8 exist).
+function hubSlug(key) { return String(key || '').replace(/_/g, '-'); }
 
 function showToast(msg) {
   const t = $('toast');
@@ -211,7 +216,14 @@ function paintHero() {
   // Info-strip body (config-driven, so every hub shell is byte-identical).
   const stripBody = $('hubStripBody');
   if (stripBody) {
-    stripBody.innerHTML = `The programme hub for <strong>${escHtml(label)}</strong> — a single home for its <strong>notes, documentation, calendar, and meeting records</strong>${tagline ? ` (${escHtml(tagline)})` : ''}. Meetings join the shared <a href="coordinators-meetings">Coordinators Meetings</a> pool; decisions surface on <a href="decisions-register">Decisions</a>.`;
+    // "Which surface do I write this on?" — stated once, here. Without it the
+    // same decision ends up duplicated across Notes, Documents and Meetings and
+    // the three drift apart within a revision (the discipline behind
+    // Common Mistake #46, applied to this hub's four content sections).
+    const boundary = PROGRAMME_BOUNDARY[programKey] || '';
+    stripBody.innerHTML = `The programme hub for <strong>${escHtml(label)}</strong> — a single home for its <strong>notes, documentation, calendar, and meeting records</strong>${tagline ? ` (${escHtml(tagline)})` : ''}. Meetings join the shared <a href="coordinators-meetings">Coordinators Meetings</a> pool; decisions surface on <a href="decisions-register">Decisions</a>.
+      <div class="prog-strip-rule"><strong>Where things go:</strong> Notes = working thinking · Documents = the approved version · Meetings = what was discussed and who took it on.</div>
+      ${boundary ? `<div class="prog-strip-boundary">${escHtml(boundary)}</div>` : ''}`;
   }
 
   // Footer CTA (config-driven).
@@ -251,6 +263,31 @@ function renderHub() {
     ? `<div class="prog-links-lbl">Related tools</div><div class="prog-links">${links}</div>`
     : '';
 
+  // Eduversal Academic Standards anchors. data-es-ref is auto-wired by the
+  // build-injected cambridge-crossref.js into a verbatim-text popover, so the
+  // madde text is never duplicated here (Common Mistake #49a).
+  // data-es-ref carries the BARE madde number ("6.14"), matching the convention
+  // in chip-families.html / handbook readers; the visible text keeps the "ES "
+  // prefix. cambridge-crossref.js reads the attribute, not the label.
+  const esRefs = (PROGRAMME_ES_REFS[programKey] || []).map(r => {
+    const bare = String(r).replace(/^ES[\s:_-]*/i, '');
+    return `<span class="es-pill" data-es-ref="${escHtml(bare)}" role="button" tabindex="0"
+      title="Eduversal Academic Standards madde ${escHtml(bare)}">ES ${escHtml(bare)}</span>`;
+  }).join('');
+  const esBlock = esRefs
+    ? `<div class="prog-links-lbl">Grounded in Academic Standards</div>
+       <div class="prog-es-row">${esRefs}</div>`
+    : '';
+
+  // Sibling programmes — keeps the eight modules reading as one system.
+  const sibs = (PROGRAMME_SIBLINGS[programKey] || []).map(k =>
+    `<a class="prog-sib" href="${escHtml(hubSlug(k))}">
+       <span class="prog-sib-emoji" aria-hidden="true">${PROGRAMME_EMOJI[k] || '•'}</span>
+       ${escHtml(programmeLabel(k))}</a>`).join('');
+  const sibsBlock = sibs
+    ? `<div class="prog-links-lbl">Related programmes</div><div class="prog-sibs">${sibs}</div>`
+    : '';
+
   host.innerHTML = `
     ${sectionShell('overview', 'Overview',
       `<span class="dw-section-mode">Live · Read-only</span>`,
@@ -282,7 +319,10 @@ function renderHub() {
         </div>
       </div>
       ${picsBlock}
-      ${linksBlock}`)}
+      <div id="progActions" class="prog-actions-slot"></div>
+      ${linksBlock}
+      ${esBlock}
+      ${sibsBlock}`)}
 
     ${sectionShell('notes', 'Notes',
       `<span class="dw-section-mode">Rich text · Shared pad</span>`,
@@ -329,6 +369,7 @@ function renderHub() {
 
   // Bind data
   bindOverviewKpi();
+  bindOpenActions();
   bindNotes();
   bindDocs();
   bindCalendar();
@@ -351,6 +392,12 @@ const SECTION_ICON = {
 function sectionShell(key, title, headRight, bodyHtml) {
   const collapsed = getCollapsed(key);
   const icon = SECTION_ICON[key] || '•';
+  // Count badge — filled by setSectionCount() once each bind resolves. Without
+  // it a collapsed section says nothing: 0 documents and 40 documents look
+  // identical until you expand. Starts blank (not "0") so it never flashes a
+  // wrong zero while loading.
+  const countBadge = COUNTED_SECTIONS.has(key)
+    ? `<span class="dw-section-count" id="secCount-${key}" aria-hidden="true"></span>` : '';
   return `
     <section class="dw-section${collapsed ? ' is-collapsed' : ''}" data-section="${key}" aria-label="${escHtml(title)}">
       <div class="dw-section-head">
@@ -362,6 +409,7 @@ function sectionShell(key, title, headRight, bodyHtml) {
           </svg>
           <span class="dw-section-icon" aria-hidden="true">${icon}</span>
           <h3 class="dw-section-title">${escHtml(title)}</h3>
+          ${countBadge}
         </div>
         ${headRight || ''}
       </div>
@@ -369,9 +417,26 @@ function sectionShell(key, title, headRight, bodyHtml) {
     </section>`;
 }
 
+// Sections whose head carries a live count badge.
+const COUNTED_SECTIONS = new Set(['documentation', 'calendar', 'meetings']);
+
+// Write a section's count badge and mark the section empty (dimmed head) when
+// it holds nothing — so the eye goes to the sections that have content.
+function setSectionCount(key, n) {
+  const el = $(`secCount-${key}`);
+  if (el) el.textContent = String(n);
+  const sec = document.querySelector(`.dw-section[data-section="${key}"]`);
+  if (sec) sec.classList.toggle('is-empty', Number(n) === 0);
+}
+
 function collapseKey(key) { return `progHub:collapsed:${programKey}:${key}`; }
 
 function getCollapsed(key) {
+  // Overview is the page's only self-explaining section — the active window,
+  // participation and related tools all live there. It always opens; a stored
+  // "collapsed" from an earlier visit would otherwise leave the hub looking
+  // completely empty on arrival.
+  if (key === 'overview') return false;
   try { return localStorage.getItem(collapseKey(key)) === '1'; }
   catch (e) { return false; }  // default open
 }
@@ -450,10 +515,31 @@ function renderPeriodKpi({ termLine, subLine, muted }) {
   const semText = sem ? sem.label : '';
   setText('kpiWindowSemester', semText && semText !== big ? semText : '');
 
-  setText('kpiWindowSub', subLine || (ay ? `AY ${ay}` : 'no academic year set'));
+  const sub = subLine || (ay ? `AY ${ay}` : 'no academic year set');
+  setText('kpiWindowSub', sub);
 
   const el = $('kpiWindow');
   if (el) el.classList.toggle('dw-kpi-val--muted', !!muted);
+
+  // Mirror into the hero so the page answers "which period are we in?" before
+  // the reader expands anything. The hero tile stacks term + semester on one
+  // line because it has no third row.
+  const heroBig = (termLine && semText && semText !== termLine)
+    ? `${termLine} · ${semText}` : big;
+  setText('heroKpiPeriod', heroBig);
+  setText('heroKpiPeriodLbl', termLine ? 'Active Window' : 'Academic Period');
+  setText('heroKpiPeriodSub', sub);
+  const hk = $('heroKpis');
+  if (hk) hk.hidden = false;
+}
+
+// Reveal a hero KPI tile and fill it. Tiles stay hidden until their query
+// resolves — an empty tile is worse than no tile.
+function setHeroKpi(wrapId, numId, subId, num, sub) {
+  const w = $(wrapId);
+  if (w) w.hidden = false;
+  setText(numId, num);
+  if (subId) setText(subId, sub || '');
 }
 
 async function bindOverviewKpi() {
@@ -474,6 +560,9 @@ async function bindOverviewKpi() {
           termLine: windowTermLabel(winLabel),
           subLine: w.academicYear ? `AY ${w.academicYear}` : 'open now',
         });
+        // Operational reach of the OPEN window — the questions a programme lead
+        // actually arrives with. Fire-and-forget: never blocks the KPI strip.
+        bindWindowReach(wsnap.docs[0].id, w);
       } else {
         renderPeriodKpi({ termLine: 'No open window', muted: true });
       }
@@ -499,6 +588,136 @@ async function bindOverviewKpi() {
     setText('kpiItems', '—');
   }
   // Docs + Meetings counts are filled by their own binds (bindDocs/bindMeetings).
+}
+
+// Open actions — who owes what, by when. A programme hub that lists documents
+// but not commitments is an archive, not a management surface.
+//
+// Reads activity_tasks tagged with this programKey (the same discriminator
+// pattern department_artifacts / coordinators_meetings / calendar_events
+// already use). No task carries programKey yet — tagging happens in
+// /activities — so the panel currently renders its empty state and starts
+// filling itself the moment a task is tagged. Deliberately NOT a new
+// collection: /activities stays the single place tasks are managed.
+const TASK_OPEN_STATUSES = ['todo', 'in_progress', 'under_review'];
+
+function bindOpenActions() {
+  const slot = $('progActions');
+  if (!slot) return;
+  const qy = query(collection(db, 'activity_tasks'), where('programKey', '==', programKey), limit(50));
+  const unsub = onSnapshot(qy, (snap) => {
+    const open = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(t => TASK_OPEN_STATUSES.includes(t.status));
+    if (!open.length) {
+      slot.innerHTML = `
+        <div class="prog-links-lbl">Open actions</div>
+        <div class="prog-actions-empty">
+          No open actions tagged to this programme.
+          <a href="activities">Open Activities →</a>
+        </div>`;
+      return;
+    }
+    // Soonest due first; undated last.
+    open.sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+    const todayIso = new Date().toISOString().slice(0, 10);
+    slot.innerHTML = `
+      <div class="prog-links-lbl">Open actions <span class="prog-actions-count">${open.length}</span></div>
+      <div class="prog-actions">
+        ${open.slice(0, 6).map(t => {
+          const overdue = t.dueDate && String(t.dueDate) < todayIso;
+          const who = Array.isArray(t.assignees) && t.assignees.length
+            ? t.assignees.join(', ') : (t.assignee || 'Unassigned');
+          return `
+            <a class="prog-action" href="activities">
+              <span class="prog-action-dot" data-st="${escHtml(t.status || '')}" aria-hidden="true"></span>
+              <span class="prog-action-name">${escHtml(t.name || t.title || 'Untitled task')}</span>
+              <span class="prog-action-who">${escHtml(who)}</span>
+              <span class="prog-action-due${overdue ? ' is-overdue' : ''}">${escHtml(t.dueDate || '—')}</span>
+            </a>`;
+        }).join('')}
+      </div>
+      ${open.length > 6 ? `<a class="prog-actions-more" href="activities">View all ${open.length} in Activities →</a>` : ''}`;
+  }, (err) => {
+    console.warn('[bindOpenActions]', err);
+    slot.innerHTML = '';   // non-fatal: the panel simply doesn't render
+  });
+  unsubFns.push(unsub);
+}
+
+// Operational reach of the currently-open EASE window: how many active students
+// have actually sat it, how many schools have started, and how long is left.
+//
+// Reads ease_sessions filtered by windowId (== the ease_test_windows doc id) —
+// sessions carry studentUid + schoolId, so participation and school coverage
+// both come from the one query. Counted in JS off a capped read rather than a
+// per-school count query, so cost stays flat as the network grows.
+//
+// Deliberately honest about small denominators: with a handful of active
+// students a percentage is noise, so the tile shows the raw ratio instead.
+async function bindWindowReach(windowId, win) {
+  // 1. Time left in the window — pure date maths, no read needed.
+  try {
+    const closes = win?.closesAt?.toDate ? win.closesAt.toDate() : null;
+    if (closes) {
+      const days = Math.ceil((closes.getTime() - Date.now()) / 86400000);
+      const dateStr = closes.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      let big, sub;
+      if (days < 0)       { big = 'Overdue';           sub = `closed ${dateStr}`; }
+      else if (days === 0){ big = 'Today';             sub = dateStr; }
+      else if (days < 21) { big = `${days}d`;          sub = dateStr; }
+      else                { big = `${Math.round(days / 7)}w`; sub = dateStr; }
+      setHeroKpi('heroKpiClosesWrap', 'heroKpiCloses', 'heroKpiClosesSub', big, sub);
+    }
+  } catch (e) { /* non-fatal — the tile just stays hidden */ }
+
+  // 2. Participation + school coverage.
+  try {
+    // `students` list/count is admin-only at the rule level (isAdmin() ||
+    // isAHAdmin() || isTHAdmin() || AH leadership) — a plain CH director or
+    // coordinator cannot read it. Only ask when we know it can succeed;
+    // otherwise the tile drops the denominator instead of throwing.
+    const canCountStudents = isAdmin;
+    const [sesSnap, studentCount, schoolSnap] = await Promise.all([
+      getDocs(query(collection(db, 'ease_sessions'), where('windowId', '==', windowId), limit(3000))),
+      canCountStudents
+        ? getCountFromServer(query(collection(db, 'students'), where('status', '==', 'active')))
+            .then(c => c.data().count).catch(() => null)
+        : Promise.resolve(null),
+      getDocs(query(collection(db, 'partner_schools'), limit(60))).catch(() => null),
+    ]);
+
+    const students = new Set();
+    const schools = new Set();
+    sesSnap.forEach(d => {
+      const s = d.data();
+      if (s.studentUid) students.add(s.studentUid);
+      if (s.schoolId) schools.add(s.schoolId);
+    });
+
+    // partner_schools includes the HQ pseudo-school — not a delivery site.
+    const totalSchools = schoolSnap
+      ? schoolSnap.docs.filter(d => d.id !== 'eduversal_hq').length : null;
+
+    const sat = students.size;
+    if (studentCount && studentCount >= 25) {
+      const pct = Math.round((sat / studentCount) * 100);
+      setHeroKpi('heroKpiReachWrap', 'heroKpiReach', 'heroKpiReachSub',
+        `${pct}%`, `${sat.toLocaleString('en-GB')} of ${studentCount.toLocaleString('en-GB')} students`);
+    } else {
+      // Too few students for a percentage to mean anything — show the ratio.
+      setHeroKpi('heroKpiReachWrap', 'heroKpiReach', 'heroKpiReachSub',
+        String(sat), studentCount != null ? `of ${studentCount} active students` : 'students sat this window');
+    }
+
+    if (totalSchools) {
+      const notStarted = Math.max(0, totalSchools - schools.size);
+      setHeroKpi('heroKpiSchoolsWrap', 'heroKpiSchools', 'heroKpiSchoolsSub',
+        `${schools.size} / ${totalSchools}`,
+        notStarted ? `${notStarted} not started` : 'all schools started');
+    }
+  } catch (e) {
+    console.warn('[bindWindowReach]', e);
+  }
 }
 
 function setText(id, txt) { const el = $(id); if (el) el.textContent = txt; }
@@ -658,6 +877,7 @@ function bindDocs() {
       .filter(d => (d.status || 'current') !== 'archived')
       .sort((a, b) => tsMillis(b.updatedAt) - tsMillis(a.updatedAt));
     setText('kpiDocs', String(docs.length));
+    setSectionCount('documentation', docs.length);
     if (!docs.length) {
       slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">No documents yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “+ Add document” to attach a policy, plan, or report to this programme.' : 'Programme documents will appear here once added.'}</div></div>`;
       return;
@@ -730,6 +950,7 @@ function bindCalendar() {
   const unsub = onSnapshot(qy, (snap) => {
     calendarEventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const evts = calendarEventsCache.filter(e => e.programKey === programKey);
+    setSectionCount('calendar', evts.length);
     if (!evts.length) {
       slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">No programme events yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “+ Add event” to put window openings, review days, or deadlines on this programme’s calendar.' : 'Programme calendar events will appear here once added.'}</div></div>`;
       return;
@@ -799,6 +1020,7 @@ function bindMeetings() {
     const mtgs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => tsMillis(b.meetingDate) - tsMillis(a.meetingDate));
     setText('kpiMeetings', String(mtgs.length));
+    setSectionCount('meetings', mtgs.length);
     if (!mtgs.length) {
       slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">No meetings logged yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “+ New meeting” to open a record for this programme — it joins the shared Coordinators Meetings pool.' : 'Programme meeting records will appear here once logged.'}</div></div>`;
       return;

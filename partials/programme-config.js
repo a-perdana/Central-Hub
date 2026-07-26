@@ -194,15 +194,57 @@ export const PROGRAMME_LINKS = {
 // leave [] rather than inventing a phantom ref (Common Mistake #49).
 // EASE + PD + appraisal live in ES Section 12 "Staff Lifecycle" / the
 // assessment sections; left [] here until each is verified per-programme.
+// Every id below was checked against manifest.json's maddeIndex on 2026-07-26
+// and against the section body text — not inferred from the title alone.
+// ES 6.14 "Benchmark and External Assessments" names EASE explicitly (its
+// windows, its five report tiers, and the "NOT used for individual student
+// grades" boundary), so it anchors all three EASE programmes.
 export const PROGRAMME_ES_REFS = {
-  ease_growth:        [],
-  ease_assessment:    [],
-  ease_academic:      [],
-  appraisal_system:   [],
-  induction_programs: [],
-  dtp:                [],
-  aft:                [],
-  atc:                [],
+  // 6.14 names EASE; 6.3 assessment architecture; 6.11 data → instruction.
+  ease_growth:        ['ES 6.14', 'ES 6.3', 'ES 6.11'],
+  // 6.6 summative design + 6.7 internal moderation = network-uniform tests.
+  ease_assessment:    ['ES 6.14', 'ES 6.6', 'ES 6.7', 'ES 6.4'],
+  // 6.8 grading/reporting + 6.9 report cards = per-subject achievement.
+  ease_academic:      ['ES 6.14', 'ES 6.8', 'ES 6.9', 'ES 6.11'],
+  // Section 12 staff lifecycle: annual cycle + goals + performance concerns.
+  appraisal_system:   ['ES 12.7', 'ES 12.8', 'ES 12.11', 'ES 6.17'],
+  // 12.5 induction programme for new teachers + 12.9 coaching and mentoring.
+  induction_programs: ['ES 12.5', 'ES 12.9', 'ES 12.4'],
+  // 12.6 professional development opportunities + 12.8 growth plans.
+  dtp:                ['ES 12.6', 'ES 12.8', 'ES 12.9'],
+  // Pre-service pipeline = workforce planning + recruitment/selection.
+  aft:                ['ES 12.2', 'ES 12.3'],
+  // Centralised training delivery sits under PD opportunities.
+  atc:                ['ES 12.6', 'ES 12.13'],
+};
+
+// Sibling programmes — surfaced as "Related programmes" chips so the eight
+// modules read as one system rather than eight silos. Grouped by family:
+// the three EASE assessment products, and the staff-development cluster.
+export const PROGRAMME_SIBLINGS = {
+  ease_growth:        ['ease_assessment', 'ease_academic'],
+  ease_assessment:    ['ease_growth', 'ease_academic'],
+  ease_academic:      ['ease_growth', 'ease_assessment'],
+  appraisal_system:   ['induction_programs', 'dtp'],
+  induction_programs: ['appraisal_system', 'dtp', 'aft'],
+  dtp:                ['atc', 'induction_programs', 'appraisal_system'],
+  aft:                ['atc', 'induction_programs'],
+  atc:                ['dtp', 'aft'],
+};
+
+// One-line boundary note per programme — what this hub is NOT, so readers
+// don't mistake e.g. Growth for an achievement grade. Rendered in the info
+// strip. EASE Growth's line restates the ES 6.14 "not used for individual
+// student grades" rule in plain language.
+export const PROGRAMME_BOUNDARY = {
+  ease_growth:        'Growth is diagnostic — it tracks progress over time and is never a report-card grade (ES 6.14).',
+  ease_assessment:    'Common assessments are network-uniform; per-school variants defeat comparability (ES 6.7).',
+  ease_academic:      'Achievement tracking reports mastery against the Cambridge curriculum, not growth trajectory.',
+  appraisal_system:   'Appraisal is the formal performance record — Year-1 induction data never feeds it (Charter NN1).',
+  induction_programs: 'Induction supports Year-1 staff; it is developmental and never feeds appraisal scoring (Charter NN1).',
+  dtp:                'DTP is capacity-building, not evaluation — participation is not an appraisal input.',
+  aft:                'AFT covers pre-service candidates who are not yet network staff.',
+  atc:                'ATC is delivery infrastructure — the curriculum it delivers is owned by DTP.',
 };
 
 export function isValidProgramme(programKey) {
