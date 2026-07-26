@@ -193,8 +193,8 @@ export const PROGRAMME_LINKS = {
   ],
   appraisal_system: [
     { slug: 'school-appraisals',    label: 'School Appraisals',    desc: 'Five-domain self-appraisal for partner schools; coordinators review and validate.',
-      who: 'School leadership, in Academic Hub — the record opens itself when they start. Admin can also open one here for a past year',
-      reads: 'Eduversal coordinators, who review and validate each domain' },
+      who: 'The school rates itself in Academic Hub; Eduversal coordinators then write the recommendations here',
+      reads: 'The school, which acts on the recommendations. A Central Hub admin signs the appraisal off' },
     { slug: 'teacher-appraisals',   label: 'Teacher Appraisals',   desc: 'All formal appraisal records and classroom walkthroughs across every school.',
       who: 'Subject leaders and school leadership, from Teachers Hub',
       reads: 'Eduversal specialists and directors; admin can finalise a record here' },
