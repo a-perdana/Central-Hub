@@ -138,6 +138,12 @@ export const PROGRAMME_PICS = {
 //   - slug:  canonical URL slug (page basename minus .html — page MUST exist)
 //   - label: display string
 //   - desc:  one-line "what this tool does"
+//   - who:   who ENTERS the data on this page (the person filling the form /
+//            authoring the content) — plain-language role names, not Firestore
+//            sub-role ids, so a first-time reader recognises themselves.
+//   - reads: who CONSUMES the output. Together `who` + `reads` answer the two
+//            questions a cold visitor has: "is this mine to fill in?" and
+//            "where does what I enter end up?".
 // All slugs verified to exist (2026-07-25). AFT + ATC have no dedicated tool
 // pages — they point at the closest generic surfaces (references / pd).
 // Links every programme hub carries, appended after its own tools by
@@ -146,71 +152,111 @@ export const PROGRAMME_PICS = {
 // coordinators_meetings, so these are the "open the full editor" routes back
 // into the pool. Defined once here rather than repeated in all eight lists.
 export const PROGRAMME_COMMON_LINKS = [
-  { slug: 'coordinators-meetings', label: 'Coordinators Meetings', desc: 'Full meeting editor with agenda items — shared HQ meeting pool.' },
-  { slug: 'decisions-register',    label: 'Decisions & Policies',  desc: 'Network-wide decisions surfaced from coordinator meetings.' },
+  { slug: 'coordinators-meetings', label: 'Coordinators Meetings', desc: 'Full meeting editor with agenda items — shared HQ meeting pool.',
+    who: 'Meeting chair or note-taker (any Eduversal coordinator)', reads: 'All Eduversal coordinators and directors' },
+  { slug: 'decisions-register',    label: 'Decisions & Policies',  desc: 'Network-wide decisions surfaced from coordinator meetings.',
+    who: 'Coordinator who logged the decision in a meeting', reads: 'All Eduversal staff — the standing record of what was agreed' },
 ];
 
 export const PROGRAMME_LINKS = {
   ease_growth: [
-    { slug: 'ease-item-author',   label: 'EASE Item Author',  desc: 'Author the 3-band adaptive item bank (Math / English / Science).' },
-    { slug: 'ease-window-admin',  label: 'EASE Window Admin',  desc: 'Open and close the three EASE Growth windows per academic year.' },
-    { slug: 'ease-bank-browser',  label: 'Latihan Browser',    desc: 'Read-only viewer into the upstream latihan.id question archive.' },
+    { slug: 'ease-item-author',   label: 'EASE Item Author',  desc: 'Author the 3-band adaptive item bank (Math / English / Science).',
+      who: 'Eduversal subject specialists for Math, English, and Science', reads: 'The adaptive engine — students see one item at a time during a test' },
+    { slug: 'ease-window-admin',  label: 'EASE Window Admin',  desc: 'Open and close the three EASE Growth windows per academic year.',
+      who: 'Eduversal admin only — one setting for the whole network', reads: 'Every partner school; an open window is what lets students start' },
+    { slug: 'ease-bank-browser',  label: 'Latihan Browser',    desc: 'Read-only viewer into the upstream latihan.id question archive.',
+      who: 'Nobody — this page is read-only, nothing is saved from it', reads: 'Eduversal specialists browsing the partner archive for source items' },
   ],
   ease_assessment: [
-    { slug: 'chapter-test-author',        label: 'Chapter Tests',          desc: 'Author network-uniform chapter mastery tests anchored to Cambridge pacing units.' },
-    { slug: 'question-bank',              label: 'Chapter Test Item Bank', desc: 'Standalone CRUD + reuse bank for chapter-test items with Cambridge metadata.' },
-    { slug: 'assessment-management',      label: 'Pacing Assessments',     desc: 'Manage chapter-end assessments and topic activities embedded in the pacing guides.' },
-    { slug: 'practice-assessment-author', label: 'Practice Tests',         desc: 'Compose or AI-rank practice assessments for Students Hub tournaments and leaderboards.' },
-    { slug: 'practice-bank-admin',        label: 'Practice Questions',     desc: 'CRUD for supplemental practice items powering SH gamification (never formal grading).' },
+    { slug: 'chapter-test-author',        label: 'Chapter Tests',          desc: 'Author network-uniform chapter mastery tests anchored to Cambridge pacing units.',
+      who: 'Eduversal subject specialists — one test per chapter, network-wide', reads: 'Teachers schedule it for a class; students take it in Students Hub' },
+    { slug: 'question-bank',              label: 'Chapter Test Item Bank', desc: 'Standalone CRUD + reuse bank for chapter-test items with Cambridge metadata.',
+      who: 'Eduversal subject specialists writing or editing single questions', reads: 'Chapter Tests above — this is the pool tests are built from' },
+    { slug: 'assessment-management',      label: 'Pacing Assessments',     desc: 'Manage chapter-end assessments and topic activities embedded in the pacing guides.',
+      who: 'Eduversal subject specialists who own the pacing guide', reads: 'Partner-school teachers following the guide in Teachers Hub' },
+    { slug: 'practice-assessment-author', label: 'Practice Tests',         desc: 'Compose or AI-rank practice assessments for Students Hub tournaments and leaderboards.',
+      who: 'Eduversal subject specialists composing practice bundles', reads: 'Students, as practice runs and daily challenges — never a formal grade' },
+    { slug: 'practice-bank-admin',        label: 'Practice Questions',     desc: 'CRUD for supplemental practice items powering SH gamification (never formal grading).',
+      who: 'Eduversal subject specialists curating the practice pool', reads: 'Practice Tests above — never counted in any formal result' },
   ],
   ease_academic: [
-    { slug: 'teaching-progress',             label: 'Teaching Progress',    desc: 'Real-time view of teacher pacing progress across all subjects, live from Teachers Hub.' },
-    { slug: 'curriculum-map',                label: 'Curriculum Map',       desc: 'Week-by-week visual of all subjects and Cambridge syllabus coverage.' },
-    { slug: 'students-overview',             label: 'Students Overview',    desc: 'Network-wide roster of every Students Hub account across partner schools.' },
-    { slug: 'primary-checkpoint-syllabus',   label: 'Primary Checkpoint',   desc: 'Manage chapter, topic, and syllabus-objective structure for Primary Checkpoint subjects.' },
-    { slug: 'secondary-checkpoint-syllabus', label: 'Secondary Checkpoint', desc: 'Manage chapter, topic, and syllabus-objective structure for Secondary Checkpoint subjects.' },
+    { slug: 'teaching-progress',             label: 'Teaching Progress',    desc: 'Real-time view of teacher pacing progress across all subjects, live from Teachers Hub.',
+      who: 'Teachers tick off their own progress in Teachers Hub', reads: 'Eduversal specialists and directors — read-only monitoring here' },
+    { slug: 'curriculum-map',                label: 'Curriculum Map',       desc: 'Week-by-week visual of all subjects and Cambridge syllabus coverage.',
+      who: 'Nobody fills this in — it is built from the pacing guides', reads: 'Eduversal specialists and school coordinators checking coverage' },
+    { slug: 'students-overview',             label: 'Students Overview',    desc: 'Network-wide roster of every Students Hub account across partner schools.',
+      who: 'Students register themselves; teachers approve them', reads: 'Eduversal admin — the network-wide roster view' },
+    { slug: 'primary-checkpoint-syllabus',   label: 'Primary Checkpoint',   desc: 'Manage chapter, topic, and syllabus-objective structure for Primary Checkpoint subjects.',
+      who: 'Eduversal subject specialists for the relevant subject', reads: 'Teachers and coordinators, as the syllabus structure behind pacing' },
+    { slug: 'secondary-checkpoint-syllabus', label: 'Secondary Checkpoint', desc: 'Manage chapter, topic, and syllabus-objective structure for Secondary Checkpoint subjects.',
+      who: 'Eduversal subject specialists for the relevant subject', reads: 'Teachers and coordinators, as the syllabus structure behind pacing' },
   ],
   appraisal_system: [
-    { slug: 'school-appraisals',    label: 'School Appraisals',    desc: 'Five-domain self-appraisal for partner schools; coordinators review and validate.' },
-    { slug: 'teacher-appraisals',   label: 'Teacher Appraisals',   desc: 'All formal appraisal records and classroom walkthroughs across every school.' },
-    { slug: 'school-visits',        label: 'School Visits',        desc: 'Log on-site monitoring, mid-year check-ins, and validation visits network-wide.' },
-    { slug: 'principal-appraisals', label: 'Principal Appraisals', desc: 'Network-wide roll-up of every Foundation Rep annual appraisal on principals.' },
-    { slug: 'walkthroughs',         label: 'Walkthroughs',         desc: 'Your personal appraisal walkthrough lens across the schools you serve.' },
-    { slug: 'principal-360-admin',  label: 'Principal 360°',       desc: 'Launch 360 survey cycles, distribute invite links, and monitor response progress.' },
+    { slug: 'school-appraisals',    label: 'School Appraisals',    desc: 'Five-domain self-appraisal for partner schools; coordinators review and validate.',
+      who: 'School leadership fills the self-appraisal in Academic Hub', reads: 'Eduversal coordinators, who review and validate each domain' },
+    { slug: 'teacher-appraisals',   label: 'Teacher Appraisals',   desc: 'All formal appraisal records and classroom walkthroughs across every school.',
+      who: 'Subject leaders and school leadership, from Teachers Hub', reads: 'Eduversal specialists and directors — read-only roll-up here' },
+    { slug: 'school-visits',        label: 'School Visits',        desc: 'Log on-site monitoring, mid-year check-ins, and validation visits network-wide.',
+      who: 'The Eduversal specialist or coordinator who made the visit', reads: 'Eduversal directors and the visited school’s coordinator' },
+    { slug: 'walkthroughs',         label: 'Walkthroughs',         desc: 'Your personal appraisal walkthrough lens across the schools you serve.',
+      who: 'You — the Eduversal specialist doing the classroom walkthrough', reads: 'You and the subject leader; feeds the teacher’s appraisal record' },
+    { slug: 'principal-appraisals', label: 'Principal Appraisals', desc: 'Network-wide roll-up of every Foundation Rep annual appraisal on principals.',
+      who: 'Foundation Representatives, from Academic Hub', reads: 'Eduversal directors — read-only network roll-up here' },
+    { slug: 'principal-360-admin',  label: 'Principal 360°',       desc: 'Launch 360 survey cycles, distribute invite links, and monitor response progress.',
+      who: 'Eduversal admin launches the cycle; teachers and leaders answer anonymously', reads: 'The principal and their Foundation Rep — aggregated, never per-person' },
   ],
   induction_programs: [
-    { slug: 'induction-admin',   label: 'Induction Admin',   desc: 'Assign mentors, track first-year cohorts, and manage the three induction handbook templates.' },
-    { slug: 'my-induction',      label: 'My Induction',      desc: 'Specialist mentee dashboard with a 4-window Year-1 timeline and 10-walkthrough cycle.' },
-    { slug: 'handbook',          label: 'Handbooks',         desc: 'Guided role handbooks: Year-1 induction tracks and first-90-day operational guides.' },
-    { slug: 'orientation-admin', label: 'Orientation Admin', desc: 'Manage resources, competency questions, and incoming partner-school teacher registrations.' },
+    { slug: 'induction-admin',   label: 'Induction Admin',   desc: 'Assign mentors, track first-year cohorts, and manage the three induction handbook templates.',
+      who: 'Eduversal admin — assigns each new hire a mentor and a school leader', reads: 'The mentee and their mentor see the assignment on their own pages' },
+    { slug: 'my-induction',      label: 'My Induction',      desc: 'Specialist mentee dashboard with a 4-window Year-1 timeline and 10-walkthrough cycle.',
+      who: 'You, if you are in your first year at Eduversal', reads: 'You and your mentor. Journal entries stay private (Charter NN2)' },
+    { slug: 'handbook',          label: 'Handbooks',         desc: 'Guided role handbooks: Year-1 induction tracks and first-90-day operational guides.',
+      who: 'Nobody — reading only. Handbooks are authored and published by Eduversal', reads: 'Everyone: Eduversal staff, school leaders, teachers, students, parents' },
+    { slug: 'orientation-admin', label: 'Orientation Admin', desc: 'Manage resources, competency questions, and incoming partner-school teacher registrations.',
+      who: 'Eduversal admin running the new-teacher orientation', reads: 'Newly registered partner-school teachers, in Teachers Hub' },
   ],
   dtp: [
-    { slug: 'pd',                   label: 'PD Materials',         desc: 'Ready-to-present professional-development materials for PD days, visits, and online sessions.' },
-    { slug: 'learning-path',        label: 'Learning Path',        desc: 'Specialist CPD course: 29 competencies across 6 domains, staged Awareness to Lead.' },
-    { slug: 'competency-framework', label: 'Competency Framework', desc: 'Hybrid coaching and subject-deepening framework for HQ Subject Specialists.' },
-    { slug: 'competency-admin',     label: 'Competency Admin',     desc: 'Review evidence, approve or reject competency claims, and issue certificates.' },
-    { slug: 'certificates',         label: 'Certificate Tracking', desc: 'Search, filter, and audit every issued partner-school workshop certificate.' },
+    { slug: 'pd',                   label: 'PD Materials',         desc: 'Ready-to-present professional-development materials for PD days, visits, and online sessions.',
+      who: 'Eduversal specialists who prepare and upload session materials', reads: 'Anyone delivering a PD session — decks, guides, and workbooks' },
+    { slug: 'learning-path',        label: 'Learning Path',        desc: 'Specialist CPD course: 29 competencies across 6 domains, staged Awareness to Lead.',
+      who: 'You — you work through it and submit your own evidence', reads: 'Eduversal reviewers, when you claim a level' },
+    { slug: 'competency-framework', label: 'Competency Framework', desc: 'Hybrid coaching and subject-deepening framework for HQ Subject Specialists.',
+      who: 'Nobody — reading only. It defines what each level means', reads: 'You, to see what is expected before you claim a competency level' },
+    { slug: 'competency-admin',     label: 'Competency Admin',     desc: 'Review evidence, approve or reject competency claims, and issue certificates.',
+      who: 'Eduversal reviewers deciding on submitted evidence', reads: 'The person who claimed the level sees the decision on their portfolio' },
+    { slug: 'certificates',         label: 'Certificate Tracking', desc: 'Search, filter, and audit every issued partner-school workshop certificate.',
+      who: 'Nobody types here — certificates arrive when they are issued', reads: 'Eduversal staff auditing what was awarded, to whom, and when' },
   ],
   // AFT — no dedicated page; generic reference surfaces.
   aft: [
-    { slug: 'references',      label: 'References & Standards', desc: 'Searchable archive of every framework, standard, and regulation across the network.' },
-    { slug: 'roles-positions', label: 'Roles & Positions',     desc: 'Network-wide HR catalogue mapping positions to role architecture and Cambridge/Indonesian anchors.' },
-    { slug: 'handbook',        label: 'Handbooks',             desc: 'Guided role handbooks for induction tracks and operational guides.' },
+    { slug: 'references',      label: 'References & Standards', desc: 'Searchable archive of every framework, standard, and regulation across the network.',
+      who: 'Nobody — reading only. Sources are published by Eduversal', reads: 'Anyone who needs the exact wording of a standard or regulation' },
+    { slug: 'roles-positions', label: 'Roles & Positions',     desc: 'Network-wide HR catalogue mapping positions to role architecture and Cambridge/Indonesian anchors.',
+      who: 'Nobody — reading only. The catalogue is maintained by Eduversal', reads: 'Anyone checking what a role covers, reports to, and is measured on' },
+    { slug: 'handbook',        label: 'Handbooks',             desc: 'Guided role handbooks for induction tracks and operational guides.',
+      who: 'Nobody — reading only. Handbooks are authored and published by Eduversal', reads: 'Everyone: Eduversal staff, school leaders, teachers, students, parents' },
   ],
   // ATC — no dedicated page; pd is the only strong fit.
   atc: [
-    { slug: 'pd',               label: 'PD Materials',      desc: 'Facilitator session guides, decks, and workbooks for delivering training sessions.' },
-    { slug: 'learning-path',    label: 'Learning Path',     desc: 'Structured CPD course learners progress through, Awareness to Lead.' },
-    { slug: 'orientation-admin',label: 'Orientation Admin', desc: 'Manage training resources, competency questions, and teacher registrations.' },
+    { slug: 'pd',               label: 'PD Materials',      desc: 'Facilitator session guides, decks, and workbooks for delivering training sessions.',
+      who: 'Eduversal specialists who prepare and upload session materials', reads: 'Whoever facilitates the session — plus the participants it is run for' },
+    { slug: 'learning-path',    label: 'Learning Path',     desc: 'Structured CPD course learners progress through, Awareness to Lead.',
+      who: 'The learner — you work through it and submit your own evidence', reads: 'Eduversal reviewers, when a level is claimed' },
+    { slug: 'orientation-admin',label: 'Orientation Admin', desc: 'Manage training resources, competency questions, and teacher registrations.',
+      who: 'Eduversal admin running the orientation programme', reads: 'Newly registered partner-school teachers, in Teachers Hub' },
   ],
   // EduOS — no dedicated tooling yet. Points at the closest real surfaces:
   // the science pacing pages the coaching sits alongside, and the item banks
   // an olympiad coach draws advanced problems from.
   eduos: [
-    { slug: 'students-overview',        label: 'Students Overview',  desc: 'Network-wide student roster — find and track the students on an olympiad squad.' },
-    { slug: 'checkpoint-science-pacing',label: 'Science Pacing',     desc: 'Lower Secondary science scheme of work that EduOS coaching supplements.' },
-    { slug: 'question-bank',            label: 'Item Bank',          desc: 'Chapter-test item bank — a source of advanced problems for coaching sets.' },
-    { slug: 'certificates',             label: 'Certificates',       desc: 'Search and audit issued certificates, including competition recognition.' },
+    { slug: 'students-overview',        label: 'Students Overview',  desc: 'Network-wide student roster — find and track the students on an olympiad squad.',
+      who: 'Students register themselves; teachers approve them', reads: 'Eduversal admin — used here to find and follow squad members' },
+    { slug: 'checkpoint-science-pacing',label: 'Science Pacing',     desc: 'Lower Secondary science scheme of work that EduOS coaching supplements.',
+      who: 'Eduversal science specialists who own the pacing guide', reads: 'Science teachers in Teachers Hub — EduOS coaching sits alongside it' },
+    { slug: 'question-bank',            label: 'Item Bank',          desc: 'Chapter-test item bank — a source of advanced problems for coaching sets.',
+      who: 'Eduversal subject specialists writing or editing single questions', reads: 'Coaches drawing advanced problems for olympiad training sets' },
+    { slug: 'certificates',             label: 'Certificates',       desc: 'Search and audit issued certificates, including competition recognition.',
+      who: 'Nobody types here — certificates arrive when they are issued', reads: 'Eduversal staff auditing what was awarded, to whom, and when' },
   ],
 };
 

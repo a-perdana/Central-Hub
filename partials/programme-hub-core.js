@@ -252,15 +252,29 @@ function renderHub() {
     ? `<div class="prog-pics"><span class="prog-pics-lbl">Lead Specialists</span>${pics}</div>`
     : '';
 
+  // Each card carries two plain-language rows below the description — who fills
+  // the page in, and who reads what they entered — so someone opening the hub
+  // for the first time can tell at a glance whether a tool is theirs to use.
+  // Both come from programme-config.js (`who` / `reads`); a card missing either
+  // simply renders without that row.
   const LINK_EMOJI = ['✍️', '🪟', '🔎', '🗣️', '⚖️', '🔗', '📌', '⭐'];
-  const links = programmeLinks(programKey).map((l, i) => `
+  const links = programmeLinks(programKey).map((l, i) => {
+    const meta = [
+      l.who   ? `<div class="prog-link-meta-row"><span class="prog-link-meta-lbl">Filled in by</span><span class="prog-link-meta-val">${escHtml(l.who)}</span></div>` : '',
+      l.reads ? `<div class="prog-link-meta-row"><span class="prog-link-meta-lbl">Used by</span><span class="prog-link-meta-val">${escHtml(l.reads)}</span></div>` : '',
+    ].join('');
+    return `
     <a class="prog-link-card" data-idx="${i % 6}" href="${escHtml(l.slug)}">
       <div class="prog-link-emoji" aria-hidden="true">${LINK_EMOJI[i % LINK_EMOJI.length]}</div>
       <div class="prog-link-title">${escHtml(l.label)} <span class="prog-link-arr" aria-hidden="true">→</span></div>
       <div class="prog-link-desc">${escHtml(l.desc || '')}</div>
-    </a>`).join('');
+      ${meta ? `<div class="prog-link-meta">${meta}</div>` : ''}
+    </a>`;
+  }).join('');
   const linksBlock = links
-    ? `<div class="prog-links-lbl">Related tools</div><div class="prog-links">${links}</div>`
+    ? `<div class="prog-links-lbl">Related tools</div>
+       <div class="prog-links-intro">Pages across the hub that this programme uses. Each card shows who enters the information and who then works with it — open one only if it is yours to fill in or to review.</div>
+       <div class="prog-links">${links}</div>`
     : '';
 
   // Eduversal Academic Standards anchors. data-es-ref is auto-wired by the
