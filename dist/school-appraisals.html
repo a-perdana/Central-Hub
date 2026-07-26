@@ -4639,23 +4639,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       //                    Eduversal's reply TO the school. Academic Hub renders
       //                    this field disabled, so it is ours to fill in.
       //
-      // Both are central_admin-only, because the school_appraisals_v2 update
-      // rule allows only isAdmin() OR an isAcademicUser() at the same school —
-      // a plain central_user (coordinator) matches neither and its write is
-      // refused. Enabling the box for coordinators would promise a permission
-      // the rule does not grant. Widening review to coordinators is a rules
-      // change first, not a UI change.
-      //
-      // Both stop once the appraisal is 'reviewed' — that closes the record.
+      // Per ES 17.8 the appraisal is run by a team, so any central_user may
+      // write the recommendation; the matching rule branch clamps their write
+      // to the recommendations field alone, so a coordinator can never alter
+      // the school's own ratings. Editing the school's side stays admin-only,
+      // and both stop once the record is 'reviewed'.
       //
       // "Submit for Review" is deliberately NOT surfaced in Central Hub at all:
       // submitting is the school's own declaration that its self-appraisal is
-      // finished, made from Academic Hub. Eduversal's action on this screen is
-      // "Mark as Reviewed" once the school has submitted.
+      // finished, made from Academic Hub. "Mark as Reviewed" — publishing the
+      // appraisal — stays admin-only: it is a single accountable sign-off.
       const isOpen = a.status !== 'reviewed';
       const canEdit = state.isAdmin && isOpen;
-      const canWriteFeedback = state.isAdmin && isOpen;
-      document.getElementById('btnSaveDraft').style.display = canEdit ? 'inline-flex' : 'none';
+      const canWriteFeedback = isOpen;
+      document.getElementById('btnSaveDraft').style.display = (canEdit || canWriteFeedback) ? 'inline-flex' : 'none';
       document.getElementById('btnSubmit').style.display = 'none';
       document.getElementById('btnMarkReviewed').style.display = (state.isAdmin && a.status === 'submitted') ? 'inline-flex' : 'none';
 
@@ -4829,7 +4826,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <label>Eduversal Coordinator Recommendations</label>
           <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" style="min-height:80px;" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
         </div>
-        ${state.isAdmin ? '' : `<div class="readonly-note">You are viewing this appraisal in read-only mode. Ratings and evidence are written by the school in Academic Hub; recommendations and sign-off are made by a Central Hub admin.</div>`}
+        ${state.isAdmin ? '' : `<div class="readonly-note">${canWriteFeedback
+            ? 'You can write the recommendations below — that is Eduversal\'s reply to this school. The ratings and evidence above are the school\'s own submission and are read-only here. Publishing the appraisal (Mark as Reviewed) is done by a Central Hub admin.'
+            : 'This appraisal has been reviewed and is now closed, so it is read-only.'}</div>`}
         ${refs ? `<div class="ref-row">${refs}</div>` : ''}`;
     }
 
@@ -4971,16 +4970,29 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     async function saveAppraisal(newStatus) {
       if (!state.currentDocId || !state.currentAppraisal) return;
       document.getElementById('saveStatus').textContent = 'Saving…';
-      const data = {
-        ratings: state.currentAppraisal.ratings || {},
-        evidence: state.currentAppraisal.evidence || {},
-        strengths: state.currentAppraisal.strengths || '',
-        improvements: state.currentAppraisal.improvements || '',
-        recommendations: state.currentAppraisal.recommendations || '',
-        status: newStatus || state.currentAppraisal.status || 'draft',
-        updatedAt: serverTimestamp(),
-        updatedBy: window.currentUser?.email || ''
-      };
+
+      // A coordinator may write recommendations and nothing else — the
+      // school_appraisals_v2 update rule clamps their diff to
+      // hasOnly(['recommendations','updatedAt','updatedBy']). Sending the full
+      // payload would fail that check even when every other field is unchanged,
+      // because affectedKeys() counts keys present in the write, not keys whose
+      // value actually differs. So the payload is narrowed to match the writer.
+      const data = state.isAdmin
+        ? {
+            ratings: state.currentAppraisal.ratings || {},
+            evidence: state.currentAppraisal.evidence || {},
+            strengths: state.currentAppraisal.strengths || '',
+            improvements: state.currentAppraisal.improvements || '',
+            recommendations: state.currentAppraisal.recommendations || '',
+            status: newStatus || state.currentAppraisal.status || 'draft',
+            updatedAt: serverTimestamp(),
+            updatedBy: window.currentUser?.email || ''
+          }
+        : {
+            recommendations: state.currentAppraisal.recommendations || '',
+            updatedAt: serverTimestamp(),
+            updatedBy: window.currentUser?.email || ''
+          };
       // A rejected write must be visible. Without this catch the promise
       // rejected, the lines below never ran, and the footer sat on "Saving…"
       // forever — the user had no way to tell the save had failed and could
@@ -4996,7 +5008,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         return;
       }
       document.getElementById('saveStatus').classList.remove('is-error');
-      state.currentAppraisal.status = data.status;
+      // data.status is absent on the coordinator payload — keep the existing
+      // status rather than writing undefined over it.
+      if (data.status) state.currentAppraisal.status = data.status;
       document.getElementById('saveStatus').textContent = 'Saved ✓';
       // Refresh table row
       const idx = state.appraisals.findIndex(a => a.id === state.currentDocId);

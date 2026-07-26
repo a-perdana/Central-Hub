@@ -1168,11 +1168,35 @@ service cloud.firestore {
     }
 
     // -- school_appraisals_v2 (interactive 5-domain appraisal tool) --
+    //
+    // Models the two-sided flow in ES 17.7 / 17.8 (Section 17, Quality
+    // Assurance and Internal Review):
+    //   17.7  the school's own self-evaluation — its ratings and evidence
+    //   17.8  Eduversal's external appraisal, "conducted annually by
+    //         Eduversal's appraisal team", whose written report carries the
+    //         commendations and recommendations back to the school
+    //
     // Read:   any Central Hub or Academic Hub user
-    // Create: central_admin only (creates the appraisal record for a school)
-    // Update: central_admin can update any field (review, recommendations);
-    //         academic_user/admin with schoolId match can update ratings/evidence/strengths/improvements
+    // Create: central_admin, or an academic user for their own school
+    // Update: three distinct writers, deliberately NOT one "review" permission:
+    //   (a) central_admin — any field, including closing the record as
+    //       'reviewed'. Publishing the appraisal report is a single
+    //       accountable act, so sign-off stays with admin alone.
+    //   (b) academic_user/admin at the same school — their own self-appraisal
+    //       (ratings / evidence / strengths / improvements).
+    //   (c) any central_user (coordinator) — recommendations ONLY, and only
+    //       while the record is still open. ES 17.8 puts the appraisal in the
+    //       hands of a team, so the coordinator who ran the visit must be able
+    //       to write the finding; without this they could see the box but
+    //       every save was refused. The affectedKeys() clamp is the load-
+    //       bearing part: it stops Eduversal silently rewriting the school's
+    //       own ratings, keeping each side's statement its own (same
+    //       principle as scorecard immutability and Charter NN1).
     // Delete: central_admin only
+    //
+    // Note: (c) is a narrow, field-scoped exception to the 2026-05-20 model in
+    // which central_admin is the sole rule-level writer. Justified by ES 17.8;
+    // do not widen it to further fields without revisiting that decision.
     match /school_appraisals_v2/{docId} {
       allow read:   if isCentralUser() || isAcademicUser();
       allow create: if isAdmin()
@@ -1182,7 +1206,12 @@ service cloud.firestore {
       allow update: if isAdmin()
                     || (isAcademicUser()
                         && resource.data.schoolId ==
-                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId);
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId)
+                    || (isCentralUser()
+                        && resource.data.status != 'reviewed'
+                        && request.resource.data.status == resource.data.status
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['recommendations', 'updatedAt', 'updatedBy']));
       allow delete: if isAdmin();
     }
 
