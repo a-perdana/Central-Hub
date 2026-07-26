@@ -114,27 +114,33 @@
   import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, serverTimestamp, query, orderBy }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  // Expose Firestore helpers to React (Babel/text-babel scope)
+  // Expose Firestore helpers to the JSX scope.
+  // This module holds ONLY the SDK bridge. The React mount CANNOT live here:
+  // the compiled JSX runs as a classic global script, so `AcademicCalendar` is
+  // not visible from inside this module's scope. Mount lives at page bottom.
   window.__calFS = {
     getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc,
     doc, getDoc, setDoc, serverTimestamp, query, orderBy,
   };
-
-  // ─── Wait for auth then mount React ──────────────────────────────────────────
-  document.addEventListener('authReady', ({ detail: { profile } }) => {
-    const isAdmin = profile?.role_centralhub === 'central_admin'
-                 || profile?.role === 'central_admin';
-    window.__calIsAdmin = isAdmin;
-
-    // Mount is deferred so Babel has time to register the component
-    requestAnimationFrame(() => {
-      const root = ReactDOM.createRoot(document.getElementById('calendar-root'));
-      root.render(React.createElement(AcademicCalendar, { isAdmin }));
-    });
-  });
+  window.__calFSReady = true;
+  document.dispatchEvent(new Event('calFSReady'));
 </script>
 
-<script type="text/babel" data-presets="react">
+<!-- NOTE: type is `text/jsx-deferred`, NOT `text/babel` — deliberate.
+     Babel standalone auto-scans for `text/babel` + `text/jsx`. When a scanned
+     tag carries `data-presets`, Babel uses those presets verbatim instead of
+     its own default, and the modern `react` preset defaults to the AUTOMATIC
+     JSX runtime — which emits `import { jsx } from "react/jsx-runtime"`.
+     Babel re-appends the compiled output as a CLASSIC script, so that import
+     throws "Cannot use import statement outside a module" from appendChild,
+     the block never defines AcademicCalendar, and the mount then fails with
+     "AcademicCalendar is not defined". (This page also loads React as a UMD
+     global, so `react/jsx-runtime` does not exist here at all.)
+
+     Using an unrecognised type keeps the block out of the auto-scan; the
+     bootstrap at page bottom compiles it explicitly with runtime:'classic'.
+     Past incident 2026-07-26. -->
+<script type="text/jsx-deferred" id="calendar-jsx">
   const { useState, useEffect, useCallback, useMemo } = React;
 
   // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -2002,6 +2008,83 @@
       </div>
     );
   }
+
+  // Expose the root component to the bootstrap below. The compiled JSX runs via
+  // an indirect eval, so it lands in global scope — but assigning explicitly
+  // keeps that contract obvious rather than implicit.
+  window.AcademicCalendar = AcademicCalendar;
+</script>
+
+<script>
+  /* ─── JSX compile + React mount bootstrap ───────────────────────────────────
+     The JSX block above is `type="text/jsx-deferred"` so Babel's auto-scan
+     skips it (see the note on that tag). We compile it by hand here, then wait
+     for BOTH async signals before rendering:
+       authReady   — dispatched on `document` by CH auth-guard.js (never `window`)
+       calFSReady  — dispatched by the Firestore SDK module block above
+     ------------------------------------------------------------------------- */
+  (function bootstrapAcademicCalendar() {
+    var compiled = false;
+
+    function compileJsx() {
+      if (compiled) return true;
+      var tag = document.getElementById('calendar-jsx');
+      if (!tag) { console.error('[academic-calendar] #calendar-jsx block missing'); return false; }
+      if (typeof Babel === 'undefined') { console.error('[academic-calendar] Babel failed to load'); return false; }
+      try {
+        // `runtime: 'classic'` is REQUIRED. Babel's default is the automatic
+        // runtime, which emits `import { jsx } from "react/jsx-runtime"` — an
+        // import statement in a classic script (instant SyntaxError), and this
+        // page loads React as a UMD global with no such module available.
+        // Classic runtime compiles to React.createElement instead.
+        var out = Babel.transform(tag.textContent, {
+          presets: [['react', { runtime: 'classic' }]]
+        }).code;
+        // Indirect eval → runs in global scope, matching what Babel's own
+        // auto-scan would have produced.
+        (0, eval)(out);
+        compiled = true;
+        return true;
+      } catch (err) {
+        console.error('[academic-calendar] JSX compile failed:', err);
+        return false;
+      }
+    }
+
+    var profile = null, profileReady = false, mounted = false;
+
+    function tryMount() {
+      if (mounted || !profileReady || !window.__calFSReady) return;
+      if (!compileJsx()) return;
+
+      var host = document.getElementById('calendar-root');
+      if (!host) { console.error('[academic-calendar] #calendar-root missing'); return; }
+      if (typeof window.AcademicCalendar !== 'function') {
+        console.error('[academic-calendar] AcademicCalendar not defined after compile');
+        return;
+      }
+      mounted = true;
+
+      var isAdmin = (profile && profile.role_centralhub === 'central_admin')
+                 || (profile && profile.role === 'central_admin') || false;
+      window.__calIsAdmin = isAdmin;
+
+      ReactDOM.createRoot(host).render(
+        React.createElement(window.AcademicCalendar, { isAdmin: isAdmin })
+      );
+    }
+
+    document.addEventListener('authReady', function (e) {
+      profile = (e.detail && e.detail.profile) || null;
+      profileReady = true;
+      tryMount();
+    });
+
+    // The SDK module may resolve before OR after this script runs, so check the
+    // flag as well as listening for the event.
+    if (window.__calFSReady) tryMount();
+    else document.addEventListener('calFSReady', tryMount);
+  })();
 </script>
 
 <!-- ===== CANONICAL PAGE FOOTER (mor — mirrors Academic Hub) ===== -->
