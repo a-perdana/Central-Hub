@@ -33,9 +33,9 @@ import {
 
 import {
   PROGRAMME_LABELS, PROGRAMME_ACRONYM, PROGRAMME_TAGLINE, PROGRAMME_EMOJI,
-  PROGRAMME_ACCENT, PROGRAMME_ACCENT_COLOR, PROGRAMME_PICS, PROGRAMME_LINKS,
+  PROGRAMME_ACCENT, PROGRAMME_ACCENT_COLOR, PROGRAMME_PICS,
   PROGRAMME_ES_REFS, PROGRAMME_SIBLINGS, PROGRAMME_BOUNDARY,
-  isValidProgramme, programmeLabel
+  isValidProgramme, programmeLabel, programmeLinks
 } from './programme-config.js';
 
 // ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ function renderHub() {
     : '';
 
   const LINK_EMOJI = ['✍️', '🪟', '🔎', '🗣️', '⚖️', '🔗', '📌', '⭐'];
-  const links = (PROGRAMME_LINKS[programKey] || []).map((l, i) => `
+  const links = programmeLinks(programKey).map((l, i) => `
     <a class="prog-link-card" data-idx="${i % 6}" href="${escHtml(l.slug)}">
       <div class="prog-link-emoji" aria-hidden="true">${LINK_EMOJI[i % LINK_EMOJI.length]}</div>
       <div class="prog-link-title">${escHtml(l.label)} <span class="prog-link-arr" aria-hidden="true">→</span></div>

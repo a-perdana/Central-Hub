@@ -131,13 +131,21 @@ export const PROGRAMME_PICS = {
 //   - desc:  one-line "what this tool does"
 // All slugs verified to exist (2026-07-25). AFT + ATC have no dedicated tool
 // pages — they point at the closest generic surfaces (references / pd).
+// Links every programme hub carries, appended after its own tools by
+// programmeLinks(). Both are shared HQ surfaces keyed by the SAME programKey
+// discriminator this hub writes — the Meetings section already reads
+// coordinators_meetings, so these are the "open the full editor" routes back
+// into the pool. Defined once here rather than repeated in all eight lists.
+export const PROGRAMME_COMMON_LINKS = [
+  { slug: 'coordinators-meetings', label: 'Coordinators Meetings', desc: 'Full meeting editor with agenda items — shared HQ meeting pool.' },
+  { slug: 'decisions-register',    label: 'Decisions & Policies',  desc: 'Network-wide decisions surfaced from coordinator meetings.' },
+];
+
 export const PROGRAMME_LINKS = {
   ease_growth: [
     { slug: 'ease-item-author',   label: 'EASE Item Author',  desc: 'Author the 3-band adaptive item bank (Math / English / Science).' },
     { slug: 'ease-window-admin',  label: 'EASE Window Admin',  desc: 'Open and close the three EASE Growth windows per academic year.' },
     { slug: 'ease-bank-browser',  label: 'Latihan Browser',    desc: 'Read-only viewer into the upstream latihan.id question archive.' },
-    { slug: 'coordinators-meetings', label: 'Coordinators Meetings', desc: 'Full meeting editor with agenda items — shared HQ meeting pool.' },
-    { slug: 'decisions-register', label: 'Decisions & Policies', desc: 'Network-wide decisions surfaced from coordinator meetings.' },
   ],
   ease_assessment: [
     { slug: 'chapter-test-author',        label: 'Chapter Tests',          desc: 'Author network-uniform chapter mastery tests anchored to Cambridge pacing units.' },
@@ -246,6 +254,14 @@ export const PROGRAMME_BOUNDARY = {
   aft:                'AFT covers pre-service candidates who are not yet network staff.',
   atc:                'ATC is delivery infrastructure — the curriculum it delivers is owned by DTP.',
 };
+
+// The hub's own tools followed by the two shared HQ surfaces. De-duped by slug
+// so a programme that lists one of them explicitly never renders it twice.
+export function programmeLinks(programKey) {
+  const own = PROGRAMME_LINKS[programKey] || [];
+  const seen = new Set(own.map(l => l.slug));
+  return own.concat(PROGRAMME_COMMON_LINKS.filter(l => !seen.has(l.slug)));
+}
 
 export function isValidProgramme(programKey) {
   return PROGRAMMES.includes(programKey);
