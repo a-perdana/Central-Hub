@@ -17,7 +17,22 @@
     .btn-secondary { padding: 7px 14px; background: #fff; color: var(--ink); border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
     .btn-danger { padding: 7px 14px; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 8px; font-family: inherit; font-size: 13px; cursor: pointer; }
 
+    /* Info-strip extras — page-local classes only; canonical .page-info-strip
+       chrome comes from shared-styles.css. */
+    .page-info-strip__pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .pis-pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px;
+      background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
+    .page-info-strip__note { margin-top: 9px; font-size: 12px; color: var(--ink-3); font-style: italic; }
+    .page-info-strip__note a { color: #0e7490; }
+
     .window-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 12px; }
+    /* Closed windows are historical record — de-emphasised, but still legible
+       and fully actionable (buttons keep full opacity). */
+    .window-card.is-closed { background: #f8fafc; border-color: #e8eaee; opacity: .72; }
+    .window-card.is-closed:hover { opacity: 1; }
+    .window-card.is-closed .window-name { color: var(--ink-2); font-weight: 500; }
+    .window-card.is-closed .btn-secondary,
+    .window-card.is-closed .btn-danger { opacity: .85; }
     .window-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
     .window-name { font-family: 'Lora', serif; font-weight: 600; font-size: 1.15rem; }
     .window-meta { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
@@ -66,6 +81,31 @@
   <main class="page-wrap">
     <div id="accessWarn" class="access-warn" hidden></div>
 
+    <aside class="page-info-strip" data-accent="teal" data-strip-key="ease-window-admin:v1" role="note">
+      <div class="page-info-strip__icon" aria-hidden="true">ℹ️</div>
+      <div class="page-info-strip__text">
+        <span class="page-info-strip__title">About this page</span>
+        <div class="page-info-strip__body">
+          This page controls <strong>when students can sit the EASE Growth adaptive test</strong>. Each academic year has three
+          windows (Term 1 / Term 2 / Term 3). A student can only start a session while a window is <strong>open</strong>
+          <em>and</em> the current time falls between its opens and closes dates — so a window left <code>open</code> past its
+          term keeps the old term showing as active across the network.
+          <div class="page-info-strip__pills">
+            <span class="pis-pill">Audience: central_admin only</span>
+            <span class="pis-pill">Writes: ease_test_windows</span>
+            <span class="pis-pill">Doc id: {academicYear}_{window}</span>
+            <span class="pis-pill">Subjects: Math · English · Science</span>
+          </div>
+          <p class="page-info-strip__note">
+            The academic year shown on new windows comes from <strong>calendar_settings/current</strong> (set in
+            <a href="academic-calendar">Academic Calendar → Year Settings</a>) — this page does not define the year itself.
+            Opening a new term does not close the previous one; close the old window explicitly.
+          </p>
+        </div>
+      </div>
+      <button class="page-info-strip__dismiss" type="button" aria-label="Dismiss">×</button>
+    </aside>
+
     <div class="toolbar" style="margin-top:18px">
       <span style="margin-left:auto"></span>
       <button id="newBtn" class="btn-primary">+ New window</button>
@@ -112,6 +152,20 @@
 
   <div id="toast" class="toast"></div>
 
+  <script>
+  (function () {
+    var strip = document.querySelector('.page-info-strip[data-strip-key]');
+    if (!strip) return;
+    var key = 'ch-strip:' + strip.dataset.stripKey;
+    try { if (localStorage.getItem(key) === '1') strip.hidden = true; } catch (e) {}
+    var btn = strip.querySelector('.page-info-strip__dismiss');
+    if (btn) btn.addEventListener('click', function () {
+      strip.hidden = true;
+      try { localStorage.setItem(key, '1'); } catch (e) {}
+    });
+  })();
+  </script>
+
   <script type="module">
     import {
       collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp, Timestamp
@@ -143,9 +197,17 @@
         box.innerHTML = '<div class="empty">No windows yet. Click + New window.</div>';
         return;
       }
-      windows.sort((a, b) => (a.academicYear || '').localeCompare(b.academicYear || '') || (a.window || '').localeCompare(b.window || ''));
+      // Status first (open → draft → closed), then most-recent academic year, then
+      // term. The active window is what an admin comes here to check, so it leads;
+      // closed windows are historical record and sink to the bottom.
+      const STATUS_RANK = { open: 0, draft: 1, closed: 2 };
+      const rank = w => (STATUS_RANK[w.status] !== undefined ? STATUS_RANK[w.status] : 1);
+      windows.sort((a, b) =>
+        rank(a) - rank(b)
+        || (b.academicYear || '').localeCompare(a.academicYear || '')
+        || (a.window || '').localeCompare(b.window || ''));
       box.innerHTML = windows.map(w => `
-        <div class="window-card">
+        <div class="window-card${w.status === 'closed' ? ' is-closed' : ''}">
           <div class="window-row">
             <div>
               <div class="window-name">${escHtml(w.academicYear)} · ${escHtml(windowLabel(w.window))}</div>
