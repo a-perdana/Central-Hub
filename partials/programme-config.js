@@ -1,6 +1,6 @@
 // Canonical CH programme taxonomy.
 //
-// Source of truth for the 8 Management-Module programmes surfaced as cards on
+// Source of truth for the 9 Management-Module programmes surfaced as cards on
 // /index and, one page each, as programme hubs (/ease-growth, …). Each hub is a
 // thin HTML shell that calls initProgrammeHub('<programKey>') from
 // partials/programme-hub-core.js — this config drives the hub's identity
@@ -12,9 +12,9 @@
 // collections (coordinators_meetings, department_artifacts, calendar_events).
 // Keep the underscore keys stable — they are Firestore values.
 //
-// Only 'ease_growth' carries full data today (the pilot). The other 7 are
-// stubbed (label + acronym + accent + PICs) so the config is complete; each
-// gets its LINKS / ES refs filled when its hub is built.
+// Only 'ease_growth' carries live operational KPIs today (the pilot). The rest
+// carry identity + links + ES anchors; their programme-specific metrics get
+// filled as each programme's own tooling is built.
 
 export const PROGRAMMES = [
   'ease_growth',
@@ -25,6 +25,7 @@ export const PROGRAMMES = [
   'dtp',
   'aft',
   'atc',
+  'eduos',
 ];
 
 export const PROGRAMME_LABELS = {
@@ -36,6 +37,7 @@ export const PROGRAMME_LABELS = {
   dtp:                'DTP',
   aft:                'AFT',
   atc:                'ATC',
+  eduos:              'EduOS',
 };
 
 // Full acronym expansion / one-line "what this is". Shown in the hub hero desc.
@@ -48,6 +50,7 @@ export const PROGRAMME_ACRONYM = {
   dtp:                'Development of Teaching Proficiency — structured professional learning pathways and capacity-building.',
   aft:                'Academy of Future Teachers — pre-service teacher development, placements, and mentorship pathways.',
   atc:                'Academy Training Center — centralised training delivery, facilitation, and capacity programmes.',
+  eduos:              'Eduversal Olimpiade Sains — school-based science olympiad preparation for high-ability students across the network.',
 };
 
 // One-line "what this hub is" used in the page info-strip + footer CTA.
@@ -60,6 +63,7 @@ export const PROGRAMME_TAGLINE = {
   dtp:                'Development of Teaching Proficiency — professional learning pathways',
   aft:                'Academy of Future Teachers — pre-service teacher development',
   atc:                'Academy Training Center — centralised training delivery',
+  eduos:              'science olympiad preparation — selection, coaching, camps, and competition results',
 };
 
 // Two-letter mono badge (matches subject-config's SUBJECT_BADGE convention).
@@ -72,6 +76,7 @@ export const PROGRAMME_BADGE = {
   dtp:                'DT',
   aft:                'AF',
   atc:                'AT',
+  eduos:              'EO',
 };
 
 // Programme-themed emoji — primary visual on the hub hero.
@@ -84,6 +89,7 @@ export const PROGRAMME_EMOJI = {
   dtp:                '📚',
   aft:                '🍎',
   atc:                '🏫',
+  eduos:              '🏅',
 };
 
 // Per-programme gradient — mirrors the index.html Management-Module card colours
@@ -97,6 +103,7 @@ export const PROGRAMME_ACCENT = {
   dtp:                'linear-gradient(140deg,#6366f1,#4338ca)', // indigo  (card mc-indigo)
   aft:                'linear-gradient(140deg,#059669,#047857)', // green   (card mc-green)
   atc:                'linear-gradient(140deg,#e11d48,#9f1239)', // rose    (card mc-rose)
+  eduos:              'linear-gradient(140deg,#f59e0b,#c2410c)', // gold    (card mc-gold)
 };
 
 // Deeper gradient stop — used as a solid tint (badge bg, accent bar).
@@ -109,6 +116,7 @@ export const PROGRAMME_ACCENT_COLOR = {
   dtp:                '#4338ca',
   aft:                '#047857',
   atc:                '#9f1239',
+  eduos:              '#c2410c',
 };
 
 // Lead-Specialist (PIC) names — SAME list shown on the /index card head.
@@ -123,6 +131,7 @@ export const PROGRAMME_PICS = {
   dtp:                ['Eki Maulana', "Qurrota A'yun"],
   aft:                ['Akhmad Afwa', 'AFT Coordinator'],
   atc:                ['Akhmad Nur I. Tawqim', 'Aan Mulyana'],
+  eduos:              ['EduOS Coordinator'],
 };
 
 // Related-tool deep-links surfaced in the hub's Overview section. Each link:
@@ -194,6 +203,15 @@ export const PROGRAMME_LINKS = {
     { slug: 'learning-path',    label: 'Learning Path',     desc: 'Structured CPD course learners progress through, Awareness to Lead.' },
     { slug: 'orientation-admin',label: 'Orientation Admin', desc: 'Manage training resources, competency questions, and teacher registrations.' },
   ],
+  // EduOS — no dedicated tooling yet. Points at the closest real surfaces:
+  // the science pacing pages the coaching sits alongside, and the item banks
+  // an olympiad coach draws advanced problems from.
+  eduos: [
+    { slug: 'students-overview',        label: 'Students Overview',  desc: 'Network-wide student roster — find and track the students on an olympiad squad.' },
+    { slug: 'checkpoint-science-pacing',label: 'Science Pacing',     desc: 'Lower Secondary science scheme of work that EduOS coaching supplements.' },
+    { slug: 'question-bank',            label: 'Item Bank',          desc: 'Chapter-test item bank — a source of advanced problems for coaching sets.' },
+    { slug: 'certificates',             label: 'Certificates',       desc: 'Search and audit issued certificates, including competition recognition.' },
+  ],
 };
 
 // Eduversal Academic Standards (ES) madde anchors — for documentation
@@ -224,6 +242,12 @@ export const PROGRAMME_ES_REFS = {
   aft:                ['ES 12.2', 'ES 12.3'],
   // Centralised training delivery sits under PD opportunities.
   atc:                ['ES 12.6', 'ES 12.13'],
+  // ES 5.11 carries the dedicated "EduOS (Eduversal Olimpiade Sains) —
+  // Specialized Olympiad Preparation" block (selection, training, camps,
+  // coaches, evidence). 8.7 identifies the gifted-and-talented cohort EduOS
+  // draws from; 5.9 lists competitions as a differentiation route; 2.0 is the
+  // acronym definition.
+  eduos:              ['ES 5.11', 'ES 8.7', 'ES 5.9', 'ES 2.0'],
 };
 
 // Sibling programmes — surfaced as "Related programmes" chips so the eight
@@ -238,6 +262,7 @@ export const PROGRAMME_SIBLINGS = {
   dtp:                ['atc', 'induction_programs', 'appraisal_system'],
   aft:                ['atc', 'induction_programs'],
   atc:                ['dtp', 'aft'],
+  eduos:              ['ease_academic', 'ease_growth'],
 };
 
 // One-line boundary note per programme — what this hub is NOT, so readers
@@ -253,6 +278,7 @@ export const PROGRAMME_BOUNDARY = {
   dtp:                'DTP is capacity-building, not evaluation — participation is not an appraisal input.',
   aft:                'AFT covers pre-service candidates who are not yet network staff.',
   atc:                'ATC is delivery infrastructure — the curriculum it delivers is owned by DTP.',
+  eduos:              'EduOS is optional enrichment, outside the Quality Management System — it supplements regular science classes and never replaces them (ES 5.11).',
 };
 
 // The hub's own tools followed by the two shared HQ surfaces. De-duped by slug

@@ -706,6 +706,7 @@ const htmlFiles = [
   "dtp.html",
   "aft.html",
   "atc.html",
+  "eduos.html",
 ];
 
 // Standalone pages copied verbatim — NO navbar / shared-styles / auth-guard /
