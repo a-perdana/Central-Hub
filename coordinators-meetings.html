@@ -603,6 +603,30 @@
     .bridge-btn.promoted { background: #d1fae5; border-color: #10b981; color: #065f46; }
 
     .agenda-add-btn { margin-top: 14px; padding: 10px 18px; border: 1px dashed var(--border); border-radius: 8px; background: none; cursor: pointer; width: 100%; font-family: 'DM Sans', sans-serif; font-size: 0.86rem; font-weight: 600; color: var(--ink-3); transition: all .15s; }
+
+    /* ── Published lock (2026-07-26) ───────────────────────────────
+       Published minutes are cited by the programme hubs, so they read as a
+       record rather than a working doc. Editing affordances are removed
+       until the author explicitly hits Unpublish. Promote-to-decision /
+       promote-to-task (.ai-bridge-bar) stay ACTIVE — turning agreed items
+       into decisions and tasks is exactly what a finalised meeting is for. */
+    .published-lock-note {
+      display: flex; align-items: center; gap: 9px;
+      margin-bottom: 14px; padding: 10px 14px;
+      background: #f1f5f9; border: 1px solid #cbd5e1; border-left: 3px solid #64748b;
+      border-radius: 8px; font-size: 0.82rem; color: var(--ink-2);
+    }
+    .published-lock-note[hidden] { display: none; }
+    body.meeting-locked .agenda-summary-input,
+    body.meeting-locked .mh-input { background: #f8fafc; cursor: default; }
+    body.meeting-locked .ai-icon-btn,
+    body.meeting-locked .ai-extras-toggle,
+    body.meeting-locked .ai-sub-add,
+    body.meeting-locked .ai-sub-linkactions,
+    body.meeting-locked .att-remove,
+    body.meeting-locked .mh-add-att { display: none; }
+    body.meeting-locked .ai-body-quill { pointer-events: none; opacity: 0.92; }
+    body.meeting-locked .att-chip input[type="checkbox"] { pointer-events: none; }
     .agenda-add-btn:hover { border-style: solid; color: var(--accent); border-color: var(--accent); background: #faf8ff; }
 
     /* === Modals === */
@@ -648,7 +672,7 @@
       <div class="page-hero__text">
         <p class="page-hero__eyebrow">Department Office · CentralHub</p>
         <h1 class="page-hero__title">Coordinators Meetings</h1>
-        <p class="page-hero__desc">Heads-of-Departments cadence — agendas, decisions, and follow-up activities, all in one record. Drafts auto-save as you type; published meetings feed the Decisions Register and Activities boards.</p>
+        <p class="page-hero__desc">Heads-of-Departments cadence — agendas, decisions, and follow-up activities, all in one record. Drafts auto-save as you type; publishing locks the record and surfaces it on the programme hubs.</p>
       </div>
       <aside class="page-hero__kpis">
         <div class="page-hero__kpi page-hero__kpi--primary">
@@ -693,7 +717,7 @@
       <div class="page-info-strip__icon" aria-hidden="true">👥</div>
       <div class="page-info-strip__text">
         <span class="page-info-strip__title">About this page</span>
-        <div class="page-info-strip__body">Record HQ Director + Subject Coordinator meetings. Each meeting holds an agenda — items tagged <strong>decision</strong> bubble up to the <a href="decisions-register">Decisions</a> register, items tagged <strong>action</strong> can spawn a task in <a href="activities">Activities</a> with one click. Drafts auto-save; published meetings are immutable history.</div>
+        <div class="page-info-strip__body">Record HQ Director + Subject Coordinator meetings. Each meeting holds an agenda — an item tagged <strong>decision</strong> can be promoted into the <a href="decisions-register">Decisions</a> register, and one tagged <strong>action</strong> can spawn a task in <a href="activities">Activities</a>, each with one click. Drafts auto-save and stay private to this page; <strong>publishing</strong> locks the record and is what makes it appear in the matching programme hub. Unpublish to reopen it for editing.</div>
       </div>
       <a href="read-me-coordinator#page-meetings" class="page-info-strip__cta">How to use →</a>
       <button class="page-info-strip__dismiss" type="button" aria-label="Dismiss">×</button>
@@ -750,6 +774,12 @@
         </div>
 
         <div class="agenda-wrap">
+          <div class="published-lock-note" id="publishedLockNote" hidden>
+            <span aria-hidden="true">🔒</span>
+            <span>Published — this record is locked. Other pages cite it, so use
+            <strong>Unpublish</strong> to reopen it for editing.</span>
+          </div>
+
           <div class="agenda-summary">
             <div class="agenda-summary-label">Meeting Summary (optional)</div>
             <textarea aria-label="One-paragraph context — what triggered this meeting, broad outcomes…" class="agenda-summary-input" id="meetingSummary" placeholder="One-paragraph context — what triggered this meeting, broad outcomes…"></textarea>
@@ -1326,6 +1356,27 @@ function paintMeetingHeader() {
     meta.textContent = ts ? `· Last edited ${fmtDate(ts)}` : '';
   }
   paintAttendees();
+  applyPublishedLock();
+}
+
+/* Published minutes are a record of what happened — they lock.
+   Reopen with Unpublish, edit, publish again; the reopen is a deliberate act
+   rather than an accidental keystroke in a record other pages now cite.
+   This is a UI guard, not a rule-level one: firestore.rules still allows any
+   dept-office member to update any meeting (collaborative-editing model), so
+   don't treat this as a security boundary. */
+function applyPublishedLock() {
+  const locked = (currentMeeting?.status || 'draft') === 'published';
+  ['meetingDate', 'meetingYear', 'meetingSemester', 'meetingSummary']
+    .forEach(id => { const el = $(id); if (el) el.disabled = locked; });
+  const addItem = $('btnAddItem');
+  if (addItem) addItem.hidden = locked;
+  // #btnAddAttendee is rebuilt by paintAttendees() on every repaint, so a JS
+  // `hidden` flag here would be lost — the body.meeting-locked CSS rule hides
+  // it instead and survives re-renders.
+  document.body.classList.toggle('meeting-locked', locked);
+  const banner = $('publishedLockNote');
+  if (banner) banner.hidden = !locked;
 }
 
 function paintAttendees() {
@@ -1441,7 +1492,7 @@ async function togglePublish() {
     });
     currentMeeting.status = next;
     paintMeetingHeader();
-    showToast(next === 'published' ? 'Meeting published — visible in Decisions feeders.' : 'Reverted to draft.');
+    showToast(next === 'published' ? 'Published — locked, and now visible on the programme hub.' : 'Reopened as draft — hidden from the programme hub.');
   } catch (err) {
     console.error('[togglePublish]', err);
     showToast(`Could not toggle: ${err.code || err.message}`);

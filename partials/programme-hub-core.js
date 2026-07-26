@@ -1015,15 +1015,28 @@ function bindMeetings() {
     limit(100)
   );
   const unsub = onSnapshot(qy, (snap) => {
-    const mtgs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Only PUBLISHED minutes surface here. A draft is a half-written record —
+    // showing it on a programme hub makes the section untrustworthy, and the
+    // author has no way to tell what is safe to read. Drafts stay visible to
+    // their authors in /coordinators-meetings until published.
+    // Filtered in JS (not a second where()) so no composite index is needed.
+    const mtgs = all.filter(m => m.status === 'published')
       .sort((a, b) => tsMillis(b.meetingDate) - tsMillis(a.meetingDate));
+    const draftCount = all.length - mtgs.length;
     setText('kpiMeetings', String(mtgs.length));
     setSectionCount('meetings', mtgs.length);
     if (!mtgs.length) {
-      slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">No meetings logged yet.</div><div class="dw-empty-desc">${canWrite ? 'Use “+ New meeting” to open a record for this programme — it joins the shared Coordinators Meetings pool.' : 'Programme meeting records will appear here once logged.'}</div></div>`;
+      // Distinguish "nothing logged" from "logged but still draft" — otherwise
+      // an author who just wrote minutes sees "No meetings" and assumes a bug.
+      const desc = draftCount
+        ? `${draftCount} meeting${draftCount === 1 ? '' : 's'} for this programme ${draftCount === 1 ? 'is' : 'are'} still in draft. Publish ${draftCount === 1 ? 'it' : 'them'} in <a href="coordinators-meetings">Coordinators Meetings</a> to surface ${draftCount === 1 ? 'it' : 'them'} here.`
+        : (canWrite ? 'Use “+ New meeting” to open a record for this programme — it joins the shared Coordinators Meetings pool.' : 'Programme meeting records will appear here once logged.');
+      slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">${draftCount ? 'No published meetings yet.' : 'No meetings logged yet.'}</div><div class="dw-empty-desc">${desc}</div></div>`;
       return;
     }
-    slot.innerHTML = mtgs.map(renderMeetingRow).join('');
+    slot.innerHTML = mtgs.map(renderMeetingRow).join('')
+      + (draftCount ? `<div class="prog-draft-note">${draftCount} more in draft — publish in <a href="coordinators-meetings">Coordinators Meetings</a> to show ${draftCount === 1 ? 'it' : 'them'} here.</div>` : '');
   }, (err) => {
     console.error('[bindMeetings]', err);
     slot.innerHTML = `<div class="dw-empty"><div class="dw-empty-title">Could not load meetings.</div><div class="dw-empty-desc">${escHtml(err.code || err.message)}</div></div>`;

@@ -1298,17 +1298,21 @@ function bindOverviewKpi(subjectId) {
   // Last meeting date — coordinators_meetings is HQ-wide, not subject-scoped
   // (the existing G-Docs replacement workflow runs ONE weekly meeting that
   // covers all subjects). Show the most recent meeting date overall.
+  // Fetch a small window rather than limit(1): only PUBLISHED minutes count as
+  // "last meeting" (a half-written draft is not a meeting that happened), and
+  // the newest doc may well be a draft. Filtering in JS keeps the existing
+  // single-field index — a where('status') here would need a composite one.
   const qMeetings = query(
     collection(db, 'coordinators_meetings'),
     orderBy('meetingDate', 'desc'),
-    limit(1)
+    limit(20)
   );
   const unsubM = onSnapshot(qMeetings, (snap) => {
-    if (snap.empty) {
-      updateKpi('kpiLastMeeting', '—', 'no minutes yet', 'muted');
+    const m = snap.docs.map(x => x.data()).find(x => x.status === 'published');
+    if (!m) {
+      updateKpi('kpiLastMeeting', '—', 'no published minutes yet', 'muted');
       return;
     }
-    const m = snap.docs[0].data();
     const d = m.meetingDate?.toDate ? m.meetingDate.toDate() : null;
     if (!d) {
       updateKpi('kpiLastMeeting', '—', 'no minutes yet', 'muted');
