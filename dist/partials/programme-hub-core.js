@@ -497,6 +497,8 @@ function windowTermLabel(raw) {
 // The academic period (semester + year) is network-wide — it comes from
 // calendar_settings/current, NOT from any programme's own collection — so every
 // hub shows it. Only the top "Term N" line is EASE-window-specific.
+// Renders into the Overview KPI tile only; the hero rail deliberately does not
+// repeat it (see the note at the end of this function).
 function renderPeriodKpi({ termLine, subLine, muted }) {
   const sem = (typeof window.getCurrentSemester === 'function')
     ? window.getCurrentSemester() : null;
@@ -520,26 +522,22 @@ function renderPeriodKpi({ termLine, subLine, muted }) {
 
   const el = $('kpiWindow');
   if (el) el.classList.toggle('dw-kpi-val--muted', !!muted);
-
-  // Mirror into the hero so the page answers "which period are we in?" before
-  // the reader expands anything. The hero tile stacks term + semester on one
-  // line because it has no third row.
-  const heroBig = (termLine && semText && semText !== termLine)
-    ? `${termLine} · ${semText}` : big;
-  setText('heroKpiPeriod', heroBig);
-  setText('heroKpiPeriodLbl', termLine ? 'Active Window' : 'Academic Period');
-  setText('heroKpiPeriodSub', sub);
-  const hk = $('heroKpis');
-  if (hk) hk.hidden = false;
+  // The period is NOT mirrored into the hero — the Overview tile above already
+  // carries term + semester + AY, and repeating it in the hero was redundant.
+  // The hero rail is reserved for the operational figures (participation,
+  // school coverage, time left) that have no other home on the page.
 }
 
 // Reveal a hero KPI tile and fill it. Tiles stay hidden until their query
-// resolves — an empty tile is worse than no tile.
+// resolves — an empty tile is worse than no tile. Revealing any tile also
+// reveals the rail, so the rail never shows as an empty box.
 function setHeroKpi(wrapId, numId, subId, num, sub) {
   const w = $(wrapId);
   if (w) w.hidden = false;
   setText(numId, num);
   if (subId) setText(subId, sub || '');
+  const rail = $('heroKpis');
+  if (rail) rail.hidden = false;
 }
 
 async function bindOverviewKpi() {
