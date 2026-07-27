@@ -81,6 +81,45 @@ Some pages have their own thematic accent (red for math pacing, green for biolog
 
 ---
 
+### Role tags — one colour per position, network-wide
+
+The appraisal model names **positions**, not people (`"Biology SS"`, `"Director of Primary"`), and those labels surface as tags wherever a role is shown — the supervisor pair on `/school-appraisals`, visit-team chips, domain-lead pickers. Each position has **one canonical colour, used on every surface**. Source of truth: [`Central Hub/partials/subject-config.js`](../../Central%20Hub/partials/subject-config.js) → `ROLE_TAG_COLORS` + `roleTagStyle(role)`.
+
+Two rules generate the palette, and the first one is the important one:
+
+1. **A subject specialist inherits its SUBJECT's colour.** `"Biology SS"` is Biology's green — the same green `/department-workspace` and `/department-artifacts` already use via `SUBJECT_ACCENT`. Giving roles a fresh independent palette would make Biology green on one page and something else on another, which is worse than no colour coding at all.
+2. **Non-subject roles take their category colour** from [`roles-positions.json`](../../Central%20Hub/resources/roles-positions.json) → `categories`. The two Directors are `academic_leadership` (`#6c5ce7`, brand mor).
+
+**Pairs that share a scope share a hue, split by depth, not by hue.** English SS Primary / Secondary, and Director of Primary / Secondary, are the same function at different school levels — a different hue would imply they are unrelated.
+
+| Role | Fill | Basis |
+|---|---|---|
+| Biology SS | `#047857` | biology green |
+| Chemistry SS | `#b45309` | chemistry amber |
+| Physics SS | `#7c3aed` | physics violet |
+| Bahasa SS | `#e11d48` | bahasa rose |
+| Religion SS | `#4f46e5` | religion indigo |
+| EduSTEAM SS | `#0e7490` | edu_steam cyan-deep |
+| English SS Primary | `#be185d` | english pink |
+| English SS Secondary | `#9d174d` | english pink, deepened |
+| Director of Primary | `#6c5ce7` | academic_leadership mor |
+| Director of Secondary | `#3730a3` | academic_leadership, deepened |
+| *(unknown role)* | `#64748b` | neutral fallback |
+
+**Fills are saturated, never 50-level tints.** A first pass used pale tints (`#d1fae5` etc.) and they were measurably indistinguishable at chip size — Physics SS and Director of Primary came out at **dE 0.0**, literally the same colour, because pale tints of different hues all collapse toward white.
+
+**Editing the table means re-checking both axes — they trade off against each other:**
+- **contrast** — white-on-fill ≥ 4.5 (WCAG AA, small bold text). Current range 4.70–9.93.
+- **distinctness** — CIE76 dE ≥ 10 against *every* other fill. Current closest pair is 12.0 (the two English roles), which is intended.
+
+Darkening a fill to fix contrast pushes it toward its neighbours and can break distinctness; the two constraints must be verified together, not in sequence.
+
+**Applying it:** call `roleTagStyle(role)` and drop the result into a `style` attribute — it emits `color` / `background` / `border-color` plus `--role-ink` (the role's deep tone), so an *outlined* variant can keep the role's hue as its text colour instead of falling back to grey. Matching is exact but case- and whitespace-insensitive; an unknown role returns the neutral fallback rather than guessing, so a roster change degrades to grey instead of silently colliding with an existing colour.
+
+**A `<select>` cannot be colour-coded per option across browsers.** Where a role is *chosen* rather than displayed, put a `.vt-swatch` circle beside the select and repaint it on `change` — see the visit-team editor and the supervision-plan modal on `/school-appraisals`.
+
+---
+
 ## Spacing & layout
 
 8px-based scale — `--space-1` (4px) through `--space-20` (80px).

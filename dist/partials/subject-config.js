@@ -229,16 +229,17 @@ export function subjectLabel(subjectId) {
 /* ──────────────────────────────────────────────────────────────────────────
    ROLE TAGS — canonical colour per position label
    ──────────────────────────────────────────────────────────────────────────
-   The appraisal model names POSITIONS, not people ("Biology SS", "Director of
-   Primary"), and those labels are rendered as tags on /school-appraisals
+   The appraisal model names POSITIONS, not people ("Biology Subject
+   Specialist", "Director of Primary Education"), and those labels are
+   rendered as tags on /school-appraisals
    (supervisor pair, visit-team chips, domain-lead pickers) and anywhere else
    a role is shown. Before this, every surface picked its own tag styling, so
    the same role read differently from page to page.
 
    Two rules decide the palette, and they are the whole point:
 
-   1. A subject specialist inherits ITS SUBJECT'S colour. "Biology SS" is
-      Biology's green — the same green /department-workspace and
+   1. A subject specialist inherits ITS SUBJECT'S colour. "Biology Subject
+      Specialist" is Biology's green — the same green /department-workspace and
       /department-artifacts already use. Assigning roles a fresh unrelated
       palette would mean Biology is green on one page and, say, orange on
       another, which is worse than having no colours at all.
@@ -271,21 +272,31 @@ export function subjectLabel(subjectId) {
 // Measured: contrast 4.70–9.93, closest pair dE 12.0. The two closest pairs
 // are the English roles and the two Directors — which is correct, they ARE
 // the same function at different school levels.
+//
+// Keys were "Biology SS" style until 2026-07-27, when the directory and the
+// appraisal roster were aligned on the spelt-out "Biology Subject Specialist".
+// Lookup is exact, so the keys had to move with the labels — a stale key does
+// not error, it silently falls back to grey.
 export const ROLE_TAG_COLORS = {
   // ── Subject specialists — each keeps its own subject's hue ──
-  'biology ss':            { fg: '#ffffff', bg: '#047857', bd: '#065f46' }, // biology green
-  'chemistry ss':          { fg: '#ffffff', bg: '#b45309', bd: '#92400e' }, // chemistry amber
-  'physics ss':            { fg: '#ffffff', bg: '#7c3aed', bd: '#5b21b6' }, // physics violet
-  'bahasa ss':             { fg: '#ffffff', bg: '#e11d48', bd: '#9f1239' }, // bahasa rose
-  'religion ss':           { fg: '#ffffff', bg: '#4f46e5', bd: '#3730a3' }, // religion indigo
-  'edusteam ss':           { fg: '#ffffff', bg: '#0e7490', bd: '#155e75' }, // edu_steam cyan-deep
+  'biology subject specialist':    { fg: '#ffffff', bg: '#047857', bd: '#065f46' }, // biology green
+  'chemistry subject specialist':  { fg: '#ffffff', bg: '#b45309', bd: '#92400e' }, // chemistry amber
+  'physics subject specialist':    { fg: '#ffffff', bg: '#7c3aed', bd: '#5b21b6' }, // physics violet
+  'bahasa indonesia subject specialist': { fg: '#ffffff', bg: '#e11d48', bd: '#9f1239' }, // bahasa rose
+  'religion subject specialist':   { fg: '#ffffff', bg: '#4f46e5', bd: '#3730a3' }, // religion indigo
+  'edu-steam subject specialist':  { fg: '#ffffff', bg: '#0e7490', bd: '#155e75' }, // edu_steam cyan-deep
+  // Combined Science — holds no domain lead (domain_leads.additional_experts),
+  // but is pickable as visit-team cover, so it needs a colour like the rest.
+  // Slate-teal: far enough from Biology's green and Edu-STEAM's cyan-deep to
+  // stay distinct at chip size.
+  'science subject specialist':    { fg: '#ffffff', bg: '#0f766e', bd: '#115e59' }, // science teal
   // English splits by school level: one pink family, two depths.
-  'english ss primary':    { fg: '#ffffff', bg: '#be185d', bd: '#9d174d' },
-  'english ss secondary':  { fg: '#ffffff', bg: '#9d174d', bd: '#831843' },
+  'primary english subject specialist':   { fg: '#ffffff', bg: '#be185d', bd: '#9d174d' },
+  'secondary english subject specialist': { fg: '#ffffff', bg: '#9d174d', bd: '#831843' },
   // ── Academic leadership — roles-positions.json categories.academic_leadership ──
   // Brand mor for Primary, deepened for Secondary. Same reasoning as English.
-  'director of primary':   { fg: '#ffffff', bg: '#6c5ce7', bd: '#4c3d9e' },
-  'director of secondary': { fg: '#ffffff', bg: '#3730a3', bd: '#312e81' },
+  'director of primary education':   { fg: '#ffffff', bg: '#6c5ce7', bd: '#4c3d9e' },
+  'director of secondary education': { fg: '#ffffff', bg: '#3730a3', bd: '#312e81' },
 };
 
 // Neutral fallback. Deliberately grey: an unrecognised role should look
