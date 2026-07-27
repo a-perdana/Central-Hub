@@ -620,6 +620,14 @@
     .ph-switch-note {
       font-size: .76rem; color: var(--ink-3); line-height: 1.5; margin-top: 9px;
     }
+    /* A partially rated visit is not an error, so it is stated rather than
+       flagged — the coordinator may simply not have finished yet. */
+    .ph-gap {
+      margin-top: 7px; padding: 7px 10px; border-radius: 7px;
+      background: #fffbeb; border: 1px solid #fde68a;
+      color: #92400e; font-size: .75rem;
+    }
+    .ph-btn.is-partial { border-style: dashed; }
     /* A non-rating phase still shows the section, so the absence is explained
        rather than looking like a missing feature. */
     .ext-section.is-nonrating { background: var(--paper); border-color: var(--border); }
@@ -728,6 +736,58 @@
     }
     .ap-add textarea:focus { outline: none; border-color: var(--accent); }
     .ap-add button { align-self: flex-start; }
+
+    /* ── PHASE REFERENCE — the five phases, page level ── */
+    .phase-ref {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 22px; margin: 0 0 24px;
+    }
+    .phase-ref[hidden] { display: none; }
+    .pr-head {
+      display: flex; align-items: baseline; gap: 10px;
+      flex-wrap: wrap; margin-bottom: 8px;
+    }
+    .pr-eyebrow {
+      font-size: .68rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent-dk);
+    }
+    .pr-sub { font-size: .74rem; color: var(--ink-3); }
+    .pr-intro {
+      font-size: .82rem; line-height: 1.6; color: var(--ink-2);
+      margin-bottom: 14px; max-width: 92ch;
+    }
+    .pr-sup { font-size: .76rem; color: var(--ink-3); font-style: italic; }
+    .pr-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px;
+    }
+    .pr-card {
+      padding: 12px 14px; border-radius: 10px;
+      background: var(--paper); border: 1px solid var(--border);
+    }
+    /* The two visits that actually produce ratings carry the page accent —
+       everything else about the cycle hangs off which phase you are rating. */
+    .pr-card.is-rating { background: #fffbeb; border-color: #fde68a; }
+    .pr-card-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+    .pr-num {
+      flex: none; width: 21px; height: 21px; border-radius: 999px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 700;
+      background: var(--border); color: var(--ink-2);
+    }
+    .pr-card.is-rating .pr-num { background: var(--accent); color: #fff; }
+    .pr-name { font-size: .85rem; font-weight: 700; color: var(--ink); }
+    .pr-when { font-size: .76rem; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; }
+    .pr-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 7px; }
+    .pr-format, .pr-led {
+      font-size: .68rem; padding: 1px 7px; border-radius: 999px;
+      background: var(--white); border: 1px solid var(--border); color: var(--ink-3);
+    }
+    .pr-desc { font-size: .78rem; line-height: 1.5; color: var(--ink-2); }
+    .pr-rates {
+      font-size: .72rem; font-weight: 600; margin-top: 8px;
+      padding-top: 7px; border-top: 1px solid var(--border); color: var(--accent-dk);
+    }
+    .pr-rates.is-no { color: var(--ink-3); font-weight: 500; font-style: italic; }
 
     /* ── NEXT STEP — where this record is in the cycle ── */
     .nx {
@@ -1262,6 +1322,10 @@
         </div>
       </div>
     </section>
+
+    <!-- Phase reference — built from the framework at authReady so it can
+         never drift from the timings the rest of the page uses. -->
+    <section class="phase-ref" id="phaseRef" hidden aria-label="The five phases of the appraisal year"></section>
 
     <!-- Controls -->
     <div class="controls-row">
@@ -2921,28 +2985,115 @@
     // Which visit's findings the modal is showing. Switching re-renders every
     // rating control against that phase's map, so Phase 1 and Phase 3 stay
     // separate records of separate visits rather than one overwritten set.
+    // How much of a phase has been covered: aspects rated, and how many of the
+    // five domains have at least one rating. The domain figure matters because
+    // the year-end School Development Rating is the mean of all five — a phase
+    // missing a domain cannot produce one.
+    function phaseCoverage(a, code) {
+      if (!FRAMEWORK) return { rated: 0, total: 0, domains: 0, domainTotal: 0 };
+      const src = extPhase(a, code).ratings;
+      const all = FRAMEWORK.domains.flatMap(d => d.aspects);
+      return {
+        rated: all.filter(x => (src[x.id] || 0) > 0).length,
+        total: all.length,
+        domains: FRAMEWORK.domains.filter(d => d.aspects.some(x => (src[x.id] || 0) > 0)).length,
+        domainTotal: FRAMEWORK.domains.length,
+      };
+    }
+
     function buildPhaseSwitcher(a) {
       const active = state.activePhase;
       const btns = REVIEW_PHASES.map(p => {
-        const rated = p.rates ? phaseHasRatings(a, p.code) : !!extPhase(a, p.code).outcome;
-        const n = p.rates ? Object.values(extPhase(a, p.code).ratings).filter(v => v > 0).length : 0;
-        return `<button type="button" class="ph-btn${p.code === active ? ' is-active' : ''}" data-phase="${p.code}">
+        if (!p.rates) {
+          const hasOutcome = !!extPhase(a, p.code).outcome;
+          return `<button type="button" class="ph-btn${p.code === active ? ' is-active' : ''}" data-phase="${p.code}">
+            <span class="ph-btn-label">${esc(p.label)}</span>
+            <span class="ph-btn-meta">${hasOutcome ? 'outcome recorded' : 'no ratings — outcome only'}</span>
+          </button>`;
+        }
+        const c = phaseCoverage(a, p.code);
+        const complete = c.rated === c.total;
+        return `<button type="button" class="ph-btn${p.code === active ? ' is-active' : ''}${c.rated && !complete ? ' is-partial' : ''}" data-phase="${p.code}">
           <span class="ph-btn-label">${esc(p.label)}</span>
-          <span class="ph-btn-meta">${p.rates
-            ? (rated ? `${n} aspect${n === 1 ? '' : 's'} rated` : 'not rated yet')
-            : (rated ? 'outcome recorded' : 'no ratings — outcome only')}</span>
+          <span class="ph-btn-meta">${c.rated
+            ? `${c.rated} / ${c.total} aspects · ${c.domains} of ${c.domainTotal} domains`
+            : 'not rated yet'}</span>
         </button>`;
       }).join('');
+
+      const c = phaseMeta(active).rates ? phaseCoverage(a, active) : null;
+      const gap = c && c.rated > 0 && c.rated < c.total;
+
       return `
         <div class="ph-switch">
           <div class="ph-switch-head">Visit findings</div>
           <div class="ph-switch-btns">${btns}</div>
           <div class="ph-switch-note">
             ${phaseMeta(active).rates
-              ? 'Ratings and justifications below belong to this visit. The school\'s own self-appraisal is a single annual submission and does not change between visits.'
+              ? `Both on-site visits rate the same 31 aspects. That second reading is what lets the report
+                 show what moved between them, and the year-end School Development Rating needs all five
+                 domains covered. The school's own self-appraisal is a single annual submission and does
+                 not change between visits.`
               : 'The mid-year check-in is online, so it records an outcome and notes — not a re-rating of the 31 aspects.'}
+            ${gap ? `<div class="ph-gap">${c.total - c.rated} aspect${c.total - c.rated === 1 ? '' : 's'} still unrated in this visit${c.domains < c.domainTotal ? `, and ${c.domainTotal - c.domains} domain${c.domainTotal - c.domains === 1 ? '' : 's'} untouched` : ''}. You can save and come back — nothing is blocked.</div>` : ''}
           </div>
         </div>`;
+    }
+
+    // The five phases of the appraisal year, as a page-level reference.
+    // Built from the framework rather than written out here, so the dates a
+    // coordinator reads are the same ones the phase switcher and the report
+    // draft use — a hardcoded copy would drift the first time the calendar
+    // moved.
+    function renderPhaseReference() {
+      const host = document.getElementById('phaseRef');
+      if (!host || !FRAMEWORK) return;
+      const meta = extMeta();
+      const phases = meta.annual_phases || [];
+      if (!phases.length) return;
+
+      const byCode = Object.fromEntries((meta.visit_types || []).map(v => [v.code, v]));
+      // Only Phase 1 and Phase 3 produce ratings — that is the single most
+      // misread thing about the cycle, so the card says it outright.
+      const RATES = { phase_1: true, phase_3: true };
+
+      const cards = phases.map((p, i) => {
+        const vt = byCode[p.visit_type] || {};
+        const rates = !!RATES[p.code];
+        return `
+          <div class="pr-card${rates ? ' is-rating' : ''}">
+            <div class="pr-card-head">
+              <span class="pr-num">${p.code === 'ongoing' ? '↻' : i}</span>
+              <span class="pr-name">${esc(p.name)}</span>
+            </div>
+            <div class="pr-when">${esc(p.timing || '')}</div>
+            <div class="pr-meta">
+              <span class="pr-format">${esc(p.format || '')}</span>
+              ${vt.led_by ? `<span class="pr-led">${esc(vt.led_by)}</span>` : ''}
+            </div>
+            <div class="pr-desc">${esc(p.description || vt.description || '')}</div>
+            <div class="pr-rates${rates ? '' : ' is-no'}">
+              ${rates
+                ? 'Rates all 31 aspects — recorded against this phase.'
+                : 'No ratings recorded. Outcome and notes only.'}
+            </div>
+          </div>`;
+      }).join('');
+
+      const sup = meta.supervision || {};
+      host.innerHTML = `
+        <div class="pr-head">
+          <span class="pr-eyebrow">The appraisal year</span>
+          <span class="pr-sub">${esc(FRAMEWORK.meta.year || '')} · ${sup.total_schools || ''} schools · ${sup.team_size || ''} experts</span>
+        </div>
+        <div class="pr-intro">
+          Every school runs the same five phases. Two of them are on-site visits that produce ratings —
+          Phase 1 and Phase 3 — and the record keeps their findings separately, so you can see what moved
+          between August and November. Phase 2 is an online check-in; it records an outcome, not a re-rating.
+          ${sup.description ? `<br><span class="pr-sup">${esc(sup.note || '')}</span>` : ''}
+        </div>
+        <div class="pr-grid">${cards}</div>`;
+      host.hidden = false;
     }
 
     // "What should happen next on this record?" — the one thing the panels
@@ -2965,9 +3116,22 @@
         return { tone: 'now', label: 'Record your ratings',
           text: 'Nothing has been rated by Eduversal yet. Open a domain tab, pick the visit in the phase switcher, and rate the aspects you saw.' };
       }
-      if (!phaseHasRatings(a, 'phase_3')) {
+      // Coverage, not just presence. A phase with one aspect rated is not a
+      // finished visit, and the year-end rating needs every domain — so say
+      // what is missing rather than waving the record through to the report.
+      const c1 = phaseCoverage(a, 'phase_1');
+      const c3 = phaseCoverage(a, 'phase_3');
+      if (c1.rated && c1.rated < c1.total) {
+        return { tone: 'now', label: 'Phase 1 incomplete',
+          text: `${c1.rated} of ${c1.total} aspects rated, covering ${c1.domains} of ${c1.domainTotal} domains. Finish the Teaching Quality visit before moving on.` };
+      }
+      if (!c3.rated) {
         return { tone: 'now', label: 'Phase 3 still to rate',
-          text: 'Phase 1 is recorded. The Validation visit rates the same aspects again — switch to Phase 3 when that visit happens.' };
+          text: 'Phase 1 is complete. The Validation visit rates the same 31 aspects again — switch to Phase 3 when that visit happens.' };
+      }
+      if (c3.rated < c3.total) {
+        return { tone: 'now', label: 'Phase 3 incomplete',
+          text: `${c3.rated} of ${c3.total} aspects rated, covering ${c3.domains} of ${c3.domainTotal} domains. The School Development Rating needs all five, so finish this visit before drafting the report.` };
       }
       if (!rep) {
         return { tone: 'now', label: 'Draft the report',
@@ -3775,6 +3939,8 @@
       }
 
       await Promise.all([loadFramework(), loadSchools()]);
+      // Needs FRAMEWORK, so it runs after the load rather than at page build.
+      renderPhaseReference();
       await loadAppraisals();
 
       // Search + filter
