@@ -200,9 +200,9 @@ export const PROGRAMME_LINKS = {
       reads: 'Eduversal specialists and directors; admin can finalise a record here' },
     { slug: 'school-visits',        label: 'School Visits',        desc: 'Log on-site monitoring, mid-year check-ins, and validation visits network-wide.',
       who: 'The Eduversal specialist or coordinator who made the visit', reads: 'Eduversal directors and the visited school’s coordinator' },
-    { slug: 'classroom-walkthrough-entry',    label: 'Classroom Walkthrough', desc: 'Record a short, unannounced classroom visit — 10-15 minutes, no score, shared with the teacher.',
-      who: 'You — the Eduversal specialist or school leader who dropped in',
-      reads: 'The teacher and their subject leader. Formative only — never counted in the appraisal score' },
+    // /classroom-walkthrough-entry is intentionally NOT listed here — it is
+    // reached from the Classroom Walkthroughs tab on /teacher-appraisals,
+    // which is where the reader already is when they need to record one.
     { slug: 'principal-appraisals', label: 'Principal Appraisals', desc: 'Network-wide roll-up of every Foundation Rep annual appraisal on principals.',
       who: 'Foundation Representatives, from Academic Hub', reads: 'Eduversal directors — read-only network roll-up here' },
     { slug: 'principal-360-admin',  label: 'Principal 360°',       desc: 'Launch 360 survey cycles, distribute invite links, and monitor response progress.',
