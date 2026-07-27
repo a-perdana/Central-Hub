@@ -64,6 +64,11 @@
       display: grid; grid-template-columns: repeat(3, 1fr);
       gap: 14px;
     }
+    /* The cycle has five steps, so let them wrap rather than forcing three
+       columns and leaving two orphans on the second row. */
+    .page-howto-grid.howto-5 {
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    }
     @media (max-width: 760px) { .page-howto-grid { grid-template-columns: 1fr; } }
     .page-howto-item {
       display: flex; gap: 10px; align-items: flex-start;
@@ -725,6 +730,28 @@
     }
     .ap-add textarea:focus { outline: none; border-color: var(--accent); }
     .ap-add button { align-self: flex-start; }
+
+    /* ── NEXT STEP — where this record is in the cycle ── */
+    .nx {
+      display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+      padding: 11px 14px; margin-bottom: 14px; border-radius: 10px;
+      border: 1px solid var(--border); border-left-width: 4px;
+      background: var(--white);
+    }
+    .nx-label {
+      flex: none; font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .nx-text { font-size: .84rem; line-height: 1.5; color: var(--ink-2); }
+    /* Colour says how much attention this needs, not just what it is. */
+    .nx.is-now     { border-left-color: var(--accent); background: #fffbeb; }
+    .nx.is-now .nx-label { color: var(--accent-dk); }
+    .nx.is-urgent  { border-left-color: #dc2626; background: #fef2f2; }
+    .nx.is-urgent .nx-label { color: #b91c1c; }
+    .nx.is-waiting { border-left-color: #64748b; background: #f8fafc; }
+    .nx.is-waiting .nx-label { color: #475569; }
+    .nx.is-done    { border-left-color: #059669; background: #ecfdf5; }
+    .nx.is-done .nx-label { color: #065f46; }
 
     /* ── APPEALS (Updated Appraisal Model §8.1) ── */
     .apl-panel {
@@ -4835,25 +4862,37 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     <!-- ===== HOW-TO STRIP — what users do on this page ===== -->
     <section class="page-howto-strip" aria-label="What you can do on this page">
-      <p class="page-howto-eyebrow">What you do here</p>
-      <h2 class="page-howto-title">Review each partner school's self-appraisal and validate the score.</h2>
-      <div class="page-howto-grid">
+      <p class="page-howto-eyebrow">The appraisal cycle</p>
+      <h2 class="page-howto-title">Every partner school runs one cycle a year. Open a school to work through it.</h2>
+      <div class="page-howto-grid howto-5">
         <div class="page-howto-item">
           <div class="page-howto-num" aria-hidden="true">1</div>
           <div class="page-howto-text">
-            <strong>Find the school.</strong> Use the filters to narrow by status (in progress / submitted / reviewed) or academic year. Each row shows the school's average score across the five domains.
+            <strong>Read what the school sent.</strong> Before your visit the school self-rates all 31 aspects and attaches evidence to each. Open a record and go domain by domain — each aspect shows their rating, their documents, and the framework's description of the band they claimed.
           </div>
         </div>
         <div class="page-howto-item">
           <div class="page-howto-num" aria-hidden="true">2</div>
           <div class="page-howto-text">
-            <strong>Open the appraisal.</strong> Click any row to read the school's domain ratings and evidence. You can compare their self-rating to what your visits suggest before moving forward.
+            <strong>Rate it yourself, per visit.</strong> Each school is visited twice — Phase 1 for teaching quality, Phase 3 to validate. Use the phase switcher to pick which visit you are recording. Where you differ from the school, you must say why; the save is blocked until you do.
           </div>
         </div>
         <div class="page-howto-item">
           <div class="page-howto-num" aria-hidden="true">3</div>
           <div class="page-howto-text">
-            <strong>Validate &amp; close.</strong> Once a school has <em>Submitted</em>, an HQ reviewer adds strengths, improvements, and recommendations — then flips the status to <em>Reviewed</em>. Closed records feed the network appraisal roll-up.
+            <strong>Write the report.</strong> The <em>Report</em> tab drafts itself from your ratings, the differences against the school's, and your reasons for them. Edit it, compose it into one document, format it, then publish. Publishing is what the school sees.
+          </div>
+        </div>
+        <div class="page-howto-item">
+          <div class="page-howto-num" aria-hidden="true">4</div>
+          <div class="page-howto-text">
+            <strong>Follow the action plan.</strong> The school has four weeks after publication to answer with an action per recommendation. You cannot edit their plan — your part is a dated progress review, which the mid-year check-in expects.
+          </div>
+        </div>
+        <div class="page-howto-item">
+          <div class="page-howto-num" aria-hidden="true">5</div>
+          <div class="page-howto-text">
+            <strong>Handle any appeal.</strong> A school may challenge a domain rating within 10 working days of the report. Appeals appear on the record; a Central Hub admin decides each one with the domain lead, within 15 working days, and that decision is final.
           </div>
         </div>
       </div>
@@ -6541,6 +6580,64 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         </div>`;
     }
 
+    // "What should happen next on this record?" — the one thing the panels
+    // could not tell a first-time reader, because each explains itself but
+    // none of them knows where you are in the cycle. Read top-down: the first
+    // unmet condition is the next move.
+    function nextStep(a) {
+      const { cases, decisions } = appeals(a);
+      const openAppeal = Object.keys(cases).find(k => !decisions[k]);
+      if (openAppeal) {
+        const d = FRAMEWORK.domains.find(x => x.id === openAppeal);
+        return { tone: 'urgent', label: 'Decide the appeal',
+          text: `${a.schoolName || 'The school'} has appealed its ${d ? d.title : openAppeal} rating. A Central Hub admin reviews it with the domain lead and responds within 15 working days.` };
+      }
+
+      const rep = a?.externalReview?.report;
+      const published = rep?.status === 'published';
+
+      if (!hasExternalRating(a)) {
+        return { tone: 'now', label: 'Record your ratings',
+          text: 'Nothing has been rated by Eduversal yet. Open a domain tab, pick the visit in the phase switcher, and rate the aspects you saw.' };
+      }
+      if (!phaseHasRatings(a, 'phase_3')) {
+        return { tone: 'now', label: 'Phase 3 still to rate',
+          text: 'Phase 1 is recorded. The Validation visit rates the same aspects again — switch to Phase 3 when that visit happens.' };
+      }
+      if (!rep) {
+        return { tone: 'now', label: 'Draft the report',
+          text: 'Both visits are rated. Open the Report tab and generate the draft — it writes itself from your ratings and reasons.' };
+      }
+      if (!published) {
+        return { tone: 'now', label: 'Finish and publish the report',
+          text: 'A draft exists but the school cannot see it. Compose it into one document, format it, then publish — ES 17.8 asks for this within 10 business days of the visit.' };
+      }
+
+      const ap = actionPlan(a);
+      if (!ap.items.length) {
+        const due = actionPlanDue(a);
+        return { tone: due && due.overdue ? 'urgent' : 'waiting', label: 'Waiting for the action plan',
+          text: due && due.overdue
+            ? 'The school is past its four-week deadline to respond. Raise it at the next check-in.'
+            : 'The report is published. The school has four weeks to answer with an action per recommendation.' };
+      }
+      if (!ap.reviews.length) {
+        return { tone: 'now', label: 'Review their progress',
+          text: 'The school has written its plan. Read it and record a progress review — the mid-year check-in expects one.' };
+      }
+      return { tone: 'done', label: 'Cycle up to date',
+        text: 'Ratings, report and action plan are all in place, and progress has been reviewed. Add another review after the next check-in.' };
+    }
+
+    function buildNextStep(a) {
+      const s = nextStep(a);
+      return `
+        <div class="nx is-${esc(s.tone)}">
+          <span class="nx-label">${esc(s.label)}</span>
+          <span class="nx-text">${esc(s.text)}</span>
+        </div>`;
+    }
+
     // Appeals against domain ratings. Only shown once a school has actually
     // lodged one — an empty panel on every record would be noise.
     function buildAppealsPanel(a) {
@@ -6816,6 +6913,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }).join('') : '';
 
       return `
+        ${buildNextStep(a)}
         <div class="overview-score-hero">
           <div>
             <div class="osh-num">${overall || '—'}</div>
