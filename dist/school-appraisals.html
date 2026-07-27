@@ -560,6 +560,65 @@
       padding: 2px 8px; margin-right: 6px;
     }
 
+    /* ── SUPERVISION STRIP (Updated Appraisal Model §2.1) ── */
+    .sup-strip {
+      margin: 16px 0 4px; padding: 13px 15px;
+      background: var(--paper); border: 1px solid var(--border); border-radius: 10px;
+    }
+    .sup-strip-head {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin-bottom: 10px;
+    }
+    .sup-visits {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px;
+    }
+    .sup-visit {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px;
+    }
+    .sup-visit-label {
+      font-size: .74rem; font-weight: 700; color: var(--accent-dk); margin-bottom: 3px;
+    }
+    .sup-visit-dates { font-size: .82rem; font-weight: 600; color: var(--ink); }
+    .sup-visit-who { font-size: .8rem; color: var(--ink-2); margin-top: 4px; }
+    .sup-role {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ink-3); margin-right: 4px;
+    }
+    .sup-team { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .sup-chip {
+      font-size: .68rem; padding: 2px 7px; border-radius: 999px;
+      background: var(--paper); border: 1px solid var(--border); color: var(--ink-2);
+    }
+
+    /* ── SCHOOL DEVELOPMENT RATING (§8) — year-end, computed ── */
+    .dev-rating {
+      margin: 14px 0 4px; padding: 13px 15px;
+      border: 1px solid var(--border); border-left-width: 4px; border-radius: 10px;
+      background: var(--white);
+    }
+    .dev-rating-label {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin-bottom: 7px;
+    }
+    .dev-rating-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .dev-rating-band { font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; }
+    .dev-rating-mean { font-size: .8rem; color: var(--ink-3); }
+    .dev-rating-meaning { font-size: .84rem; line-height: 1.55; color: var(--ink-2); margin-top: 6px; }
+    .dev-rating-note { font-size: .74rem; color: var(--ink-3); font-style: italic; margin-top: 6px; }
+    .dev-rating-pending { font-size: .84rem; line-height: 1.55; color: var(--ink-3); font-style: italic; }
+    /* Band colours run green → red, matching the score-pill family so the two
+       scales at least agree on direction even though their labels differ. */
+    .dev-rating.is-outstanding        { border-left-color: #059669; }
+    .dev-rating.is-outstanding .dev-rating-band { color: #065f46; }
+    .dev-rating.is-strong             { border-left-color: #0891b2; }
+    .dev-rating.is-strong .dev-rating-band { color: #0e7490; }
+    .dev-rating.is-developing         { border-left-color: #d97706; }
+    .dev-rating.is-developing .dev-rating-band { color: #b45309; }
+    .dev-rating.is-needs_intervention { border-left-color: #dc2626; }
+    .dev-rating.is-needs_intervention .dev-rating-band { color: #b91c1c; }
+    .dev-rating.is-pending            { border-left-color: var(--ink-3); }
+
     /* ── WRITTEN REPORT TAB (ES 17.8) ── */
     .rep-head {
       display: flex; justify-content: space-between; align-items: flex-start;
@@ -4901,6 +4960,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       return FRAMEWORK?.meta?.rating_scale?.[n]?.label || scoreLabel(n);
     }
 
+    // ── SCHOOL DEVELOPMENT RATING (Updated Appraisal Model §8) ──
+    // Year-end rating COMPUTED from the mean of the five domain scores. It is
+    // never entered by hand — the model defines it as a formula.
+    //
+    // Deliberately distinct from externalReview.outcome (On Track / Needs
+    // Support / Critical Attention), which is a per-visit judgement that
+    // triggers escalation during the year. A school can sit at Needs Support
+    // after Phase 1 and still finish the year Strong; the two answer
+    // different questions.
+    //
+    // Careful with the labels: "Developing" names BOTH an aspect band on the
+    // 1–4 scale and a school rating here. Always render this one as a School
+    // Development Rating so the two cannot be read as the same thing.
+    function developmentRating(a, rater) {
+      const bands = extMeta().development_rating?.bands || [];
+      if (!bands.length || !FRAMEWORK) return null;
+      const perDomain = FRAMEWORK.domains
+        .map(d => parseFloat(domainAvg(a, d.id, rater)))
+        .filter(n => n > 0);
+      // The model says "mean across all five domains" — a partial year does
+      // not produce a rating, it produces a gap.
+      if (perDomain.length < FRAMEWORK.domains.length) {
+        return { incomplete: true, rated: perDomain.length, total: FRAMEWORK.domains.length };
+      }
+      const mean = perDomain.reduce((x, y) => x + y, 0) / perDomain.length;
+      const band = bands.find(b => mean >= b.min && mean <= b.max)
+        // Guard the seams: the published bands leave no gap, but floating
+        // point can land a hair outside a boundary.
+        || bands.reduce((best, b) => (Math.abs(mean - b.min) < Math.abs(mean - best.min) ? b : best), bands[0]);
+      return { mean: mean.toFixed(2), code: band.code, label: band.label, meaning: band.meaning };
+    }
+
+    // The supervision pair for a school, seeded from the model's §2.1 table
+    // onto partner_schools. Role labels, not uids — the model names positions.
+    function supervisionFor(schoolId) {
+      return state.schools.find(s => s.id === schoolId)?.appraisal_2026_27 || null;
+    }
+
     // A composite is an average, so naming its band flatly ("3.6 —
     // Exemplary") overstates it: a domain can average 3.6 while still
     // containing an aspect rated Beginning. Qualify anything that is not a
@@ -4957,7 +5054,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         deltas.length
           ? `Our rating is different from the school's on ${deltas.length} aspect${deltas.length === 1 ? '' : 's'}. We explain each difference in the domain findings below.`
           : `Our ratings match the school's own ratings on every aspect we rated. This tells us the school knows itself well.`,
-        outcomeLabel ? `Overall outcome: ${outcomeLabel}.` : ''
+        outcomeLabel ? `Overall outcome: ${outcomeLabel}.` : '',
+        // §7 lists the School Development Rating as report content, and §8
+        // defines it as computed. State it here rather than leaving the
+        // reader to work it out from five domain numbers.
+        (() => {
+          const dr = developmentRating(a, 'external');
+          if (!dr || dr.incomplete) return '';
+          return `School Development Rating: ${dr.label} (mean ${dr.mean} of 4). ${dr.meaning}`;
+        })()
       ].filter(Boolean).join(' ');
 
       // 1 — findings for EACH domain, aspect by aspect.
@@ -5102,6 +5207,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const out = [];
       out.push(`<h1>Eduversal School Appraisal Report</h1>`);
       out.push(`<p><strong>${esc2(a.schoolName || '')}</strong> — ${esc2(a.academicYear || '')}</p>`);
+
+      // §2.2: the Primary Supervisor signs Phase 1, the Secondary signs
+      // Phase 3. Naming them on the document is what makes it accountable
+      // rather than anonymous.
+      const sup = supervisionFor(a.schoolId);
+      if (sup) {
+        const line = [];
+        if (sup.primarySupervisor) line.push(`Primary Supervisor: ${esc2(sup.primarySupervisor)}${sup.visit1?.dates ? ` (Phase 1, ${esc2(sup.visit1.dates)})` : ''}`);
+        if (sup.secondarySupervisor) line.push(`Secondary Supervisor: ${esc2(sup.secondarySupervisor)}${sup.visit2?.dates ? ` (Phase 3, ${esc2(sup.visit2.dates)})` : ''}`);
+        if (line.length) out.push(`<p>${line.join('<br>')}</p>`);
+      }
 
       if (rep.summary) { out.push('<h2>Executive Summary</h2>'); out.push(para(rep.summary)); }
 
@@ -5917,6 +6033,58 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         ${stage === 'sections' ? sectionsView : documentView}`;
     }
 
+    // Who owns this school this year, and when they visit. Seeded from the
+    // Updated Appraisal Model §2.1 onto partner_schools — read-only here.
+    function buildSupervisionStrip(a) {
+      const sup = supervisionFor(a.schoolId);
+      if (!sup) return '';
+      const visit = (label, v, who, role) => v ? `
+        <div class="sup-visit">
+          <div class="sup-visit-label">${label}</div>
+          <div class="sup-visit-dates">${esc(v.dates || '')}</div>
+          <div class="sup-visit-who"><span class="sup-role">${esc(role)}</span> ${esc(who || '—')}</div>
+          ${Array.isArray(v.team) && v.team.length
+            ? `<div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip">${esc(t)}</span>`).join('')}</div>`
+            : ''}
+        </div>` : '';
+      return `
+        <div class="sup-strip">
+          <div class="sup-strip-head">Supervision · ${esc(FRAMEWORK?.meta?.year || '')}</div>
+          <div class="sup-visits">
+            ${visit('Phase 1 · Teaching Quality', sup.visit1, sup.primarySupervisor, 'Primary Supervisor')}
+            ${visit('Phase 3 · Validation', sup.visit2, sup.secondarySupervisor, 'Secondary Supervisor')}
+          </div>
+        </div>`;
+    }
+
+    // Year-end rating, computed. Shown with its full name so it is never read
+    // as an aspect band — "Developing" means different things on the two
+    // scales.
+    function buildDevelopmentRatingCard(a) {
+      const dr = developmentRating(a, 'external');
+      if (!dr) return '';
+      if (dr.incomplete) {
+        return `
+          <div class="dev-rating is-pending">
+            <div class="dev-rating-label">School Development Rating</div>
+            <div class="dev-rating-pending">
+              Not yet available — ${dr.rated} of ${dr.total} domains rated by Eduversal.
+              The rating is the mean of all five domain scores, so it appears once every domain has been rated.
+            </div>
+          </div>`;
+      }
+      return `
+        <div class="dev-rating is-${esc(dr.code)}">
+          <div class="dev-rating-label">School Development Rating</div>
+          <div class="dev-rating-row">
+            <span class="dev-rating-band">${esc(dr.label)}</span>
+            <span class="dev-rating-mean">mean ${esc(dr.mean)} / 4</span>
+          </div>
+          <div class="dev-rating-meaning">${esc(dr.meaning)}</div>
+          <div class="dev-rating-note">Computed from the five domain means — not entered by hand. A development indicator, not a ranking.</div>
+        </div>`;
+    }
+
     // The overview-level half of the external review: the outcome verdict and
     // which visit produced it. Every option list comes from the framework's
     // meta.external_evaluation — do not hardcode these vocabularies.
@@ -6037,6 +6205,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             </div>
           </div>
         </div>
+        ${buildSupervisionStrip(a)}
+        ${buildDevelopmentRatingCard(a)}
         <div class="overview-grid">${overviewCards}</div>
         ${canEdit ? `<div class="school-owned-note">
           <strong>These are the school's own words.</strong> Ratings, evidence, Key Strengths and Areas for Improvement were written by the school in Academic Hub. You can correct them as an admin, but the school will not be told they changed — prefer writing your response under <em>Eduversal Coordinator Recommendations</em> below.
