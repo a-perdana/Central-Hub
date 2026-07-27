@@ -635,14 +635,22 @@
     .osh-desc { font-size: 0.84rem; color: rgba(255,255,255,0.8); line-height: 1.55; }
 
     /* Strengths / Improvement textarea in overview */
-    .overview-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-    @media (max-width: 620px) { .overview-fields { grid-template-columns: 1fr; } }
+    /* One per row, not side by side. Two columns halved the writing width, so
+       prose wrapped every six or seven words and both boxes still had to be
+       read in full — the pairing saved vertical space at the cost of the
+       thing the boxes are for. Stacked, each gets the full modal width. */
+    .overview-fields { display: grid; grid-template-columns: 1fr; gap: 18px; margin-bottom: 18px; }
     .field-group label { display: block; font-size: 0.78rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    /* Roomy on purpose. These boxes hold paragraphs of appraisal prose, and
+       at 130px with 0.875rem text a coordinator was writing into a slot
+       roughly four lines tall — enough to lose the start of your own sentence
+       while typing the end of it. Taller, larger type and a longer line
+       height so a full thought is visible at once. */
     .field-group textarea {
-      width: 100%; min-height: 130px; padding: 10px 12px;
+      width: 100%; min-height: 200px; padding: 14px 16px;
       border: 1.5px solid var(--border); border-radius: 10px;
-      font-family: inherit; font-size: 0.875rem; color: var(--ink);
-      resize: vertical; background: var(--white); line-height: 1.55;
+      font-family: inherit; font-size: 0.92rem; color: var(--ink);
+      resize: vertical; background: var(--white); line-height: 1.7;
       transition: border-color 0.15s;
     }
     .field-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,83,9,0.08); }
@@ -663,6 +671,35 @@
     }
     .field-owner.is-locked { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
     .field-owner.is-yours  { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
+    /* Editable, but not ours — an admin correcting the school's own words.
+       Amber because that IS the attention axis: the school will not be told
+       these changed. Distinct from .is-locked (cannot edit) and .is-yours
+       (ours to write); all three now render in every state, so a field never
+       goes unlabelled at the moment it is open for typing. */
+    .field-owner.is-theirs { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+
+    /* ── OWNERSHIP AT BLOCK LEVEL ──
+       Three consecutive blocks on the Overview tab were the same white card
+       with the same border, so which one a coordinator was meant to fill in
+       was not visible — only discoverable by clicking. Ownership now carries
+       weight: ours is raised, the school's is recessed. */
+    .field-group.is-ours {
+      background: #f5fdff; border: 1px solid #a5f3fc;
+      border-left: 4px solid #0891b2; border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 16px;
+    }
+    .field-group.is-ours > label { color: #0e7490; }
+    .field-group.is-ours textarea { border-color: #a5f3fc; background: var(--white); }
+    .field-group.is-ours textarea:focus {
+      border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8,145,178,0.12);
+    }
+    /* The school's half: present and legible, but visibly not the place the
+       coordinator is being asked to type. */
+    .overview-fields.is-school-owned .field-group {
+      background: var(--paper); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .overview-fields.is-school-owned textarea { background: var(--white); }
     /* .ab-section-label is a flex row ending in a rule (::after). Keep the pill
        from being stretched by that flex context or letter-spaced by the
        label's uppercase treatment. */
@@ -4384,13 +4421,22 @@
         ${canEdit ? `<div class="school-owned-note">
           <strong>These are the school's own words.</strong> Ratings, evidence, Key Strengths and Areas for Improvement were written by the school in Academic Hub. You can correct them as an admin, but the school will not be told they changed — prefer writing your response under <em>Eduversal Coordinator Recommendations</em> below.
         </div>` : ''}
-        <div class="overview-fields">
+        <!-- The ownership chip used to render ONLY when the field was locked,
+             so it vanished at the one moment it matters most: an admin with
+             these fields open has no marker telling them the words are the
+             school's. It now always states the owner, and says so more
+             sharply when the field is editable. -->
+        <div class="overview-fields is-school-owned">
           <div class="field-group">
-            <label>Key Strengths ${!canEdit ? '<span class="field-owner is-locked">🔒 the school\'s</span>' : ''}</label>
+            <label>Key Strengths ${canEdit
+              ? '<span class="field-owner is-theirs">✎ the school\'s — edit with care</span>'
+              : '<span class="field-owner is-locked">🔒 the school\'s</span>'}</label>
             <textarea aria-label="What does this school do particularly well?" data-overview-field="strengths" placeholder="${canEdit ? 'What does this school do particularly well?' : 'Written by the school in Academic Hub'}" ${!canEdit ? 'disabled' : ''}>${a.strengths || ''}</textarea>
           </div>
           <div class="field-group">
-            <label>Areas for Improvement ${!canEdit ? '<span class="field-owner is-locked">🔒 the school\'s</span>' : ''}</label>
+            <label>Areas for Improvement ${canEdit
+              ? '<span class="field-owner is-theirs">✎ the school\'s — edit with care</span>'
+              : '<span class="field-owner is-locked">🔒 the school\'s</span>'}</label>
             <textarea aria-label="What are the priority areas to develop?" data-overview-field="improvements" placeholder="${canEdit ? 'What are the priority areas to develop?' : 'Written by the school in Academic Hub'}" ${!canEdit ? 'disabled' : ''}>${a.improvements || ''}</textarea>
           </div>
         </div>
@@ -4401,9 +4447,15 @@
              report is published, so they close the panel in the order the
              cycle actually produces them. -->
         ${buildDevelopmentRatingCard(a)}
-        <div class="field-group">
-          <label>Eduversal Coordinator Recommendations ${(canWriteFeedback && !state.isAdmin) ? '<span class="field-owner is-yours">✏️ yours to write</span>' : ''}</label>
-          <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" style="min-height:130px;" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
+        <!-- The one field on this tab that is Eduversal's to write, so it
+             carries visible weight rather than sitting at the same rank as
+             the school's fields above and the read-only panels below. The
+             chip was suppressed for admins (`&& !state.isAdmin`), which hid
+             the ownership marker from the very people who can edit every
+             other field too — exactly who needs to know which box is theirs. -->
+        <div class="field-group is-ours">
+          <label>Eduversal Coordinator Recommendations ${canWriteFeedback ? '<span class="field-owner is-yours">✏️ yours to write</span>' : '<span class="field-owner is-locked">🔒 closed</span>'}</label>
+          <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
         </div>
         ${buildActionPlanPanel(a, canWriteExternal)}
         ${buildAppealsPanel(a)}
