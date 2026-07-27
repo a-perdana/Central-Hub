@@ -225,3 +225,88 @@ export function isValidSubject(subjectId) {
 export function subjectLabel(subjectId) {
   return SUBJECT_LABELS[subjectId] || subjectId;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ROLE TAGS — canonical colour per position label
+   ──────────────────────────────────────────────────────────────────────────
+   The appraisal model names POSITIONS, not people ("Biology SS", "Director of
+   Primary"), and those labels are rendered as tags on /school-appraisals
+   (supervisor pair, visit-team chips, domain-lead pickers) and anywhere else
+   a role is shown. Before this, every surface picked its own tag styling, so
+   the same role read differently from page to page.
+
+   Two rules decide the palette, and they are the whole point:
+
+   1. A subject specialist inherits ITS SUBJECT'S colour. "Biology SS" is
+      Biology's green — the same green /department-workspace and
+      /department-artifacts already use. Assigning roles a fresh unrelated
+      palette would mean Biology is green on one page and, say, orange on
+      another, which is worse than having no colours at all.
+
+   2. Roles that are NOT subject-scoped take the `academic_leadership`
+      category colour from resources/roles-positions.json (#6c5ce7, brand
+      mor) — the category those positions actually belong to.
+
+   Two pairs share a base hue because they genuinely share a scope: the two
+   English specialists, and the two Directors. Primary vs Secondary is carried
+   by depth (Primary lighter, Secondary deeper) rather than by hue, because
+   they are the same function at different school levels — a different hue
+   would imply they are unrelated.
+
+   Keys are the VERBATIM role strings used by the appraisal framework's
+   domain_leads.pairs roster. Matching is exact and case-insensitive; an
+   unknown role falls back to neutral rather than guessing, so a roster change
+   degrades to grey instead of silently colliding with an existing colour. */
+
+// `bg` is the tag fill, `bd` its border, `fg` the text. Fills are SATURATED,
+// not pale tints: an earlier pass used 50-level tints (#d1fae5 etc.) and they
+// were measurably indistinguishable at chip size — Physics and Director of
+// Primary came out at dE 0.0, literally the same colour. Pale tints of
+// different hues all collapse toward white.
+//
+// Every entry is verified on two axes, and BOTH must hold if you edit one:
+//   · contrast  white-on-fill >= 4.5 (WCAG AA, small bold text)
+//   · dE        >= 10 against every other fill (CIE76; below that reads as
+//               "the same colour" at chip size)
+// Measured: contrast 4.70–9.93, closest pair dE 12.0. The two closest pairs
+// are the English roles and the two Directors — which is correct, they ARE
+// the same function at different school levels.
+export const ROLE_TAG_COLORS = {
+  // ── Subject specialists — each keeps its own subject's hue ──
+  'biology ss':            { fg: '#ffffff', bg: '#047857', bd: '#065f46' }, // biology green
+  'chemistry ss':          { fg: '#ffffff', bg: '#b45309', bd: '#92400e' }, // chemistry amber
+  'physics ss':            { fg: '#ffffff', bg: '#7c3aed', bd: '#5b21b6' }, // physics violet
+  'bahasa ss':             { fg: '#ffffff', bg: '#e11d48', bd: '#9f1239' }, // bahasa rose
+  'religion ss':           { fg: '#ffffff', bg: '#4f46e5', bd: '#3730a3' }, // religion indigo
+  'edusteam ss':           { fg: '#ffffff', bg: '#0e7490', bd: '#155e75' }, // edu_steam cyan-deep
+  // English splits by school level: one pink family, two depths.
+  'english ss primary':    { fg: '#ffffff', bg: '#be185d', bd: '#9d174d' },
+  'english ss secondary':  { fg: '#ffffff', bg: '#9d174d', bd: '#831843' },
+  // ── Academic leadership — roles-positions.json categories.academic_leadership ──
+  // Brand mor for Primary, deepened for Secondary. Same reasoning as English.
+  'director of primary':   { fg: '#ffffff', bg: '#6c5ce7', bd: '#4c3d9e' },
+  'director of secondary': { fg: '#ffffff', bg: '#3730a3', bd: '#312e81' },
+};
+
+// Neutral fallback. Deliberately grey: an unrecognised role should look
+// unrecognised, not borrow a meaning it has not earned.
+export const ROLE_TAG_FALLBACK = { fg: '#ffffff', bg: '#64748b', bd: '#475569' };
+
+/** Colour triplet for a role label. Exact match, case- and space-insensitive. */
+export function roleTagColor(role) {
+  if (!role) return ROLE_TAG_FALLBACK;
+  const key = String(role).trim().toLowerCase().replace(/\s+/g, ' ');
+  return ROLE_TAG_COLORS[key] || ROLE_TAG_FALLBACK;
+}
+
+/** Inline `style` string for a role tag. Keeps callers to one call.
+ *
+ *  Also publishes the role's own ink as `--role-ink`, so an outlined variant
+ *  (a chip that drops the fill to signal secondary rank, say) can keep the
+ *  role's hue as its text colour instead of falling back to neutral grey.
+ *  Without it the hollow variant loses the colour coding entirely, which is
+ *  the whole point of the tag. */
+export function roleTagStyle(role) {
+  const c = roleTagColor(role);
+  return `color:${c.fg};background:${c.bg};border-color:${c.bd};--role-ink:${c.bd};`;
+}

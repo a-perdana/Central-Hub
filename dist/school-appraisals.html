@@ -188,14 +188,21 @@
     .school-name { font-weight: 600; }
     .school-meta { font-size: 0.78rem; color: var(--ink-3); margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
     /* Two supervisors per school, so they read as tags rather than one run-on
-       string. Primary carries the accent — it is the year's main contact. */
+       string. Colour identifies WHICH expert (canonical per-role palette in
+       partials/subject-config.js, applied inline); rank is carried by the
+       fill treatment instead — Primary solid, Secondary outlined — so the two
+       signals stay readable at once rather than competing for the same hue. */
     .sv-tag {
-      font-size: .68rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
-      background: var(--accent-2); color: var(--accent-dk);
-      border: 1px solid #fde68a; cursor: help;
+      font-size: .68rem; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+      border: 1px solid transparent; cursor: help; white-space: nowrap;
     }
+    /* Secondary hollows out: keeps the role's hue as text + border, drops the
+       fill. `background` is overridden after the inline style via !important
+       because the inline attribute would otherwise always win. */
     .sv-tag.is-secondary {
-      background: var(--paper); color: var(--ink-3); border-color: var(--border);
+      background: var(--white) !important;
+      color: var(--role-ink, var(--ink-3)) !important;
+      font-weight: 600;
     }
     /* Records made before the supervision plan hold a typed name. */
     .sv-legacy { font-style: italic; }
@@ -645,9 +652,13 @@
       letter-spacing: .04em; color: var(--ink-3); margin-right: 4px;
     }
     .sup-team { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-    .sup-chip {
-      font-size: .68rem; padding: 2px 7px; border-radius: 999px;
-      background: var(--paper); border: 1px solid var(--border); color: var(--ink-2);
+    /* Team chips carry the same per-role palette as the supervisor tags, so a
+       reader can match "who is on this visit" against "who signs it" by
+       colour alone. Fill/border/text arrive inline from roleTagStyle(). */
+    .sup-chip, .role-tag {
+      display: inline-block;
+      font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid transparent; white-space: nowrap;
     }
 
     /* ── PHASE SWITCHER (Updated Appraisal Model §5) ── */
@@ -710,13 +721,24 @@
     .vt-note { font-size: .78rem; line-height: 1.5; color: var(--ink-3); margin-bottom: 10px; }
     .vt-rows { display: flex; flex-direction: column; gap: 6px; }
     .vt-row {
-      display: grid; grid-template-columns: 34px 1fr 190px auto;
+      display: grid; grid-template-columns: 34px 1fr 209px auto;
       align-items: center; gap: 10px;
       padding: 6px 9px; border-radius: 7px; background: var(--paper);
     }
     @media (max-width: 680px) {
       .vt-row { grid-template-columns: 34px 1fr; }
-      .vt-row select, .vt-row .vt-who { grid-column: 1 / -1; }
+      /* .vt-pick is the swatch+select wrapper — it is the grid child now, so
+         it is what must span, not the bare select inside it. */
+      .vt-row .vt-pick, .vt-row .vt-who { grid-column: 1 / -1; }
+    }
+    /* A <select> cannot be colour-coded per option across browsers, so the
+       selected role's colour rides beside it as a swatch. Re-rendered with
+       the panel on every change, so it always matches the selection. */
+    .vt-pick { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .vt-pick select { flex: 1; min-width: 0; }
+    .vt-swatch {
+      flex: none; width: 12px; height: 12px; border-radius: 50%;
+      border: 1.5px solid var(--border);
     }
     .vt-row.is-swapped { background: #fffbeb; }
     .vt-domain {
@@ -5356,6 +5378,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       query, orderBy, serverTimestamp, where
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+    // Canonical colour per position label, shared with every other CH surface
+    // that shows a role tag. Subject specialists inherit their subject's own
+    // colour, so "Biology SS" is the same green here as on
+    // /department-workspace — see partials/subject-config.js for the rule.
+    import { roleTagStyle } from './partials/subject-config.js';
+
     // ===== FRAMEWORK DATA (loaded from JSON) =====
     let FRAMEWORK = null;
 
@@ -5718,8 +5746,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const sup = supervisionFor(a.schoolId);
       if (sup && (sup.primarySupervisor || sup.secondarySupervisor)) {
         const parts = [];
-        if (sup.primarySupervisor) parts.push(`<span class="sv-tag" title="Primary Supervisor · signs the Phase 1 report">${esc(sup.primarySupervisor)}</span>`);
-        if (sup.secondarySupervisor) parts.push(`<span class="sv-tag is-secondary" title="Secondary Supervisor · signs the Phase 3 report">${esc(sup.secondarySupervisor)}</span>`);
+        // Colour comes from the role, not from primary-vs-secondary rank —
+        // that distinction is carried by the solid/outlined treatment below,
+        // so the hue stays free to mean "which expert".
+        if (sup.primarySupervisor) parts.push(`<span class="sv-tag" style="${roleTagStyle(sup.primarySupervisor)}" title="Primary Supervisor · signs the Phase 1 report">${esc(sup.primarySupervisor)}</span>`);
+        if (sup.secondarySupervisor) parts.push(`<span class="sv-tag is-secondary" style="${roleTagStyle(sup.secondarySupervisor)}" title="Secondary Supervisor · signs the Phase 3 report">${esc(sup.secondarySupervisor)}</span>`);
         return parts.join('');
       }
       return a.appraiser ? `<span class="sv-legacy">${esc(a.appraiser)}</span>` : '';
@@ -6964,9 +6995,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="sup-visit">
           <div class="sup-visit-label">${label}</div>
           <div class="sup-visit-dates">${esc(v.dates || '')}</div>
-          <div class="sup-visit-who"><span class="sup-role">${esc(role)}</span> ${esc(who || '—')}</div>
+          <div class="sup-visit-who"><span class="sup-role">${esc(role)}</span> ${who ? `<span class="role-tag" style="${roleTagStyle(who)}">${esc(who)}</span>` : '—'}</div>
           ${Array.isArray(v.team) && v.team.length
-            ? `<div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip">${esc(t)}</span>`).join('')}</div>`
+            ? `<div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip" style="${roleTagStyle(t)}">${esc(t)}</span>`).join('')}</div>`
             : ''}
         </div>` : '';
       return `
@@ -7465,11 +7496,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <span class="vt-domain">${esc(d.code)}</span>
             <span class="vt-domain-title">${esc(d.title)}</span>
             ${editable
-              ? `<select data-vt-domain="${esc(d.id)}">
-                   <option value="">— not covered —</option>
-                   ${roster.map(r => `<option value="${escAttr(r)}" ${r === who ? 'selected' : ''}>${esc(r)}</option>`).join('')}
-                 </select>`
-              : `<span class="vt-who">${who ? esc(who) : '<em>not recorded</em>'}</span>`}
+              // A <select> cannot be colour-coded per option across browsers,
+              // so the role's colour rides alongside it as a swatch that
+              // follows the selection. Read-only rows use the full tag.
+              ? `<span class="vt-pick">
+                   <span class="vt-swatch" data-vt-swatch="${esc(d.id)}" style="${who ? roleTagStyle(who) : 'background:transparent;border-color:var(--border);'}" aria-hidden="true"></span>
+                   <select data-vt-domain="${esc(d.id)}">
+                     <option value="">— not covered —</option>
+                     ${roster.map(r => `<option value="${escAttr(r)}" ${r === who ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+                   </select>
+                 </span>`
+              : `<span class="vt-who">${who ? `<span class="role-tag" style="${roleTagStyle(who)}">${esc(who)}</span>` : '<em>not recorded</em>'}</span>`}
             ${swapped ? `<span class="vt-swap" title="Planned: ${escAttr(wasPlanned)}">covered</span>` : ''}
           </div>`;
       }).join('');
@@ -8156,7 +8193,21 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         lab.setAttribute('for', `${prefix}${i}`);
         lab.textContent = `${d.code} · ${d.title || ''}`.replace(/ · $/, '');
         cell.appendChild(lab);
-        cell.appendChild(roleSelect(`${prefix}${i}`, team[i] || ''));
+        // Same swatch-beside-select treatment as the visit-team editor, so a
+        // role is recognisable by colour in both places. This modal has no
+        // re-render on change, so the swatch is repainted by its own listener.
+        const pick = document.createElement('span');
+        pick.className = 'vt-pick';
+        const swatch = document.createElement('span');
+        swatch.className = 'vt-swatch';
+        const paint = v => swatch.setAttribute('style',
+          v ? roleTagStyle(v) : 'background:transparent;border-color:var(--border);');
+        paint(team[i] || '');
+        const sel = roleSelect(`${prefix}${i}`, team[i] || '');
+        sel.addEventListener('change', () => paint(sel.value));
+        pick.appendChild(swatch);
+        pick.appendChild(sel);
+        cell.appendChild(pick);
         wrap.appendChild(cell);
       });
     }
@@ -8187,13 +8238,27 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         `<strong>${affected} appraisal record${affected === 1 ? '' : 's'}</strong> of this school. ` +
         `Re-running the supervision seed script would overwrite these edits.`;
 
-      // Supervisors: rebuilt each open so a roster change is picked up.
+      // Supervisors: rebuilt each open so a roster change is picked up. Each
+      // gets the same colour swatch as the team pickers — the supervisor is
+      // drawn from the same ten experts, so it should read the same way.
       ['supEditPrimary', 'supEditSecondary'].forEach((id, i) => {
         const old = document.getElementById(id);
         const fresh = roleSelect(id, i === 0 ? sup.primarySupervisor : sup.secondarySupervisor,
                                  { blankLabel: '— not set —' });
         fresh.className = 'form-select';
-        old.replaceWith(fresh);
+        const pick = document.createElement('span');
+        pick.className = 'vt-pick';
+        const swatch = document.createElement('span');
+        swatch.className = 'vt-swatch';
+        const paint = v => swatch.setAttribute('style',
+          v ? roleTagStyle(v) : 'background:transparent;border-color:var(--border);');
+        paint(fresh.value);
+        fresh.addEventListener('change', () => paint(fresh.value));
+        pick.appendChild(swatch);
+        pick.appendChild(fresh);
+        // Replace whatever is currently in the slot — on a second open that
+        // is the previous wrapper, not the original <select>.
+        (old.closest('.vt-pick') || old).replaceWith(pick);
       });
 
       document.getElementById('supEditV1Dates').value = sup.visit1?.dates || '';
