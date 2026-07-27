@@ -555,6 +555,73 @@
       padding: 2px 8px; margin-right: 6px;
     }
 
+    /* ── WRITTEN REPORT TAB (ES 17.8) ── */
+    .rep-head {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 14px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .rep-title { font-family: 'Lora', serif; font-size: 1.25rem; font-weight: 600; color: var(--ink); }
+    .rep-sub { font-size: .82rem; color: var(--ink-3); margin-top: 2px; }
+    .rep-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    /* Two-click confirm for destructive/irreversible actions — this hub bans
+       confirm() (Common Mistake #3), so the button states the consequence. */
+    .rep-actions .is-confirming {
+      background: #b91c1c !important; border-color: #b91c1c !important;
+      color: #fff !important;
+    }
+    .rep-stamp {
+      font-size: .78rem; color: var(--ink-3); font-style: italic;
+      margin-bottom: 12px;
+    }
+    .rep-stamp.is-published {
+      color: #065f46; font-style: normal; font-weight: 600;
+      background: #d1fae5; border: 1px solid #6ee7b7;
+      border-radius: 8px; padding: 9px 12px;
+    }
+    .rep-section-label {
+      font-size: .76rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3);
+      margin: 20px 0 10px; padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .rep-domain textarea { min-height: 96px; }
+
+    /* Print: drop the app chrome and let the report run as a document.
+       Scoped to body.printing-report so printing from any other tab still
+       behaves normally. */
+    @media print {
+      body.printing-report .nav,
+      body.printing-report .page-hero,
+      body.printing-report .page-toolbar,
+      body.printing-report .table-wrap,
+      body.printing-report .modal-tabs,
+      body.printing-report .modal-head,
+      body.printing-report .modal-footer-bar,
+      body.printing-report .rep-actions,
+      body.printing-report .ext-intro-note,
+      body.printing-report .page-footer { display: none !important; }
+      body.printing-report .modal-overlay {
+        position: static; background: none; display: block !important;
+      }
+      body.printing-report .modal {
+        box-shadow: none; border: 0; max-width: none; width: auto; margin: 0;
+      }
+      body.printing-report .modal-tab-panel { display: none !important; }
+      body.printing-report #reportPanel { display: block !important; }
+      /* The live textareas are replaced by .rep-print-text mirrors at print
+         time — a textarea only prints what fits its visible box. */
+      body.printing-report #reportPanel textarea { display: none !important; }
+      body.printing-report .field-group label { color: #000; }
+      body.printing-report .rep-domain { break-inside: avoid; }
+    }
+    .rep-print-text { display: none; }
+    @media print {
+      body.printing-report .rep-print-text {
+        display: block; white-space: pre-wrap;
+        font-size: 11pt; line-height: 1.5; color: #000; margin-bottom: 10pt;
+      }
+    }
+
     /* Dual score readout — school number, arrow, Eduversal number. */
     .dual-score { display: inline-flex; align-items: center; gap: 6px; }
     .dual-score-arrow { color: var(--ink-3, #9ca3af); font-size: .8rem; }
@@ -1087,7 +1154,10 @@
         visitType:        er.visitType || '',
         evaluatedBy:      er.evaluatedBy || '',
         evaluatedAt:      er.evaluatedAt || null,
-        frameworkVersion: er.frameworkVersion || ''
+        frameworkVersion: er.frameworkVersion || '',
+        // Present only once a draft exists — an absent report and an empty
+        // one are different states, and the panel keys its wording off that.
+        ...(er.report ? { report: er.report } : {})
       };
     }
 
@@ -1121,6 +1191,153 @@
       if (num)  num.textContent = dext || '—';
       const heroExt = panelsEl.querySelector('[data-ext-overall]');
       if (heroExt) heroExt.textContent = avgScore(a, 'external') || '—';
+    }
+
+    // ===== WRITTEN REPORT (ES 17.8, "within 10 business days") =====
+    // ES 17.8 requires the post-visit report to carry four things:
+    //   1. findings for EACH domain
+    //   2. specific commendations and recommendations
+    //   3. ratings or indicators of performance level
+    //   4. priority action areas
+    // The draft below assembles all four from what the appraiser already
+    // entered — per-aspect ratings, the deltas against the school's own
+    // ratings, the justifications behind each difference, and the outcome
+    // verdict. It is a STARTING POINT, not the report: everything is
+    // editable before publish, and regenerating deliberately warns first.
+    function reportShape(a) {
+      const r = extReview(a).report || {};
+      return {
+        status:      r.status || 'draft',      // 'draft' | 'published'
+        summary:     r.summary || '',
+        domains:     r.domains || {},          // { d1: '…', … } per-domain findings
+        commendations: r.commendations || '',
+        recommendations: r.recommendations || '',
+        priorities:  r.priorities || '',
+        generatedAt: r.generatedAt || null,
+        publishedAt: r.publishedAt || null,
+        publishedBy: r.publishedBy || ''
+      };
+    }
+
+    function bandLabel(n) {
+      return FRAMEWORK?.meta?.rating_scale?.[n]?.label || scoreLabel(n);
+    }
+
+    // Every aspect where Eduversal and the school landed on different bands,
+    // with the justification the appraiser wrote. This is the evidential
+    // spine of the report — a difference without a reason should not exist
+    // (the save gate enforces that), so these read as finished sentences.
+    function reportDeltas(a) {
+      if (!FRAMEWORK) return [];
+      const er = extReview(a);
+      return FRAMEWORK.domains.flatMap(d =>
+        d.aspects
+          .map(asp => {
+            const ext = er.ratings[asp.id] || 0;
+            const sch = a.ratings?.[asp.id] || 0;
+            if (!(ext > 0 && sch > 0) || ext === sch) return null;
+            return {
+              domain: d, aspect: asp, ext, sch,
+              dir: ext > sch ? 'higher' : 'lower',
+              why: String(er.justifications[asp.id] || '').trim()
+            };
+          })
+          .filter(Boolean)
+      );
+    }
+
+    function generateReportDraft(a) {
+      const er = extReview(a);
+      const meta = extMeta();
+      const deltas = reportDeltas(a);
+      const overallSchool = avgScore(a);
+      const overallExt = avgScore(a, 'external');
+      const outcomeLabel = meta.outcome_scale?.[er.outcome]?.label || '';
+
+      // 1 + 3 — scope, and the performance level per ES 17.8
+      const visitName = (meta.visit_types || []).find(v => v.code === er.visitType)?.name || 'appraisal visit';
+      const summary = [
+        `${a.schoolName || 'The school'} was appraised against the Eduversal School Appraisal Framework v${FRAMEWORK?.meta?.version || '2.0'} — five domains, ${FRAMEWORK.domains.reduce((n, d) => n + d.aspects.length, 0)} aspects — during the ${visitName} of the ${a.academicYear || ''} cycle.`,
+        overallExt
+          ? `Eduversal's overall rating is ${overallExt} (${bandLabel(Math.round(parseFloat(overallExt)))}), against the school's own self-rating of ${overallSchool || '—'}.`
+          : `Eduversal has not yet recorded an overall rating for this cycle.`,
+        deltas.length
+          ? `Eduversal's rating differs from the school's on ${deltas.length} aspect${deltas.length === 1 ? '' : 's'}; each difference is evidenced in the domain findings below.`
+          : `Eduversal's ratings align with the school's self-assessment across every rated aspect — the self-appraisal is a reliable account.`,
+        outcomeLabel ? `Overall outcome: ${outcomeLabel}.` : ''
+      ].filter(Boolean).join(' ');
+
+      // 1 — findings for EACH domain
+      const domains = {};
+      FRAMEWORK.domains.forEach(d => {
+        const sch = domainAvg(a, d.id);
+        const ext = domainAvg(a, d.id, 'external');
+        const mine = deltas.filter(x => x.domain.id === d.id);
+        const lines = [];
+        lines.push(ext
+          ? `Eduversal rates ${d.title} at ${ext} (${bandLabel(Math.round(parseFloat(ext)))}); the school self-rated ${sch || '—'}.`
+          : `${d.title} has not yet been externally rated.`);
+        if (mine.length) {
+          lines.push('');
+          mine.forEach(x => {
+            lines.push(`• ${x.aspect.title} — school ${x.sch} (${bandLabel(x.sch)}), Eduversal ${x.ext} (${bandLabel(x.ext)}). ${x.why}`);
+          });
+        } else if (ext) {
+          lines.push('Ratings in this domain agree with the school\'s own assessment.');
+        }
+        domains[d.id] = lines.join('\n');
+      });
+
+      // 2 — commendations: strongest domains, and where the school was honest
+      const rated = FRAMEWORK.domains
+        .map(d => ({ d, ext: parseFloat(domainAvg(a, d.id, 'external')) }))
+        .filter(x => x.ext > 0)
+        .sort((x, y) => y.ext - x.ext);
+      const commendations = rated.length
+        ? [
+            rated[0].ext >= 3
+              ? `${rated[0].d.title} is the strongest domain at ${rated[0].ext.toFixed(1)} (${bandLabel(Math.round(rated[0].ext))}).`
+              : '',
+            deltas.filter(x => x.dir === 'higher').length
+              ? `The school under-rated itself on ${deltas.filter(x => x.dir === 'higher').length} aspect${deltas.filter(x => x.dir === 'higher').length === 1 ? '' : 's'} where Eduversal found stronger practice than claimed.`
+              : '',
+            !deltas.length ? 'The school\'s self-appraisal was accurate throughout — a mark of a mature evaluation culture.' : ''
+          ].filter(Boolean).join(' ')
+        : '';
+
+      // 2 — recommendations: carry the coordinator's own text through
+      const recommendations = [
+        String(a.recommendations || '').trim(),
+        String(er.outcomeNote || '').trim()
+      ].filter(Boolean).join('\n\n');
+
+      // 4 — priority action areas. Aspect-level first, then domain-level.
+      // A domain average hides a single failing aspect — five aspects at 4
+      // and one at 1 still averages 3.5 — so anything Eduversal rated
+      // Beginning or Developing is named individually. ES 17.8 asks for
+      // "priority action areas", and a buried 1 is exactly that.
+      const weakAspects = FRAMEWORK.domains
+        .flatMap(d => d.aspects.map(asp => ({ d, asp, ext: er.ratings[asp.id] || 0 })))
+        .filter(x => x.ext > 0 && x.ext < 3)
+        .sort((x, y) => x.ext - y.ext);
+      const weakDomains = rated.filter(x => x.ext < 3).sort((x, y) => x.ext - y.ext);
+
+      let priorities = '';
+      if (weakAspects.length) {
+        priorities = weakAspects.slice(0, 6).map((x, i) =>
+          `${i + 1}. ${x.d.code} ${x.asp.title} — rated ${x.ext} (${bandLabel(x.ext)}). ${x.ext === 1 ? 'Practice is absent or at an early stage; this needs attention before the next cycle.' : 'Practice is emerging but gaps remain; consolidate to reach Established.'}`
+        ).join('\n');
+        if (weakAspects.length > 6) {
+          priorities += `\n\n(${weakAspects.length - 6} further aspect${weakAspects.length - 6 === 1 ? '' : 's'} below Established — see the domain findings.)`;
+        }
+        if (weakDomains.length) {
+          priorities += `\n\nAt domain level, ${weakDomains.map(x => `${x.d.title} (${x.ext.toFixed(1)})`).join(' and ')} sit${weakDomains.length === 1 ? 's' : ''} below Established overall.`;
+        }
+      } else if (rated.length) {
+        priorities = 'No aspect was rated below Established. Priorities should focus on moving Established practice toward Exemplary.';
+      }
+
+      return { summary, domains, commendations, recommendations, priorities };
     }
 
     // Evidence URLs and filenames are school-supplied, so they are untrusted
@@ -1443,6 +1660,18 @@
         panelsEl.appendChild(panel);
       });
 
+      // Report tab — last, because it is what the visit produces.
+      const reportIdx = FRAMEWORK.domains.length + 1;
+      const reportTab = makeTab('📄', 'Report', reportIdx, '#b45309');
+      tabsEl.appendChild(reportTab);
+
+      const reportPanel = document.createElement('div');
+      reportPanel.className = 'modal-tab-panel' + (state.activeTab === reportIdx ? ' active' : '');
+      reportPanel.dataset.panel = String(reportIdx);
+      reportPanel.id = 'reportPanel';
+      reportPanel.innerHTML = buildReportPanel(a, canWriteExternal);
+      panelsEl.appendChild(reportPanel);
+
       // Tab switching
       tabsEl.querySelectorAll('.modal-tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -1553,6 +1782,126 @@
         });
       });
 
+      // ── Written report (ES 17.8) ──
+      function ensureReport() {
+        const er = ensureExternalReview();
+        if (!er.report) er.report = { status: 'draft', domains: {} };
+        if (!er.report.domains) er.report.domains = {};
+        return er.report;
+      }
+      function reportIsPublished() {
+        return extReview(state.currentAppraisal).report?.status === 'published';
+      }
+
+      // All report-panel listeners live here so they can be re-attached after
+      // the panel is re-rendered (generate / publish both replace its HTML).
+      function wireReportPanel() {
+      panelsEl.querySelectorAll('[data-report-field]').forEach(ta => {
+        ta.addEventListener('input', () => {
+          if (!canWriteExternal || reportIsPublished()) return;
+          ensureReport()[ta.dataset.reportField] = ta.value;
+          document.getElementById('saveStatus').textContent = 'Unsaved changes';
+        });
+      });
+      panelsEl.querySelectorAll('[data-report-domain]').forEach(ta => {
+        ta.addEventListener('input', () => {
+          if (!canWriteExternal || reportIsPublished()) return;
+          ensureReport().domains[ta.dataset.reportDomain] = ta.value;
+          document.getElementById('saveStatus').textContent = 'Unsaved changes';
+        });
+      });
+
+      const genBtn = panelsEl.querySelector('#btnGenerateReport');
+      genBtn?.addEventListener('click', () => {
+        if (!canWriteExternal || reportIsPublished()) return;
+        const rep = ensureReport();
+        const hasText = !!(rep.summary || rep.commendations || rep.recommendations || rep.priorities
+          || Object.values(rep.domains || {}).some(Boolean));
+        // Regenerating discards hand-written text, so ask once rather than
+        // silently overwriting an evening's editing. Double-click confirm —
+        // confirm() is banned on this hub (CH Common Mistake #3).
+        if (hasText && genBtn.dataset.confirming !== '1') {
+          genBtn.dataset.confirming = '1';
+          const original = genBtn.textContent;
+          genBtn.textContent = 'Overwrite your edits? Click again';
+          genBtn.classList.add('is-confirming');
+          setTimeout(() => {
+            genBtn.dataset.confirming = '0';
+            genBtn.textContent = original;
+            genBtn.classList.remove('is-confirming');
+          }, 3000);
+          return;
+        }
+        genBtn.dataset.confirming = '0';
+        const draft = generateReportDraft(state.currentAppraisal);
+        Object.assign(rep, draft, { generatedAt: new Date().toISOString() });
+        rerenderReportPanel();
+        document.getElementById('saveStatus').textContent = 'Draft generated — review it, then save';
+      });
+
+      panelsEl.querySelector('#btnPrintReport')?.addEventListener('click', () => {
+        // A textarea prints only what fits its visible box — long findings
+        // would be silently truncated on paper. Mirror each one into a plain
+        // block element for the print pass, then throw the mirrors away.
+        const host = panelsEl.querySelector('#reportPanel');
+        if (!host) return;
+        host.querySelectorAll('textarea').forEach(ta => {
+          const mirror = document.createElement('div');
+          mirror.className = 'rep-print-text';
+          mirror.textContent = ta.value;
+          ta.insertAdjacentElement('afterend', mirror);
+        });
+        document.body.classList.add('printing-report');
+        const cleanup = () => {
+          document.body.classList.remove('printing-report');
+          host.querySelectorAll('.rep-print-text').forEach(el => el.remove());
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        window.print();
+      });
+
+      const pubBtn = panelsEl.querySelector('#btnPublishReport');
+      pubBtn?.addEventListener('click', async () => {
+        if (!canWriteExternal || reportIsPublished()) return;
+        // Publishing hands the report to the school and closes editing, so it
+        // is a two-click act like the generate overwrite above.
+        if (pubBtn.dataset.confirming !== '1') {
+          pubBtn.dataset.confirming = '1';
+          const original = pubBtn.textContent;
+          pubBtn.textContent = 'Publish to the school? Click again';
+          pubBtn.classList.add('is-confirming');
+          setTimeout(() => {
+            pubBtn.dataset.confirming = '0';
+            pubBtn.textContent = original;
+            pubBtn.classList.remove('is-confirming');
+          }, 3000);
+          return;
+        }
+        pubBtn.dataset.confirming = '0';
+        const rep = ensureReport();
+        rep.status = 'published';
+        rep.publishedAt = new Date().toISOString();
+        rep.publishedBy = window.currentUser?.email || '';
+        await saveAppraisal();
+        rerenderReportPanel();
+      });
+
+      // Re-render just the report panel in place, keeping the tab active.
+      // Its own listeners die with the old innerHTML, so re-attach them —
+      // wireReportPanel() is defined once and called from both here and the
+      // initial render below.
+      function rerenderReportPanel() {
+        const host = panelsEl.querySelector('#reportPanel');
+        if (!host) return;
+        const wasActive = host.classList.contains('active');
+        host.innerHTML = buildReportPanel(state.currentAppraisal, canWriteExternal);
+        if (wasActive) host.classList.add('active');
+        wireReportPanel();
+      }
+      } // end wireReportPanel
+      wireReportPanel();
+
       // Outcome / phase / visit type / outcome note — the overview-level
       // fields of the external review.
       ['outcome', 'phase', 'visitType', 'outcomeNote'].forEach(field => {
@@ -1582,6 +1931,71 @@
           });
         }
       });
+    }
+
+    // The written report (ES 17.8). Auto-drafted, then edited by hand. Every
+    // box is a plain textarea — the draft is a first pass, and the appraiser
+    // owns the final words.
+    function buildReportPanel(a, canWriteExternal) {
+      const rep = reportShape(a);
+      const published = rep.status === 'published';
+      const dis = canWriteExternal && !published ? '' : 'disabled';
+      const hasDraft = !!(rep.summary || rep.commendations || rep.recommendations || rep.priorities
+        || Object.values(rep.domains).some(Boolean));
+
+      const domainBoxes = FRAMEWORK.domains.map(d => `
+        <div class="field-group rep-domain">
+          <label>${d.icon || ''} ${d.code} · ${d.title}</label>
+          <textarea aria-label="Findings for ${d.title}" data-report-domain="${d.id}" ${dis} placeholder="Findings for this domain…">${esc(rep.domains[d.id] || '')}</textarea>
+        </div>`).join('');
+
+      const stamp = published
+        ? `<div class="rep-stamp is-published">Published${rep.publishedAt ? ' ' + fmtDate(rep.publishedAt) : ''}${rep.publishedBy ? ' by ' + esc(rep.publishedBy) : ''} — the school can now read this report in Academic Hub. Editing is closed.</div>`
+        : (rep.generatedAt
+            ? `<div class="rep-stamp">Draft generated ${fmtDate(rep.generatedAt)}. Not visible to the school yet.</div>`
+            : '<div class="rep-stamp">No draft yet — generate one from the ratings, then edit it.</div>');
+
+      return `
+        <div class="rep-head">
+          <div>
+            <div class="rep-title">Written Appraisal Report</div>
+            <div class="rep-sub">${esc(a.schoolName || '')} · ${esc(a.academicYear || '')}</div>
+          </div>
+          <div class="rep-actions">
+            ${canWriteExternal && !published ? `<button class="btn-secondary" id="btnGenerateReport">${hasDraft ? '↻ Regenerate draft' : '✨ Generate draft'}</button>` : ''}
+            <button class="btn-secondary" id="btnPrintReport">🖨 Print</button>
+            ${canWriteExternal && !published && hasDraft ? '<button class="btn-primary" id="btnPublishReport">Publish to school</button>' : ''}
+          </div>
+        </div>
+        ${stamp}
+        <div class="ext-intro-note">
+          ES 17.8 asks for a written report within 10 business days of the visit, carrying findings for each
+          domain, specific commendations and recommendations, ratings or indicators of performance level, and
+          the priority action areas. The draft below is assembled from the ratings you recorded, the differences
+          against the school's self-appraisal and the reasons you gave for them — <strong>edit it freely before
+          publishing</strong>. Publishing makes it readable by the school in Academic Hub and closes editing.
+        </div>
+
+        <div class="field-group">
+          <label>Executive Summary</label>
+          <textarea aria-label="Executive summary" data-report-field="summary" style="min-height:120px;" ${dis} placeholder="Scope of the appraisal and the headline finding…">${esc(rep.summary)}</textarea>
+        </div>
+
+        <div class="rep-section-label">Findings by Domain</div>
+        ${domainBoxes}
+
+        <div class="field-group">
+          <label>Commendations</label>
+          <textarea aria-label="Commendations" data-report-field="commendations" ${dis} placeholder="What the school does well, with evidence…">${esc(rep.commendations)}</textarea>
+        </div>
+        <div class="field-group">
+          <label>Recommendations</label>
+          <textarea aria-label="Recommendations" data-report-field="recommendations" ${dis} placeholder="What Eduversal asks the school to act on…">${esc(rep.recommendations)}</textarea>
+        </div>
+        <div class="field-group">
+          <label>Priority Action Areas</label>
+          <textarea aria-label="Priority action areas" data-report-field="priorities" ${dis} placeholder="The few things that matter most before the next cycle…">${esc(rep.priorities)}</textarea>
+        </div>`;
     }
 
     // The overview-level half of the external review: the outcome verdict and
@@ -1987,7 +2401,7 @@
         frameworkVersion: FRAMEWORK?.meta?.version || ''
       };
       const touchedExternal = hasExternalRating(state.currentAppraisal)
-        || er.outcome || er.outcomeNote || er.phase || er.visitType;
+        || er.outcome || er.outcomeNote || er.phase || er.visitType || er.report;
 
       const data = state.isAdmin
         ? {
