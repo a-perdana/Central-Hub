@@ -673,9 +673,9 @@
       display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
       gap: 12px; margin-bottom: 12px;
     }
-    /* The three sub-labels sit INSIDE a .field-group, so they inherit that
-       label's uppercase/bold treatment and shout over the group's own title.
-       Step them down to a quiet field caption. */
+    /* The sub-labels sit INSIDE a .field-group, so they inherit that label's
+       uppercase/bold treatment and shout over the group's own title. Step
+       them down to a quiet field caption. */
     .ext-meta-row label {
       display: block; font-size: .72rem; font-weight: 600;
       text-transform: none; letter-spacing: 0;
@@ -3461,11 +3461,13 @@
       } // end wireReportPanel
       wireReportPanel();
 
-      // Outcome / visit type / outcome note — the overview-level fields of the
-      // external review. `phase` is deliberately NOT here: which phase these
-      // belong to is state.activePhase, driven by the phase switcher, and
-      // ensurePhase() already routes every write into that phase's slice.
-      ['outcome', 'visitType', 'outcomeNote'].forEach(field => {
+      // Outcome / outcome note — the overview-level fields of the external
+      // review. `phase` is deliberately NOT here: which phase these belong to
+      // is state.activePhase, driven by the phase switcher, and ensurePhase()
+      // already routes every write into that phase's slice. `visitType` is
+      // gone for a related reason — the phase determines it (see
+      // buildExternalReviewBlock).
+      ['outcome', 'outcomeNote'].forEach(field => {
         const el = panelsEl.querySelector(`[data-ext-field="${field}"]`);
         if (!el) return;
         el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
@@ -4194,12 +4196,13 @@
       const activePhase = phaseMeta(er.phase);
       const phaseInfo = (meta.annual_phases || []).find(p => p.code === er.phase) || {};
 
-      // Only visits that carry an outcome can justify an outcome verdict —
-      // introductory sessions and coordinator notes are has_outcome:false.
-      const visitOpts = (meta.visit_types || [])
-        .filter(v => v.has_outcome)
-        .map(v => `<option value="${v.code}" title="${v.description || ''}" ${er.visitType === v.code ? 'selected' : ''}>${v.name}</option>`)
-        .join('');
+      // There is no Visit type control: annual_phases[].visit_type maps each
+      // phase to exactly one visit type, so the phase already answers it and a
+      // second picker could only contradict it — it offered all four
+      // has_outcome types regardless of the phase in view. It was write-only
+      // besides (nothing read externalReview.phases[].visitType — no report
+      // line, no filter, no rule) and no record had ever carried a value.
+      // Same reasoning that retired the `appraiser` field.
 
       const byline = er.evaluatedBy
         ? `<div class="ext-byline">Recorded by ${er.evaluatedBy}${er.evaluatedAt ? ` · ${fmtDate(er.evaluatedAt)}` : ''}${er.frameworkVersion ? ` · framework v${er.frameworkVersion}` : ''}</div>`
@@ -4229,13 +4232,6 @@
                 ${phaseInfo.timing ? `<span class="ext-phase-when">${esc(phaseInfo.timing)}</span>` : ''}
               </div>
               <div class="ext-phase-hint">Set by <strong>Visit findings</strong> above</div>
-            </div>
-            <div>
-              <label style="font-size:.76rem;">Visit type</label>
-              <select data-ext-field="visitType" ${dis}>
-                <option value="">Not set</option>
-                ${visitOpts}
-              </select>
             </div>
           </div>
           <textarea aria-label="Notes supporting the outcome verdict…" data-ext-field="outcomeNote" style="min-height:110px;" placeholder="${canWriteExternal ? 'What supports this outcome? Commendations, concerns, and the priority action areas…' : 'Recorded by the Eduversal appraisal team'}" ${dis}>${er.outcomeNote || ''}</textarea>
