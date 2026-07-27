@@ -98,6 +98,8 @@ The catalogue below groups collections by the business domain they serve. Within
 #### `partner_schools/{schoolId}`
 **PK:** Auto-id (e.g. `Dy5r9txPnrBNbyYDleDf`); HQ uses literal `eduversal_hq`.
 **Fields:** `name`, `domain` (e.g. `fatih.sch.id` — drives email-based auto-default in AH/TH auth-guards), `city`, `status`, `createdAt`, `enabled_systems[]` (Phase 3 ops — pilot enrolment per school, optional. Allowed values: `'kpi'`, `'appraisal'`, `'competency'`, `'induction'` (added Phase 5). **Missing field = all systems enabled** (back-compat for schools that pre-date pilot). **Empty array `[]` = all systems explicitly disabled** for that school).
+`appraisal_2026_27` (added 2026-07-27) — the school's supervision plan for the appraisal year, seeded from the *Updated Appraisal Model: Overview* §2.1/§3.1–3.3 by [`scripts/appraisal/seed-school-supervisors-2026-27.js`](../../scripts/appraisal/seed-school-supervisors-2026-27.js). Shape: `{primarySupervisor, secondarySupervisor, visit1{dates, team[]}, visit2{dates, team[]}, source, updatedAt}`. Supervisors are **role labels** ("Physics SS", "Director of Primary"), not uids — the model names positions, so staff turnover does not invalidate the plan. The Primary Supervisor signs the Phase 1 report; the Secondary signs Phase 3. CH `/school-appraisals` reads this to show the supervision strip and to name the signees on the composed report. The seed script asserts the model's own invariants before writing: 15 schools, every expert supervising exactly 3, and every supervisor present on the visit team they sign for.
+
 **Subcollections:**
 - `partner_schools/{id}/classes/{classId}` — `name`, `grade`, `section`. Read by TH pacing pages and `settings.html`.
 

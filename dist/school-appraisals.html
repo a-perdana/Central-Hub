@@ -591,6 +591,36 @@
       background: var(--paper); border: 1px solid var(--border); color: var(--ink-2);
     }
 
+    /* ── PHASE SWITCHER (Updated Appraisal Model §5) ── */
+    .ph-switch {
+      margin: 14px 0 4px; padding: 13px 15px;
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+    }
+    .ph-switch-head {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin-bottom: 9px;
+    }
+    .ph-switch-btns {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px;
+    }
+    .ph-btn {
+      text-align: left; padding: 9px 12px; cursor: pointer;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      background: var(--paper); font-family: inherit;
+      transition: border-color .15s, background .15s;
+    }
+    .ph-btn:hover { border-color: var(--accent); }
+    .ph-btn.is-active { border-color: var(--accent); background: var(--accent-2); }
+    .ph-btn-label { display: block; font-size: .82rem; font-weight: 700; color: var(--ink); }
+    .ph-btn-meta { display: block; font-size: .72rem; color: var(--ink-3); margin-top: 2px; }
+    .ph-btn.is-active .ph-btn-meta { color: var(--accent-dk); }
+    .ph-switch-note {
+      font-size: .76rem; color: var(--ink-3); line-height: 1.5; margin-top: 9px;
+    }
+    /* A non-rating phase still shows the section, so the absence is explained
+       rather than looking like a missing feature. */
+    .ext-section.is-nonrating { background: var(--paper); border-color: var(--border); }
+
     /* ── SCHOOL DEVELOPMENT RATING (§8) — year-end, computed ── */
     .dev-rating {
       margin: 14px 0 4px; padding: 13px 15px;
@@ -4823,6 +4853,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       currentDocId: null,
       schools: [],
       activeTab: 0,
+      // Which visit's findings the modal is showing / writing. Set when a
+      // record opens, to the latest phase that has ratings.
+      activePhase: 'phase_1',
       pendingDeleteId: null
     };
 
@@ -4836,16 +4869,22 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // self-appraisal; 'external' is Eduversal's parallel rating (ES 17.8).
     // The two live in sibling fields and never merge — see externalReview
     // in firestore.rules.
-    function ratingSource(appraisal, rater) {
-      return rater === 'external' ? appraisal?.externalReview?.ratings : appraisal?.ratings;
+    // 'school' reads the school's single self-appraisal. 'external' reads a
+    // phase — the one being worked on by default, or a named one. Passing an
+    // explicit phase is how the report summarises Phase 1 and Phase 3
+    // separately without disturbing what the editor is showing.
+    function ratingSource(appraisal, rater, phaseCode) {
+      if (rater !== 'external') return appraisal?.ratings;
+      const code = phaseCode || state.activePhase || currentRatingPhase(appraisal);
+      return appraisal?.externalReview?.phases?.[code]?.ratings;
     }
 
     // Framework-keyed on purpose. An earlier version did
     // Object.values(appraisal.ratings), which blind-iterates whatever the map
     // happens to hold — so any key that is not an aspect id silently skewed
     // the composite. Walk the framework instead.
-    function avgScore(appraisal, rater) {
-      const src = ratingSource(appraisal, rater);
+    function avgScore(appraisal, rater, phaseCode) {
+      const src = ratingSource(appraisal, rater, phaseCode);
       if (!src || !FRAMEWORK) return null;
       const vals = FRAMEWORK.domains
         .flatMap(d => d.aspects.map(a => src[a.id]))
@@ -4854,8 +4893,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
     }
 
-    function domainAvg(appraisal, domainId, rater) {
-      const src = ratingSource(appraisal, rater);
+    function domainAvg(appraisal, domainId, rater, phaseCode) {
+      const src = ratingSource(appraisal, rater, phaseCode);
       if (!src || !FRAMEWORK) return null;
       const domain = FRAMEWORK.domains.find(d => d.id === domainId);
       if (!domain) return null;
@@ -4876,17 +4915,74 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // ===== EXTERNAL REVIEW (ES 17.8) =====
     // Always hand back a usable shape so callers never branch on absence —
     // records created before the two-rater model simply carry empty maps.
-    function extReview(appraisal) {
-      const er = appraisal?.externalReview || {};
+    // ── PHASED EXTERNAL REVIEW (Updated Appraisal Model §5) ──
+    // A school is visited twice: Phase 1 (Teaching Quality) and Phase 3
+    // (Validation), 56–63 days apart, each producing its own findings. The
+    // Annual Report then summarises BOTH (§7). So Eduversal's ratings live
+    // per phase, in externalReview.phases{}.
+    //
+    // The school's own `ratings` map stays single: it self-appraises once a
+    // year, before Phase 1, and Phase 3 validates that same submission.
+    //
+    // Phase 2 is an online check-in with no classroom visit, so it records an
+    // outcome and a note but no ratings — re-scoring 31 aspects over Zoom
+    // would be a fiction.
+    const REVIEW_PHASES = [
+      { code: 'phase_1', label: 'Phase 1 · Teaching Quality', rates: true },
+      { code: 'phase_2', label: 'Phase 2 · Mid-Year Check-in', rates: false },
+      { code: 'phase_3', label: 'Phase 3 · Validation',       rates: true },
+    ];
+    const RATING_PHASES = REVIEW_PHASES.filter(p => p.rates).map(p => p.code);
+
+    function phaseMeta(code) {
+      return REVIEW_PHASES.find(p => p.code === code) || REVIEW_PHASES[0];
+    }
+
+    // One phase's slice, always a usable shape.
+    function extPhase(appraisal, code) {
+      const p = appraisal?.externalReview?.phases?.[code] || {};
       return {
-        ratings:          er.ratings || {},
-        justifications:   er.justifications || {},
-        outcome:          er.outcome || '',
-        outcomeNote:      er.outcomeNote || '',
-        phase:            er.phase || '',
-        visitType:        er.visitType || '',
-        evaluatedBy:      er.evaluatedBy || '',
-        evaluatedAt:      er.evaluatedAt || null,
+        ratings:        p.ratings || {},
+        justifications: p.justifications || {},
+        outcome:        p.outcome || '',
+        outcomeNote:    p.outcomeNote || '',
+        visitDates:     p.visitDates || '',
+        evaluatedBy:    p.evaluatedBy || '',
+        evaluatedAt:    p.evaluatedAt || null,
+      };
+    }
+
+    function phaseHasRatings(appraisal, code) {
+      return Object.values(extPhase(appraisal, code).ratings).some(v => v > 0);
+    }
+
+    // The phase whose ratings currently represent the school: the latest
+    // rating phase that has been filled in. Phase 3 validates Phase 1, so
+    // when both exist Phase 3 is the standing position.
+    function currentRatingPhase(appraisal) {
+      for (let i = RATING_PHASES.length - 1; i >= 0; i--) {
+        if (phaseHasRatings(appraisal, RATING_PHASES[i])) return RATING_PHASES[i];
+      }
+      return RATING_PHASES[0];
+    }
+
+    // Year-level view of the external review. `ratings`/`justifications`
+    // resolve to the phase being worked on (state.activePhase) so every
+    // existing caller keeps working unchanged; report / frameworkVersion stay
+    // year-level because the Annual Report covers the whole cycle.
+    function extReview(appraisal, phaseCode) {
+      const er = appraisal?.externalReview || {};
+      const code = phaseCode || state.activePhase || currentRatingPhase(appraisal);
+      const p = extPhase(appraisal, code);
+      return {
+        phase:            code,
+        ratings:          p.ratings,
+        justifications:   p.justifications,
+        outcome:          p.outcome,
+        outcomeNote:      p.outcomeNote,
+        visitDates:       p.visitDates,
+        evaluatedBy:      p.evaluatedBy,
+        evaluatedAt:      p.evaluatedAt,
         frameworkVersion: er.frameworkVersion || '',
         // Present only once a draft exists — an absent report and an empty
         // one are different states, and the panel keys its wording off that.
@@ -4894,8 +4990,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       };
     }
 
+    // "Has Eduversal rated this school at all?" — true if ANY phase has.
     function hasExternalRating(appraisal) {
-      return Object.values(extReview(appraisal).ratings).some(v => v > 0);
+      return RATING_PHASES.some(c => phaseHasRatings(appraisal, c));
     }
 
     // The framework's own vocabularies — never hardcode these lists.
@@ -4905,12 +5002,25 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     // Lazily materialise externalReview on the in-memory record so the click
     // handlers can write into it without every caller re-checking for absence.
+    // The year-level envelope (report, frameworkVersion, phases map).
     function ensureExternalReview() {
       const a = state.currentAppraisal;
       if (!a.externalReview) a.externalReview = {};
-      if (!a.externalReview.ratings) a.externalReview.ratings = {};
-      if (!a.externalReview.justifications) a.externalReview.justifications = {};
+      if (!a.externalReview.phases) a.externalReview.phases = {};
       return a.externalReview;
+    }
+
+    // The slice for the phase currently being written. Every rating,
+    // justification and outcome edit goes through here, so a Phase 1 finding
+    // can never land on Phase 3 by accident.
+    function ensurePhase(code) {
+      const er = ensureExternalReview();
+      const key = code || state.activePhase;
+      if (!er.phases[key]) er.phases[key] = {};
+      const p = er.phases[key];
+      if (!p.ratings) p.ratings = {};
+      if (!p.justifications) p.justifications = {};
+      return p;
     }
 
     // Live-update the external numbers after a rating click, mirroring what
@@ -4973,11 +5083,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // Careful with the labels: "Developing" names BOTH an aspect band on the
     // 1–4 scale and a school rating here. Always render this one as a School
     // Development Rating so the two cannot be read as the same thing.
-    function developmentRating(a, rater) {
+    function developmentRating(a, rater, phaseCode) {
       const bands = extMeta().development_rating?.bands || [];
       if (!bands.length || !FRAMEWORK) return null;
+      // Year-end rating, so it reads the standing position — the latest phase
+      // that has been rated — unless a specific phase is asked for.
+      const code = phaseCode || (rater === 'external' ? currentRatingPhase(a) : undefined);
       const perDomain = FRAMEWORK.domains
-        .map(d => parseFloat(domainAvg(a, d.id, rater)))
+        .map(d => parseFloat(domainAvg(a, d.id, rater, code)))
         .filter(n => n > 0);
       // The model says "mean across all five domains" — a partial year does
       // not produce a rating, it produces a gap.
@@ -5041,12 +5154,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const outcomeLabel = meta.outcome_scale?.[er.outcome]?.label || '';
 
       // 1 + 3 — scope, and the performance level per ES 17.8
-      const visitName = (meta.visit_types || []).find(v => v.code === er.visitType)?.name || 'appraisal visit';
+      // §7 wants BOTH visits summarised. Say which ones actually happened
+      // rather than describing a single generic "appraisal visit".
+      const visitedPhases = RATING_PHASES.filter(c => phaseHasRatings(a, c));
+      const visitLine = visitedPhases.length
+        ? `Eduversal visited ${a.schoolName || 'the school'} ${visitedPhases.length === 1 ? 'once' : `${visitedPhases.length} times`} in the ${a.academicYear || ''} cycle: ${visitedPhases.map(c => phaseMeta(c).label.replace(' · ', ' — ')).join('; ')}.`
+        : `Eduversal has not yet completed a rating visit to ${a.schoolName || 'the school'} in the ${a.academicYear || ''} cycle.`;
       const totalAspects = FRAMEWORK.domains.reduce((n, d) => n + d.aspects.length, 0);
       const ratedCount = FRAMEWORK.domains
         .flatMap(d => d.aspects).filter(asp => (er.ratings[asp.id] || 0) > 0).length;
       const summary = [
-        `Eduversal visited ${a.schoolName || 'the school'} for the ${visitName} in the ${a.academicYear || ''} cycle.`,
+        visitLine,
         `We used the Eduversal School Appraisal Framework version ${FRAMEWORK?.meta?.version || '2.0'}. It has five domains and ${totalAspects} aspects. We rated ${ratedCount} of them.`,
         overallExt
           ? `Our overall rating is ${overallExt} out of 4 (${compositeBand(overallExt)}). The school rated itself ${overallSchool || '—'}.`
@@ -5087,6 +5205,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
 
         lines.push(`Eduversal rates this domain ${ext} (${compositeBand(ext)}). The school rated itself ${sch || '—'}.`);
+
+        // Where both visits rated this domain, the movement between them is
+        // the most useful sentence in the section — it says whether anything
+        // changed between August and November.
+        const p1 = domainAvg(a, d.id, 'external', 'phase_1');
+        const p3 = domainAvg(a, d.id, 'external', 'phase_3');
+        if (p1 && p3) {
+          const delta = (parseFloat(p3) - parseFloat(p1)).toFixed(1);
+          lines.push(
+            delta > 0 ? `This improved from ${p1} at the Teaching Quality visit to ${p3} at Validation (+${delta}).`
+            : delta < 0 ? `This fell from ${p1} at the Teaching Quality visit to ${p3} at Validation (${delta}).`
+            : `This was unchanged between the two visits (${p1}).`
+          );
+        }
         lines.push('');
 
         d.aspects.forEach((asp, i) => {
@@ -5496,6 +5628,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       state.currentDocId = docId;
       state.currentAppraisal = { id: docId, ...snap.data() };
       state.activeTab = 0;
+      // Open on the latest phase that has findings, so a record mid-cycle
+      // shows where the work actually is rather than always starting at
+      // Phase 1.
+      state.activePhase = currentRatingPhase(state.currentAppraisal);
       renderAppraisalModal();
       document.getElementById('appraisalModal').style.display = 'flex';
     }
@@ -5671,6 +5807,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       });
 
+      // Phase switch — re-render the whole modal so every rating control,
+      // delta and score is rebuilt against the newly selected visit.
+      panelsEl.querySelectorAll('[data-phase]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.phase;
+          if (code === state.activePhase) return;
+          state.activePhase = code;
+          renderAppraisalModal();
+        });
+      });
+
       // ── Eduversal external rating (ES 17.8) ──
       // Deliberately does NOT call markSchoolDataEdited(): that warning is
       // about overwriting the school's own words. Recording our own rating
@@ -5680,7 +5827,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           if (!canWriteExternal) return;
           const aspectId = btn.dataset.extAspect;
           const val = parseInt(btn.value);
-          const er = ensureExternalReview();
+          const er = ensurePhase();
           er.ratings[aspectId] = val;
           document.getElementById('saveStatus').textContent = 'Unsaved changes';
 
@@ -5704,7 +5851,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       panelsEl.querySelectorAll('[data-ext-justify]').forEach(ta => {
         ta.addEventListener('input', () => {
           if (!canWriteExternal) return;
-          const er = ensureExternalReview();
+          const er = ensurePhase();
           er.justifications[ta.dataset.extJustify] = ta.value;
           document.getElementById('saveStatus').textContent = 'Unsaved changes';
           if (ta.value.trim()) ta.closest('.aspect-card')?.classList.remove('is-justify-missing');
@@ -5920,7 +6067,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         if (!el) return;
         el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
           if (!canWriteExternal) return;
-          ensureExternalReview()[field] = el.value;
+          ensurePhase()[field] = el.value;
           document.getElementById('saveStatus').textContent = 'Unsaved changes';
         });
       });
@@ -6053,6 +6200,33 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <div class="sup-visits">
             ${visit('Phase 1 · Teaching Quality', sup.visit1, sup.primarySupervisor, 'Primary Supervisor')}
             ${visit('Phase 3 · Validation', sup.visit2, sup.secondarySupervisor, 'Secondary Supervisor')}
+          </div>
+        </div>`;
+    }
+
+    // Which visit's findings the modal is showing. Switching re-renders every
+    // rating control against that phase's map, so Phase 1 and Phase 3 stay
+    // separate records of separate visits rather than one overwritten set.
+    function buildPhaseSwitcher(a) {
+      const active = state.activePhase;
+      const btns = REVIEW_PHASES.map(p => {
+        const rated = p.rates ? phaseHasRatings(a, p.code) : !!extPhase(a, p.code).outcome;
+        const n = p.rates ? Object.values(extPhase(a, p.code).ratings).filter(v => v > 0).length : 0;
+        return `<button type="button" class="ph-btn${p.code === active ? ' is-active' : ''}" data-phase="${p.code}">
+          <span class="ph-btn-label">${esc(p.label)}</span>
+          <span class="ph-btn-meta">${p.rates
+            ? (rated ? `${n} aspect${n === 1 ? '' : 's'} rated` : 'not rated yet')
+            : (rated ? 'outcome recorded' : 'no ratings — outcome only')}</span>
+        </button>`;
+      }).join('');
+      return `
+        <div class="ph-switch">
+          <div class="ph-switch-head">Visit findings</div>
+          <div class="ph-switch-btns">${btns}</div>
+          <div class="ph-switch-note">
+            ${phaseMeta(active).rates
+              ? 'Ratings and justifications below belong to this visit. The school\'s own self-appraisal is a single annual submission and does not change between visits.'
+              : 'The mid-year check-in is online, so it records an outcome and notes — not a re-rating of the 31 aspects.'}
           </div>
         </div>`;
     }
@@ -6206,6 +6380,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           </div>
         </div>
         ${buildSupervisionStrip(a)}
+        ${buildPhaseSwitcher(a)}
         ${buildDevelopmentRatingCard(a)}
         <div class="overview-grid">${overviewCards}</div>
         ${canEdit ? `<div class="school-owned-note">
@@ -6324,8 +6499,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                 ${evidenceAttachmentsHtml(a, aspect.id)}
               </div>
 
+              ${!phaseMeta(state.activePhase).rates ? `
+              <div class="ab-section ext-section is-nonrating">
+                <div class="ab-section-label">Eduversal External Rating</div>
+                <div class="ev-empty">${esc(phaseMeta(state.activePhase).label)} is an online check-in — it records an outcome for the school, not per-aspect ratings. Switch to Phase 1 or Phase 3 to rate this aspect.</div>
+              </div>` : `
               <div class="ab-section ext-section">
-                <div class="ab-section-label">Eduversal External Rating ${canWriteExternal ? '<span class="field-owner is-yours">✏️ yours to record</span>' : '<span class="field-owner is-locked">🔒 published</span>'}</div>
+                <div class="ab-section-label">Eduversal External Rating · ${esc(phaseMeta(state.activePhase).label)} ${canWriteExternal ? '<span class="field-owner is-yours">✏️ yours to record</span>' : '<span class="field-owner is-locked">🔒 published</span>'}</div>
                 <div class="ext-compare">
                   <span class="ext-compare-lbl">School said</span>
                   <span class="score-pill ${badgeCls}">${badgeText}</span>
@@ -6339,7 +6519,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                   </div>
                   <textarea aria-label="Why does Eduversal's rating differ from the school's?" class="evidence-textarea" data-ext-justify="${aspect.id}" placeholder="Evidence for the difference — what was seen, and which band descriptor is not yet met…" ${!canWriteExternal ? 'disabled' : ''}>${extJustify}</textarea>
                 </div>
-              </div>
+              </div>`}
 
               <div class="ab-section">
                 <div class="ab-section-label">Evidence & Notes ${!canEdit ? '<span class="field-owner is-locked">🔒 the school\'s</span>' : ''}</div>
@@ -6482,21 +6662,42 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // dotted paths ('externalReview.ratings.d1-a1'): a dotted write reports
       // affectedKeys() as 'externalReview.ratings', which the hasOnly list
       // does not contain, and the write is refused.
-      const er = extReview(state.currentAppraisal);
+      // Write the real envelope, not extReview()'s flattened view — that view
+      // resolves one phase for the editor and would collapse the others.
+      const erRaw = state.currentAppraisal.externalReview || {};
+      const phases = { ...(erRaw.phases || {}) };
+
+      // Stamp the phase being edited with who recorded it and when. Only that
+      // one — the others were stamped when they were written.
+      const editing = state.activePhase;
+      if (phases[editing]) {
+        phases[editing] = {
+          ...phases[editing],
+          evaluatedBy: window.currentUser?.email || '',
+          evaluatedAt: new Date().toISOString(),
+        };
+      }
+
       // Sanitise the composed report on every write, not only on publish —
       // a draft is stored and re-rendered too, so it must never carry markup
       // the allowlist would reject.
-      if (er.report?.html) {
-        er.report = { ...er.report, html: sanitiseReportHtml(er.report.html) };
-      }
+      const report = erRaw.report
+        ? (erRaw.report.html
+            ? { ...erRaw.report, html: sanitiseReportHtml(erRaw.report.html) }
+            : erRaw.report)
+        : null;
+
       const externalPayload = {
-        ...er,
-        evaluatedBy: window.currentUser?.email || '',
-        evaluatedAt: serverTimestamp(),
+        phases,
+        ...(report ? { report } : {}),
         frameworkVersion: FRAMEWORK?.meta?.version || ''
       };
-      const touchedExternal = hasExternalRating(state.currentAppraisal)
-        || er.outcome || er.outcomeNote || er.phase || er.visitType || er.report;
+
+      const anyPhaseTouched = Object.values(phases).some(p =>
+        Object.values(p?.ratings || {}).some(v => v > 0)
+        || p?.outcome || p?.outcomeNote || p?.visitDates
+      );
+      const touchedExternal = anyPhaseTouched || !!report;
 
       const data = state.isAdmin
         ? {
