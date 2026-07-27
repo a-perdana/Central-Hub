@@ -688,6 +688,21 @@
       background: var(--paper); color: var(--ink-2);
       border-style: dashed; cursor: not-allowed; opacity: .75;
     }
+    /* Cycle phase is shown, not chosen — it follows the phase switcher above.
+       Same box metrics as the two selects beside it so the row still reads as
+       three fields, but flat and unclickable so it never invites an edit. */
+    .ext-phase-fixed {
+      width: 100%; padding: 8px 10px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      background: var(--paper); line-height: 1.4;
+      display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    }
+    .ext-phase-name { font-size: .85rem; font-weight: 600; color: var(--ink); }
+    .ext-phase-when { font-size: .74rem; color: var(--ink-3, #6b7280); }
+    .ext-phase-hint {
+      font-size: .7rem; color: var(--ink-3, #6b7280); margin-top: 4px;
+    }
+    .ext-phase-hint strong { font-weight: 600; color: var(--ink-2, #4b5563); }
     .ext-byline {
       font-size: .76rem; color: var(--ink-3, #6b7280);
       margin-top: 6px; font-style: italic;
@@ -1926,7 +1941,7 @@
 
     // Canonical colour per position label, shared with every other CH surface
     // that shows a role tag. Subject specialists inherit their subject's own
-    // colour, so "Biology SS" is the same green here as on
+    // colour, so "Biology Subject Specialist" is the same green here as on
     // /department-workspace — see partials/subject-config.js for the rule.
     import { roleTagStyle } from './partials/subject-config.js';
 
@@ -2277,12 +2292,19 @@
       return state.schools.find(s => s.id === schoolId)?.[SUPERVISION_FIELD] || null;
     }
 
-    // The ten expert roles the model assigns, derived from the framework's
+    // The expert roles the model assigns, derived from the framework's
     // domain-lead pairs so the list cannot drift from it. Used by both the
     // supervisor pickers and the visit-team pickers.
+    //
+    // additional_experts are specialists who hold no domain lead but can join
+    // a team or cover for one — they belong in the pickers even though they
+    // never appear in pairs. Reading pairs alone would leave them unselectable
+    // and force an off-roster free-text value.
     function expertRoster() {
-      const pairs = FRAMEWORK?.meta?.external_evaluation?.domain_leads?.pairs;
-      return pairs ? [...new Set(Object.values(pairs).flat())].sort() : [];
+      const dl = FRAMEWORK?.meta?.external_evaluation?.domain_leads;
+      if (!dl?.pairs) return [];
+      const extra = Array.isArray(dl.additional_experts) ? dl.additional_experts : [];
+      return [...new Set([...Object.values(dl.pairs).flat(), ...extra])].sort();
     }
 
     // Every school has TWO supervisors, so the row shows both. Falls back to
@@ -3429,9 +3451,11 @@
       } // end wireReportPanel
       wireReportPanel();
 
-      // Outcome / phase / visit type / outcome note — the overview-level
-      // fields of the external review.
-      ['outcome', 'phase', 'visitType', 'outcomeNote'].forEach(field => {
+      // Outcome / visit type / outcome note — the overview-level fields of the
+      // external review. `phase` is deliberately NOT here: which phase these
+      // belong to is state.activePhase, driven by the phase switcher, and
+      // ensurePhase() already routes every write into that phase's slice.
+      ['outcome', 'visitType', 'outcomeNote'].forEach(field => {
         const el = panelsEl.querySelector(`[data-ext-field="${field}"]`);
         if (!el) return;
         el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
@@ -4047,10 +4071,10 @@
       const editable = canWriteExternal && !p.teamConfirmed;
 
       // Everyone who could stand in — the plan names roles, and cover comes
-      // from the same ten.
-      const roster = (extMeta().domain_leads?.pairs)
-        ? [...new Set(Object.values(extMeta().domain_leads.pairs).flat())].sort()
-        : [];
+      // from the same roster. Uses the shared helper rather than re-deriving
+      // from pairs: an inline copy here missed additional_experts, so a
+      // specialist without a domain lead could not be picked as cover.
+      const roster = expertRoster();
 
       const changed = p.team && planned.length &&
         (p.team.length !== planned.length || p.team.some((x, i) => x !== planned[i]));
@@ -4149,9 +4173,16 @@
         .map(([k, v]) => `<option value="${k}" title="${v.description || ''}" ${er.outcome === k ? 'selected' : ''}>${v.label || k}</option>`)
         .join('');
 
-      const phaseOpts = (meta.annual_phases || [])
-        .map(p => `<option value="${p.code}" title="${p.description || ''}" ${er.phase === p.code ? 'selected' : ''}>${p.name}${p.timing ? ` · ${p.timing}` : ''}</option>`)
-        .join('');
+      // Which phase this outcome belongs to is NOT a choice made here — it is
+      // whatever the phase switcher above has selected, and every rating,
+      // justification and outcome edit already lands in that phase's slice via
+      // ensurePhase(). A second control for the same state was worse than
+      // redundant: picking a phase here wrote a `phase` field into the ACTIVE
+      // phase's slice (nothing reads it) while state.activePhase stayed put, so
+      // the box claimed to be recording Phase 2 while the data went to Phase 1.
+      // Read-only label instead, so there is exactly one way to change phase.
+      const activePhase = phaseMeta(er.phase);
+      const phaseInfo = (meta.annual_phases || []).find(p => p.code === er.phase) || {};
 
       // Only visits that carry an outcome can justify an outcome verdict —
       // introductory sessions and coordinator notes are has_outcome:false.
@@ -4183,10 +4214,11 @@
             </div>
             <div>
               <label style="font-size:.76rem;">Cycle phase</label>
-              <select data-ext-field="phase" ${dis}>
-                <option value="">Not set</option>
-                ${phaseOpts}
-              </select>
+              <div class="ext-phase-fixed" title="${escAttr(phaseInfo.description || '')}">
+                <span class="ext-phase-name">${esc(phaseInfo.name || activePhase.label)}</span>
+                ${phaseInfo.timing ? `<span class="ext-phase-when">${esc(phaseInfo.timing)}</span>` : ''}
+              </div>
+              <div class="ext-phase-hint">Set by <strong>Visit findings</strong> above</div>
             </div>
             <div>
               <label style="font-size:.76rem;">Visit type</label>
@@ -4259,11 +4291,19 @@
           </div>
         </div>
         ${buildSupervisionStrip(a)}
+
+        <!-- ── THIS VISIT ── everything below is scoped to state.activePhase:
+             the switcher picks the phase, the team panel says who attended it,
+             and the external review records its verdict. They were previously
+             split by eight unrelated blocks, which made the phase dropdown in
+             the review box read as an independent choice. -->
         ${buildPhaseSwitcher(a)}
         ${buildVisitTeamPanel(a, canWriteExternal)}
-        ${buildDevelopmentRatingCard(a)}
-        ${buildActionPlanPanel(a, canWriteExternal)}
-        ${buildAppealsPanel(a)}
+        ${buildExternalReviewGroup(a, canWriteExternal)}
+
+        <!-- ── THE SCHOOL'S SUBMISSION ── its own ratings and its own words,
+             kept together so the ownership boundary the note describes is
+             actually visible rather than asserted. -->
         <div class="overview-grid">${overviewCards}</div>
         ${canEdit ? `<div class="school-owned-note">
           <strong>These are the school's own words.</strong> Ratings, evidence, Key Strengths and Areas for Improvement were written by the school in Academic Hub. You can correct them as an admin, but the school will not be told they changed — prefer writing your response under <em>Eduversal Coordinator Recommendations</em> below.
@@ -4278,11 +4318,19 @@
             <textarea aria-label="What are the priority areas to develop?" data-overview-field="improvements" placeholder="${canEdit ? 'What are the priority areas to develop?' : 'Written by the school in Academic Hub'}" ${!canEdit ? 'disabled' : ''}>${a.improvements || ''}</textarea>
           </div>
         </div>
+
+        <!-- ── EDUVERSAL'S RESPONSE ── the year-end rating is the mean of the
+             five domain cards above, so it follows them rather than preceding
+             its own inputs. Action plan and appeals both only exist once the
+             report is published, so they close the panel in the order the
+             cycle actually produces them. -->
+        ${buildDevelopmentRatingCard(a)}
         <div class="field-group">
           <label>Eduversal Coordinator Recommendations ${(canWriteFeedback && !state.isAdmin) ? '<span class="field-owner is-yours">✏️ yours to write</span>' : ''}</label>
           <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" style="min-height:130px;" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
         </div>
-        ${buildExternalReviewGroup(a, canWriteExternal)}
+        ${buildActionPlanPanel(a, canWriteExternal)}
+        ${buildAppealsPanel(a)}
         ${state.isAdmin ? '' : `<div class="readonly-note">${canWriteFeedback
             ? 'You can write the recommendations below — that is Eduversal\'s reply to this school. The ratings and evidence above are the school\'s own submission and are read-only here. Publishing the appraisal (Mark as Reviewed) is done by a Central Hub admin.'
             : 'This appraisal has been reviewed and is now closed, so it is read-only.'}</div>`}
