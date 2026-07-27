@@ -360,7 +360,13 @@ Bypass list is identical to the rule layer (admin / coordinator / director). Emp
 
 The school's own `ratings` map stays **single**: it self-appraises once a year, before Phase 1, and Phase 3 validates that same submission. Only Eduversal's side is phased.
 
+Each rating phase also records **who attended**: `team[]` and `domainPic{<domainId>: roleTag}` as role tags (`"Physics SS"`), plus `teamConfirmed` / `teamConfirmedBy` / `teamConfirmedAt`. `partner_schools.appraisal_2026_27` says who was *scheduled*; this says what happened, because cover is routine — someone falls ill and a colleague goes. Without it an appeal cannot be reviewed with the person who actually saw the domain being challenged (model §8.1), and cross-network calibration has no author to attribute a rating to. Pre-filled from the plan, correctable, then confirmed.
+
+**`teamConfirmed` is admin-gated in the UI but NOT in rules** — `phases{}` is validated at the top level only, so a `central_user` bypassing the UI could set it. Acceptable while every CH user is HR-onboarded staff and `teamConfirmedBy` records the claim; enforce it in rules before that flag ever gates anything consequential.
+
 `report` and `frameworkVersion` sit at the envelope level, not inside a phase — the Annual Report covers the whole cycle.
+
+**"Validated" is earned, not implied.** The badge on `/school-appraisals` requires a phase to be rated on *every* aspect **and** to have its attending team confirmed. It previously fired on `hasExternalRating()` — one rated aspect by one unknown person showed the same badge as a completed visit. Both phases validated reads "✓ Validated"; one reads as partial, in amber.
 
 **`actionPlan{}` — the school's response, closing the ES 17.8 loop.** Appears once `externalReview.report.status == 'published'`; ES 17.8 gives the school four weeks to answer with an action per recommendation. Shape: `{items[], reviews[], status ('not_started'|'draft'|'submitted'), submittedAt, submittedBy}`. Each item is `{priority, action, owner, due, status}` and is seeded in AH from the report's numbered priorities so the school answers the recommendations rather than facing a blank page. Each review is `{note, reviewedBy, reviewedOn}`.
 

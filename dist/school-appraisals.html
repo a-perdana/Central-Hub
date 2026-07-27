@@ -186,7 +186,20 @@
     .appraisal-table tbody tr:hover { background: var(--paper); }
     .appraisal-table td { padding: 13px 16px; font-size: 0.875rem; color: var(--ink); vertical-align: middle; }
     .school-name { font-weight: 600; }
-    .school-meta { font-size: 0.78rem; color: var(--ink-3); margin-top: 2px; }
+    .school-meta { font-size: 0.78rem; color: var(--ink-3); margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
+    /* Two supervisors per school, so they read as tags rather than one run-on
+       string. Primary carries the accent — it is the year's main contact. */
+    .sv-tag {
+      font-size: .68rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+      background: var(--accent-2); color: var(--accent-dk);
+      border: 1px solid #fde68a; cursor: help;
+    }
+    .sv-tag.is-secondary {
+      background: var(--paper); color: var(--ink-3); border-color: var(--border);
+    }
+    /* Records made before the supervision plan hold a typed name. */
+    .sv-legacy { font-style: italic; }
+    .form-hint { font-size: .72rem; color: var(--ink-3); margin-top: 5px; line-height: 1.45; }
 
     /* Score pill */
     .score-pill {
@@ -5183,8 +5196,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Appraiser Name *</label>
-            <input aria-label="Coordinator name" class="form-input" id="newAppraiser" type="text" placeholder="Coordinator name">
+            <label class="form-label" for="newAppraiser">Appraiser *</label>
+            <select aria-label="Appraiser role" class="form-input" id="newAppraiser">
+              <option value="">Select a role…</option>
+            </select>
+            <div class="form-hint" id="newAppraiserHint">Pick the expert role, not a person — the model assigns positions, so the record survives staff changes.</div>
           </div>
         </div>
         <div class="modal-error" id="newModalError" style="display:none;"></div>
@@ -5560,6 +5576,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // onto partner_schools. Role labels, not uids — the model names positions.
     function supervisionFor(schoolId) {
       return state.schools.find(s => s.id === schoolId)?.appraisal_2026_27 || null;
+    }
+
+    // Every school has TWO supervisors, so the row shows both. Falls back to
+    // the record's own `appraiser` field for rows created before the
+    // supervision plan existed — those hold a typed name rather than a role.
+    function supervisorLine(a) {
+      const sup = supervisionFor(a.schoolId);
+      if (sup && (sup.primarySupervisor || sup.secondarySupervisor)) {
+        const parts = [];
+        if (sup.primarySupervisor) parts.push(`<span class="sv-tag" title="Primary Supervisor · signs the Phase 1 report">${esc(sup.primarySupervisor)}</span>`);
+        if (sup.secondarySupervisor) parts.push(`<span class="sv-tag is-secondary" title="Secondary Supervisor · signs the Phase 3 report">${esc(sup.secondarySupervisor)}</span>`);
+        return parts.join('');
+      }
+      return a.appraiser ? `<span class="sv-legacy">${esc(a.appraiser)}</span>` : '';
     }
 
     // A composite is an average, so naming its band flatly ("3.6 —
@@ -5971,6 +6001,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         opt.textContent = s.name;
         sel.appendChild(opt);
       });
+
+    }
+
+    // Appraiser is a ROLE, not a typed name — the model assigns positions, and
+    // a record keyed to a person goes stale the moment someone moves on. The
+    // roster is the ten experts, derived from the domain-lead pairs so it
+    // cannot drift from the framework.
+    //
+    // Separate from loadSchools() because that runs in parallel with
+    // loadFramework(), so FRAMEWORK is not reliably there yet.
+    function populateAppraiserRoles() {
+      const sel = document.getElementById('newSchoolSelect');
+      const roleSel = document.getElementById('newAppraiser');
+      if (roleSel && sel) {
+        const roster = FRAMEWORK?.meta?.external_evaluation?.domain_leads?.pairs
+          ? [...new Set(Object.values(FRAMEWORK.meta.external_evaluation.domain_leads.pairs).flat())].sort()
+          : [];
+        roster.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r;
+          opt.textContent = r;
+          roleSel.appendChild(opt);
+        });
+
+        // Picking a school pre-selects its Primary Supervisor, since that is
+        // who runs the first visit. Still changeable.
+        sel.addEventListener('change', () => {
+          const sup = supervisionFor(sel.value);
+          const hint = document.getElementById('newAppraiserHint');
+          if (sup?.primarySupervisor && roster.includes(sup.primarySupervisor)) {
+            roleSel.value = sup.primarySupervisor;
+            if (hint) hint.textContent =
+              `Pre-filled with this school's Primary Supervisor. Secondary is ${sup.secondarySupervisor || '—'}.`;
+          } else if (hint) {
+            hint.textContent = 'Pick the expert role, not a person — the model assigns positions, so the record survives staff changes.';
+          }
+        });
+      }
     }
 
     // ===== FILTER & RENDER TABLE =====
@@ -6024,7 +6092,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         tr.innerHTML = `
           <td>
             <div class="school-name">${a.schoolName || '—'}</div>
-            <div class="school-meta">${a.appraiser || ''}</div>
+            <div class="school-meta">${supervisorLine(a)}</div>
           </td>
           <td>${a.academicYear || '—'}</td>
           <td>
@@ -6095,7 +6163,13 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     function renderAppraisalModal() {
       const a = state.currentAppraisal;
       document.getElementById('modalTitle').textContent = a.schoolName || 'School Appraisal';
-      document.getElementById('modalSubtitle').textContent = `${a.academicYear || ''} · ${a.appraiser || ''}`;
+      // Both supervisors, not one typed name — the model assigns a pair.
+      const sup = supervisionFor(a.schoolId);
+      const who = sup && (sup.primarySupervisor || sup.secondarySupervisor)
+        ? [sup.primarySupervisor, sup.secondarySupervisor].filter(Boolean).join(' · ')
+        : (a.appraiser || '');
+      document.getElementById('modalSubtitle').textContent =
+        [a.academicYear || '', who].filter(Boolean).join(' · ');
       document.getElementById('saveStatus').textContent = 'All changes saved';
 
       // Three different edit scopes on this screen — the school's answers and
@@ -7927,7 +8001,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // the phase reference wires itself once it has rendered.
       wireStripCollapse(document);
       await Promise.all([loadFramework(), loadSchools()]);
-      // Needs FRAMEWORK, so it runs after the load rather than at page build.
+      // Both need FRAMEWORK, so they run after the load rather than inside
+      // loadSchools() — that races loadFramework() in the Promise.all above.
+      populateAppraiserRoles();
       renderPhaseReference();
       await loadAppraisals();
 
