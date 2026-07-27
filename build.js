@@ -555,7 +555,7 @@ const htmlFiles = [
   "school-appraisals.html",
   "teacher-appraisals.html",
   "teacher-appraisal-entry.html",
-  "walkthrough-entry.html",
+  "classroom-walkthrough-entry.html",
   "teaching-progress.html",
   "primary-checkpoint-syllabus.html",
   "secondary-checkpoint-syllabus.html",
@@ -687,7 +687,7 @@ const htmlFiles = [
   // gated own 15-school visit + Window 2/3/4 progress. Shares school_visits
   // collection with /school-visits (Operations) via visitType:
   // 'specialist_walkthrough' discriminator.
-  "walkthroughs.html",
+  "induction-walkthroughs.html",
   // Walkthrough review queue (2026-05-19; renamed from specialist-mentor-review
   // 2026-05-26) — Department Office > Workspace. Director-only. HQ Director
   // sees submitted specialist walkthroughs, leaves NN2-confidential coaching
