@@ -1558,25 +1558,49 @@
     /* One expert per domain, so the team grid is labelled by domain rather
        than by an anonymous slot number — that mapping is what domainPic
        seeds from, and a bare "Member 3" hides it. */
-    /* Five columns, one per domain, in domain order — that ordering is the
-       domainPic mapping, so it has to survive as a single readable row.
-       Explicit 5 rather than auto-fit: auto-fit re-flows to 3 + 2 and the
-       break lands mid-sequence, which reads as two groups that aren't. */
-    .sup-edit-team { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-    @media (max-width: 1080px) { .sup-edit-team { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @media (max-width: 700px)  { .sup-edit-team { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 460px)  { .sup-edit-team { grid-template-columns: 1fr; } }
-    /* Labels run to two lines at five-across ("Student Achievement & Learning
-       Outcomes"), so reserve both lines — otherwise the selects sit at
-       different heights across the row. */
+    /* Two rows of columns rather than one row of five. At five-across each
+       track is about a fifth of the modal and every role name truncated
+       mid-word ("Chemistry Subject Specia…") — the picker could not show what
+       it had selected. Domain order still reads left-to-right, top-to-bottom,
+       so the domainPic mapping survives the wrap; the break after D3 is
+       deliberate and even rather than the ragged 3+2 auto-fit produced. */
+    .sup-edit-team { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 12px; }
+    @media (max-width: 860px) { .sup-edit-team { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 520px) { .sup-edit-team { grid-template-columns: 1fr; } }
+    /* Labels still run to two lines ("Student Achievement & Learning
+       Outcomes"), so reserve both — otherwise the selects sit at different
+       heights across a row. */
     .sup-edit-team-label {
       font-size: .66rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .03em; color: var(--ink-3); margin-bottom: 5px; display: block;
       line-height: 1.3; min-height: 2.6em;
     }
-    /* The role names are longer than a fifth of the modal, so let the select
-       shrink inside its track instead of forcing the grid wider. */
     .sup-edit-team .form-select { width: 100%; min-width: 0; font-size: .82rem; padding-inline: 9px; }
+
+    /* The three phases this modal does not edit. Visibly quieter than the two
+       visit blocks above — recessed, no border-left accent — so the editable
+       half stays the obvious subject of the screen. */
+    .sup-edit-phases { display: flex; flex-direction: column; gap: 8px; }
+    .sup-phase {
+      padding: 11px 13px; border-radius: 9px;
+      background: var(--paper); border: 1px solid var(--border);
+    }
+    .sup-phase-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .sup-phase-name { font-size: .82rem; font-weight: 700; color: var(--ink); }
+    .sup-phase-tag {
+      font-size: .62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ink-2);
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 999px; padding: 1px 7px;
+    }
+    /* Same role-tag treatment as everywhere else, so the Primary Supervisor
+       reads as the same person here as in the picker above. */
+    .sup-phase-lead {
+      font-size: .62rem; font-weight: 700; border-radius: 999px;
+      padding: 1px 7px; border: 1px solid transparent; white-space: nowrap;
+    }
+    .sup-phase-when { font-size: .74rem; color: var(--ink-2); margin-top: 4px; }
+    .sup-phase-desc { font-size: .74rem; color: var(--ink-3); line-height: 1.5; margin-top: 4px; }
     .sup-edit-sect {
       font-size: .72rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .06em; color: var(--ink-3); margin: 4px 0 10px;
@@ -5715,6 +5739,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <div class="sup-edit-team" id="supEditV2Team"></div>
         </div>
 
+        <!-- The plan only stores the two on-site visits, but the cycle has
+             five phases and the other three shape when these two can happen:
+             Phase 0 gates Phase 1 (no self-evaluation, no visit), Phase 2 is
+             led by the Primary Supervisor picked above, and Follow-up is
+             triggered by the outcome recorded at a visit. Showing only the
+             editable half made the two dates look free-standing. Read-only
+             and rendered from the framework, so they cannot drift from it. -->
+        <div class="sup-edit-sect" style="margin-top:20px;">Rest of the cycle</div>
+        <div class="sup-edit-phases" id="supEditPhases"></div>
+
         <div class="modal-error" id="supEditError" style="display:none;"></div>
         <div class="modal-error" id="supEditWarn" style="display:none;background:var(--accent-2);border-color:#fde68a;color:var(--ink-2);"></div>
       </div>
@@ -8734,6 +8768,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     // One team row per domain: the plan lists teams in domain order and
     // defaultDomainPic() seeds the per-domain lead by position, so the
     // editor has to preserve that ordering rather than offer a free list.
+    // The three phases this modal does NOT edit — Kickoff, the mid-year
+    // check-in and follow-up. They carry no per-school data (nothing to
+    // store), but they set the terms for the two visits that DO: Phase 0 must
+    // land before Phase 1, Phase 2 is the Primary Supervisor's, and follow-up
+    // depends on the outcome. Read straight from annual_phases so the modal
+    // cannot state a timing the framework has since changed.
+    function renderCyclePhases(sup) {
+      const wrap = document.getElementById('supEditPhases');
+      if (!wrap) return;
+      const phases = (FRAMEWORK?.meta?.external_evaluation?.annual_phases || [])
+        .filter(p => p.code !== 'phase_1' && p.code !== 'phase_3');
+      if (!phases.length) { wrap.innerHTML = ''; return; }
+
+      wrap.innerHTML = phases.map(p => {
+        // Phase 2 is the one place a name from this modal actually appears,
+        // so say whose it is rather than leaving the reader to connect them.
+        const lead = p.code === 'phase_2' && sup.primarySupervisor
+          ? `<span class="sup-phase-lead" style="${roleTagStyle(sup.primarySupervisor)}">${esc(sup.primarySupervisor)}</span>`
+          : '';
+        return `
+          <div class="sup-phase">
+            <div class="sup-phase-top">
+              <span class="sup-phase-name">${esc(p.name || p.code)}</span>
+              ${p.format ? `<span class="sup-phase-tag">${esc(p.format)}</span>` : ''}
+              ${lead}
+            </div>
+            ${p.timing ? `<div class="sup-phase-when">${esc(p.timing)}</div>` : ''}
+            ${p.description ? `<div class="sup-phase-desc">${esc(p.description)}</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
     function renderTeamPickers(containerId, prefix, team) {
       const wrap = document.getElementById(containerId);
       wrap.innerHTML = '';
@@ -8811,6 +8877,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         // is the previous wrapper, not the original <select>.
         (old.closest('.vt-pick') || old).replaceWith(pick);
       });
+
+      renderCyclePhases(sup);
 
       document.getElementById('supEditV1Dates').value = sup.visit1?.dates || '';
       document.getElementById('supEditV2Dates').value = sup.visit2?.dates || '';
