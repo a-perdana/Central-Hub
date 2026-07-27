@@ -633,8 +633,12 @@
       font-size: .72rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .06em; color: var(--ink-3); margin-bottom: 10px;
     }
+    /* align-items:start — the two visits are read side by side, so a card
+       with a shorter team should end where its content ends rather than
+       stretching to match its neighbour and trailing blank space. */
     .sup-visits {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 14px; align-items: start;
     }
     .sup-visit {
       background: var(--white); border: 1px solid var(--border);
@@ -665,14 +669,31 @@
       font-size: .68rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .04em; color: var(--ink-3);
     }
+    /* Deliberately the same treatment as .sup-role — the two label the two
+       halves of the card ("who signs it" / "who attends"), so they should
+       read as a matched pair rather than as heading and sub-heading. The
+       rule above separates them without adding another colour. */
+    .sup-team-head {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ink-3);
+      margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border);
+    }
+    .sup-team-count {
+      font-size: .64rem; font-weight: 700; line-height: 1;
+      color: var(--ink-2); background: var(--paper);
+      border: 1px solid var(--border); border-radius: 999px; padding: 2px 6px;
+    }
     /* Two equal columns. As a wrapping flex row the five chips broke 4 + 1 at
        ragged widths, which read as an unordered pile; one full-width column
        fixed the alignment but made each chip a banner. Two columns keep the
        equal widths while holding the block to three compact rows.
        Order runs left-to-right, matching the domain order the array encodes. */
+    /* margin-top is small because .sup-team-head above already carries the
+       separation — the old 8px was spacing it off the supervisor row. */
     .sup-team {
       display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 4px; margin-top: 8px;
+      gap: 4px; margin-top: 6px;
     }
     /* Below this the two visit cards stack, so each card has the full strip
        width to itself and the chips would otherwise stay needlessly narrow. */
@@ -683,10 +704,16 @@
        reader can match "who is on this visit" against "who signs it" by
        colour alone. Fill/border/text arrive inline from roleTagStyle(). */
     .sup-chip, .role-tag {
-      display: inline-block;
+      display: inline-flex; align-items: center; justify-content: center;
       font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
       border: 1px solid transparent; white-space: nowrap;
     }
+    /* As grid items the chips must FILL their cell, not sit at content height
+       inside it — inline-block left them baseline-aligned, so a row whose
+       other cell happened to be taller showed the shorter chip floating.
+       align-self:stretch + a shared min-height makes every chip identical. */
+    .sup-team .sup-chip,
+    .sup-visit-who .role-tag { align-self: stretch; min-height: 22px; }
     /* Grid stretch gives every chip the column's full width; centring the
        label keeps the stack from reading as left-ragged text. */
     .sup-team .sup-chip { text-align: center; padding-inline: 6px; }
@@ -3394,7 +3421,12 @@
           <div class="sup-visit-dates">${esc(v.dates || '')}</div>
           <div class="sup-visit-who"><span class="sup-role">${esc(role)}</span>${who ? `<span class="role-tag" style="${roleTagStyle(who)}">${esc(who)}</span>` : '<span class="sup-none">— not set —</span>'}</div>
           ${Array.isArray(v.team) && v.team.length
-            ? `<div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip" style="${roleTagStyle(t)}">${esc(t)}</span>`).join('')}</div>`
+            // Heading, not just a gap: the supervisor tag above is the same
+            // shape and colour family as these chips, so without a label the
+            // block reads as one team of six rather than "who signs it" plus
+            // "who attends". The count makes the five explicit.
+            ? `<div class="sup-team-head">Visit team <span class="sup-team-count">${v.team.length}</span></div>
+               <div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip" style="${roleTagStyle(t)}">${esc(t)}</span>`).join('')}</div>`
             : ''}
         </div>` : '';
       return `
