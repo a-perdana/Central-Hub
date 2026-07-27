@@ -248,6 +248,59 @@
       font-size: .83rem; color: #15803d; line-height: 1.65;
     }
 
+    /* Per-item F2 scores (modal) — the entry form stores scores[itemId]
+       and notes[itemId]; this renders them against the framework item set. */
+    .item-domain { margin-bottom: 14px; }
+    .item-domain-head {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
+    }
+    .item-domain-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .item-domain-title { font-size: .8rem; font-weight: 800; color: #1e293b; }
+    .item-domain-count {
+      margin-left: auto; font-size: .7rem; font-weight: 700; color: #94a3b8;
+    }
+    .item-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 12px; border-radius: 8px; background: #f8fafc; margin-bottom: 5px;
+    }
+    .item-row.is-unscored { opacity: .55; background: #fff; border: 1px dashed #e2e8f0; }
+    .item-row-main { flex: 1; min-width: 0; }
+    .item-row-title {
+      font-size: .79rem; font-weight: 600; color: #334155; line-height: 1.45;
+    }
+    .item-row-code {
+      font-family: 'DM Mono', ui-monospace, monospace; font-size: .68rem;
+      font-weight: 700; color: #7c3aed; margin-right: 6px;
+    }
+    .item-row-note {
+      margin-top: 5px; font-size: .74rem; color: #64748b; line-height: 1.5;
+      border-left: 2px solid #ddd6fe; padding-left: 8px;
+    }
+    .item-row-rubric {
+      margin-top: 4px; font-size: .72rem; color: #94a3b8; line-height: 1.5; font-style: italic;
+    }
+    .item-score {
+      flex: none; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-width: 46px; padding: 4px 0;
+      border-radius: 7px; font-weight: 800;
+    }
+    .item-score-num { font-size: .95rem; line-height: 1; }
+    .item-score-lbl {
+      font-size: .58rem; text-transform: uppercase; letter-spacing: .04em;
+      margin-top: 2px; font-weight: 700; opacity: .85;
+    }
+    .is-s4 { background: #dcfce7; color: #15803d; }
+    .is-s3 { background: #dbeafe; color: #1d4ed8; }
+    .is-s2 { background: #fef3c7; color: #b45309; }
+    .is-s1 { background: #fee2e2; color: #b91c1c; }
+    .is-sna { background: #f1f5f9; color: #94a3b8; }
+    .is-snone { background: transparent; color: #cbd5e1; border: 1px dashed #e2e8f0; }
+    .item-scores-note {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      padding: 9px 13px; font-size: .75rem; color: #92400e;
+      line-height: 1.55; margin-bottom: 12px;
+    }
+
     /* Action buttons */
     .btn-view {
       padding: 5px 14px; background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe;
@@ -758,7 +811,43 @@ let appraiserNames = {};
 const appraiserLabel = (a) =>
   a.appraiserName || appraiserNames[a.appraiserUid] || a.appraiserUid || '—';
 
+// Appraisal framework v2 — F2 item set, loaded lazily the first time a modal
+// opens. The entry form keys scores/notes by item id (D1.1, D2.3, …) so the
+// item titles + rubric wording have to come from the framework, not the record.
+const FRAMEWORK_URL = 'references-data/frameworks/appraisal-framework-v2.json';
+const LEVEL_ORDER   = ['induction', 'developing', 'proficient', 'lead'];
+const DOMAIN_COLS   = ['#4338ca', '#7c3aed', '#0891b2', '#059669'];
+let F2 = null;                 // { title, domains: {...} }
+let SCALE_LABELS = {};         // 1..4 -> 'Unsatisfactory' … 'Distinguished'
+let frameworkPromise = null;   // in-flight guard so parallel opens fetch once
+
+function loadFramework() {
+  if (frameworkPromise) return frameworkPromise;
+  frameworkPromise = fetch(FRAMEWORK_URL)
+    .then(r => { if (!r.ok) throw new Error(`framework ${r.status}`); return r.json(); })
+    .then(fw => {
+      F2 = fw.frameworks?.['1'] || null;
+      (fw.scoring_scale || []).forEach(s => { SCALE_LABELS[s.value] = s.label; });
+      if (!F2 || !F2.domains) throw new Error('F2 block missing from framework');
+      return F2;
+    })
+    .catch(e => {
+      // Leave F2 null — the modal degrades to "scores recorded but item set
+      // unavailable" rather than breaking the rest of the detail view.
+      console.warn('appraisal framework unavailable', e);
+      frameworkPromise = null;
+      return null;
+    });
+  return frameworkPromise;
+}
+
 // ── HELPERS ──────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
+}
+
 function fmt(date) {
   if (!date) return '—';
   const d = date?.toDate ? date.toDate() : new Date(date);
@@ -919,6 +1008,93 @@ function renderWalkthroughs() {
   }).join('');
 }
 
+// ── PER-ITEM F2 SCORES ───────────────────────────────────
+// The entry form persists scores[itemId] (1..4 | 'na') + notes[itemId]. This
+// walks the framework's F2 domains so items appear in authored order with
+// their titles, rather than as a bare id->number map. Items the appraiser
+// never touched are shown greyed rather than hidden — an unscored item is
+// itself information ("not addressed"), and hiding them would misrepresent
+// coverage on a partial record.
+function renderItemScores(a) {
+  const scores = a.scores || {};
+  const notes  = a.notes  || {};
+  if (!Object.keys(scores).length && !Object.keys(notes).length) return '';
+
+  if (!F2) {
+    return `<div class="detail-section-title">F2 Item Scores</div>
+      <div class="item-scores-note">
+        Scores are recorded on this appraisal, but the item set could not be
+        loaded from <code>appraisal-framework-v2.json</code>, so item titles are
+        unavailable. Reload the page; if it keeps failing, tell an admin.
+      </div>`;
+  }
+
+  // Same level-visibility rule the entry form applies: an item shows when the
+  // teacher's level is at or above its visible_from.
+  const have = LEVEL_ORDER.indexOf(a.level || 'induction');
+  const itemVisible = (item) => {
+    const need = LEVEL_ORDER.indexOf(item.visible_from || 'induction');
+    if (need < 0) return true;
+    return have >= need;
+  };
+
+  let scoredTotal = 0, itemTotal = 0;
+
+  const domains = Object.values(F2.domains).map((d, di) => {
+    const items = (d.items || []).filter(itemVisible);
+    if (!items.length) return '';
+
+    const scoredHere = items.filter(i => scores[i.id] !== undefined && scores[i.id] !== 'na').length;
+    scoredTotal += scoredHere;
+    itemTotal   += items.length;
+
+    const rows = items.map(item => {
+      const v    = scores[item.id];
+      const note = notes[item.id];
+      const has  = v !== undefined;
+      const isNa = v === 'na';
+
+      const cls = !has ? 'is-snone' : isNa ? 'is-sna' : `is-s${v}`;
+      const num = !has ? '—' : isNa ? 'N/A' : v;
+      const lbl = !has ? 'not scored' : isNa ? 'not obs.' : (SCALE_LABELS[v] || '');
+
+      // Show the rubric wording for the band actually awarded — that is the
+      // "why this score" the reader is after, and it is authored text, not a
+      // judgement we are inventing here.
+      const rubric = (has && !isNa && item.rubric && item.rubric[String(v)])
+        ? `<div class="item-row-rubric">${esc(item.rubric[String(v)])}</div>` : '';
+
+      return `
+        <div class="item-row${has ? '' : ' is-unscored'}">
+          <div class="item-row-main">
+            <div class="item-row-title">
+              <span class="item-row-code">${esc(item.id)}</span>${esc(item.title || '')}
+            </div>
+            ${rubric}
+            ${note ? `<div class="item-row-note">${esc(note)}</div>` : ''}
+          </div>
+          <div class="item-score ${cls}">
+            <div class="item-score-num">${esc(num)}</div>
+            <div class="item-score-lbl">${esc(lbl)}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="item-domain">
+        <div class="item-domain-head">
+          <span class="item-domain-dot" style="background:${DOMAIN_COLS[di % DOMAIN_COLS.length]};"></span>
+          <span class="item-domain-title">${esc(d.id || '')} · ${esc(d.title || '')}</span>
+          <span class="item-domain-count">${scoredHere}/${items.length} scored</span>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  return `<div class="detail-section-title">F2 Item Scores · ${scoredTotal}/${itemTotal} scored</div>
+    ${domains}`;
+}
+
 // ── APPRAISAL DETAIL MODAL ───────────────────────────────
 // appraiserNarrative is a Glow/Grow/Go object (strengths / development /
 // actions / growItemLabel / goDate / goCheck), not free text — dumping it
@@ -935,11 +1111,14 @@ function renderNarrative(n) {
     return `<div class="detail-section-title">Appraiser Narrative</div>
             <div class="detail-narrative">${n.text}</div>`;
   }
+  // Two shapes reach this modal: AH's entry form writes strengths/development/
+  // actions, CH's own teacher-appraisal-entry writes glow/grow/go. Accept both
+  // — before this, CH-authored narratives rendered as nothing at all.
   const parts = [
-    ['Glow — strengths',        n.strengths],
-    ['Grow — development',      n.development],
+    ['Glow — strengths',        n.strengths  || n.glow],
+    ['Grow — development',      n.development || n.grow],
     ['Grow — focus item',       n.growItemLabel || n.growItem],
-    ['Go — agreed action',      n.actions],
+    ['Go — agreed action',      n.actions    || n.go],
     ['Go — by when',            n.goDate],
     ['Go — how it is checked',  n.goCheck]
   ].filter(([, v]) => v != null && String(v).trim() !== '');
@@ -951,9 +1130,12 @@ function renderNarrative(n) {
     ).join('')}</div>`;
 }
 
-window.openAppraisalModal = function(id) {
+window.openAppraisalModal = async function(id) {
   const a = allAppraisals.find(x => x.id === id);
   if (!a) return;
+
+  // Item titles come from the framework file; fetch once, then render.
+  await loadFramework();
 
   document.getElementById('modalTitle').textContent = a.teacherName || 'Teacher Appraisal';
   document.getElementById('modalSub').textContent =
@@ -1004,7 +1186,9 @@ window.openAppraisalModal = function(id) {
       <div class="detail-info-item"><div class="detail-info-label">Appraiser</div><div class="detail-info-val">${appraiserLabel(a)}</div></div>
     </div>
 
-    ${renderNarrative(a.appraiserNarrative)}
+    ${renderItemScores(a)}
+
+    ${renderNarrative(a.appraiserNarrative || a.narrative)}
 
     ${a.teacherResponse ? `
       <div class="detail-section-title">Teacher Response</div>
