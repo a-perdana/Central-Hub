@@ -362,6 +362,10 @@ The school's own `ratings` map stays **single**: it self-appraises once a year, 
 
 `report` and `frameworkVersion` sit at the envelope level, not inside a phase — the Annual Report covers the whole cycle.
 
+**`actionPlan{}` — the school's response, closing the ES 17.8 loop.** Appears once `externalReview.report.status == 'published'`; ES 17.8 gives the school four weeks to answer with an action per recommendation. Shape: `{items[], reviews[], status ('not_started'|'draft'|'submitted'), submittedAt, submittedBy}`. Each item is `{priority, action, owner, due, status}` and is seeded in AH from the report's numbered priorities so the school answers the recommendations rather than facing a blank page. Each review is `{note, reviewedBy, reviewedOn}`.
+
+**`items[]` is the school's and `reviews[]` is Eduversal's, enforced in both directions.** Rule branch (e) lets an AH user at that school write `items` while requiring `reviews` to arrive back byte-equal; branch (f) lets any `central_user` append `reviews` while requiring `items` to arrive back byte-equal. Neither side can rewrite the other's words — the same principle as the two-rater ratings split. Both branches carry the other party's array in their key list purely so a save round-trips it instead of dropping it.
+
 `externalReview.report` is the written report ES 17.8 requires within 10 business days of the visit: `{status ('draft'|'published'), summary, domains{<domainId>: string}, commendations, recommendations, priorities, html, generatedAt, composedAt, publishedAt, publishedBy}`.
 
 It moves through two stages in CH `/school-appraisals`. **Sections** — the plain-text fields above, auto-drafted from the ratings, the deltas against the school's self-appraisal, the justifications behind them, and the framework's own `rating_scale_guide` descriptor for each band awarded (so a number reads as a finding). **Document** — `html`, the composed rich-text version, formatted in a Quill editor before publishing. Once `html` exists it is what prints and what the school reads; the section fields stay as the regenerable source. Draft text is written for ESL readers: short sentences, plain words.
