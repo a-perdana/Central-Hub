@@ -239,6 +239,55 @@ service firebase.storage {
              .data.role_centralhub == 'central_admin';
     }
 
+    // School self-appraisal evidence. ES 17.8 opens the appraisal cycle with
+    // "Evidence Submission (4-6 weeks before visit)" — the school attaches the
+    // documents behind each of its 31 aspect ratings, and the visiting
+    // Eduversal team reads them to answer handbook s6's "Ask 'show me'".
+    // Path: school_appraisals/{docId}/{aspectId}/{timestamp}_{filename}
+    //   - docId:    school_appraisals_v2 doc id (NOT a schoolId, so ownership
+    //               is resolved by reading that doc's schoolId field)
+    //   - aspectId: framework aspect, 'd1-a1' … 'd5-a6'
+    //
+    // Write is the school's own: an AH user whose users/{uid}.schoolId matches
+    // the appraisal record's schoolId. Read additionally covers every Central
+    // Hub user — the whole point of the evidence is that the appraiser can
+    // open it, and CH users have no schoolId of their own to match on.
+    //
+    // Note this path had NO rule until 2026-07-27, which means every upload
+    // was denied by default. The upload UI has shipped in AH since the page
+    // was built, so the feature has simply never worked — the bucket held
+    // zero objects under this prefix when the rule was added.
+    match /school_appraisals/{docId}/{aspectId}/{filename} {
+      function apprSchoolId() {
+        return firestore.get(/databases/(default)/documents/school_appraisals_v2/$(docId)).data.schoolId;
+      }
+      function caller() {
+        return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      }
+      function isCentralReader() {
+        let u = caller();
+        return u.role_centralhub == 'central_admin' || u.role_centralhub == 'central_user';
+      }
+      function isSchoolOwner() {
+        let u = caller();
+        return u.role_academichub == 'academic_admin'
+            || (u.role_academichub == 'academic_user' && u.schoolId == apprSchoolId());
+      }
+      allow read: if request.auth != null && (isCentralReader() || isSchoolOwner());
+      allow write: if request.auth != null
+        && isSchoolOwner()
+        && request.resource.size <= 25 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*')
+            || request.resource.contentType.matches('application/msword')
+            || request.resource.contentType.matches('application/vnd.ms-excel')
+            || request.resource.contentType.matches('image/.*'));
+      // Deleting evidence rewrites the audit trail behind a rating, so it
+      // stays with the school that owns it (to fix a mis-upload) and admin.
+      allow delete: if request.auth != null
+        && (caller().role_centralhub == 'central_admin' || isSchoolOwner());
+    }
+
     // AH School Leadership artifact uploads (2026-05-21) — per-(school,
     // subject) living documents (Annual Plan, Department Handbook,
     // Subject Policy) attached to school_artifacts.fileUrl. Same

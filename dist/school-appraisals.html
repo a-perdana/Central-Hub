@@ -529,6 +529,34 @@
       font-size: .8rem; color: #78350f; line-height: 1.55;
     }
     .ext-intro-note em { color: #92400e; font-style: italic; }
+    /* ── EVIDENCE SUBMITTED BY THE SCHOOL (read-only in CH) ── */
+    .ev-list { display: flex; flex-direction: column; gap: 6px; }
+    .ev-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 11px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--white);
+      text-decoration: none; color: var(--ink);
+      font-size: .82rem; transition: border-color .15s, background .15s;
+    }
+    .ev-item:hover { border-color: var(--accent); background: var(--paper); }
+    .ev-icon { flex: none; font-size: .95rem; }
+    .ev-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ev-size { flex: none; font-size: .72rem; color: var(--ink-3); }
+    .ev-open { flex: none; font-size: .72rem; font-weight: 600; color: var(--accent); }
+    .ev-empty {
+      font-size: .8rem; color: var(--ink-3); font-style: italic;
+      padding: 9px 11px; background: var(--paper);
+      border: 1px dashed var(--border); border-radius: 8px;
+    }
+    /* Collapsed-card badge so the appraiser can see which aspects came with
+       evidence without opening all 31 of them. */
+    .ev-count {
+      flex: none; font-size: .72rem; font-weight: 600;
+      color: var(--ink-2); background: var(--paper);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 2px 8px; margin-right: 6px;
+    }
+
     /* Dual score readout — school number, arrow, Eduversal number. */
     .dual-score { display: inline-flex; align-items: center; gap: 6px; }
     .dual-score-arrow { color: var(--ink-3, #9ca3af); font-size: .8rem; }
@@ -4730,6 +4758,53 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       if (heroExt) heroExt.textContent = avgScore(a, 'external') || '—';
     }
 
+    // Evidence URLs and filenames are school-supplied, so they are untrusted
+    // input reaching innerHTML. Block javascript:/data: hrefs and escape the
+    // text before either goes near the DOM.
+    function safeUrl(url) {
+      return /^https?:\/\//i.test(String(url || '')) ? String(url) : '#';
+    }
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
+    }
+
+    // The school's uploaded evidence for one aspect, read-only. ES 17.8's
+    // pre-visit "Evidence Submission" lands in files{}/links{} from AH
+    // /school-self-appraisal; this is where the appraiser answers handbook
+    // s6's "Ask 'show me'". Central Hub never writes either map.
+    function evidenceAttachmentsHtml(a, aspectId) {
+      const files = a.files?.[aspectId] || [];
+      const links = a.links?.[aspectId] || [];
+      if (!files.length && !links.length) {
+        return '<div class="ev-empty">No documents or links attached by the school for this aspect.</div>';
+      }
+      const fileRows = files.map(f => {
+        const ext = String(f.name || '').split('.').pop().toUpperCase();
+        const icon = ext === 'PDF' ? '📄' : ['JPG','JPEG','PNG','GIF','WEBP'].includes(ext) ? '🖼️' : '📎';
+        const size = f.size > 1024 * 1024
+          ? (f.size / 1024 / 1024).toFixed(1) + ' MB'
+          : Math.round((f.size || 0) / 1024) + ' KB';
+        return `<a class="ev-item" href="${safeUrl(f.url)}" target="_blank" rel="noopener" title="${esc(f.name || '')}">
+          <span class="ev-icon">${icon}</span>
+          <span class="ev-name">${esc(f.name || 'Untitled')}</span>
+          <span class="ev-size">${size}</span>
+          <span class="ev-open">Open ↗</span>
+        </a>`;
+      }).join('');
+      const linkRows = links.map(l => `<a class="ev-item" href="${safeUrl(l.url)}" target="_blank" rel="noopener" title="${esc(l.url || '')}">
+          <span class="ev-icon">🔗</span>
+          <span class="ev-name">${esc(l.url || '')}</span>
+          <span class="ev-open">Open ↗</span>
+        </a>`).join('');
+      return `<div class="ev-list">${fileRows}${linkRows}</div>`;
+    }
+
+    function evidenceCount(a, aspectId) {
+      return (a.files?.[aspectId]?.length || 0) + (a.links?.[aspectId]?.length || 0);
+    }
+
     // Delta chip shown beside each aspect. Empty until BOTH sides have rated —
     // "Eduversal says 3" against an unrated aspect is not a disagreement.
     function extDeltaHtml(ext, school) {
@@ -5305,6 +5380,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         const extRating = er.ratings[aspect.id] || 0;
         const extJustify = er.justifications[aspect.id] || '';
         const needsJustify = extRating > 0 && currentRating > 0 && extRating !== currentRating;
+        const evCount = evidenceCount(a, aspect.id);
 
         const ratingBtns = [1,2,3,4].map(v => {
           const scale = FRAMEWORK.meta.rating_scale[v];
@@ -5348,6 +5424,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                 <div class="aspect-desc">${aspect.description}</div>
               </div>
               <span class="aspect-head-right">
+                ${evCount ? `<span class="ev-count" title="${evCount} document${evCount === 1 ? '' : 's'} or link${evCount === 1 ? '' : 's'} attached by the school">📎 ${evCount}</span>` : ''}
                 <span class="score-pill ${badgeCls}">${badgeText}</span>
                 <svg class="aspect-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
               </span>
@@ -5372,6 +5449,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               <div class="ab-section">
                 <div class="ab-section-label">Self-Assessment Rating ${!canEdit ? '<span class="field-owner is-locked">🔒 the school\'s</span>' : ''}</div>
                 <div class="rating-options">${ratingBtns}</div>
+              </div>
+
+              <div class="ab-section">
+                <div class="ab-section-label">Evidence Submitted by the School <span class="field-owner is-locked">🔒 the school's</span></div>
+                ${evidenceAttachmentsHtml(a, aspect.id)}
               </div>
 
               <div class="ab-section ext-section">
