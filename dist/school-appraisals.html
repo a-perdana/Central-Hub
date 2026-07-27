@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <!-- Quill powers the report composer (same version already used by
+       appraisal-system.html and mail-composer.html on this hub). -->
+  <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
   <link rel="stylesheet" href="shared-styles.css">
   <style>
     :root {
@@ -588,6 +591,28 @@
     }
     .rep-domain textarea { min-height: 96px; }
 
+    /* Composed-document stage: the editor and its read-only twin. Sized to
+       read like a page rather than a form field. */
+    .rep-doc-wrap { margin-top: 4px; }
+    .rep-editor { min-height: 520px; background: var(--white); }
+    .rep-editor .ql-editor {
+      min-height: 480px; font-size: .92rem; line-height: 1.65;
+      font-family: 'DM Sans', system-ui, sans-serif; color: var(--ink);
+    }
+    .rep-editor .ql-editor h1 { font-family: 'Lora', serif; font-size: 1.5rem; }
+    .rep-editor .ql-editor h2 { font-family: 'Lora', serif; font-size: 1.2rem; margin-top: 1.2em; }
+    .rep-editor .ql-editor h3 { font-size: 1rem; font-weight: 700; margin-top: 1em; }
+    .rep-editor .ql-editor h4 { font-size: .92rem; font-weight: 700; color: var(--accent-dk); margin-top: .9em; }
+    .rep-doc-readonly {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 10px; padding: 26px 30px;
+      font-size: .9rem; line-height: 1.65;
+    }
+    .rep-doc-readonly h1 { font-family: 'Lora', serif; font-size: 1.45rem; margin-bottom: .3em; }
+    .rep-doc-readonly h2 { font-family: 'Lora', serif; font-size: 1.15rem; margin: 1.3em 0 .4em; }
+    .rep-doc-readonly h3 { font-size: 1rem; margin: 1.1em 0 .3em; }
+    .rep-doc-readonly h4 { font-size: .9rem; color: var(--accent-dk); margin: .9em 0 .2em; }
+
     /* Print: drop the app chrome and let the report run as a document.
        Scoped to body.printing-report so printing from any other tab still
        behaves normally. */
@@ -610,17 +635,29 @@
       }
       body.printing-report .modal-tab-panel { display: none !important; }
       body.printing-report #reportPanel { display: block !important; }
-      /* The live textareas are replaced by .rep-print-text mirrors at print
-         time — a textarea only prints what fits its visible box. */
-      body.printing-report #reportPanel textarea { display: none !important; }
-      body.printing-report .field-group label { color: #000; }
-      body.printing-report .rep-domain { break-inside: avoid; }
+      /* Everything on the panel is working chrome; only the print sheet
+         built at click time goes on paper. */
+      body.printing-report #reportPanel > *:not(.rep-print-sheet) { display: none !important; }
+      body.printing-report .rep-print-sheet { display: block !important; }
     }
-    .rep-print-text { display: none; }
+    .rep-print-sheet { display: none; }
     @media print {
-      body.printing-report .rep-print-text {
-        display: block; white-space: pre-wrap;
-        font-size: 11pt; line-height: 1.5; color: #000; margin-bottom: 10pt;
+      body.printing-report .rep-print-sheet {
+        font-size: 11pt; line-height: 1.55; color: #000;
+      }
+      body.printing-report .rep-print-sheet h1 { font-size: 18pt; margin: 0 0 6pt; }
+      body.printing-report .rep-print-sheet h2 {
+        font-size: 14pt; margin: 16pt 0 4pt; break-after: avoid;
+      }
+      body.printing-report .rep-print-sheet h3 {
+        font-size: 12pt; margin: 12pt 0 3pt; break-after: avoid;
+      }
+      body.printing-report .rep-print-sheet h4 {
+        font-size: 11pt; margin: 9pt 0 2pt; break-after: avoid;
+      }
+      body.printing-report .rep-print-sheet p { margin: 0 0 7pt; orphans: 3; widows: 3; }
+      body.printing-report .rep-print-sheet .rep-print-text {
+        white-space: pre-wrap; margin-bottom: 10pt;
       }
     }
 
@@ -4701,6 +4738,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   </div>
 
   <script src="firebase-config.js"></script>
+  <!-- Quill must load before the module script that instantiates it. -->
+  <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
   <script type="module" src="auth-guard.js"></script>
   <script type="module">
     import {
@@ -4848,7 +4887,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         commendations: r.commendations || '',
         recommendations: r.recommendations || '',
         priorities:  r.priorities || '',
+        // The composed, formatted document. Once this exists it — not the
+        // section fields — is what prints and what the school reads.
+        html:        r.html || '',
         generatedAt: r.generatedAt || null,
+        composedAt:  r.composedAt || null,
         publishedAt: r.publishedAt || null,
         publishedBy: r.publishedBy || ''
       };
@@ -4856,6 +4899,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     function bandLabel(n) {
       return FRAMEWORK?.meta?.rating_scale?.[n]?.label || scoreLabel(n);
+    }
+
+    // A composite is an average, so naming its band flatly ("3.6 —
+    // Exemplary") overstates it: a domain can average 3.6 while still
+    // containing an aspect rated Beginning. Qualify anything that is not a
+    // whole number so the label reads as an approximation.
+    function compositeBand(avg) {
+      const n = parseFloat(avg);
+      if (!n) return '';
+      const label = bandLabel(Math.round(n));
+      return Number.isInteger(n) ? label : `close to ${label}`;
     }
 
     // Every aspect where Eduversal and the school landed on different bands,
@@ -4891,36 +4945,67 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       // 1 + 3 — scope, and the performance level per ES 17.8
       const visitName = (meta.visit_types || []).find(v => v.code === er.visitType)?.name || 'appraisal visit';
+      const totalAspects = FRAMEWORK.domains.reduce((n, d) => n + d.aspects.length, 0);
+      const ratedCount = FRAMEWORK.domains
+        .flatMap(d => d.aspects).filter(asp => (er.ratings[asp.id] || 0) > 0).length;
       const summary = [
-        `${a.schoolName || 'The school'} was appraised against the Eduversal School Appraisal Framework v${FRAMEWORK?.meta?.version || '2.0'} — five domains, ${FRAMEWORK.domains.reduce((n, d) => n + d.aspects.length, 0)} aspects — during the ${visitName} of the ${a.academicYear || ''} cycle.`,
+        `Eduversal visited ${a.schoolName || 'the school'} for the ${visitName} in the ${a.academicYear || ''} cycle.`,
+        `We used the Eduversal School Appraisal Framework version ${FRAMEWORK?.meta?.version || '2.0'}. It has five domains and ${totalAspects} aspects. We rated ${ratedCount} of them.`,
         overallExt
-          ? `Eduversal's overall rating is ${overallExt} (${bandLabel(Math.round(parseFloat(overallExt)))}), against the school's own self-rating of ${overallSchool || '—'}.`
-          : `Eduversal has not yet recorded an overall rating for this cycle.`,
+          ? `Our overall rating is ${overallExt} out of 4 (${compositeBand(overallExt)}). The school rated itself ${overallSchool || '—'}.`
+          : `We have not yet given an overall rating for this cycle.`,
         deltas.length
-          ? `Eduversal's rating differs from the school's on ${deltas.length} aspect${deltas.length === 1 ? '' : 's'}; each difference is evidenced in the domain findings below.`
-          : `Eduversal's ratings align with the school's self-assessment across every rated aspect — the self-appraisal is a reliable account.`,
+          ? `Our rating is different from the school's on ${deltas.length} aspect${deltas.length === 1 ? '' : 's'}. We explain each difference in the domain findings below.`
+          : `Our ratings match the school's own ratings on every aspect we rated. This tells us the school knows itself well.`,
         outcomeLabel ? `Overall outcome: ${outcomeLabel}.` : ''
       ].filter(Boolean).join(' ');
 
-      // 1 — findings for EACH domain
+      // 1 — findings for EACH domain, aspect by aspect.
+      // The framework carries a written descriptor for all 4 bands on all 31
+      // aspects (rating_scale_guide). Quoting the descriptor for the band we
+      // awarded is what turns a number into a finding the school can act on —
+      // it says what "Developing" MEANS for this particular aspect, in the
+      // framework's own words rather than ours.
+      //
+      // Tone: short sentences, plain words, one idea per sentence. Most
+      // readers are ESL school leaders, and a report they cannot read is a
+      // report that changes nothing.
       const domains = {};
       FRAMEWORK.domains.forEach(d => {
         const sch = domainAvg(a, d.id);
         const ext = domainAvg(a, d.id, 'external');
-        const mine = deltas.filter(x => x.domain.id === d.id);
         const lines = [];
-        lines.push(ext
-          ? `Eduversal rates ${d.title} at ${ext} (${bandLabel(Math.round(parseFloat(ext)))}); the school self-rated ${sch || '—'}.`
-          : `${d.title} has not yet been externally rated.`);
-        if (mine.length) {
-          lines.push('');
-          mine.forEach(x => {
-            lines.push(`• ${x.aspect.title} — school ${x.sch} (${bandLabel(x.sch)}), Eduversal ${x.ext} (${bandLabel(x.ext)}). ${x.why}`);
-          });
-        } else if (ext) {
-          lines.push('Ratings in this domain agree with the school\'s own assessment.');
+
+        if (!ext) {
+          domains[d.id] = `${d.title} was not rated during this visit.`;
+          return;
         }
-        domains[d.id] = lines.join('\n');
+
+        lines.push(`Eduversal rates this domain ${ext} (${compositeBand(ext)}). The school rated itself ${sch || '—'}.`);
+        lines.push('');
+
+        d.aspects.forEach((asp, i) => {
+          const e = er.ratings[asp.id] || 0;
+          const s = a.ratings?.[asp.id] || 0;
+          if (!e) return;                       // not rated by Eduversal — say nothing
+          const guide = asp.rating_scale_guide?.[e];
+          const descriptor = typeof guide === 'string' ? guide : (guide?.description || '');
+
+          lines.push(`${d.code}.${i + 1} ${asp.title} — ${e} (${bandLabel(e)})`);
+          if (descriptor) lines.push(descriptor);
+
+          if (s > 0 && s !== e) {
+            const dir = e > s ? 'higher than' : 'lower than';
+            lines.push(`The school rated this ${s} (${bandLabel(s)}), so our rating is ${dir} theirs. ${er.justifications[asp.id] || ''}`.trim());
+          } else if (s > 0) {
+            lines.push(`The school rated this the same. We agree.`);
+          }
+          lines.push('');
+        });
+
+        const rated = d.aspects.filter(asp => (er.ratings[asp.id] || 0) > 0).length;
+        if (!rated) lines.push('No aspect in this domain was rated during this visit.');
+        domains[d.id] = lines.join('\n').trim();
       });
 
       // 2 — commendations: strongest domains, and where the school was honest
@@ -4928,15 +5013,25 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         .map(d => ({ d, ext: parseFloat(domainAvg(a, d.id, 'external')) }))
         .filter(x => x.ext > 0)
         .sort((x, y) => y.ext - x.ext);
+      // Name the strongest aspects, not only the strongest domain — a
+      // commendation is more useful when the school knows exactly what to
+      // keep doing.
+      const strongAspects = FRAMEWORK.domains
+        .flatMap(d => d.aspects.map(asp => ({ d, asp, ext: er.ratings[asp.id] || 0 })))
+        .filter(x => x.ext === 4);
+      const underRated = deltas.filter(x => x.dir === 'higher');
       const commendations = rated.length
         ? [
             rated[0].ext >= 3
-              ? `${rated[0].d.title} is the strongest domain at ${rated[0].ext.toFixed(1)} (${bandLabel(Math.round(rated[0].ext))}).`
+              ? `${rated[0].d.title} is the school's strongest domain. We rated it ${rated[0].ext.toFixed(1)} (${compositeBand(rated[0].ext)}).`
               : '',
-            deltas.filter(x => x.dir === 'higher').length
-              ? `The school under-rated itself on ${deltas.filter(x => x.dir === 'higher').length} aspect${deltas.filter(x => x.dir === 'higher').length === 1 ? '' : 's'} where Eduversal found stronger practice than claimed.`
+            strongAspects.length
+              ? `We rated ${strongAspects.length} aspect${strongAspects.length === 1 ? '' : 's'} Exemplary: ${strongAspects.slice(0, 5).map(x => x.asp.title).join('; ')}${strongAspects.length > 5 ? '; and others' : ''}. This practice is strong enough for other schools in the network to learn from.`
               : '',
-            !deltas.length ? 'The school\'s self-appraisal was accurate throughout — a mark of a mature evaluation culture.' : ''
+            underRated.length
+              ? `On ${underRated.length} aspect${underRated.length === 1 ? '' : 's'} the school rated itself lower than we did. The school is more modest than the evidence requires.`
+              : '',
+            !deltas.length ? 'The school\'s own ratings matched ours everywhere. Honest self-appraisal is itself a strength.' : ''
           ].filter(Boolean).join(' ')
         : '';
 
@@ -4959,20 +5054,103 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       let priorities = '';
       if (weakAspects.length) {
-        priorities = weakAspects.slice(0, 6).map((x, i) =>
-          `${i + 1}. ${x.d.code} ${x.asp.title} — rated ${x.ext} (${bandLabel(x.ext)}). ${x.ext === 1 ? 'Practice is absent or at an early stage; this needs attention before the next cycle.' : 'Practice is emerging but gaps remain; consolidate to reach Established.'}`
-        ).join('\n');
+        // Each priority says three things: where you are, what the next band
+        // asks for (in the framework's own words), and why it matters now.
+        priorities = weakAspects.slice(0, 6).map((x, i) => {
+          const next = x.asp.rating_scale_guide?.[x.ext + 1];
+          const target = typeof next === 'string' ? next : (next?.description || '');
+          const head = `${i + 1}. ${x.d.code} ${x.asp.title} — now ${x.ext} (${bandLabel(x.ext)})`;
+          const why = x.ext === 1
+            ? 'This practice is missing or has only just started. It needs attention before the next visit.'
+            : 'This practice has started but there are still gaps.';
+          const goal = target ? `To reach ${bandLabel(x.ext + 1)}: ${target}` : '';
+          return [head, why, goal].filter(Boolean).join('\n');
+        }).join('\n\n');
         if (weakAspects.length > 6) {
-          priorities += `\n\n(${weakAspects.length - 6} further aspect${weakAspects.length - 6 === 1 ? '' : 's'} below Established — see the domain findings.)`;
+          priorities += `\n\nThere ${weakAspects.length - 6 === 1 ? 'is 1 more aspect' : `are ${weakAspects.length - 6} more aspects`} below Established. You can find ${weakAspects.length - 6 === 1 ? 'it' : 'them'} in the domain findings above.`;
         }
         if (weakDomains.length) {
-          priorities += `\n\nAt domain level, ${weakDomains.map(x => `${x.d.title} (${x.ext.toFixed(1)})`).join(' and ')} sit${weakDomains.length === 1 ? 's' : ''} below Established overall.`;
+          priorities += `\n\nAt domain level, ${weakDomains.map(x => `${x.d.title} (${x.ext.toFixed(1)})`).join(' and ')} ${weakDomains.length === 1 ? 'is' : 'are'} below Established overall.`;
         }
       } else if (rated.length) {
-        priorities = 'No aspect was rated below Established. Priorities should focus on moving Established practice toward Exemplary.';
+        priorities = 'No aspect is below Established. The next step is to move Established practice towards Exemplary.';
       }
 
       return { summary, domains, commendations, recommendations, priorities };
+    }
+
+    // Turn the section fields into ONE rich document for the editor. The
+    // fields are the data; this is the artefact that gets formatted, printed
+    // and published. Plain-text paragraphs become <p>, and lines that read as
+    // an aspect heading ("D1.3 Some Title — 2 (Developing)") become <h4> so
+    // the document has structure to format rather than a wall of text.
+    function composeFullReport(a) {
+      const rep = reportShape(a);
+      const esc2 = esc;
+      const para = txt => String(txt || '')
+        .split(/\n{2,}/)
+        .map(block => {
+          const lines = block.split('\n').filter(l => l.trim());
+          return lines.map(l => (
+            /^[A-Z]\d+\.\d+\s/.test(l.trim()) || /^\d+\.\s/.test(l.trim())
+              ? `<h4>${esc2(l.trim())}</h4>`
+              : `<p>${esc2(l.trim())}</p>`
+          )).join('');
+        })
+        .join('');
+
+      const out = [];
+      out.push(`<h1>Eduversal School Appraisal Report</h1>`);
+      out.push(`<p><strong>${esc2(a.schoolName || '')}</strong> — ${esc2(a.academicYear || '')}</p>`);
+
+      if (rep.summary) { out.push('<h2>Executive Summary</h2>'); out.push(para(rep.summary)); }
+
+      out.push('<h2>Findings by Domain</h2>');
+      FRAMEWORK.domains.forEach(d => {
+        const body = rep.domains[d.id];
+        if (!body) return;
+        out.push(`<h3>${esc2(d.code)} · ${esc2(d.title)}</h3>`);
+        out.push(para(body));
+      });
+
+      if (rep.commendations)    { out.push('<h2>Commendations</h2>');        out.push(para(rep.commendations)); }
+      if (rep.recommendations)  { out.push('<h2>Recommendations</h2>');      out.push(para(rep.recommendations)); }
+      if (rep.priorities)       { out.push('<h2>Priority Action Areas</h2>'); out.push(para(rep.priorities)); }
+
+      return out.join('\n');
+    }
+
+    // Allowlist sanitiser for the composed report. The editor is ours and the
+    // authors are HQ staff, but this HTML is stored, re-rendered in Academic
+    // Hub and printed — so it is treated as untrusted on the way out, the
+    // same discipline the content-override editors on this hub use.
+    const REPORT_ALLOWED_TAGS = new Set([
+      'H1','H2','H3','H4','P','BR','HR','STRONG','B','EM','I','U','S',
+      'UL','OL','LI','BLOCKQUOTE','TABLE','THEAD','TBODY','TR','TH','TD','SPAN','DIV'
+    ]);
+    function sanitiseReportHtml(html) {
+      const host = document.createElement('div');
+      host.innerHTML = String(html || '');
+      const walk = node => {
+        [...node.childNodes].forEach(child => {
+          if (child.nodeType === 3) return;              // text — always fine
+          if (child.nodeType !== 1) { child.remove(); return; }
+          if (!REPORT_ALLOWED_TAGS.has(child.tagName)) {
+            // Keep the words, drop the tag.
+            const text = document.createTextNode(child.textContent || '');
+            child.replaceWith(text);
+            return;
+          }
+          // Strip every attribute except the alignment classes Quill emits.
+          [...child.attributes].forEach(attr => {
+            const keep = attr.name === 'class' && /^ql-align-(center|right|justify)$/.test(attr.value);
+            if (!keep) child.removeAttribute(attr.name);
+          });
+          walk(child);
+        });
+      };
+      walk(host);
+      return host.innerHTML;
     }
 
     // Evidence URLs and filenames are school-supplied, so they are untrusted
@@ -5446,6 +5624,67 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       });
 
+      // Mount the rich editor when the panel is showing the composed document.
+      // Quill is re-created on every re-render because the host node is
+      // replaced; keep the instance on state so the save path can read it.
+      const editorHost = panelsEl.querySelector('#reportEditor');
+      if (editorHost && window.Quill) {
+        state.reportQuill = new Quill(editorHost, {
+          theme: 'snow',
+          modules: {
+            toolbar: [
+              [{ header: [1, 2, 3, 4, false] }],
+              ['bold', 'italic', 'underline'],
+              [{ list: 'ordered' }, { list: 'bullet' }],
+              [{ align: [] }],
+              ['blockquote'],
+              ['clean']
+            ]
+          }
+        });
+        state.reportQuill.root.innerHTML = sanitiseReportHtml(extReview(state.currentAppraisal).report?.html || '');
+        state.reportQuill.on('text-change', () => {
+          if (!canWriteExternal || reportIsPublished()) return;
+          ensureReport().html = state.reportQuill.root.innerHTML;
+          document.getElementById('saveStatus').textContent = 'Unsaved changes';
+        });
+      } else if (!editorHost) {
+        state.reportQuill = null;
+      }
+
+      panelsEl.querySelector('#btnComposeReport')?.addEventListener('click', () => {
+        if (!canWriteExternal || reportIsPublished()) return;
+        const rep = ensureReport();
+        rep.html = composeFullReport(state.currentAppraisal);
+        rep.composedAt = new Date().toISOString();
+        rerenderReportPanel();
+        document.getElementById('saveStatus').textContent = 'Composed — format it, then publish';
+      });
+
+      const backBtn = panelsEl.querySelector('#btnBackToSections');
+      backBtn?.addEventListener('click', () => {
+        if (!canWriteExternal || reportIsPublished()) return;
+        // Going back drops the composed document — including any formatting
+        // done in the editor — so it asks first, like the other two
+        // irreversible actions on this panel.
+        if (backBtn.dataset.confirming !== '1') {
+          backBtn.dataset.confirming = '1';
+          const original = backBtn.textContent;
+          backBtn.textContent = 'Discard formatting? Click again';
+          backBtn.classList.add('is-confirming');
+          setTimeout(() => {
+            backBtn.dataset.confirming = '0';
+            backBtn.textContent = original;
+            backBtn.classList.remove('is-confirming');
+          }, 3000);
+          return;
+        }
+        backBtn.dataset.confirming = '0';
+        ensureReport().html = '';
+        rerenderReportPanel();
+        document.getElementById('saveStatus').textContent = 'Back to sections — recompose when ready';
+      });
+
       const genBtn = panelsEl.querySelector('#btnGenerateReport');
       genBtn?.addEventListener('click', () => {
         if (!canWriteExternal || reportIsPublished()) return;
@@ -5475,21 +5714,38 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       });
 
       panelsEl.querySelector('#btnPrintReport')?.addEventListener('click', () => {
-        // A textarea prints only what fits its visible box — long findings
-        // would be silently truncated on paper. Mirror each one into a plain
-        // block element for the print pass, then throw the mirrors away.
         const host = panelsEl.querySelector('#reportPanel');
         if (!host) return;
-        host.querySelectorAll('textarea').forEach(ta => {
-          const mirror = document.createElement('div');
-          mirror.className = 'rep-print-text';
-          mirror.textContent = ta.value;
-          ta.insertAdjacentElement('afterend', mirror);
-        });
+        // Print the composed document when there is one — that is the report.
+        // Fall back to mirroring the section textareas, because a textarea
+        // prints only what fits its visible box and long findings would be
+        // silently truncated on paper.
+        const repHtml = extReview(state.currentAppraisal).report?.html || '';
+        const sheet = document.createElement('div');
+        sheet.className = 'rep-print-sheet';
+        if (repHtml) {
+          sheet.innerHTML = sanitiseReportHtml(
+            state.reportQuill ? state.reportQuill.root.innerHTML : repHtml
+          );
+        } else {
+          host.querySelectorAll('textarea').forEach(ta => {
+            const label = ta.closest('.field-group')?.querySelector('label')?.textContent || '';
+            if (label) {
+              const h = document.createElement('h3');
+              h.textContent = label.trim();
+              sheet.appendChild(h);
+            }
+            const p = document.createElement('div');
+            p.className = 'rep-print-text';
+            p.textContent = ta.value;
+            sheet.appendChild(p);
+          });
+        }
+        host.appendChild(sheet);
         document.body.classList.add('printing-report');
         const cleanup = () => {
           document.body.classList.remove('printing-report');
-          host.querySelectorAll('.rep-print-text').forEach(el => el.remove());
+          sheet.remove();
           window.removeEventListener('afterprint', cleanup);
         };
         window.addEventListener('afterprint', cleanup);
@@ -5515,6 +5771,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
         pubBtn.dataset.confirming = '0';
         const rep = ensureReport();
+        // Take the editor's current content, not the last text-change echo,
+        // and sanitise on the way in so what is stored is what the school
+        // will safely see.
+        if (state.reportQuill) rep.html = sanitiseReportHtml(state.reportQuill.root.innerHTML);
         rep.status = 'published';
         rep.publishedAt = new Date().toISOString();
         rep.publishedBy = window.currentUser?.email || '';
@@ -5590,27 +5850,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             ? `<div class="rep-stamp">Draft generated ${fmtDate(rep.generatedAt)}. Not visible to the school yet.</div>`
             : '<div class="rep-stamp">No draft yet — generate one from the ratings, then edit it.</div>');
 
-      return `
-        <div class="rep-head">
-          <div>
-            <div class="rep-title">Written Appraisal Report</div>
-            <div class="rep-sub">${esc(a.schoolName || '')} · ${esc(a.academicYear || '')}</div>
-          </div>
-          <div class="rep-actions">
-            ${canWriteExternal && !published ? `<button class="btn-secondary" id="btnGenerateReport">${hasDraft ? '↻ Regenerate draft' : '✨ Generate draft'}</button>` : ''}
-            <button class="btn-secondary" id="btnPrintReport">🖨 Print</button>
-            ${canWriteExternal && !published && hasDraft ? '<button class="btn-primary" id="btnPublishReport">Publish to school</button>' : ''}
-          </div>
-        </div>
-        ${stamp}
-        <div class="ext-intro-note">
-          ES 17.8 asks for a written report within 10 business days of the visit, carrying findings for each
-          domain, specific commendations and recommendations, ratings or indicators of performance level, and
-          the priority action areas. The draft below is assembled from the ratings you recorded, the differences
-          against the school's self-appraisal and the reasons you gave for them — <strong>edit it freely before
-          publishing</strong>. Publishing makes it readable by the school in Academic Hub and closes editing.
-        </div>
+      // Two stages, and the panel shows whichever the report has reached:
+      //   sections  — the drafted fields, regenerable per domain
+      //   document  — the composed rich document, formatted in the editor
+      // Composing does not delete the sections; you can go back, adjust a
+      // field and re-compose.
+      const composed = !!rep.html;
+      const stage = composed ? 'document' : 'sections';
 
+      const sectionsView = `
         <div class="field-group">
           <label>Executive Summary</label>
           <textarea aria-label="Executive summary" data-report-field="summary" style="min-height:120px;" ${dis} placeholder="Scope of the appraisal and the headline finding…">${esc(rep.summary)}</textarea>
@@ -5631,6 +5879,42 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <label>Priority Action Areas</label>
           <textarea aria-label="Priority action areas" data-report-field="priorities" ${dis} placeholder="The few things that matter most before the next cycle…">${esc(rep.priorities)}</textarea>
         </div>`;
+
+      const documentView = `
+        <div class="rep-doc-wrap">
+          ${canWriteExternal && !published
+            ? '<div id="reportEditor" class="rep-editor"></div>'
+            : `<div class="rep-doc-readonly">${sanitiseReportHtml(rep.html)}</div>`}
+        </div>`;
+
+      return `
+        <div class="rep-head">
+          <div>
+            <div class="rep-title">Written Appraisal Report</div>
+            <div class="rep-sub">${esc(a.schoolName || '')} · ${esc(a.academicYear || '')}</div>
+          </div>
+          <div class="rep-actions">
+            ${canWriteExternal && !published && stage === 'sections' ? `<button class="btn-secondary" id="btnGenerateReport">${hasDraft ? '↻ Regenerate draft' : '✨ Generate draft'}</button>` : ''}
+            ${canWriteExternal && !published && stage === 'sections' && hasDraft ? '<button class="btn-primary" id="btnComposeReport">Compose full report →</button>' : ''}
+            ${canWriteExternal && !published && stage === 'document' ? '<button class="btn-secondary" id="btnBackToSections">← Back to sections</button>' : ''}
+            <button class="btn-secondary" id="btnPrintReport">🖨 Print</button>
+            ${canWriteExternal && !published && stage === 'document' ? '<button class="btn-primary" id="btnPublishReport">Publish to school</button>' : ''}
+          </div>
+        </div>
+        ${stamp}
+        <div class="ext-intro-note">
+          ES 17.8 asks for a written report within 10 business days of the visit, carrying findings for each
+          domain, specific commendations and recommendations, ratings or indicators of performance level, and
+          the priority action areas.
+          ${stage === 'sections'
+            ? `The sections below are drafted from the ratings you recorded, the differences against the school's
+               self-appraisal and the reasons you gave for them. Edit them, then <strong>Compose full report</strong>
+               to turn them into one document you can format.`
+            : `This is the composed document. Format it as you want it to read — headings, bold, lists — then
+               <strong>Publish</strong>. Publishing makes it readable by the school in Academic Hub and closes editing.`}
+          Written for readers whose first language is not English: short sentences, plain words.
+        </div>
+        ${stage === 'sections' ? sectionsView : documentView}`;
     }
 
     // The overview-level half of the external review: the outcome verdict and
@@ -6029,6 +6313,12 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // affectedKeys() as 'externalReview.ratings', which the hasOnly list
       // does not contain, and the write is refused.
       const er = extReview(state.currentAppraisal);
+      // Sanitise the composed report on every write, not only on publish —
+      // a draft is stored and re-rendered too, so it must never carry markup
+      // the allowlist would reject.
+      if (er.report?.html) {
+        er.report = { ...er.report, html: sanitiseReportHtml(er.report.html) };
+      }
       const externalPayload = {
         ...er,
         evaluatedBy: window.currentUser?.email || '',
