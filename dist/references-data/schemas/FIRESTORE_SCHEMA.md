@@ -354,7 +354,13 @@ Bypass list is identical to the rule layer (admin / coordinator / director). Emp
 
 #### `school_appraisals_v2/{docId}`
 **PK:** auto-id.
-**Fields:** `schoolId →partner_schools.id`, `schoolName`, `academicYear` (dash format, e.g. `2026-2027`), `appraiser`, `status` (`draft` / `submitted` / `reviewed`), `ratings{}`, `evidence{}`, `files{}`, `links{}`, `strengths`, `improvements`, `recommendations`, `externalReview{ratings{}, justifications{}, outcome, outcomeNote, phase, visitType, evaluatedBy, evaluatedAt, frameworkVersion, report{}}`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`.
+**Fields:** `schoolId →partner_schools.id`, `schoolName`, `academicYear` (dash format, e.g. `2026-2027`), `appraiser`, `status` (`draft` / `submitted` / `reviewed`), `ratings{}`, `evidence{}`, `files{}`, `links{}`, `strengths`, `improvements`, `recommendations`, `externalReview{phases{}, report{}, frameworkVersion}`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`.
+
+**`externalReview.phases{}` — one slice per visit.** The Updated Appraisal Model (AY 2026–2027) sends a team to each school **twice**, 56–63 days apart, and the Annual Report summarises both. So Eduversal's findings are keyed by phase: `phases.phase_1` (Teaching Quality Visit) and `phases.phase_3` (Validation Visit) carry `{ratings{}, justifications{}, outcome, outcomeNote, visitDates, evaluatedBy, evaluatedAt}`; `phases.phase_2` (Mid-Year Check-in) is online and carries the same shape **minus ratings** — re-scoring 31 aspects over a video call would be a fiction, so it records an outcome and notes only.
+
+The school's own `ratings` map stays **single**: it self-appraises once a year, before Phase 1, and Phase 3 validates that same submission. Only Eduversal's side is phased.
+
+`report` and `frameworkVersion` sit at the envelope level, not inside a phase — the Annual Report covers the whole cycle.
 
 `externalReview.report` is the written report ES 17.8 requires within 10 business days of the visit: `{status ('draft'|'published'), summary, domains{<domainId>: string}, commendations, recommendations, priorities, html, generatedAt, composedAt, publishedAt, publishedBy}`.
 

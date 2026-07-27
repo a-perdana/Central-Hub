@@ -649,6 +649,83 @@
     .dev-rating.is-needs_intervention .dev-rating-band { color: #b91c1c; }
     .dev-rating.is-pending            { border-left-color: var(--ink-3); }
 
+    /* ── ACTION PLAN (ES 17.8) ── */
+    .ap-panel {
+      margin: 14px 0 4px; padding: 14px 16px;
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 4px solid #0891b2; border-radius: 10px;
+    }
+    .ap-panel.is-waiting { border-left-color: var(--ink-3); }
+    .ap-head {
+      display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+      font-size: .78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin-bottom: 8px;
+    }
+    .ap-status {
+      font-size: .68rem; padding: 2px 8px; border-radius: 999px;
+      text-transform: none; letter-spacing: 0; font-weight: 600;
+      background: var(--paper); border: 1px solid var(--border); color: var(--ink-2);
+    }
+    .ap-status.is-submitted { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+    .ap-status.is-draft { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+    .ap-due {
+      font-size: .7rem; font-weight: 600; text-transform: none;
+      letter-spacing: 0; color: var(--ink-3);
+    }
+    .ap-due.is-overdue { color: #b91c1c; }
+    .ap-note { font-size: .78rem; line-height: 1.55; color: var(--ink-3); margin-bottom: 12px; }
+    .ap-empty {
+      font-size: .82rem; color: var(--ink-3); font-style: italic;
+      padding: 10px 12px; background: var(--paper);
+      border: 1px dashed var(--border); border-radius: 8px;
+    }
+    .ap-items { display: flex; flex-direction: column; gap: 8px; }
+    .ap-item {
+      padding: 10px 12px; background: var(--paper);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    .ap-item-head { display: flex; gap: 8px; align-items: baseline; }
+    .ap-item-num {
+      flex: none; font-size: .7rem; font-weight: 700; color: #0e7490;
+      background: #cffafe; border-radius: 999px; padding: 1px 7px;
+    }
+    .ap-item-action { font-size: .86rem; line-height: 1.5; color: var(--ink); }
+    .ap-item-meta {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      font-size: .74rem; color: var(--ink-3); margin-top: 6px;
+    }
+    .ap-item-status {
+      padding: 1px 7px; border-radius: 999px; font-weight: 600;
+      background: var(--white); border: 1px solid var(--border);
+    }
+    .ap-item-status.is-done { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+    .ap-item-status.is-in_progress { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+    .ap-item-ref { font-size: .72rem; color: var(--ink-3); font-style: italic; margin-top: 5px; }
+    .ap-reviews-label {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3);
+      margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--border);
+    }
+    .ap-reviews { display: flex; flex-direction: column; gap: 8px; }
+    .ap-review {
+      padding: 9px 12px; background: #f0fdfa;
+      border: 1px solid #99f6e4; border-radius: 8px;
+    }
+    .ap-review-head {
+      display: flex; gap: 10px; font-size: .72rem; color: #0e7490; margin-bottom: 4px;
+    }
+    .ap-review-who { font-weight: 600; }
+    .ap-review-note { font-size: .84rem; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+    .ap-add { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .ap-add textarea {
+      width: 100%; min-height: 74px; padding: 9px 11px;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      font-family: inherit; font-size: .85rem; color: var(--ink);
+      resize: vertical; background: var(--white); line-height: 1.5;
+    }
+    .ap-add textarea:focus { outline: none; border-color: var(--accent); }
+    .ap-add button { align-self: flex-start; }
+
     /* ── WRITTEN REPORT TAB (ES 17.8) ── */
     .rep-head {
       display: flex; justify-content: space-between; align-items: flex-start;
@@ -5807,6 +5884,34 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       });
 
+      // Append an Eduversal progress review. Append-only by design: a review
+      // is a dated observation, and editing history would defeat the point of
+      // keeping one.
+      panelsEl.querySelector('#btnAddReview')?.addEventListener('click', () => {
+        if (!canWriteExternal) return;
+        const box = panelsEl.querySelector('#apReviewNote');
+        const note = (box?.value || '').trim();
+        const status = document.getElementById('saveStatus');
+        if (!note) {
+          status.textContent = 'Not added — write what changed before recording a review.';
+          status.classList.add('is-error');
+          box?.focus();
+          return;
+        }
+        status.classList.remove('is-error');
+        const a = state.currentAppraisal;
+        if (!a.actionPlan) a.actionPlan = {};
+        if (!Array.isArray(a.actionPlan.reviews)) a.actionPlan.reviews = [];
+        a.actionPlan.reviews.push({
+          note,
+          reviewedBy: window.currentUser?.email || '',
+          reviewedOn: new Date().toISOString().slice(0, 10),
+        });
+        box.value = '';
+        renderAppraisalModal();
+        document.getElementById('saveStatus').textContent = 'Review added — save to record it';
+      });
+
       // Phase switch — re-render the whole modal so every rating control,
       // delta and score is rebuilt against the newly selected visit.
       panelsEl.querySelectorAll('[data-phase]').forEach(btn => {
@@ -6204,6 +6309,42 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         </div>`;
     }
 
+    // ── ACTION PLAN (ES 17.8 "School Response and Action Planning") ──
+    // The school's answer to the report: within 4 weeks it writes an action
+    // per recommendation, with an owner and a date. Eduversal then reviews
+    // progress quarterly (ES 17.8 "Monitoring and Progress Reporting"; the
+    // model puts action-plan status on the Phase 2 agenda).
+    //
+    // items[] belongs to the school and reviews[] to Eduversal — separate
+    // arrays with separate rule branches, so neither side can rewrite the
+    // other's words.
+    function actionPlan(a) {
+      const ap = a?.actionPlan || {};
+      return {
+        items:       Array.isArray(ap.items) ? ap.items : [],
+        reviews:     Array.isArray(ap.reviews) ? ap.reviews : [],
+        status:      ap.status || 'not_started',   // not_started | draft | submitted
+        submittedAt: ap.submittedAt || null,
+        submittedBy: ap.submittedBy || '',
+      };
+    }
+
+    function reportIsPublishedOn(a) {
+      return a?.externalReview?.report?.status === 'published';
+    }
+
+    // ES 17.8 gives the school 4 weeks from the report. Surfacing the deadline
+    // is what makes it a commitment rather than an aspiration.
+    function actionPlanDue(a) {
+      const pub = a?.externalReview?.report?.publishedAt;
+      if (!pub) return null;
+      const d = new Date(pub);
+      if (isNaN(d)) return null;
+      d.setDate(d.getDate() + 28);
+      const overdue = Date.now() > d.getTime() && actionPlan(a).status !== 'submitted';
+      return { date: d, overdue };
+    }
+
     // Which visit's findings the modal is showing. Switching re-renders every
     // rating control against that phase's map, so Phase 1 and Phase 3 stay
     // separate records of separate visits rather than one overwritten set.
@@ -6228,6 +6369,80 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
               ? 'Ratings and justifications below belong to this visit. The school\'s own self-appraisal is a single annual submission and does not change between visits.'
               : 'The mid-year check-in is online, so it records an outcome and notes — not a re-rating of the 31 aspects.'}
           </div>
+        </div>`;
+    }
+
+    // Eduversal's view of the school's action plan: read the commitments,
+    // append a progress review. The items themselves are the school's and are
+    // read-only here — that is enforced in the rule, not just the UI.
+    function buildActionPlanPanel(a, canWriteExternal) {
+      const ap = actionPlan(a);
+      const published = reportIsPublishedOn(a);
+
+      if (!published) {
+        return `
+          <div class="ap-panel is-waiting">
+            <div class="ap-head">Action Plan</div>
+            <div class="ap-empty">
+              The school writes its action plan after the report is published. ES 17.8 gives it four weeks
+              from publication to respond with an action per recommendation, each with an owner and a date.
+            </div>
+          </div>`;
+      }
+
+      const due = actionPlanDue(a);
+      const dueLine = due
+        ? `<span class="ap-due${due.overdue ? ' is-overdue' : ''}">Due ${due.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}${due.overdue ? ' · overdue' : ''}</span>`
+        : '';
+
+      const itemsHtml = ap.items.length
+        ? ap.items.map((it, i) => `
+            <div class="ap-item">
+              <div class="ap-item-head">
+                <span class="ap-item-num">${i + 1}</span>
+                <span class="ap-item-action">${esc(it.action || '')}</span>
+              </div>
+              <div class="ap-item-meta">
+                ${it.owner ? `<span><strong>Owner:</strong> ${esc(it.owner)}</span>` : ''}
+                ${it.due ? `<span><strong>By:</strong> ${esc(it.due)}</span>` : ''}
+                ${it.status ? `<span class="ap-item-status is-${esc(it.status)}">${esc(it.status.replace(/_/g, ' '))}</span>` : ''}
+              </div>
+              ${it.priority ? `<div class="ap-item-ref">Responds to: ${esc(it.priority)}</div>` : ''}
+            </div>`).join('')
+        : `<div class="ap-empty">The school has not written its action plan yet.${due && due.overdue ? ' It is past the four-week deadline — raise it at the next check-in.' : ''}</div>`;
+
+      const reviewsHtml = ap.reviews.length
+        ? ap.reviews.map(r => `
+            <div class="ap-review">
+              <div class="ap-review-head">
+                <span class="ap-review-when">${esc(r.reviewedOn || '')}</span>
+                <span class="ap-review-who">${esc(r.reviewedBy || '')}</span>
+              </div>
+              <div class="ap-review-note">${esc(r.note || '')}</div>
+            </div>`).join('')
+        : '<div class="ap-empty">No progress review recorded yet.</div>';
+
+      return `
+        <div class="ap-panel">
+          <div class="ap-head">
+            Action Plan
+            <span class="ap-status is-${esc(ap.status)}">${esc(ap.status.replace(/_/g, ' '))}</span>
+            ${dueLine}
+          </div>
+          <div class="ap-note">
+            Written by the school in Academic Hub — read-only here. Your part is the progress review:
+            the model puts action-plan status on the Phase 2 check-in agenda, and ES 17.8 asks for
+            quarterly monitoring after that.
+          </div>
+          <div class="ap-items">${itemsHtml}</div>
+
+          <div class="ap-reviews-label">Eduversal progress reviews</div>
+          <div class="ap-reviews">${reviewsHtml}</div>
+          ${canWriteExternal && ap.items.length ? `
+            <div class="ap-add">
+              <textarea id="apReviewNote" placeholder="What has actually moved since the last check? Name evidence, not impressions…"></textarea>
+              <button class="btn-secondary" id="btnAddReview">Add progress review</button>
+            </div>` : ''}
         </div>`;
     }
 
@@ -6382,6 +6597,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         ${buildSupervisionStrip(a)}
         ${buildPhaseSwitcher(a)}
         ${buildDevelopmentRatingCard(a)}
+        ${buildActionPlanPanel(a, canWriteExternal)}
         <div class="overview-grid">${overviewCards}</div>
         ${canEdit ? `<div class="school-owned-note">
           <strong>These are the school's own words.</strong> Ratings, evidence, Key Strengths and Areas for Improvement were written by the school in Academic Hub. You can correct them as an admin, but the school will not be told they changed — prefer writing your response under <em>Eduversal Coordinator Recommendations</em> below.
@@ -6699,6 +6915,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       );
       const touchedExternal = anyPhaseTouched || !!report;
 
+      // Action plan: Eduversal only ever appends reviews. items / status /
+      // submitted* are carried back untouched — the rule requires exact
+      // equality on items, so sending them modified would be refused.
+      const apRaw = state.currentAppraisal.actionPlan || {};
+      const pendingReviews = Array.isArray(apRaw.reviews) && apRaw.reviews.length > 0;
+      const actionPlanPayload = {
+        items:       Array.isArray(apRaw.items) ? apRaw.items : [],
+        reviews:     Array.isArray(apRaw.reviews) ? apRaw.reviews : [],
+        status:      apRaw.status || 'not_started',
+        ...(apRaw.submittedAt ? { submittedAt: apRaw.submittedAt } : {}),
+        ...(apRaw.submittedBy ? { submittedBy: apRaw.submittedBy } : {}),
+      };
+
       const data = state.isAdmin
         ? {
             ratings: state.currentAppraisal.ratings || {},
@@ -6707,6 +6936,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             improvements: state.currentAppraisal.improvements || '',
             recommendations: state.currentAppraisal.recommendations || '',
             ...(touchedExternal ? { externalReview: externalPayload } : {}),
+            ...(pendingReviews ? { actionPlan: actionPlanPayload } : {}),
             status: newStatus || state.currentAppraisal.status || 'draft',
             updatedAt: serverTimestamp(),
             updatedBy: window.currentUser?.email || ''
@@ -6728,6 +6958,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           await setDoc(
             doc(window.db, 'school_appraisals_v2', state.currentDocId),
             { externalReview: externalPayload, updatedAt: serverTimestamp(), updatedBy: window.currentUser?.email || '' },
+            { merge: true }
+          );
+        }
+        // Progress reviews are their own rule branch (actionPlan only), so a
+        // non-admin needs a third write. The payload carries items back
+        // unchanged — the rule requires exact equality, which is what stops
+        // Eduversal editing the school's commitments.
+        if (!state.isAdmin && pendingReviews) {
+          await setDoc(
+            doc(window.db, 'school_appraisals_v2', state.currentDocId),
+            { actionPlan: actionPlanPayload, updatedAt: serverTimestamp(), updatedBy: window.currentUser?.email || '' },
             { merge: true }
           );
         }

@@ -1229,12 +1229,29 @@ service cloud.firestore {
     //       report.status == 'published'. Treat that as a presentation rule,
     //       not a confidentiality boundary: never put anything in the draft
     //       that would harm the school if read early.
+    //   (e) the school (AH user at this school) — actionPlan.items ONLY.
+    //       ES 17.8 closes the cycle with the school's response: within 4
+    //       weeks of the report it "develops an action plan addressing
+    //       recommendations" and "assigns responsibilities, timelines, and
+    //       resources". The plan is the SCHOOL's, so the school writes it —
+    //       Eduversal cannot edit an item, only review progress against it.
+    //   (f) any central_user — actionPlan.reviews ONLY. Eduversal's quarterly
+    //       check-ins on that plan (ES 17.8 "Monitoring and Progress
+    //       Reporting"; model §4C puts action-plan status on the Phase 2
+    //       agenda). Appending a review can never alter what the school
+    //       committed to, which is what keeps the record honest about who
+    //       said what.
     // Delete: central_admin only
     //
-    // Note: (c) and (d) are narrow, field-scoped exceptions to the 2026-05-20
-    // model in which central_admin is the sole rule-level writer. Both are
-    // justified by ES 17.8; do not widen either to further fields without
-    // revisiting that decision.
+    // Note: (c) through (f) are narrow, field-scoped exceptions to the
+    // 2026-05-20 model in which central_admin is the sole rule-level writer.
+    // All are justified by ES 17.8; do not widen any of them to further
+    // fields without revisiting that decision.
+    //
+    // The actionPlan split is deliberate and load-bearing: items[] and
+    // reviews[] are separate arrays with separate writers, so neither side
+    // can rewrite the other's words. Same principle as the two-rater ratings
+    // split above.
     //
     // Not enforced here: "a justification is required when Eduversal's rating
     // differs from the school's". Expressing that needs a per-aspect crosswalk
@@ -1266,7 +1283,34 @@ service cloud.firestore {
                         && request.resource.data.externalReview is map
                         && request.resource.data.externalReview.keys().hasOnly([
                              'phases', 'report', 'frameworkVersion'
-                           ]));
+                           ]))
+                    // (e) the school writes its own action plan — items only.
+                    // 'reviews' is in the key list so a school save round-trips
+                    // Eduversal's reviews rather than dropping them, but the
+                    // equality check below stops the school editing them.
+                    || (isAcademicUser()
+                        && resource.data.schoolId ==
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['actionPlan', 'updatedAt', 'updatedBy'])
+                        && request.resource.data.actionPlan is map
+                        && request.resource.data.actionPlan.keys().hasOnly([
+                             'items', 'submittedAt', 'submittedBy', 'status', 'reviews'
+                           ])
+                        && request.resource.data.actionPlan.get('reviews', [])
+                             == resource.data.get('actionPlan', {}).get('reviews', []))
+                    // (f) Eduversal appends progress reviews — reviews only.
+                    || (isCentralUser()
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['actionPlan', 'updatedAt', 'updatedBy'])
+                        && request.resource.data.actionPlan is map
+                        && request.resource.data.actionPlan.keys().hasOnly([
+                             'items', 'submittedAt', 'submittedBy', 'status', 'reviews'
+                           ])
+                        // The school's own commitments are untouchable from
+                        // here: items must arrive back exactly as stored.
+                        && request.resource.data.actionPlan.get('items', [])
+                             == resource.data.get('actionPlan', {}).get('items', []));
       allow delete: if isAdmin();
     }
 
