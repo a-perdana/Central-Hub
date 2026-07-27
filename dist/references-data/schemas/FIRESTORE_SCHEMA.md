@@ -352,9 +352,27 @@ Bypass list is identical to the rule layer (admin / coordinator / director). Emp
 
 #### `school_appraisals_v2/{docId}`
 **PK:** auto-id.
-**Fields:** `schoolId →partner_schools.id`, `domains{1..5: {rating, evidence, strengths, improvements}}`, `review`, `recommendations`, `status`, `createdAt`.
-**Writers:** `central_admin` (any field); AH admin / AH user with same `schoolId` (own school's ratings/evidence/strengths/improvements).
+**Fields:** `schoolId →partner_schools.id`, `schoolName`, `academicYear` (dash format, e.g. `2026-2027`), `appraiser`, `status` (`draft` / `submitted` / `reviewed`), `ratings{}`, `evidence{}`, `files{}`, `links{}`, `strengths`, `improvements`, `recommendations`, `externalReview{ratings{}, justifications{}, outcome, outcomeNote, phase, visitType, evaluatedBy, evaluatedAt, frameworkVersion}`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`.
+
+`ratings` / `evidence` / `externalReview.ratings` / `externalReview.justifications` are keyed by **aspect id** (`d1-a1` … `d5-a6` — 5 domains × 31 aspects) from [`Academic Hub/resources/school-appraisal-framework.json`](../../Academic%20Hub/resources/school-appraisal-framework.json), values 1–4. `externalReview.outcome` / `.phase` / `.visitType` take their values verbatim from that file's `meta.external_evaluation.{outcome_scale, annual_phases[].code, visit_types[].code}` — never hardcode those vocabularies.
+
+**Two-rater model (ES 17.7 / 17.8).** The school's `ratings` are its own statement, written from AH `/school-self-appraisal`, and are unreachable from Central Hub at the rule level. Eduversal records its parallel external rating in the `externalReview` sibling field (ES 17.8: the written report carries *"Ratings or indicators of performance level"*). Neither side can overwrite the other, so the delta between them stays visible. Sparse by design — an unrated aspect is an absent key, and a record with no `externalReview` at all is the pre-2026-07-27 shape that degrades to "not yet externally rated".
+
+**Writers:**
+- **create** — `central_admin`, or an AH user whose `users/{uid}.schoolId` matches.
+- **update (a)** — `central_admin`: any field, including closing the record as `reviewed`.
+- **update (b)** — AH admin / AH user at the same school: their own self-appraisal.
+- **update (c)** — any `central_user`: `recommendations` only, while `status != 'reviewed'`.
+- **update (d)** — any `central_user`: `externalReview` only, while `status != 'reviewed'`.
+- **delete** — `central_admin`.
+
+Branches (c) and (d) are narrow, field-scoped exceptions to the 2026-05-20 model in which `central_admin` is the sole rule-level writer; both are justified by ES 17.8, which puts the appraisal in the hands of a team. The `affectedKeys().hasOnly()` clamp on each is the load-bearing part.
+
 **Read:** any Central Hub or Academic Hub user.
+
+**Write shape caveat:** `externalReview` must be written as a whole object via `setDoc(..., {merge:true})`. A dotted-path write (`updateDoc({'externalReview.ratings.d1-a1': 3})`) reports `affectedKeys()` as `externalReview.ratings`, which is absent from the `hasOnly` list, and is refused. A non-admin editing both `recommendations` and `externalReview` in one session needs two sequential writes — the two rule branches are field-disjoint and cannot be satisfied by a single payload.
+
+**Not enforced in rules:** "a justification is required when Eduversal's rating differs from the school's". It needs a crosswalk over all 31 aspect keys, which cannot be expressed cheaply and would break whenever the framework changes. Enforced in the UI (`Central Hub/school-appraisals.html` → `blockOnMissingJustifications`) per handbook [`school-appraisal-handbook-v1.json`](../handbooks/policy-topic/school-appraisal-handbook-v1.json) §`s6_external_evaluation_cycle`; `externalReview.evaluatedBy` plus the visible delta is the audit trail.
 
 #### `appraisal_cycles/{docId}`
 **PK:** auto-id.

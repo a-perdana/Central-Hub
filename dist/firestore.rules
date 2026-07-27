@@ -1187,7 +1187,7 @@ service cloud.firestore {
     //
     // Read:   any Central Hub or Academic Hub user
     // Create: central_admin, or an academic user for their own school
-    // Update: three distinct writers, deliberately NOT one "review" permission:
+    // Update: four distinct writers, deliberately NOT one "review" permission:
     //   (a) central_admin — any field, including closing the record as
     //       'reviewed'. Publishing the appraisal report is a single
     //       accountable act, so sign-off stays with admin alone.
@@ -1201,11 +1201,30 @@ service cloud.firestore {
     //       bearing part: it stops Eduversal silently rewriting the school's
     //       own ratings, keeping each side's statement its own (same
     //       principle as scorecard immutability and Charter NN1).
+    //   (d) any central_user — externalReview ONLY, while the record is open.
+    //       ES 17.8's written report must carry "Ratings or indicators of
+    //       performance level", so Eduversal needs its OWN rating per aspect,
+    //       not just prose. This is the two-rater model: the school's ratings
+    //       map stays unreachable from here (it is absent from the hasOnly
+    //       list) and Eduversal's parallel rating lands in a sibling field, so
+    //       neither side can overwrite the other and the delta stays visible.
+    //       Value vocabularies (outcome / phase / visitType) come verbatim
+    //       from Academic Hub/resources/school-appraisal-framework.json
+    //       meta.external_evaluation.
     // Delete: central_admin only
     //
-    // Note: (c) is a narrow, field-scoped exception to the 2026-05-20 model in
-    // which central_admin is the sole rule-level writer. Justified by ES 17.8;
-    // do not widen it to further fields without revisiting that decision.
+    // Note: (c) and (d) are narrow, field-scoped exceptions to the 2026-05-20
+    // model in which central_admin is the sole rule-level writer. Both are
+    // justified by ES 17.8; do not widen either to further fields without
+    // revisiting that decision.
+    //
+    // Not enforced here: "a justification is required when Eduversal's rating
+    // differs from the school's". Expressing that needs a per-aspect crosswalk
+    // over all 31 aspect keys, which cannot be written cheaply and would break
+    // the moment the framework adds an aspect. It is enforced in the UI
+    // (school-appraisals.html saveAppraisal) and the audit trail —
+    // externalReview.evaluatedBy plus the visible delta — is what makes a
+    // missing justification obvious to a reviewer.
     match /school_appraisals_v2/{docId} {
       allow read:   if isCentralUser() || isAcademicUser();
       allow create: if isAdmin()
@@ -1220,7 +1239,18 @@ service cloud.firestore {
                         && resource.data.status != 'reviewed'
                         && request.resource.data.status == resource.data.status
                         && request.resource.data.diff(resource.data).affectedKeys()
-                             .hasOnly(['recommendations', 'updatedAt', 'updatedBy']));
+                             .hasOnly(['recommendations', 'updatedAt', 'updatedBy']))
+                    || (isCentralUser()
+                        && resource.data.status != 'reviewed'
+                        && request.resource.data.status == resource.data.status
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['externalReview', 'updatedAt', 'updatedBy'])
+                        && request.resource.data.externalReview is map
+                        && request.resource.data.externalReview.keys().hasOnly([
+                             'ratings', 'justifications', 'outcome', 'outcomeNote',
+                             'phase', 'visitType', 'evaluatedBy', 'evaluatedAt',
+                             'frameworkVersion'
+                           ]));
       allow delete: if isAdmin();
     }
 
