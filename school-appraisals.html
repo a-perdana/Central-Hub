@@ -91,6 +91,10 @@
     .strip-toggle .page-howto-title,
     .strip-toggle .page-howto-eyebrow { display: block; margin: 0; }
     .strip-toggle .page-howto-eyebrow { margin-bottom: 6px; }
+    /* The heading's own bottom margin is zeroed above so it does not offset
+       the chevron, so the breathing room before the steps goes on the body. */
+    #howtoBody { margin-top: 18px; }
+    #phaseRefBody { margin-top: 16px; }
     .strip-toggle:hover .page-howto-title { color: var(--accent-dk); }
     /* Collapsed: the bar alone, so the table starts higher up the page. */
     .page-howto-strip.is-collapsed { padding-bottom: 16px; }
@@ -668,6 +672,63 @@
     /* A non-rating phase still shows the section, so the absence is explained
        rather than looking like a missing feature. */
     .ext-section.is-nonrating { background: var(--paper); border-color: var(--border); }
+
+    /* ── VISIT TEAM — who actually attended ── */
+    .vt-panel {
+      margin: 14px 0 4px; padding: 13px 15px;
+      background: var(--white); border: 1px solid var(--border);
+      border-left: 4px solid var(--ink-3); border-radius: 10px;
+    }
+    .vt-panel.is-confirmed { border-left-color: #059669; }
+    .vt-head {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: .78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin-bottom: 7px;
+    }
+    .vt-badge {
+      font-size: .68rem; padding: 2px 8px; border-radius: 999px;
+      text-transform: none; letter-spacing: 0; font-weight: 600;
+      background: var(--paper); border: 1px solid var(--border); color: var(--ink-3);
+    }
+    .vt-badge.is-ok { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+    .vt-badge.is-changed { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+    .vt-note { font-size: .78rem; line-height: 1.5; color: var(--ink-3); margin-bottom: 10px; }
+    .vt-rows { display: flex; flex-direction: column; gap: 6px; }
+    .vt-row {
+      display: grid; grid-template-columns: 34px 1fr 190px auto;
+      align-items: center; gap: 10px;
+      padding: 6px 9px; border-radius: 7px; background: var(--paper);
+    }
+    @media (max-width: 680px) {
+      .vt-row { grid-template-columns: 34px 1fr; }
+      .vt-row select, .vt-row .vt-who { grid-column: 1 / -1; }
+    }
+    .vt-row.is-swapped { background: #fffbeb; }
+    .vt-domain {
+      font-size: .7rem; font-weight: 700; color: var(--ink-2);
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 5px; padding: 2px 6px; text-align: center;
+    }
+    .vt-domain-title { font-size: .8rem; color: var(--ink); }
+    .vt-who { font-size: .8rem; font-weight: 600; color: var(--ink-2); }
+    .vt-who em { font-weight: 400; color: var(--ink-3); }
+    .vt-row select {
+      padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 7px;
+      font-family: inherit; font-size: .8rem; background: var(--white); color: var(--ink);
+    }
+    .vt-row select:focus { outline: none; border-color: var(--accent); }
+    .vt-swap {
+      font-size: .66rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: #92400e;
+      background: #fef3c7; border: 1px solid #fcd34d;
+      border-radius: 999px; padding: 1px 7px; cursor: help;
+    }
+    .vt-stamp { font-size: .76rem; color: var(--ink-3); font-style: italic; margin-top: 9px; }
+    .vt-stamp.is-confirmed { color: #047857; font-style: normal; }
+    .vt-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .vt-hint { font-size: .76rem; color: var(--ink-3); font-style: italic; }
+    /* A partial validation is real but incomplete — amber, not green. */
+    .st-validated.is-partial { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 
     /* ── SCHOOL DEVELOPMENT RATING (§8) — year-end, computed ── */
     .dev-rating {
@@ -1641,7 +1702,47 @@
         visitDates:     p.visitDates || '',
         evaluatedBy:    p.evaluatedBy || '',
         evaluatedAt:    p.evaluatedAt || null,
+        // Who actually went, and who took which domain. The supervision plan
+        // on partner_schools says who was SCHEDULED; this records what
+        // happened. They diverge often enough to matter — someone falls ill
+        // and a colleague covers — and without it an appeal cannot find the
+        // person who saw the domain being challenged (model §8.1).
+        //
+        // Role tags, not uids, to stay consistent with the plan they are
+        // pre-filled from.
+        team:           Array.isArray(p.team) ? p.team : null,
+        domainPic:      p.domainPic || {},          // { d1: 'Biology SS', … }
+        teamConfirmed:  !!p.teamConfirmed,
+        teamConfirmedBy: p.teamConfirmedBy || '',
+        teamConfirmedAt: p.teamConfirmedAt || null,
       };
+    }
+
+    // The scheduled team for a phase, from partner_schools. Phase 1 maps to
+    // visit1 and Phase 3 to visit2 — the plan only covers the two on-site
+    // rounds, which are the ones that need a team.
+    function plannedTeam(a, code) {
+      const sup = supervisionFor(a.schoolId);
+      if (!sup) return null;
+      const v = code === 'phase_1' ? sup.visit1 : code === 'phase_3' ? sup.visit2 : null;
+      return v && Array.isArray(v.team) ? v.team : null;
+    }
+
+    // What to show: the recorded team if there is one, otherwise the plan.
+    // Distinguishing the two is the point — "as planned" and "confirmed as
+    // attended" are different claims.
+    function effectiveTeam(a, code) {
+      const p = extPhase(a, code);
+      return p.team || plannedTeam(a, code) || [];
+    }
+
+    // One expert per domain, so a five-person team maps onto the five domains.
+    // Seeded by position: the plan lists teams in domain order.
+    function defaultDomainPic(a, code) {
+      const team = effectiveTeam(a, code);
+      const out = {};
+      (FRAMEWORK?.domains || []).forEach((d, i) => { if (team[i]) out[d.id] = team[i]; });
+      return out;
     }
 
     function phaseHasRatings(appraisal, code) {
@@ -1683,8 +1784,31 @@
     }
 
     // "Has Eduversal rated this school at all?" — true if ANY phase has.
+    // Deliberately loose: it drives whether external columns render at all.
     function hasExternalRating(appraisal) {
       return RATING_PHASES.some(c => phaseHasRatings(appraisal, c));
+    }
+
+    // "Validated" is a claim, so it has to be earned. A phase counts when it
+    // covers every aspect AND an admin has confirmed who attended — a rating
+    // whose author is unknown cannot be defended in an appeal or used for
+    // calibration, so it is not validation.
+    //
+    // This used to be hasExternalRating(), which meant one rated aspect by
+    // one person showed the same badge as a completed visit.
+    function phaseIsValidated(a, code) {
+      const p = extPhase(a, code);
+      if (!p.teamConfirmed) return false;
+      if (!FRAMEWORK) return false;
+      const all = FRAMEWORK.domains.flatMap(d => d.aspects);
+      return all.length > 0 && all.every(x => (p.ratings[x.id] || 0) > 0);
+    }
+
+    function validationState(a) {
+      const done = RATING_PHASES.filter(c => phaseIsValidated(a, c));
+      if (done.length === RATING_PHASES.length) return { level: 'full', done, label: '✓ Validated' };
+      if (done.length) return { level: 'partial', done, label: `✓ ${phaseMeta(done[0]).label.split(' · ')[0]}` };
+      return { level: 'none', done, label: '' };
     }
 
     // The framework's own vocabularies — never hardcode these lists.
@@ -2245,7 +2369,7 @@
         const [stClass, stLabel] = statusMap[a.status] || ['st-draft','In Progress'];
 
         const extAvg = avgScore(a, 'external');
-        const validated = hasExternalRating(a);
+        const vs = validationState(a);
 
         const domainDots = FRAMEWORK ? FRAMEWORK.domains.map(d => {
           const davg = domainAvg(a, d.id);
@@ -2270,7 +2394,9 @@
           <td>${a.academicYear || '—'}</td>
           <td>
             <span class="status-badge ${stClass}">${stLabel}</span>
-            ${validated ? '<span class="status-badge st-validated" title="Eduversal has recorded its own rating for this school (ES 17.8)">✓ Validated</span>' : ''}
+            ${vs.level !== 'none' ? `<span class="status-badge st-validated${vs.level === 'partial' ? ' is-partial' : ''}" title="${vs.level === 'full'
+                ? 'Both on-site visits rated in full, with the attending team confirmed by an admin.'
+                : 'One visit complete and confirmed; the other is still open.'}">${esc(vs.label)}</span>` : ''}
           </td>
           <td>
             <span class="dual-score">
@@ -2561,6 +2687,55 @@
           renderAppraisalModal();
           document.getElementById('saveStatus').textContent = 'Decision recorded — save to send it to the school';
         });
+      });
+
+      // ── Visit team ──
+      // Editing a domain's PIC also writes the team array, so "who attended"
+      // and "who took which domain" stay one fact rather than two that can
+      // disagree.
+      panelsEl.querySelectorAll('[data-vt-domain]').forEach(sel => {
+        sel.addEventListener('change', () => {
+          if (!canWriteExternal) return;
+          const p = ensurePhase();
+          if (!p.domainPic) p.domainPic = { ...defaultDomainPic(state.currentAppraisal, state.activePhase) };
+          const id = sel.dataset.vtDomain;
+          if (sel.value) p.domainPic[id] = sel.value;
+          else delete p.domainPic[id];
+          // Team = the distinct people named across the domains, in domain
+          // order, so it never contradicts the per-domain assignment.
+          p.team = (FRAMEWORK.domains || [])
+            .map(d => p.domainPic[d.id])
+            .filter(Boolean)
+            .filter((v, i, arr) => arr.indexOf(v) === i);
+          document.getElementById('saveStatus').textContent = 'Unsaved changes';
+          renderAppraisalModal();
+        });
+      });
+
+      panelsEl.querySelector('#btnConfirmTeam')?.addEventListener('click', () => {
+        if (!state.isAdmin) return;
+        const p = ensurePhase();
+        // Confirming an untouched panel means "the plan is what happened",
+        // so materialise it rather than storing an empty confirmation.
+        if (!p.domainPic || !Object.keys(p.domainPic).length) {
+          p.domainPic = { ...defaultDomainPic(state.currentAppraisal, state.activePhase) };
+        }
+        if (!p.team) p.team = effectiveTeam(state.currentAppraisal, state.activePhase);
+        p.teamConfirmed = true;
+        p.teamConfirmedBy = window.currentUser?.email || '';
+        p.teamConfirmedAt = new Date().toISOString();
+        renderAppraisalModal();
+        document.getElementById('saveStatus').textContent = 'Team confirmed — save to record it';
+      });
+
+      panelsEl.querySelector('#btnReopenTeam')?.addEventListener('click', () => {
+        if (!state.isAdmin) return;
+        const p = ensurePhase();
+        p.teamConfirmed = false;
+        p.teamConfirmedBy = '';
+        p.teamConfirmedAt = null;
+        renderAppraisalModal();
+        document.getElementById('saveStatus').textContent = 'Reopened — correct the team, then confirm again';
       });
 
       // Phase switch — re-render the whole modal so every rating control,
@@ -3407,6 +3582,84 @@
         </div>`;
     }
 
+    // Who actually went on this visit, and who took which domain.
+    //
+    // The plan on partner_schools says who was scheduled. Reality diverges —
+    // someone falls ill, a colleague covers — and the plan does not know.
+    // That matters beyond record-keeping: an appeal against a domain rating
+    // has to be reviewed with the person who saw that domain (model §8.1),
+    // and calibration across the network is meaningless if you cannot tell
+    // who rated what.
+    //
+    // Only the two on-site phases have teams. Phase 2 is a call led by the
+    // Primary Supervisor.
+    function buildVisitTeamPanel(a, canWriteExternal) {
+      const code = state.activePhase;
+      if (!phaseMeta(code).rates) return '';
+
+      const p = extPhase(a, code);
+      const planned = plannedTeam(a, code) || [];
+      const team = effectiveTeam(a, code);
+      const pic = Object.keys(p.domainPic).length ? p.domainPic : defaultDomainPic(a, code);
+      const editable = canWriteExternal && !p.teamConfirmed;
+
+      // Everyone who could stand in — the plan names roles, and cover comes
+      // from the same ten.
+      const roster = (extMeta().domain_leads?.pairs)
+        ? [...new Set(Object.values(extMeta().domain_leads.pairs).flat())].sort()
+        : [];
+
+      const changed = p.team && planned.length &&
+        (p.team.length !== planned.length || p.team.some((x, i) => x !== planned[i]));
+
+      const rows = (FRAMEWORK?.domains || []).map(d => {
+        const who = pic[d.id] || '';
+        const wasPlanned = planned[(FRAMEWORK.domains).indexOf(d)] || '';
+        const swapped = wasPlanned && who && who !== wasPlanned;
+        return `
+          <div class="vt-row${swapped ? ' is-swapped' : ''}">
+            <span class="vt-domain">${esc(d.code)}</span>
+            <span class="vt-domain-title">${esc(d.title)}</span>
+            ${editable
+              ? `<select data-vt-domain="${esc(d.id)}">
+                   <option value="">— not covered —</option>
+                   ${roster.map(r => `<option value="${escAttr(r)}" ${r === who ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+                 </select>`
+              : `<span class="vt-who">${who ? esc(who) : '<em>not recorded</em>'}</span>`}
+            ${swapped ? `<span class="vt-swap" title="Planned: ${escAttr(wasPlanned)}">covered</span>` : ''}
+          </div>`;
+      }).join('');
+
+      const stamp = p.teamConfirmed
+        ? `<div class="vt-stamp is-confirmed">Confirmed${p.teamConfirmedAt ? ' ' + fmtDate(p.teamConfirmedAt) : ''}${p.teamConfirmedBy ? ' by ' + esc(p.teamConfirmedBy) : ''}. Reopen to correct it.</div>`
+        : (p.team
+            ? '<div class="vt-stamp">Recorded but not confirmed. An admin confirms who attended before the record counts as validated.</div>'
+            : '<div class="vt-stamp">Showing the scheduled team. Confirm it, or change anyone who did not attend.</div>');
+
+      return `
+        <div class="vt-panel${p.teamConfirmed ? ' is-confirmed' : ''}">
+          <div class="vt-head">
+            Visit team · ${esc(phaseMeta(code).label)}
+            ${p.teamConfirmed ? '<span class="vt-badge is-ok">✓ confirmed</span>' : '<span class="vt-badge">unconfirmed</span>'}
+            ${changed ? '<span class="vt-badge is-changed">differs from plan</span>' : ''}
+          </div>
+          <div class="vt-note">
+            Five experts, one per domain. If someone was covered on the day, record who actually
+            came — an appeal against a domain rating is reviewed with the person who saw it.
+          </div>
+          <div class="vt-rows">${rows}</div>
+          ${stamp}
+          ${canWriteExternal ? `
+            <div class="vt-actions">
+              ${p.teamConfirmed
+                ? (state.isAdmin ? '<button class="btn-secondary" id="btnReopenTeam">Reopen for correction</button>' : '')
+                : (state.isAdmin
+                    ? '<button class="btn-primary" id="btnConfirmTeam">Confirm this team</button>'
+                    : '<span class="vt-hint">A Central Hub admin confirms the team.</span>')}
+            </div>` : ''}
+        </div>`;
+    }
+
     // Year-end rating, computed. Shown with its full name so it is never read
     // as an aspect band — "Developing" means different things on the two
     // scales.
@@ -3558,6 +3811,7 @@
         </div>
         ${buildSupervisionStrip(a)}
         ${buildPhaseSwitcher(a)}
+        ${buildVisitTeamPanel(a, canWriteExternal)}
         ${buildDevelopmentRatingCard(a)}
         ${buildActionPlanPanel(a, canWriteExternal)}
         ${buildAppealsPanel(a)}
