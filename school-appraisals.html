@@ -1147,6 +1147,42 @@
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     @media (max-width: 520px) { .form-row { grid-template-columns: 1fr; } }
 
+    /* ── SUPERVISION EDIT MODAL (Updated Appraisal Model §2.1 / §3.1–3.3) ──
+       Wider than the create modal: it carries two supervisors, two visit
+       date ranges and two five-person teams. */
+    .sup-edit-modal { max-width: 760px; }
+    .sup-edit-scroll { overflow-y: auto; max-height: 68vh; }
+    /* The plan belongs to the SCHOOL for the year, not to this one record —
+       editing it here changes every appraisal of that school. Saying so is
+       not optional; the row it was opened from implies otherwise. */
+    .sup-edit-scope {
+      display: flex; gap: 9px; align-items: flex-start;
+      background: var(--accent-2); border: 1px solid #fde68a;
+      border-radius: 9px; padding: 10px 12px; margin-bottom: 18px;
+      font-size: .78rem; line-height: 1.5; color: var(--ink-2);
+    }
+    .sup-edit-scope-icon { flex: none; font-size: .95rem; line-height: 1.35; }
+    .sup-edit-visit {
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 15px; margin-bottom: 14px; background: var(--paper);
+    }
+    .sup-edit-visit-head {
+      font-size: .74rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--accent-dk); margin-bottom: 11px;
+    }
+    /* One expert per domain, so the team grid is labelled by domain rather
+       than by an anonymous slot number — that mapping is what domainPic
+       seeds from, and a bare "Member 3" hides it. */
+    .sup-edit-team { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 10px; }
+    .sup-edit-team-label {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ink-3); margin-bottom: 4px; display: block;
+    }
+    .sup-edit-sect {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin: 4px 0 10px;
+    }
+
     /* Empty state */
     .empty { padding: 48px 24px; text-align: center; }
     .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
@@ -1552,27 +1588,90 @@
           <label class="form-label">School *</label>
           <select class="form-select" id="newSchoolSelect"><option value="">Select a school…</option></select>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Academic Year *</label>
-            <select class="form-select" id="newYearSelect">
-              <option value="2025-2026">2025–2026</option>
-              <option value="2024-2025">2024–2025</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="newAppraiser">Appraiser *</label>
-            <select aria-label="Appraiser role" class="form-input" id="newAppraiser">
-              <option value="">Select a role…</option>
-            </select>
-            <div class="form-hint" id="newAppraiserHint">Pick the expert role, not a person — the model assigns positions, so the record survives staff changes.</div>
-          </div>
+        <div class="form-group">
+          <label class="form-label">Academic Year *</label>
+          <select class="form-select" id="newYearSelect">
+            <option value="2025-2026">2025–2026</option>
+            <option value="2024-2025">2024–2025</option>
+          </select>
         </div>
+        <!-- No appraiser field: the supervision plan on the school names the
+             Primary and Secondary Supervisor for the year, so asking again
+             here could only contradict it. Shown read-only instead, and
+             editable from the row's ✏️ button. -->
+        <div class="form-hint" id="newSupervisionHint" style="margin-top:2px;">Pick a school to see who supervises it this year.</div>
         <div class="modal-error" id="newModalError" style="display:none;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" id="newModalCancel">Cancel</button>
         <button class="btn-save" id="newModalSave">Create Appraisal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SUPERVISION PLAN EDIT MODAL =====
+       Updated Appraisal Model §2.1 (supervisor pair) and §3.1–3.3 (visit
+       dates + teams). Writes partner_schools/{id}.appraisal_{year}, which is
+       the SCHOOL's plan for the year — not a field of the appraisal record it
+       was opened from. central_admin only; partner_schools write is
+       isAHAdmin() in firestore.rules. -->
+  <div class="modal-overlay" id="supEditModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="supEditTitle">
+    <div class="modal sup-edit-modal">
+      <div class="modal-head">
+        <div>
+          <h2 class="modal-title" id="supEditTitle">Supervision Plan</h2>
+          <p style="font-size:0.82rem;color:var(--ink-3);margin-top:3px;" id="supEditSubtitle"></p>
+        </div>
+        <button class="modal-close" id="supEditClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body sup-edit-scroll">
+        <div class="sup-edit-scope">
+          <span class="sup-edit-scope-icon" aria-hidden="true">⚠</span>
+          <span id="supEditScopeText"></span>
+        </div>
+
+        <div class="sup-edit-sect">Supervisors</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="supEditPrimary">Primary Supervisor</label>
+            <select class="form-select" id="supEditPrimary"></select>
+            <div class="form-hint">Signs the Phase 1 report.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supEditSecondary">Secondary Supervisor</label>
+            <select class="form-select" id="supEditSecondary"></select>
+            <div class="form-hint">Signs the Phase 3 report.</div>
+          </div>
+        </div>
+
+        <div class="sup-edit-visit">
+          <div class="sup-edit-visit-head">Visit 1 · Phase 1 — Teaching Quality</div>
+          <div class="form-group">
+            <label class="form-label" for="supEditV1Dates">Dates</label>
+            <input class="form-input" id="supEditV1Dates" type="text" placeholder="e.g. 20–21 Aug 2026" autocomplete="off">
+            <div class="form-hint">Free text, as the model writes them — a single day or a range.</div>
+          </div>
+          <label class="sup-edit-team-label" style="margin-top:12px;">Visit team · one expert per domain</label>
+          <div class="sup-edit-team" id="supEditV1Team"></div>
+        </div>
+
+        <div class="sup-edit-visit">
+          <div class="sup-edit-visit-head">Visit 2 · Phase 3 — Validation</div>
+          <div class="form-group">
+            <label class="form-label" for="supEditV2Dates">Dates</label>
+            <input class="form-input" id="supEditV2Dates" type="text" placeholder="e.g. 15–16 Oct 2026" autocomplete="off">
+            <div class="form-hint">The model spaces the two visits 56–63 days apart.</div>
+          </div>
+          <label class="sup-edit-team-label" style="margin-top:12px;">Visit team · one expert per domain</label>
+          <div class="sup-edit-team" id="supEditV2Team"></div>
+        </div>
+
+        <div class="modal-error" id="supEditError" style="display:none;"></div>
+        <div class="modal-error" id="supEditWarn" style="display:none;background:var(--accent-2);border-color:#fde68a;color:var(--ink-2);"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="supEditCancel">Cancel</button>
+        <button class="btn-save" id="supEditSave">Save plan</button>
       </div>
     </div>
   </div>
@@ -1625,7 +1724,11 @@
       // Which visit's findings the modal is showing / writing. Set when a
       // record opens, to the latest phase that has ratings.
       activePhase: 'phase_1',
-      pendingDeleteId: null
+      pendingDeleteId: null,
+      // Which school's supervision plan the edit modal is writing, and
+      // whether the model-invariant warning has already been shown once.
+      supEditSchoolId: null,
+      supEditForce: false
     };
 
     // ===== HELPERS =====
@@ -1937,10 +2040,23 @@
       return { mean: mean.toFixed(2), code: band.code, label: band.label, meaning: band.meaning };
     }
 
+    // The plan is stored per academic year, so the field name carries the
+    // year: `appraisal_2026_27`. Seeded under that name and read under it
+    // here, so a future cycle adds a field rather than overwriting this one.
+    const SUPERVISION_FIELD = 'appraisal_2026_27';
+
     // The supervision pair for a school, seeded from the model's §2.1 table
     // onto partner_schools. Role labels, not uids — the model names positions.
     function supervisionFor(schoolId) {
-      return state.schools.find(s => s.id === schoolId)?.appraisal_2026_27 || null;
+      return state.schools.find(s => s.id === schoolId)?.[SUPERVISION_FIELD] || null;
+    }
+
+    // The ten expert roles the model assigns, derived from the framework's
+    // domain-lead pairs so the list cannot drift from it. Used by both the
+    // supervisor pickers and the visit-team pickers.
+    function expertRoster() {
+      const pairs = FRAMEWORK?.meta?.external_evaluation?.domain_leads?.pairs;
+      return pairs ? [...new Set(Object.values(pairs).flat())].sort() : [];
     }
 
     // Every school has TWO supervisors, so the row shows both. Falls back to
@@ -2369,41 +2485,36 @@
 
     }
 
-    // Appraiser is a ROLE, not a typed name — the model assigns positions, and
-    // a record keyed to a person goes stale the moment someone moves on. The
-    // roster is the ten experts, derived from the domain-lead pairs so it
-    // cannot drift from the framework.
+    // The create form no longer asks WHO appraises: the model assigns a
+    // Primary and Secondary Supervisor per school for the year, and that pair
+    // already lives on partner_schools. Asking again could only produce a
+    // third answer that contradicts it. So picking a school just reports the
+    // plan it already has — and says so when it has none, since that is the
+    // one case where creating a record leaves something to fill in.
     //
     // Separate from loadSchools() because that runs in parallel with
     // loadFramework(), so FRAMEWORK is not reliably there yet.
-    function populateAppraiserRoles() {
+    function wireCreateSupervisionHint() {
       const sel = document.getElementById('newSchoolSelect');
-      const roleSel = document.getElementById('newAppraiser');
-      if (roleSel && sel) {
-        const roster = FRAMEWORK?.meta?.external_evaluation?.domain_leads?.pairs
-          ? [...new Set(Object.values(FRAMEWORK.meta.external_evaluation.domain_leads.pairs).flat())].sort()
-          : [];
-        roster.forEach(r => {
-          const opt = document.createElement('option');
-          opt.value = r;
-          opt.textContent = r;
-          roleSel.appendChild(opt);
-        });
-
-        // Picking a school pre-selects its Primary Supervisor, since that is
-        // who runs the first visit. Still changeable.
-        sel.addEventListener('change', () => {
-          const sup = supervisionFor(sel.value);
-          const hint = document.getElementById('newAppraiserHint');
-          if (sup?.primarySupervisor && roster.includes(sup.primarySupervisor)) {
-            roleSel.value = sup.primarySupervisor;
-            if (hint) hint.textContent =
-              `Pre-filled with this school's Primary Supervisor. Secondary is ${sup.secondarySupervisor || '—'}.`;
-          } else if (hint) {
-            hint.textContent = 'Pick the expert role, not a person — the model assigns positions, so the record survives staff changes.';
-          }
-        });
-      }
+      const hint = document.getElementById('newSupervisionHint');
+      if (!sel || !hint) return;
+      sel.addEventListener('change', () => {
+        if (!sel.value) {
+          hint.textContent = 'Pick a school to see who supervises it this year.';
+          return;
+        }
+        const sup = supervisionFor(sel.value);
+        if (sup?.primarySupervisor || sup?.secondarySupervisor) {
+          hint.innerHTML =
+            `Supervised by <strong>${esc(sup.primarySupervisor || '—')}</strong> (Primary, signs Phase 1) ` +
+            `and <strong>${esc(sup.secondarySupervisor || '—')}</strong> (Secondary, signs Phase 3). ` +
+            `Change it from the ✏️ button on the school's row.`;
+        } else {
+          hint.innerHTML =
+            'No supervision plan is set for this school yet. Create the record, then set the ' +
+            'supervisors, visit dates and teams from the ✏️ button on its row.';
+        }
+      });
     }
 
     // ===== FILTER & RENDER TABLE =====
@@ -2477,6 +2588,7 @@
           <td>
             <div class="row-actions">
               <button class="btn-icon-sm btn-open" data-id="${a.id}" title="Open appraisal">📂</button>
+              ${state.isAdmin ? `<button class="btn-icon-sm btn-edit-sup" data-school-id="${esc(a.schoolId || '')}" data-name="${esc(a.schoolName || '')}" data-year="${esc(a.academicYear || '')}" title="Edit supervision plan — supervisors, visit dates and teams">✏️</button>` : ''}
               ${state.isAdmin ? `<button class="btn-icon-sm btn-delete-row" data-id="${a.id}" data-name="${a.schoolName}" title="Delete">🗑</button>` : ''}
             </div>
           </td>`;
@@ -2485,6 +2597,12 @@
 
       tbody.querySelectorAll('.btn-open').forEach(btn => {
         btn.addEventListener('click', e => { e.stopPropagation(); openAppraisal(btn.dataset.id); });
+      });
+      tbody.querySelectorAll('.btn-edit-sup').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          openSupervisionEdit(btn.dataset.schoolId, btn.dataset.name, btn.dataset.year);
+        });
       });
       tbody.querySelectorAll('.btn-delete-row').forEach(btn => {
         btn.addEventListener('click', e => { e.stopPropagation(); confirmDelete(btn.dataset.id, btn.dataset.name); });
@@ -4306,26 +4424,26 @@
     async function createAppraisal() {
       const schoolId = document.getElementById('newSchoolSelect').value;
       const academicYear = document.getElementById('newYearSelect').value;
-      const appraiser = document.getElementById('newAppraiser').value.trim();
       const errEl = document.getElementById('newModalError');
       errEl.style.display = 'none';
 
       if (!schoolId) { errEl.textContent = 'Please select a school.'; errEl.style.display = 'block'; return; }
-      if (!appraiser) { errEl.textContent = 'Please choose the appraiser role.'; errEl.style.display = 'block'; return; }
 
       const school = state.schools.find(s => s.id === schoolId);
       const btn = document.getElementById('newModalSave');
       btn.disabled = true; btn.textContent = 'Creating…';
 
-      // NOTE: `appraiser` is vestigial. It is still written here, but nothing
-      // reads it any more except the legacy fallback in supervisorLine() —
-      // the supervision pair on partner_schools.appraisal_2026_27 replaced it
-      // on 2026-07-27. Retire it or redefine it as "who opened this record"
-      // before the next cycle; see the school_appraisals_v2 card in
+      // `appraiser` is NOT written any more (retired 2026-07-27). The
+      // supervision pair on partner_schools.appraisal_2026_27 is the answer to
+      // "who appraises this school", so a second field holding a typed name
+      // could only contradict it. Records made before that plan existed still
+      // carry the field and supervisorLine() still renders it as a legacy
+      // fallback — this only stops NEW records from acquiring a value nothing
+      // maintains. See the school_appraisals_v2 card in
       // docs/architecture/FIRESTORE_SCHEMA.md.
       const docRef = await addDoc(collection(window.db, 'school_appraisals_v2'), {
         schoolId, schoolName: school?.name || schoolId,
-        academicYear, appraiser,
+        academicYear,
         status: 'draft',
         ratings: {}, evidence: {},
         strengths: '', improvements: '', recommendations: '',
@@ -4337,6 +4455,176 @@
       document.getElementById('newModal').style.display = 'none';
       await loadAppraisals();
       openAppraisal(docRef.id);
+    }
+
+    // ===== SUPERVISION PLAN EDIT (Updated Appraisal Model §2.1 / §3.1–3.3) =====
+    // Writes partner_schools/{schoolId}.appraisal_2026_27 — the school's plan
+    // for the year. Opened from an appraisal row for convenience, but scoped
+    // to the school: the modal says so, because the row it came from implies
+    // otherwise.
+
+    // A <select> over the ten expert roles. Team slots may legitimately be
+    // empty (a four-person visit), so those carry a blank option; the two
+    // supervisor slots use the same builder and are validated on save.
+    function roleSelect(id, value, opts = {}) {
+      const sel = document.createElement('select');
+      sel.className = 'form-select';
+      sel.id = id;
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = opts.blankLabel || '— none —';
+      sel.appendChild(blank);
+      expertRoster().forEach(r => {
+        const o = document.createElement('option');
+        o.value = r; o.textContent = r;
+        sel.appendChild(o);
+      });
+      // A plan seeded before a roster change can name a role the framework no
+      // longer lists. Dropping it silently would erase it on the next save,
+      // so keep it as an option and mark it.
+      if (value && !expertRoster().includes(value)) {
+        const o = document.createElement('option');
+        o.value = value; o.textContent = `${value} (not on the current roster)`;
+        sel.appendChild(o);
+      }
+      sel.value = value || '';
+      return sel;
+    }
+
+    // One team row per domain: the plan lists teams in domain order and
+    // defaultDomainPic() seeds the per-domain lead by position, so the
+    // editor has to preserve that ordering rather than offer a free list.
+    function renderTeamPickers(containerId, prefix, team) {
+      const wrap = document.getElementById(containerId);
+      wrap.innerHTML = '';
+      (FRAMEWORK?.domains || []).forEach((d, i) => {
+        const cell = document.createElement('div');
+        const lab = document.createElement('label');
+        lab.className = 'sup-edit-team-label';
+        lab.setAttribute('for', `${prefix}${i}`);
+        lab.textContent = `${d.code} · ${d.title || ''}`.replace(/ · $/, '');
+        cell.appendChild(lab);
+        cell.appendChild(roleSelect(`${prefix}${i}`, team[i] || ''));
+        wrap.appendChild(cell);
+      });
+    }
+
+    function readTeam(prefix) {
+      // Trailing blanks are dropped so a four-person team stores four entries,
+      // but an interior blank is preserved — position IS the domain mapping,
+      // and compacting it would silently re-assign every later domain.
+      const out = (FRAMEWORK?.domains || []).map((_, i) =>
+        document.getElementById(`${prefix}${i}`)?.value || '');
+      while (out.length && !out[out.length - 1]) out.pop();
+      return out;
+    }
+
+    function openSupervisionEdit(schoolId, schoolName, academicYear) {
+      const sup = supervisionFor(schoolId) || {};
+      state.supEditSchoolId = schoolId;
+
+      document.getElementById('supEditSubtitle').textContent =
+        `${schoolName || schoolId} · ${academicYear || ''}`.trim();
+
+      // How many records this edit reaches. "Every appraisal of this school"
+      // is abstract; a count is not.
+      const affected = state.appraisals.filter(a => a.schoolId === schoolId).length;
+      document.getElementById('supEditScopeText').innerHTML =
+        `This is <strong>${esc(schoolName || 'the school')}</strong>'s supervision plan for the appraisal year, ` +
+        `stored on the school itself — not on this one record. Saving changes it for ` +
+        `<strong>${affected} appraisal record${affected === 1 ? '' : 's'}</strong> of this school. ` +
+        `Re-running the supervision seed script would overwrite these edits.`;
+
+      // Supervisors: rebuilt each open so a roster change is picked up.
+      ['supEditPrimary', 'supEditSecondary'].forEach((id, i) => {
+        const old = document.getElementById(id);
+        const fresh = roleSelect(id, i === 0 ? sup.primarySupervisor : sup.secondarySupervisor,
+                                 { blankLabel: '— not set —' });
+        fresh.className = 'form-select';
+        old.replaceWith(fresh);
+      });
+
+      document.getElementById('supEditV1Dates').value = sup.visit1?.dates || '';
+      document.getElementById('supEditV2Dates').value = sup.visit2?.dates || '';
+      renderTeamPickers('supEditV1Team', 'supEditV1M', Array.isArray(sup.visit1?.team) ? sup.visit1.team : []);
+      renderTeamPickers('supEditV2Team', 'supEditV2M', Array.isArray(sup.visit2?.team) ? sup.visit2.team : []);
+
+      document.getElementById('supEditError').style.display = 'none';
+      document.getElementById('supEditWarn').style.display = 'none';
+      document.getElementById('supEditModal').style.display = 'flex';
+    }
+
+    async function saveSupervisionEdit() {
+      const schoolId = state.supEditSchoolId;
+      const errEl  = document.getElementById('supEditError');
+      const warnEl = document.getElementById('supEditWarn');
+      errEl.style.display = 'none'; warnEl.style.display = 'none';
+      if (!schoolId) return;
+
+      const primary   = document.getElementById('supEditPrimary').value;
+      const secondary = document.getElementById('supEditSecondary').value;
+      const v1Dates   = document.getElementById('supEditV1Dates').value.trim();
+      const v2Dates   = document.getElementById('supEditV2Dates').value.trim();
+      const v1Team    = readTeam('supEditV1M');
+      const v2Team    = readTeam('supEditV2M');
+
+      // The model's own invariant (§2.1): a supervisor signs for a visit they
+      // attended. The seed script asserts it before writing; a hand edit that
+      // does not is far likelier to be a slip than a deliberate exception, so
+      // warn and let the second click through rather than blocking outright.
+      const breaches = [];
+      if (primary   && v1Team.length && !v1Team.includes(primary))   breaches.push(`${primary} signs Phase 1 but is not on the Visit 1 team`);
+      if (secondary && v2Team.length && !v2Team.includes(secondary)) breaches.push(`${secondary} signs Phase 3 but is not on the Visit 2 team`);
+      if (breaches.length && !state.supEditForce) {
+        state.supEditForce = true;
+        warnEl.innerHTML = `⚠ ${breaches.map(esc).join('. ')}. The model expects a supervisor to have attended the visit they sign for. Click <strong>Save plan</strong> again to save anyway.`;
+        warnEl.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('supEditSave');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        // merge:true on the nested field: the plan replaces wholesale, but
+        // nothing else on the school doc is touched. `source` records that a
+        // human overrode the seed, so a later re-seed diff is explicable.
+        await updateDoc(doc(window.db, 'partner_schools', schoolId), {
+          [SUPERVISION_FIELD]: {
+            primarySupervisor: primary,
+            secondarySupervisor: secondary,
+            visit1: { dates: v1Dates, team: v1Team },
+            visit2: { dates: v2Dates, team: v2Team },
+            source: 'manual-edit-school-appraisals',
+            updatedAt: new Date().toISOString(),
+            updatedBy: window.currentUser?.email || '',
+          }
+        });
+
+        // state.schools is what supervisionFor() reads, so it has to move too
+        // or the table keeps showing the old pair until a reload.
+        const s = state.schools.find(x => x.id === schoolId);
+        if (s) s[SUPERVISION_FIELD] = {
+          primarySupervisor: primary, secondarySupervisor: secondary,
+          visit1: { dates: v1Dates, team: v1Team },
+          visit2: { dates: v2Dates, team: v2Team },
+          source: 'manual-edit-school-appraisals',
+        };
+
+        state.supEditForce = false;
+        document.getElementById('supEditModal').style.display = 'none';
+        applyFilters();
+        // An open appraisal shows the supervision strip and the planned
+        // teams, so it has to re-render against the new plan.
+        if (state.currentDocId && document.getElementById('appraisalModal').style.display === 'flex') {
+          renderAppraisalModal();
+        }
+      } catch (e) {
+        console.error('[supervision] save failed', e);
+        errEl.textContent = 'Could not save the plan. ' + (e?.message || '');
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save plan';
+      }
     }
 
     // ===== DELETE =====
@@ -4374,7 +4662,7 @@
       await Promise.all([loadFramework(), loadSchools()]);
       // Both need FRAMEWORK, so they run after the load rather than inside
       // loadSchools() — that races loadFramework() in the Promise.all above.
-      populateAppraiserRoles();
+      wireCreateSupervisionHint();
       renderPhaseReference();
       await loadAppraisals();
 
@@ -4386,7 +4674,7 @@
       // New appraisal modal
       document.getElementById('btnNewAppraisal').addEventListener('click', () => {
         document.getElementById('newSchoolSelect').value = '';
-        document.getElementById('newAppraiser').value = '';
+        document.getElementById('newSupervisionHint').textContent = 'Pick a school to see who supervises it this year.';
         document.getElementById('newModalError').style.display = 'none';
         document.getElementById('newModal').style.display = 'flex';
       });
@@ -4405,6 +4693,16 @@
       document.getElementById('btnMarkReviewed').addEventListener('click', () => saveAppraisal('reviewed'));
 
       // Delete modal
+      // Supervision plan edit modal. Closing resets the "save anyway" latch,
+      // so a warning that was dismissed by closing has to be earned again.
+      const closeSupEdit = () => {
+        document.getElementById('supEditModal').style.display = 'none';
+        state.supEditForce = false;
+      };
+      document.getElementById('supEditClose').addEventListener('click', closeSupEdit);
+      document.getElementById('supEditCancel').addEventListener('click', closeSupEdit);
+      document.getElementById('supEditSave').addEventListener('click', saveSupervisionEdit);
+
       document.getElementById('deleteModalClose').addEventListener('click', () => { document.getElementById('deleteModal').style.display = 'none'; });
       document.getElementById('deleteModalCancel').addEventListener('click', () => { document.getElementById('deleteModal').style.display = 'none'; });
       document.getElementById('deleteModalConfirm').addEventListener('click', async () => {
