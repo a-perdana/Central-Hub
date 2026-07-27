@@ -69,6 +69,43 @@
     .page-howto-grid.howto-5 {
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     }
+
+    /* ── Collapsible reference strips ──
+       The header IS the control, so the whole bar is the click target rather
+       than a small chevron someone has to aim at. */
+    .strip-toggle {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 14px; width: 100%; padding: 0; margin: 0;
+      background: none; border: 0; cursor: pointer;
+      font-family: inherit; text-align: left; color: inherit;
+      border-radius: 8px;
+    }
+    .strip-toggle-text { display: block; }
+    .strip-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .strip-chev {
+      flex: none; margin-top: 2px; color: var(--ink-3);
+      transition: transform .2s ease, color .15s;
+    }
+    .strip-toggle:hover .strip-chev { color: var(--accent); }
+    .strip-toggle[aria-expanded="false"] .strip-chev { transform: rotate(-90deg); }
+    /* The title is a heading inside a button; keep its block layout and drop
+       the margin that would otherwise offset the chevron. */
+    .strip-toggle .page-howto-title,
+    .strip-toggle .page-howto-eyebrow { display: block; margin: 0; }
+    .strip-toggle .page-howto-eyebrow { margin-bottom: 6px; }
+    .strip-toggle:hover .page-howto-title { color: var(--accent-dk); }
+    /* Collapsed: the bar alone, so the table starts higher up the page. */
+    .page-howto-strip.is-collapsed { padding-bottom: 16px; }
+    .phase-ref.is-collapsed { padding-bottom: 16px; }
+    .page-howto-grid[hidden], #phaseRefBody[hidden] { display: none; }
+
+    /* Steps lift slightly on hover — enough to read as discrete cards rather
+       than one wall of text, without turning them into fake buttons. */
+    .page-howto-item {
+      border-radius: 10px; padding: 2px 4px; margin: -2px -4px;
+      transition: background .15s;
+    }
+    .page-howto-item:hover { background: rgba(108, 92, 231, .06); }
     @media (max-width: 760px) { .page-howto-grid { grid-template-columns: 1fr; } }
     .page-howto-item {
       display: flex; gap: 10px; align-items: flex-start;
@@ -258,8 +295,8 @@
     /* Collapsed by default — a domain holds 5-8 aspects and each expands to a
        rating guide, four rating buttons and an evidence box, so opening the tab
        fully expanded buried the list under several screens of scrolling.
-       The head is a <button> so keyboard and screen readers get the toggle for
-       free; the reset below strips the UA button styling. */
+       The head is a real button element so keyboard and screen readers get
+       the toggle for free; the reset below strips the UA button styling. */
     .aspect-head {
       width: 100%; font-family: inherit; text-align: left;
       border: none; border-bottom: 1px solid var(--border);
@@ -765,10 +802,22 @@
     .pr-card {
       padding: 12px 14px; border-radius: 10px;
       background: var(--paper); border: 1px solid var(--border);
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s;
+    }
+    .pr-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,.07);
+      border-color: var(--accent);
     }
     /* The two visits that actually produce ratings carry the page accent —
        everything else about the cycle hangs off which phase you are rating. */
     .pr-card.is-rating { background: #fffbeb; border-color: #fde68a; }
+    .pr-card.is-rating:hover { border-color: var(--accent); }
+    /* Motion is decoration here; anyone who has asked for less should get it. */
+    @media (prefers-reduced-motion: reduce) {
+      .pr-card, .strip-chev { transition: none; }
+      .pr-card:hover { transform: none; }
+    }
     .pr-card-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
     .pr-num {
       flex: none; width: 21px; height: 21px; border-radius: 999px;
@@ -4922,9 +4971,15 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     <!-- ===== HOW-TO STRIP — what users do on this page ===== -->
     <section class="page-howto-strip" aria-label="What you can do on this page">
-      <p class="page-howto-eyebrow">The appraisal cycle</p>
-      <h2 class="page-howto-title">Every partner school runs one cycle a year. Open a school to work through it.</h2>
-      <div class="page-howto-grid howto-5">
+      <button type="button" class="strip-toggle" data-collapse="howto" aria-expanded="true" aria-controls="howtoBody">
+        <span class="strip-toggle-text">
+          <span class="page-howto-eyebrow">The appraisal cycle</span>
+          <span class="page-howto-title">Every partner school runs one cycle a year. Open a school to work through it.</span>
+        </span>
+        <svg class="strip-chev" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div id="howtoBody" class="page-howto-grid howto-5">
         <div class="page-howto-item">
           <div class="page-howto-num" aria-hidden="true">1</div>
           <div class="page-howto-text">
@@ -6675,6 +6730,40 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         </div>`;
     }
 
+    // Collapse / expand for the two page-level reference strips.
+    //
+    // These are orientation, not working surfaces: useful the first few times,
+    // then a large block between you and the table. So they collapse, and the
+    // choice persists — unlike the hub's .page-info-strip dismiss button,
+    // which hides a strip permanently with no way back. Someone who collapses
+    // this on Monday should be able to reopen it in November when the
+    // Validation visits start and the sequence matters again.
+    function wireStripCollapse(root) {
+      (root || document).querySelectorAll('[data-collapse]').forEach(btn => {
+        if (btn.dataset.wired === '1') return;
+        btn.dataset.wired = '1';
+        const key = 'ch-appraisal-strip:' + btn.dataset.collapse;
+        const body = document.getElementById(btn.getAttribute('aria-controls'));
+        if (!body) return;
+
+        const apply = (open) => {
+          btn.setAttribute('aria-expanded', String(open));
+          body.hidden = !open;
+          btn.closest('.page-howto-strip, .phase-ref')?.classList.toggle('is-collapsed', !open);
+        };
+        // Default open — a first-time reader has not chosen anything yet.
+        let stored = null;
+        try { stored = localStorage.getItem(key); } catch (e) {}
+        apply(stored !== '0');
+
+        btn.addEventListener('click', () => {
+          const open = btn.getAttribute('aria-expanded') !== 'true';
+          apply(open);
+          try { localStorage.setItem(key, open ? '1' : '0'); } catch (e) {}
+        });
+      });
+    }
+
     // The five phases of the appraisal year, as a page-level reference.
     // Built from the framework rather than written out here, so the dates a
     // coordinator reads are the same ones the phase switcher and the report
@@ -6717,18 +6806,25 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       const sup = meta.supervision || {};
       host.innerHTML = `
-        <div class="pr-head">
-          <span class="pr-eyebrow">The appraisal year</span>
-          <span class="pr-sub">${esc(FRAMEWORK.meta.year || '')} · ${sup.total_schools || ''} schools · ${sup.team_size || ''} experts</span>
-        </div>
-        <div class="pr-intro">
-          Every school runs the same five phases. Two of them are on-site visits that produce ratings —
-          Phase 1 and Phase 3 — and the record keeps their findings separately, so you can see what moved
-          between August and November. Phase 2 is an online check-in; it records an outcome, not a re-rating.
-          ${sup.description ? `<br><span class="pr-sup">${esc(sup.note || '')}</span>` : ''}
-        </div>
-        <div class="pr-grid">${cards}</div>`;
+        <button type="button" class="strip-toggle" data-collapse="phaseref" aria-expanded="true" aria-controls="phaseRefBody">
+          <span class="strip-toggle-text">
+            <span class="pr-eyebrow">The appraisal year</span>
+            <span class="pr-sub">${esc(FRAMEWORK.meta.year || '')} · ${sup.total_schools || ''} schools · ${sup.team_size || ''} experts · visit teams of 5</span>
+          </span>
+          <svg class="strip-chev" width="18" height="18" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="phaseRefBody">
+          <div class="pr-intro">
+            Every school runs the same five phases. Two of them are on-site visits that produce ratings —
+            Phase 1 and Phase 3 — and the record keeps their findings separately, so you can see what moved
+            between August and November. Phase 2 is an online check-in; it records an outcome, not a re-rating.
+            ${sup.note ? `<br><span class="pr-sup">${esc(sup.note)}</span>` : ''}
+          </div>
+          <div class="pr-grid">${cards}</div>
+        </div>`;
       host.hidden = false;
+      wireStripCollapse(host);
     }
 
     // "What should happen next on this record?" — the one thing the panels
@@ -7573,6 +7669,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         }
       }
 
+      // The how-to strip is static markup, so it can be wired immediately;
+      // the phase reference wires itself once it has rendered.
+      wireStripCollapse(document);
       await Promise.all([loadFramework(), loadSchools()]);
       // Needs FRAMEWORK, so it runs after the load rather than at page build.
       renderPhaseReference();
