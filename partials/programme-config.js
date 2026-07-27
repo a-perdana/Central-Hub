@@ -203,10 +203,12 @@ export const PROGRAMME_LINKS = {
     // /classroom-walkthrough-entry is intentionally NOT listed here — it is
     // reached from the Classroom Walkthroughs tab on /teacher-appraisals,
     // which is where the reader already is when they need to record one.
-    { slug: 'principal-appraisals', label: 'Principal Appraisals', desc: 'Network-wide roll-up of every Foundation Rep annual appraisal on principals.',
-      who: 'Foundation Representatives, from Academic Hub', reads: 'Eduversal directors — read-only network roll-up here' },
-    { slug: 'principal-360-admin',  label: 'Principal 360°',       desc: 'Launch 360 survey cycles, distribute invite links, and monitor response progress.',
-      who: 'Eduversal admin launches the cycle; teachers and leaders answer anonymously', reads: 'The principal and their Foundation Rep — aggregated, never per-person' },
+    // The principal surfaces (/principal-appraisals, /principal-360-admin,
+    // /principal-observations, /principal-coaching-hub) are intentionally NOT
+    // listed either — they belong to the Principal Evaluation Module, a
+    // separate leadership cycle owned by Foundation Reps and Eduversal
+    // directors. This hub is the staff appraisal system; mixing the two makes
+    // the card grid read as one programme when they are governed separately.
   ],
   induction_programs: [
     { slug: 'induction-admin',   label: 'Induction Admin',   desc: 'Assign mentors, track first-year cohorts, and manage the three induction handbook templates.',
@@ -336,12 +338,27 @@ export const PROGRAMME_BOUNDARY = {
   eduos:              'EduOS is optional enrichment, outside the Quality Management System — it supplements regular science classes and never replaces them (ES 5.11).',
 };
 
+// Per-programme opt-out from PROGRAMME_COMMON_LINKS. A shared surface that is
+// genuinely off-topic for one hub is dropped here rather than removed from the
+// common list, so the other seven hubs keep it.
+//   appraisal_system → coordinators-meetings: appraisal records are written on
+//   the tool pages above, never in a coordinator meeting. The meeting editor
+//   only added a route into a pool this hub does not feed. Decisions & Policies
+//   stays — appraisal policy changes DO land in the standing record.
+export const PROGRAMME_COMMON_LINK_EXCLUDE = {
+  appraisal_system: ['coordinators-meetings'],
+};
+
 // The hub's own tools followed by the two shared HQ surfaces. De-duped by slug
-// so a programme that lists one of them explicitly never renders it twice.
+// so a programme that lists one of them explicitly never renders it twice, and
+// filtered against this programme's opt-out list.
 export function programmeLinks(programKey) {
   const own = PROGRAMME_LINKS[programKey] || [];
   const seen = new Set(own.map(l => l.slug));
-  return own.concat(PROGRAMME_COMMON_LINKS.filter(l => !seen.has(l.slug)));
+  const excluded = new Set(PROGRAMME_COMMON_LINK_EXCLUDE[programKey] || []);
+  return own.concat(
+    PROGRAMME_COMMON_LINKS.filter(l => !seen.has(l.slug) && !excluded.has(l.slug))
+  );
 }
 
 export function isValidProgramme(programKey) {
