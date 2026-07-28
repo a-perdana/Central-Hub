@@ -1020,6 +1020,28 @@
        rather than looking like a missing feature. */
     .ext-section.is-nonrating { background: var(--paper); border-color: var(--border); }
 
+    /* ── ATTENDANCE — how many of the five experts this visit rests on ── */
+    .pa-line {
+      margin-top: 10px; padding: 9px 11px; border-radius: 8px;
+      background: var(--paper); border: 1px solid var(--border);
+      border-left: 3px solid var(--ink-3);
+    }
+    .pa-line.is-complete { border-left-color: #059669; }
+    .pa-head {
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      font-size: .76rem; font-weight: 700; color: var(--ink);
+    }
+    .pa-count { white-space: nowrap; }
+    .pa-sep { color: var(--ink-3); font-weight: 400; }
+    .pa-badge {
+      font-size: .68rem; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+      background: var(--white); border: 1px solid var(--border); color: var(--ink-3);
+    }
+    .pa-badge.is-ok { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+    .pa-names { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+    .pa-none { font-size: .75rem; color: var(--ink-3); }
+    .pa-warn { margin-top: 7px; font-size: .74rem; line-height: 1.5; color: #92400e; }
+
     /* ── VISIT TEAM — who actually attended ── */
     .vt-panel {
       margin: 18px 0 8px; padding: 16px 18px;
@@ -1401,6 +1423,21 @@
       color: #065f46; font-style: normal; font-weight: 600;
       background: #d1fae5; border: 1px solid #6ee7b7;
       border-radius: 8px; padding: 9px 12px;
+    }
+    /* Why publishing is closed, stated where the button is — an inert button
+       with no explanation reads as a bug rather than a rule. Amber, not red:
+       an unfinished cycle is the normal mid-year state, not a failure. */
+    .rep-gate {
+      margin-bottom: 14px; padding: 11px 13px; border-radius: 9px;
+      background: #fffbeb; border: 1px solid #fde68a;
+    }
+    .rep-gate-head {
+      font-size: .78rem; font-weight: 700; color: #92400e; margin-bottom: 5px;
+    }
+    .rep-gate-note { font-size: .75rem; line-height: 1.55; color: #92400e; }
+    .rep-gate-list {
+      margin: 8px 0 0; padding-left: 18px;
+      font-size: .75rem; line-height: 1.6; color: #92400e;
     }
     .rep-section-label {
       font-size: .76rem; font-weight: 700; text-transform: uppercase;
@@ -2382,6 +2419,80 @@
       if (done.length === RATING_PHASES.length) return { level: 'full', done, label: '✓ Validated' };
       if (done.length) return { level: 'partial', done, label: `✓ ${phaseMeta(done[0]).label.split(' · ')[0]}` };
       return { level: 'none', done, label: '' };
+    }
+
+    // Which domains a phase actually covered, and who was recorded as having
+    // seen each one. Derived from domainPic — the ratings map itself carries no
+    // author, so "who covered this" is the honest claim, not "who typed it".
+    //
+    // A domain counts as covered only when every one of its aspects is rated:
+    // a domain lead who rated two of six aspects has not delivered a domain
+    // score, and the year-end mean cannot be built from a partial one.
+    function phaseAttendance(a, code) {
+      const p = extPhase(a, code);
+      const pic = Object.keys(p.domainPic).length ? p.domainPic : defaultDomainPic(a, code);
+      const domains = FRAMEWORK?.domains || [];
+      const covered = domains.filter(d =>
+        (d.aspects || []).length > 0 && d.aspects.every(x => (p.ratings[x.id] || 0) > 0));
+      // Distinct people, because one expert may hold two domains on a small
+      // visit — counting rows would overstate the team.
+      const experts = [...new Set(covered.map(d => pic[d.id]).filter(Boolean))];
+      const missing = domains.filter(d => !covered.includes(d));
+      return {
+        covered: covered.length,
+        total: domains.length,
+        experts,                                   // names, deduped
+        expertCount: experts.length,
+        unassigned: covered.filter(d => !pic[d.id]).length,
+        missing: missing.map(d => ({ code: d.code, title: d.title, who: pic[d.id] || '' })),
+        teamConfirmed: !!p.teamConfirmed,
+      };
+    }
+
+    // Can this record produce a report the school can act on? The written
+    // report carries a rating per domain (ES 17.8) and the year-end School
+    // Development Rating is the mean of all five, so a phase that skipped a
+    // domain cannot supply either. Team confirmation rides along because an
+    // appeal against a domain rating is reviewed with the person who saw it
+    // (model §8.1) — the same two conditions phaseIsValidated() already sets,
+    // applied to the report rather than only to the badge.
+    //
+    // Returns the blockers rather than a bare boolean so the panel can say
+    // which visit is short and by how much.
+    function reportReadiness(a) {
+      const blockers = [];
+      // No framework, no domain list to check against — treat that as not
+      // ready rather than vacuously ready. Otherwise a slow resource fetch
+      // would briefly open Publish on a record nobody has finished rating.
+      if (!FRAMEWORK?.domains?.length) {
+        return { ready: false, blockers: [{ code: null, kind: 'framework',
+          text: 'The appraisal framework has not loaded yet. Reload the page if this persists.' }] };
+      }
+      RATING_PHASES.forEach(code => {
+        const att = phaseAttendance(a, code);
+        const label = phaseMeta(code).label;
+        if (att.covered < att.total) {
+          blockers.push({
+            code, kind: 'domains',
+            text: `${label}: ${att.covered} of ${att.total} domains fully rated (${att.missing.map(m => m.code).join(', ')} outstanding).`
+          });
+        } else if (!att.teamConfirmed) {
+          blockers.push({
+            code, kind: 'team',
+            text: `${label}: every domain is rated, but the visit team is not confirmed. An admin confirms who attended.`
+          });
+        } else if (att.unassigned) {
+          // Confirmed-but-empty is possible on a school with no supervision
+          // plan: there was nothing for the confirm button to materialise, so
+          // it stored an assent to an empty team. A rating nobody stands
+          // behind cannot be appealed against, so it does not go out.
+          blockers.push({
+            code, kind: 'unassigned',
+            text: `${label}: ${att.unassigned} rated domain${att.unassigned === 1 ? ' has' : 's have'} nobody recorded against ${att.unassigned === 1 ? 'it' : 'them'}. Name who saw each domain in the visit team.`
+          });
+        }
+      });
+      return { ready: blockers.length === 0, blockers };
     }
 
     // The framework's own vocabularies — never hardcode these lists.
@@ -3394,6 +3505,14 @@
           p.domainPic = { ...defaultDomainPic(state.currentAppraisal, state.activePhase) };
         }
         if (!p.team) p.team = effectiveTeam(state.currentAppraisal, state.activePhase);
+        // A school with no supervision plan has nothing to materialise, so the
+        // panel would otherwise record an assent to an empty team — confirmed,
+        // but naming nobody. Say what is missing instead of storing that.
+        if (!Object.keys(p.domainPic).length) {
+          document.getElementById('saveStatus').textContent =
+            'Name who covered each domain first — there is no scheduled team to confirm.';
+          return;
+        }
         p.teamConfirmed = true;
         p.teamConfirmedBy = window.currentUser?.email || '';
         p.teamConfirmedAt = new Date().toISOString();
@@ -3622,6 +3741,10 @@
       const pubBtn = panelsEl.querySelector('#btnPublishReport');
       pubBtn?.addEventListener('click', async () => {
         if (!canWriteExternal || reportIsPublished()) return;
+        // The button renders disabled when the record is short, but re-check
+        // here: the panel is not re-rendered when ratings change on another
+        // tab, so a stale button could otherwise publish an incomplete record.
+        if (!reportReadiness(state.currentAppraisal).ready) return;
         // Publishing hands the report to the school and closes editing, so it
         // is a two-click act like the generate overwrite above.
         if (pubBtn.dataset.confirming !== '1') {
@@ -3721,6 +3844,24 @@
             ? `<div class="rep-stamp">Draft generated ${fmtDate(rep.generatedAt)}. Not visible to the school yet.</div>`
             : '<div class="rep-stamp">No draft yet — generate one from the ratings, then edit it.</div>');
 
+      // Publishing is the irreversible step — it hands the report to the
+      // school and closes editing — so it is the one gated on a complete
+      // record. Drafting stays open: writing a first pass against a partial
+      // visit is useful, and the draft is private until published.
+      const readiness = reportReadiness(a);
+      const gate = published || readiness.ready ? '' : `
+        <div class="rep-gate">
+          <div class="rep-gate-head">Not ready to publish</div>
+          <div class="rep-gate-note">
+            The report carries a rating for each of the five domains and the school may appeal any of
+            them, so it goes out once both visits have rated every domain and an admin has confirmed
+            who attended. Draft and edit freely in the meantime — nothing here is sent to the school.
+          </div>
+          <ul class="rep-gate-list">
+            ${readiness.blockers.map(b => `<li>${esc(b.text)}</li>`).join('')}
+          </ul>
+        </div>`;
+
       // Two stages, and the panel shows whichever the report has reached:
       //   sections  — the drafted fields, regenerable per domain
       //   document  — the composed rich document, formatted in the editor
@@ -3769,10 +3910,13 @@
             ${canWriteExternal && !published && stage === 'sections' && hasDraft ? '<button class="btn-primary" id="btnComposeReport">Compose full report →</button>' : ''}
             ${canWriteExternal && !published && stage === 'document' ? '<button class="btn-secondary" id="btnBackToSections">← Back to sections</button>' : ''}
             <button class="btn-secondary" id="btnPrintReport">🖨 Print</button>
-            ${canWriteExternal && !published && stage === 'document' ? '<button class="btn-primary" id="btnPublishReport">Publish to school</button>' : ''}
+            ${canWriteExternal && !published && stage === 'document'
+              ? `<button class="btn-primary" id="btnPublishReport" ${readiness.ready ? '' : 'disabled title="Both visits must rate every domain, with the team confirmed."'}>Publish to school</button>`
+              : ''}
           </div>
         </div>
         ${stamp}
+        ${gate}
         <div class="ext-intro-note">
           ES 17.8 asks for a written report within 10 business days of the visit, carrying findings for each
           domain, specific commendations and recommendations, ratings or indicators of performance level, and
@@ -3949,6 +4093,44 @@
               : 'The mid-year check-in is online, so it records an outcome and notes — not a re-rating of the 31 aspects.'}
             ${gap ? `<div class="ph-gap">${c.total - c.rated} aspect${c.total - c.rated === 1 ? '' : 's'} still unrated in this visit${c.domains < c.domainTotal ? `, and ${c.domainTotal - c.domains} domain${c.domainTotal - c.domains === 1 ? '' : 's'} untouched` : ''}. You can save and come back — nothing is blocked.</div>` : ''}
           </div>
+          ${buildAttendanceLine(a)}
+        </div>`;
+    }
+
+    // Who this visit's rating actually rests on. The aspect counts above say
+    // how much was rated; this says how many of the five experts that covers,
+    // which is the question an appeal or a calibration review starts from.
+    //
+    // Named from domainPic — the person recorded as having seen the domain.
+    // Not "who typed the ratings": the ratings map carries no author, and
+    // claiming one it does not hold would be worse than counting domains.
+    function buildAttendanceLine(a) {
+      const code = state.activePhase;
+      if (!phaseMeta(code).rates) return '';
+      const att = phaseAttendance(a, code);
+      if (!att.total) return '';
+
+      const complete = att.covered === att.total;
+      const names = att.experts.length
+        ? att.experts.map(n => `<span class="role-tag" style="${roleTagStyle(n)}">${esc(n)}</span>`).join('')
+        : '<em class="pa-none">no domain fully rated yet</em>';
+
+      return `
+        <div class="pa-line${complete && att.teamConfirmed ? ' is-complete' : ''}">
+          <div class="pa-head">
+            <span class="pa-count">${att.covered} of ${att.total} domains rated</span>
+            <span class="pa-sep">·</span>
+            <!-- Distinct people, not "N of 5": one expert may hold two domains,
+                 and "4 of 5" would read as someone missing when nobody is. -->
+            <span class="pa-count">rated by ${att.expertCount} expert${att.expertCount === 1 ? '' : 's'}</span>
+            ${att.teamConfirmed
+              ? '<span class="pa-badge is-ok">✓ team confirmed</span>'
+              : '<span class="pa-badge">team unconfirmed</span>'}
+          </div>
+          <div class="pa-names">${names}</div>
+          ${att.unassigned
+            ? `<div class="pa-warn">${att.unassigned} rated domain${att.unassigned === 1 ? ' has' : 's have'} nobody recorded against ${att.unassigned === 1 ? 'it' : 'them'} — set the visit team below, or an appeal cannot be reviewed with the person who saw it.</div>`
+            : ''}
         </div>`;
     }
 
@@ -4089,6 +4271,14 @@
       if (!rep) {
         return { tone: 'now', label: 'Draft the report',
           text: 'Both visits are rated. Open the Report tab and generate the draft — it writes itself from your ratings and reasons.' };
+      }
+      // Both visits are rated by this point, so the only thing that can still
+      // hold the report back is an unconfirmed team. Say so plainly rather
+      // than sending the reader to a Publish button that will not respond.
+      const readiness = reportReadiness(a);
+      if (!published && !readiness.ready) {
+        return { tone: 'now', label: 'Confirm who attended',
+          text: `${readiness.blockers[0].text} The report is ready otherwise — publishing opens once this is settled.` };
       }
       if (!published) {
         return { tone: 'now', label: 'Finish and publish the report',
