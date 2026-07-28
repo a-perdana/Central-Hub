@@ -348,6 +348,33 @@
       color: #fff; border-color: var(--tab-color, var(--accent));
     }
     .modal-tab.active .modal-tab-label { color: var(--tab-color, var(--accent)); font-weight: 700; }
+
+    /* Progress on the tab strip, for the phase in view. Three states, and the
+       distance between them is deliberate: a finished domain reads at a
+       glance, a started one reads as started, an untouched one stays quiet.
+       Colour is the domain's own, so the strip never introduces a new palette.
+
+       Only the badge is coloured while inactive — colouring the label too made
+       every finished tab compete with the active one for the eye. */
+    .modal-tab.is-complete .modal-tab-badge {
+      background: var(--tab-color); color: #fff; border-color: var(--tab-color);
+    }
+    .modal-tab.is-complete .modal-tab-label { color: var(--ink); font-weight: 600; }
+    /* Started but unfinished: the same hue at low strength, so it reads as
+       "in progress" rather than as a second finished state. */
+    .modal-tab.is-partial .modal-tab-badge {
+      background: color-mix(in srgb, var(--tab-color) 12%, transparent);
+      color: var(--tab-color);
+      border-color: color-mix(in srgb, var(--tab-color) 35%, transparent);
+      border-style: dashed;
+    }
+    /* The active tab keeps its own treatment whatever its progress — the two
+       systems would otherwise fight over the badge on a finished active tab. */
+    .modal-tab.active.is-partial .modal-tab-badge,
+    .modal-tab.active.is-complete .modal-tab-badge {
+      background: var(--tab-color); color: #fff;
+      border-color: var(--tab-color); border-style: solid;
+    }
     .modal-tab-panel { display: none; }
     .modal-tab-panel.active { display: block; }
 
@@ -2555,6 +2582,51 @@
       if (heroExt) heroExt.textContent = avgScore(a, 'external') || '—';
     }
 
+    // Per-domain progress on the tab strip: a finished domain wears its own
+    // colour, a started one shows it faintly, an untouched one stays grey. The
+    // strip then answers "how far in am I" without opening five tabs to find
+    // out — the counts existed only inside each panel before this.
+    //
+    // Scoped to the phase in view, because that is what the domain panels are
+    // editing: Phase 1 can be complete while Phase 3 is empty, and a strip
+    // that ignored the phase would contradict the panel under it.
+    //
+    // Called on every full render AND after each external rating click, since
+    // rating deliberately does not re-render the modal (that would throw away
+    // scroll position mid-edit).
+    function refreshTabProgress() {
+      const tabsEl = document.getElementById('modalTabs');
+      if (!tabsEl || !FRAMEWORK) return;
+      const a = state.currentAppraisal;
+      if (!a) return;
+
+      const code = state.activePhase;
+      // Phase 2 is a call that records an outcome, not a re-rating, so there
+      // is no per-aspect progress to show for it.
+      const rating = phaseMeta(code)?.rates;
+      const ratings = rating ? extPhase(a, code).ratings : null;
+      const phaseLabel = phaseMeta(code)?.label || '';
+
+      tabsEl.querySelectorAll('.modal-tab[data-domain-id]').forEach(tab => {
+        const domain = FRAMEWORK.domains.find(d => d.id === tab.dataset.domainId);
+        tab.classList.remove('is-complete', 'is-partial');
+        if (!domain) return;
+        if (!ratings) { tab.title = domain.title; return; }
+
+        const aspects = domain.aspects || [];
+        const done = aspects.filter(x => (ratings[x.id] || 0) > 0).length;
+        if (aspects.length && done === aspects.length) {
+          tab.classList.add('is-complete');
+          tab.title = `${domain.title} — all ${aspects.length} aspects rated in ${phaseLabel}`;
+        } else if (done) {
+          tab.classList.add('is-partial');
+          tab.title = `${domain.title} — ${done} of ${aspects.length} aspects rated in ${phaseLabel}`;
+        } else {
+          tab.title = `${domain.title} — not yet rated in ${phaseLabel}`;
+        }
+      });
+    }
+
     // ===== WRITTEN REPORT (ES 17.8, "within 10 business days") =====
     // ES 17.8 requires the post-visit report to carry four things:
     //   1. findings for EACH domain
@@ -3317,12 +3389,15 @@
       overviewPanel.innerHTML = buildOverviewPanel(a, canEdit, canWriteFeedback, canWriteExternal);
       panelsEl.appendChild(overviewPanel);
 
-      // Domain tabs
+      // Domain tabs. Progress colouring is applied by refreshTabProgress()
+      // once the strip is built — see there for the three states.
       FRAMEWORK.domains.forEach((domain, idx) => {
         const tabIdx = idx + 1;
         const color = DOMAIN_COLORS[idx] || '#374151';
         const tab = makeTab(domain.code, domain.title, tabIdx, color);
         tab.dataset.tab = String(tabIdx);
+
+        tab.dataset.domainId = domain.id;
         tabsEl.appendChild(tab);
 
         const panel = document.createElement('div');
@@ -3331,6 +3406,8 @@
         panel.innerHTML = buildDomainPanel(domain, a, canEdit, canWriteExternal);
         panelsEl.appendChild(panel);
       });
+
+      refreshTabProgress();
 
       // Report tab — last, because it is what the visit produces.
       const reportIdx = FRAMEWORK.domains.length + 1;
@@ -3587,6 +3664,11 @@
           btn.closest('.aspect-card')?.classList.remove('is-justify-missing');
 
           refreshExternalScores(panelsEl, btn.dataset.domain);
+          // The tab strip carries per-domain progress, so the domain that just
+          // gained its last aspect should light up now rather than on the next
+          // full render — which does not happen while rating (deliberately:
+          // re-rendering mid-edit would throw away scroll position).
+          refreshTabProgress();
         });
       });
 
