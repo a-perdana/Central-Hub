@@ -53,12 +53,30 @@
 
     .selected-teacher {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      padding: 10px 13px; border-radius: 10px;
+      padding: 10px 13px; border-radius: 10px; margin-bottom: 16px;
       background: #fffbeb; border: 1px solid #fde68a;
       font-size: 0.85rem; color: #78350f;
     }
     .selected-teacher[hidden] { display: none; }
     .st-name { font-weight: 700; }
+    .st-level-wrap { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+    .st-level-lbl {
+      font-size: .68rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .05em; color: #a16207;
+    }
+    .st-level {
+      font-family: inherit; font-size: .78rem; font-weight: 600; color: #78350f;
+      background: #fff; border: 1px solid #fcd34d; border-radius: 7px; padding: 4px 8px;
+      cursor: pointer;
+    }
+    .st-level:disabled { cursor: not-allowed; opacity: .7; background: #fef3c7; }
+    .st-level-lock[hidden] { display: none; }
+    .st-level-note {
+      font-size: .76rem; line-height: 1.5; margin: -8px 0 16px;
+      padding: 9px 12px; border-radius: 9px;
+      background: #fef3c7; border: 1px solid #fde68a; color: #78350f;
+    }
+    .st-level-note[hidden] { display: none; }
     .st-clear {
       margin-left: auto; background: none; border: none; cursor: pointer;
       color: #92400e; font-size: 0.78rem; font-weight: 600; text-decoration: underline;
@@ -88,9 +106,20 @@
     .domain-head {
       width: 100%; font-family: inherit; text-align: left; cursor: pointer;
       border: none; border-bottom: 1px solid var(--border);
-      padding: 15px 18px; background: var(--white);
+      padding: 15px 18px;
+      /* Tinted from the domain's own colour so the four domains read apart at a
+         glance instead of as one undifferentiated stack. */
+      background: color-mix(in srgb, var(--d-col, #d97706) 7%, #fff);
       display: flex; justify-content: space-between; align-items: center; gap: 14px;
       transition: background .14s;
+    }
+    .domain-head .dh-title { color: var(--d-col, var(--ink)); }
+    /* Thin completion bar along the bottom edge of the domain header. */
+    .dh-progress {
+      height: 3px; background: var(--border); position: relative; overflow: hidden;
+    }
+    .dh-progress__fill {
+      height: 100%; width: 0; background: var(--d-col, #d97706); transition: width .25s;
     }
     .domain-head:hover { background: var(--paper); }
     .domain-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -108,8 +137,100 @@
     }
     .dh-pill.is-done { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
 
-    .item-row { padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .kbd-rail {
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+      margin: -6px 0 16px; padding: 0 4px;
+      font-size: .72rem; color: var(--ink-3);
+    }
+    .kbd-rail kbd {
+      font-family: 'DM Mono', monospace; font-size: .68rem;
+      background: var(--paper); border: 1px solid var(--border);
+      border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; margin: 0 1px;
+      color: var(--ink-2);
+    }
+    .kbd-rail__hint { margin-left: auto; font-style: italic; }
+    @media (max-width: 700px) { .kbd-rail { display: none; } }
+
+    /* ── Rubric density toggle ──────────────────────────────────
+       Full view keeps the descriptors on the buttons (the default — you
+       cannot pick between 3 and 4 without reading both). Simplified view
+       drops to the bare 1-Unsatisfactory … 4-Distinguished labels for the
+       specialist who already knows the rubric and wants to score fast on a
+       small screen. Purely presentational — no scoring behaviour changes. */
+    .view-rail {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin: -4px 0 16px; padding: 0 4px;
+    }
+    .view-rail__lbl { font-size: .72rem; font-weight: 600; color: var(--ink-3); }
+    .view-toggle {
+      display: inline-flex; padding: 3px; gap: 3px; border-radius: 999px;
+      background: var(--paper); border: 1px solid var(--border);
+    }
+    .view-toggle__btn {
+      border: none; background: none; cursor: pointer; font-family: inherit;
+      font-size: .72rem; font-weight: 700; letter-spacing: .01em;
+      color: var(--ink-3); padding: 5px 13px; border-radius: 999px;
+      transition: background .14s, color .14s, box-shadow .14s;
+    }
+    .view-toggle__btn:hover { color: var(--ink-2); }
+    .view-toggle__btn[aria-pressed="true"] {
+      background: var(--white); color: var(--accent);
+      box-shadow: 0 1px 3px rgba(15,23,42,.10);
+    }
+    .view-rail__note { font-size: .7rem; color: var(--ink-3); font-style: italic; }
+
+    /* Simplified: hide the descriptor, sit the number + label on one line,
+       and let the buttons shrink so all five fit a single row.
+       Selectors are ID-scoped so they beat the later .score-btn.is-na
+       block without needing !important. */
+    #domainHost.rubric-simple .score-btn {
+      flex-direction: row; align-items: center; gap: 7px;
+      min-width: 108px; padding: 9px 11px;
+    }
+    #domainHost.rubric-simple .score-btn .sb-desc { display: none; }
+    #domainHost.rubric-simple .score-btn .sb-lbl { font-size: .6rem; }
+    /* Not-seen keeps its fixed width in simplified view too — it is an
+       exclusion, not a 5th point on the scale, so it should not stretch. */
+    #domainHost.rubric-simple .score-btn.is-na { flex: 0 0 auto; min-width: 104px; }
+    @media (max-width: 860px) {
+      #domainHost.rubric-simple .score-btn,
+      #domainHost.rubric-simple .score-btn.is-na { min-width: calc(50% - 5px); }
+    }
+
+    .item-row {
+      padding: 16px 12px; border-bottom: 1px solid var(--border);
+      border-radius: 10px; outline: none; scroll-margin-top: 90px;
+      transition: background .12s, box-shadow .12s;
+    }
     .item-row:last-child { border-bottom: none; }
+    /* Keyboard focus is the primary input during a live lesson — make the
+       focused row unmistakable so the specialist never scores the wrong item. */
+    .item-row:focus-visible, .item-row.is-focused {
+      background: #fffbeb; box-shadow: inset 3px 0 0 #d97706;
+    }
+    .item-row.item-done .item-title::after {
+      content: ' ✓'; color: #16a34a; font-weight: 800; font-size: .8rem;
+    }
+
+    /* Cambridge Teacher Standards chip — cambridge-crossref.js wires the
+       popover; this only styles it. */
+    .cts-pill {
+      font-family: 'DM Mono', monospace; font-size: .65rem; font-weight: 600;
+      padding: 2px 6px; border-radius: 4px; cursor: pointer;
+      background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe;
+    }
+    .cts-pill:hover { background: #ddd6fe; }
+
+    .note-toggle {
+      background: none; border: none; cursor: pointer; font-family: inherit;
+      font-size: .73rem; font-weight: 600; color: var(--ink-3);
+      padding: 6px 0 0; text-align: left;
+    }
+    .note-toggle:hover { color: #b45309; }
+    .note-toggle.is-filled { color: #b45309; font-weight: 700; }
+    /* .item-note is display:block by default — the bare [hidden] attribute
+       loses to it, so the override is required (Common Mistake #42). */
+    .item-note[hidden] { display: none; }
     .item-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 4px; flex-wrap: wrap; }
     .item-id {
       font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500;
@@ -117,34 +238,49 @@
       border: 1px solid var(--border);
     }
     .item-title { font-size: 0.9rem; font-weight: 600; color: var(--ink); flex: 1; min-width: 200px; }
-    .item-rubric {
-      font-size: 0.79rem; color: var(--ink-2); line-height: 1.55;
-      background: var(--paper); border-radius: 8px; padding: 9px 11px; margin: 8px 0 10px;
-      border: 1px solid var(--border);
-    }
-    .item-rubric[hidden] { display: none; }
-    .rubric-toggle {
-      background: none; border: none; cursor: pointer; font-family: inherit;
-      font-size: 0.73rem; font-weight: 700; color: #b45309; padding: 0;
-      text-transform: uppercase; letter-spacing: 0.04em;
-    }
-
-    .score-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .score-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
     .score-btn {
-      flex: 1; min-width: 92px; padding: 9px 8px; border-radius: 9px;
-      border: 2px solid var(--border); background: var(--paper); cursor: pointer;
-      font-family: inherit; text-align: center; color: var(--ink-3);
-      display: flex; flex-direction: column; gap: 2px; transition: all .14s;
+      flex: 1; min-width: 150px; padding: 10px 10px; border-radius: 10px;
+      border: 1.5px solid var(--border); background: var(--white); cursor: pointer;
+      font-family: inherit; text-align: left; color: var(--ink-3);
+      display: flex; flex-direction: column; gap: 3px; transition: all .14s;
     }
-    .score-btn:hover { border-color: var(--ink-2); color: var(--ink); background: var(--white); }
-    .score-btn .sb-num { font-size: 1.15rem; font-weight: 900; line-height: 1; }
-    .score-btn .sb-lbl { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
-    .score-btn.sel-1 { background: #fef2f2; border-color: #dc2626; color: #991b1b; }
-    .score-btn.sel-2 { background: #fffbeb; border-color: #d97706; color: #92400e; }
-    .score-btn.sel-3 { background: #ecfdf5; border-color: #059669; color: #065f46; }
-    .score-btn.sel-4 { background: #eff6ff; border-color: #2563eb; color: #1e40af; }
-    .score-btn.is-na { flex: none; min-width: 70px; }
-    .score-btn.sel-na { background: #f1f5f9; border-color: #64748b; color: #334155; }
+    .score-btn:hover { border-color: #c4b5fd; background: #faf5ff; }
+    .score-btn .sb-num {
+      font-size: .78rem; font-weight: 800; line-height: 1; color: var(--ink);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .sb-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    /* 1→4 reads as a single progression: red · orange · amber · green.
+       Not-seen is grey — a deliberate exclusion, not a low score. */
+    .sb-dot-1 { background: #dc2626; }
+    .sb-dot-2 { background: #f97316; }
+    .sb-dot-3 { background: #ca8a04; }
+    .sb-dot-4 { background: #16a34a; }
+    .sb-dot-na { background: #94a3b8; }
+    .score-btn .sb-lbl {
+      font-size: 0.62rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--ink-2);
+    }
+    /* The rubric descriptor is the whole point of the button — you cannot pick
+       between 3 and 4 without reading both. */
+    .score-btn .sb-desc { font-size: .74rem; color: var(--ink-3); line-height: 1.45; }
+    .score-btn.sel-1 { background: #fff1f2; border-color: #dc2626; }
+    .score-btn.sel-2 { background: #fff7ed; border-color: #f97316; }
+    .score-btn.sel-3 { background: #fefce8; border-color: #ca8a04; }
+    .score-btn.sel-4 { background: #f0fdf4; border-color: #16a34a; }
+    .score-btn.sel-1, .score-btn.sel-2, .score-btn.sel-3, .score-btn.sel-4, .score-btn.sel-na {
+      border-width: 2px;
+    }
+    .score-btn.sel-1 .sb-desc, .score-btn.sel-2 .sb-desc,
+    .score-btn.sel-3 .sb-desc, .score-btn.sel-4 .sb-desc { color: var(--ink-2); }
+    .score-btn.is-na { flex: 0 0 auto; min-width: 118px; border-color: #fecaca; background: #fff5f5; }
+    .score-btn.is-na .sb-desc { font-style: italic; }
+    .score-btn.sel-na { background: #f1f5f9; border-color: #64748b; }
+    @media (max-width: 860px) {
+      .score-btn { min-width: 100%; }
+      .score-btn.is-na { min-width: 100%; }
+    }
 
     .item-note {
       width: 100%; margin-top: 9px; padding: 8px 11px; min-height: 54px;
@@ -2043,6 +2179,11 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
               <span class="nav-item-label">Teacher Appraisals</span>
             </a>
+            <a href="teacher-levels" class="ch-dd-item" data-nav-page="teacher-levels" data-nav-key="teacher-levels">
+              <span class="nav-drag-handle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+              <span class="nav-item-label">Teacher Levels</span>
+            </a>
           </div>
 
           <div class="ch-dd-col-divider"></div>
@@ -2658,7 +2799,8 @@
           <a href="read-me-appraisal"  class="mobile-nav-link" data-mob-page="read-me-appraisal"  data-mobile-nav-key="read-me-appraisal">Read Me First</a>
           <a href="school-visits"      class="mobile-nav-link" data-mob-page="school-visits"      data-mobile-nav-key="school-visits">School Visits</a>
           <a href="school-appraisals"  class="mobile-nav-link" data-mob-page="school-appraisals"  data-mobile-nav-key="school-appraisals">School Appraisals</a>
-          <a href="teacher-appraisals" class="mobile-nav-link" data-mob-page="teacher-appraisals" data-mobile-nav-key="teacher-appraisals">Teacher Appraisals</a>          <div class="mob-nav-subheader">Leadership Programs</div>
+          <a href="teacher-appraisals" class="mobile-nav-link" data-mob-page="teacher-appraisals" data-mobile-nav-key="teacher-appraisals">Teacher Appraisals</a>
+          <a href="teacher-levels" class="mobile-nav-link" data-mob-page="teacher-levels" data-mobile-nav-key="teacher-levels">Teacher Levels</a>          <div class="mob-nav-subheader">Leadership Programs</div>
           <a href="read-me-leadership-programs"      class="mobile-nav-link" data-mob-page="read-me-leadership-programs"  data-mobile-nav-key="read-me-leadership-programs">Read Me First</a>
           <a href="principal-360-admin"              class="mobile-nav-link" data-mob-page="principal-360-admin"          data-mobile-nav-key="principal-360-admin">Principal 360°</a>
           <a href="principal-coaching-hub"           class="mobile-nav-link" data-mob-page="principal-coaching-hub"       data-mobile-nav-key="principal-coaching-hub">Principal Coaching</a>
@@ -2852,7 +2994,7 @@
         specialist: ['read-me-my-hub','learning-path','specialist-portfolio','specialist-certificates','my-induction'],
         deptoffice: ['read-me-coordinator','handbook-specialist-90d','coordinators-meetings','coordinator-proposals','decisions-register','coordinators-directory','department-artifacts','department-workspace','activities','induction-walkthroughs','walkthrough-review','weekly-checklist'],
         performance:['read-me-competency','competency-framework',
-                     'read-me-appraisal','school-appraisals','teacher-appraisals','teacher-appraisal-entry','classroom-walkthrough-entry','school-visits',
+                     'read-me-appraisal','school-appraisals','teacher-appraisals','teacher-levels','teacher-appraisal-entry','classroom-walkthrough-entry','school-visits',
                      'read-me-leadership-programs','principal-360-admin','principal-coaching-hub','principal-observations','principal-appraisals',
                      'read-me-kpi','school-kpi-admin','teacher-kpi-admin'],
         admin:      ['console','page-access','rules-viewer','careers-admin-th',
@@ -3835,10 +3977,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   <header class="page-hero" id="main-content" role="main" tabindex="-1" data-accent="amber">
     <div class="page-hero__inner">
       <div class="page-hero__text">
-        <div class="page-hero__eyebrow">Appraisal System · F2</div>
+        <div class="page-hero__eyebrow">Specialist Visit · Lesson Observation</div>
         <h1 class="page-hero__title">Class Observation Entry</h1>
         <p class="page-hero__desc">
-          Score a teacher's lesson against F2 — Class Observation — during your on-site visit.
+          Score a teacher's lesson against the F2 Class Observation rubric during your on-site visit.
         </p>
       </div>
     </div>
@@ -3853,15 +3995,16 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       <div class="page-info-strip__text">
         <span class="page-info-strip__title">About this page</span>
         <div class="page-info-strip__body">
-          This page records <strong>F2 — Class Observation</strong> only: the 45-item lesson observation
-          an Eduversal Subject Specialist scores live during an announced lesson. Items are filtered to
-          the teacher's appraisal level, and F2 carries 50% of the formal appraisal. You write it; the
-          teacher reads it once you share. Anchored to
+          An Eduversal Subject Specialist scores a lesson live during an on-site visit, using the
+          <strong>F2 — Class Observation</strong> rubric. Items are filtered to the teacher's level
+          (37 at Developing, up to 45 at Lead). You write it; the teacher reads it once you share.
+          Anchored to
           <span class="es-pill" data-es-ref="17.8" role="button" tabindex="0"
                 title="Eduversal Academic Standards madde 17.8">ES 17.8</span>.
           <br>
-          <em>F1 (Administration), F3 (Work Inspection) and F4 (Student Survey) are collected on their
-          own schedule by the partner school and are not part of this form.</em>
+          <em>This is Eduversal's own view of teaching quality &mdash; it is <strong>not</strong> part of
+          the school's formal appraisal record and never contributes to a composite score or predicate
+          band. The partner school runs its own F1&ndash;F4 cycle in Academic Hub.</em>
         </div>
       </div>
     </aside>
@@ -3879,8 +4022,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <div class="selected-teacher" id="selectedTeacher" hidden>
           <span class="st-name" id="stName">—</span>
           <span id="stMeta">—</span>
+          <span class="st-level-wrap">
+            <label class="st-level-lbl" for="stLevel">level</label>
+            <select class="st-level" id="stLevel">
+              <option value="induction">Induction</option>
+              <option value="developing">Developing</option>
+              <option value="proficient">Proficient</option>
+              <option value="lead">Lead</option>
+            </select>
+            <span class="st-level-lock" id="stLevelLock" hidden>🔒</span>
+          </span>
           <button type="button" class="st-clear" id="stClear">change teacher</button>
         </div>
+        <div class="st-level-note" id="stLevelNote" hidden></div>
 
         <div class="setup-grid" id="setupGrid">
           <div class="form-group tp-wrap" id="tpGroup">
@@ -3909,6 +4063,28 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         <span class="pr-count" id="prCount">0 / 0 scored</span>
         <div class="pr-bar-wrap"><div class="pr-bar" id="prBar"></div></div>
         <span class="pr-mean">F2 mean <strong id="prMean">—</strong></span>
+      </div>
+      <!-- Keyboard is the primary input during a live lesson. -->
+      <div class="kbd-rail" aria-hidden="true">
+        <span><kbd>1</kbd>–<kbd>4</kbd> score</span>
+        <span><kbd>N</kbd> not seen</span>
+        <span><kbd>E</kbd> evidence</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+        <span class="kbd-rail__hint">Click an item first, then type.</span>
+      </div>
+
+      <!-- Rubric density. Full is the default; simplified is a per-user
+           convenience remembered in localStorage, never persisted to the
+           appraisal record. -->
+      <div class="view-rail">
+        <span class="view-rail__lbl">Rubric view</span>
+        <div class="view-toggle" role="group" aria-label="Rubric view">
+          <button type="button" class="view-toggle__btn" id="btnViewFull"
+                  data-view="full" aria-pressed="true">Full descriptors</button>
+          <button type="button" class="view-toggle__btn" id="btnViewSimple"
+                  data-view="simple" aria-pressed="false">Simplified</button>
+        </div>
+        <span class="view-rail__note" id="viewRailNote">Descriptors shown on every score button.</span>
       </div>
 
       <!-- Domains render here -->
@@ -4028,7 +4204,44 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           pill.textContent = `${n}/${items.length}`;
           pill.classList.toggle('is-done', items.length > 0 && n === items.length);
         }
+        const bar = document.querySelector(`[data-dbar="${key}"]`);
+        if (bar) bar.style.width = items.length ? `${(n / items.length) * 100}%` : '0%';
       });
+    }
+
+    // ── Rubric density toggle ──────────────────────────────────
+    // Presentational only: a class on the host, not on the buttons, because
+    // selectScore() and restoreInputs() both rewrite each button's className
+    // wholesale — a per-button class would be wiped on the first click.
+    const RUBRIC_VIEW_KEY = 'ch:appraisal-entry:rubricView';
+
+    function applyRubricView(mode, persist) {
+      const simple = mode === 'simple';
+      const host = $('domainHost');
+      if (host) host.classList.toggle('rubric-simple', simple);
+      const fullBtn = $('btnViewFull');
+      const simpleBtn = $('btnViewSimple');
+      if (fullBtn)   fullBtn.setAttribute('aria-pressed', simple ? 'false' : 'true');
+      if (simpleBtn) simpleBtn.setAttribute('aria-pressed', simple ? 'true' : 'false');
+      const note = $('viewRailNote');
+      if (note) {
+        note.textContent = simple
+          ? 'Level names only — hover a button to read its descriptor.'
+          : 'Descriptors shown on every score button.';
+      }
+      if (persist) { try { localStorage.setItem(RUBRIC_VIEW_KEY, simple ? 'simple' : 'full'); } catch (e) {} }
+    }
+
+    function storedRubricView() {
+      try { return localStorage.getItem(RUBRIC_VIEW_KEY) === 'simple' ? 'simple' : 'full'; }
+      catch (e) { return 'full'; }
+    }
+
+    function wireRubricViewToggle() {
+      document.querySelectorAll('.view-toggle__btn').forEach(btn => {
+        btn.addEventListener('click', () => applyRubricView(btn.dataset.view, true));
+      });
+      applyRubricView(storedRubricView(), false);
     }
 
     // ── Render ─────────────────────────────────────────────────
@@ -4041,31 +4254,45 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         if (!items.length) return '';
 
         const rows = items.map(item => {
+          // The rubric descriptor lives ON the button, not behind a toggle.
+          // Deciding 3-vs-4 means reading both descriptors side by side; making
+          // that a click away is what turned the form into a guessing game.
           const btns = SCALE.map(s => `
-            <button type="button" class="score-btn" data-item="${esc(item.id)}" data-val="${s.value}">
-              <span class="sb-num">${s.value}</span>
+            <button type="button" class="score-btn" data-item="${esc(item.id)}" data-val="${s.value}"
+                    title="${esc(item.rubric?.[s.value] || s.label)}">
+              <span class="sb-num"><span class="sb-dot sb-dot-${s.value}"></span>${s.value}</span>
               <span class="sb-lbl">${esc(s.label)}</span>
+              ${item.rubric?.[s.value] ? `<span class="sb-desc">${esc(item.rubric[s.value])}</span>` : ''}
             </button>`).join('') + `
-            <button type="button" class="score-btn is-na" data-item="${esc(item.id)}" data-val="na">
-              <span class="sb-num">–</span>
+            <button type="button" class="score-btn is-na" data-item="${esc(item.id)}" data-val="na"
+                    title="Not observable during this lesson — excluded from the mean, not counted as a low score.">
+              <span class="sb-num"><span class="sb-dot sb-dot-na"></span>–</span>
               <span class="sb-lbl">Not seen</span>
+              <span class="sb-desc">Excluded from the mean</span>
             </button>`;
 
-          const rubricHtml = Object.keys(item.rubric || {})
-            .sort((a, b) => Number(b) - Number(a))
-            .map(k => `<div><strong>${esc(k)} — ${esc((SCALE.find(s => String(s.value) === String(k)) || {}).label || '')}:</strong> ${esc(item.rubric[k])}</div>`)
-            .join('');
+          // Full rubric text now sits on each score button, so the old
+          // show/hide rubric block would just repeat it.
+
+          // Cambridge Teacher Standards refs travel with the item in
+          // appraisal-framework-v2.json. The specialist is exactly the person
+          // who needs them to hand — cambridge-crossref.js turns .cts-pill into
+          // a click-to-expand popover carrying the verbatim standard text.
+          const ctsHtml = (Array.isArray(item.cambridge_standard_refs) ? item.cambridge_standard_refs : [])
+            .map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" role="button" tabindex="0"
+                         title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('');
 
           return `
-            <div class="item-row">
+            <div class="item-row" id="row-${esc(item.id)}" tabindex="0"
+                 data-item-row="${esc(item.id)}" onkeydown="window.handleItemKey(event, '${esc(item.id)}')">
               <div class="item-head">
                 <span class="item-id">${esc(item.id)}</span>
                 <span class="item-title">${esc(item.title)}</span>
-                ${rubricHtml ? `<button type="button" class="rubric-toggle" data-rubric="${esc(item.id)}">rubric</button>` : ''}
+                ${ctsHtml}
               </div>
-              ${rubricHtml ? `<div class="item-rubric" id="rub-${esc(item.id)}" hidden>${rubricHtml}</div>` : ''}
               <div class="score-row">${btns}</div>
-              <textarea class="item-note" data-note="${esc(item.id)}"
+              <button type="button" class="note-toggle" data-note-toggle="${esc(item.id)}">+ Add evidence</button>
+              <textarea class="item-note" data-note="${esc(item.id)}" hidden
                         placeholder="Evidence for this score — what you actually saw…"></textarea>
             </div>`;
         }).join('');
@@ -4084,6 +4311,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
                      stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
               </span>
             </button>
+            <div class="dh-progress"><div class="dh-progress__fill" data-dbar="${esc(key)}"></div></div>
             <div class="domain-body" id="dom-${esc(key)}" ${di === 0 ? '' : 'hidden'}>${rows}</div>
           </div>`;
       }).join('');
@@ -4102,7 +4330,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       });
       Object.entries(notes).forEach(([id, txt]) => {
         const ta = document.querySelector(`[data-note="${CSS.escape(id)}"]`);
-        if (ta) ta.value = txt;
+        if (!ta) return;
+        ta.value = txt;
+        // Evidence that already exists must be visible, not hidden behind a
+        // toggle the specialist has no reason to suspect.
+        if (txt && txt.trim()) {
+          ta.hidden = false;
+          const btn = document.querySelector(`[data-note-toggle="${CSS.escape(id)}"]`);
+          if (btn) { btn.classList.add('is-filled'); btn.textContent = '− Evidence'; }
+        }
+      });
+      Object.keys(scores).forEach(id => {
+        const row = document.getElementById(`row-${id}`);
+        if (row) row.classList.add('item-done');
       });
     }
 
@@ -4117,40 +4357,93 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         });
       });
 
-      document.querySelectorAll('[data-rubric]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const el = document.getElementById(`rub-${btn.dataset.rubric}`);
-          if (el) el.hidden = !el.hidden;
-        });
+      document.querySelectorAll('.score-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectScore(btn.dataset.item, btn.dataset.val));
       });
 
-      document.querySelectorAll('.score-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = btn.dataset.item;
-          const raw = btn.dataset.val;
-          const val = raw === 'na' ? 'na' : Number(raw);
-          // Clicking the selected score again clears it.
-          if (scores[id] === val) delete scores[id]; else scores[id] = val;
-          document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
-            b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
-          });
-          if (scores[id] !== undefined) {
-            btn.classList.add(scores[id] === 'na' ? 'sel-na' : `sel-${scores[id]}`);
-          }
-          markDirty();
-          refreshProgress();
-        });
+      // Evidence textarea stays folded until there is something to say, so a
+      // 30-45 item lesson doesn't scroll for pages.
+      document.querySelectorAll('[data-note-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => openNote(btn.dataset.noteToggle, true));
       });
 
       document.querySelectorAll('[data-note]').forEach(ta => {
-        ta.addEventListener('input', () => { notes[ta.dataset.note] = ta.value; markDirty(); });
+        ta.addEventListener('input', () => {
+          notes[ta.dataset.note] = ta.value;
+          const btn = document.querySelector(`[data-note-toggle="${CSS.escape(ta.dataset.note)}"]`);
+          if (btn) {
+            btn.classList.toggle('is-filled', !!ta.value.trim());
+            btn.textContent = ta.value.trim() ? '− Evidence' : '+ Add evidence';
+          }
+          markDirty();
+        });
       });
     }
 
+    // Single scoring path — the click handler and the keyboard handler both
+    // route through here so they can never drift apart.
+    function selectScore(id, raw) {
+      if (!id) return;
+      const val = raw === 'na' ? 'na' : Number(raw);
+      if (scores[id] === val) delete scores[id]; else scores[id] = val;   // click again to clear
+      document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
+        b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
+        if (scores[id] !== undefined && String(b.dataset.val) === String(scores[id])) {
+          b.classList.add(scores[id] === 'na' ? 'sel-na' : `sel-${scores[id]}`);
+        }
+      });
+      const row = document.getElementById(`row-${id}`);
+      if (row) row.classList.toggle('item-done', scores[id] !== undefined);
+      markDirty();
+      refreshProgress();
+    }
+
+    function openNote(id, focus) {
+      const ta  = document.querySelector(`[data-note="${CSS.escape(id)}"]`);
+      const btn = document.querySelector(`[data-note-toggle="${CSS.escape(id)}"]`);
+      if (!ta) return;
+      ta.hidden = !ta.hidden;
+      if (btn) btn.textContent = ta.hidden
+        ? (ta.value.trim() ? '− Evidence' : '+ Add evidence')
+        : '− Evidence';
+      if (!ta.hidden && focus) ta.focus();
+    }
+
+    // Keyboard scoring — the specialist is sitting in a lesson, so 1-4 / N beats
+    // hunting for buttons. Arrow keys walk the item list; E opens evidence.
+    function itemRows() { return [...document.querySelectorAll('.item-row[tabindex="0"]')]; }
+    function moveFocus(id, delta) {
+      const rows = itemRows();
+      const i = rows.findIndex(r => r.id === `row-${id}`);
+      const next = rows[i + delta];
+      if (next) next.focus();
+    }
+    window.handleItemKey = function (e, id) {
+      if (e.target && e.target.tagName === 'TEXTAREA') return;   // typing evidence
+      if (['1','2','3','4'].includes(e.key)) {
+        e.preventDefault(); selectScore(id, e.key); moveFocus(id, 1);
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault(); selectScore(id, 'na'); moveFocus(id, 1);
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault(); openNote(id, true);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault(); moveFocus(id, 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); moveFocus(id, -1);
+      }
+    };
+
+    let autoSaveTimer = null;
     function markDirty() {
       const el = $('abStatus');
       el.className = 'ab-status';
       el.textContent = 'Unsaved changes';
+      // A lesson observation is scored live; a closed tab or a flat battery
+      // used to lose the lot. Debounced draft autosave once a teacher is
+      // picked (the payload needs one) and something has been scored.
+      if (!teacher || !Object.keys(scores).length) return;
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => save('draft', true), 1500);
     }
 
     // ── Teacher picker ─────────────────────────────────────────
@@ -4204,22 +4497,79 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       if (!t) return;
       teacher = t;
       $('stName').textContent = t.name;
-      $('stMeta').textContent = [t.school, t.subject, `level: ${t.level}`].filter(Boolean).join(' · ');
+      $('stMeta').textContent = [t.school, t.subject].filter(Boolean).join(' · ');
+      $('stLevel').value = t.level || 'induction';
       $('selectedTeacher').hidden = false;
       $('tpGroup').style.display = 'none';
       $('tpResults').hidden = true;
       // Level changes which items are visible, so re-render.
       renderDomains();
       markDirty();
+      applyLevelLock();   // async — resolves against this teacher's shared records
+    }
+
+    // ── Appraisal level ────────────────────────────────────────
+    // The level decides which F2 items are in scope (30 at Induction up to 45
+    // at Lead), so changing it mid-record would silently change the denominator
+    // of an already-shared observation. Once an observation has been SHARED
+    // with the teacher for a given level, that level is frozen for this page.
+    // Drafts stay editable — a specialist who picked the wrong level and has
+    // not shared anything yet should be able to fix it.
+    let lockedLevels = new Set();
+
+    async function applyLevelLock() {
+      const sel  = $('stLevel');
+      const lock = $('stLevelLock');
+      const note = $('stLevelNote');
+      lockedLevels = new Set();
+      sel.disabled = false; lock.hidden = true; note.hidden = true;
+      if (!teacher?.uid) return;
+
+      try {
+        // Single-field equality query — served by the automatic index.
+        const snap = await getDocs(query(
+          collection(window.db, 'specialist_observations'),
+          where('teacherUid', '==', teacher.uid)
+        ));
+        snap.forEach(d => {
+          const v = d.data();
+          if (v.status === 'shared' && v.level) lockedLevels.add(v.level);
+        });
+      } catch (e) {
+        // Read failure must not block scoring — fail open, leave the picker live.
+        console.warn('level-lock lookup failed', e);
+        return;
+      }
+
+      if (!lockedLevels.size) return;
+
+      const current = sel.value;
+      [...sel.options].forEach(o => { o.disabled = lockedLevels.has(o.value) && o.value !== current; });
+
+      if (lockedLevels.has(current)) {
+        // The level in play already has a shared record — freeze it outright.
+        sel.disabled = true;
+        lock.hidden  = false;
+        note.hidden  = false;
+        note.innerHTML = `<strong>Level locked.</strong> A <strong>${esc(current)}</strong> observation
+          has already been shared with ${esc(teacher.name)}. Changing the level now would change which
+          items are in scope for a record the teacher has already seen. To observe at a different level,
+          ask an administrator to update the teacher's level on their profile.`;
+      } else {
+        note.hidden = false;
+        note.innerHTML = `Already shared at: <strong>${esc([...lockedLevels].join(', '))}</strong>.
+          Those levels cannot be picked again here.`;
+      }
     }
 
     // ── Save ───────────────────────────────────────────────────
     function buildPayload(status) {
       return {
-        // Identity — appraiserUid must be this user; the create rule pins it.
-        appraiserUid: window.currentUser.uid,
-        appraiserName: profile?.displayName || window.currentUser.email || '',
-        appraiserHub: 'centralhub',
+        // Identity — observerUid must be this user; the create rule pins it.
+        observerUid: window.currentUser.uid,
+        observerName: profile?.displayName || window.currentUser.email || '',
+        observerRole: 'subject_specialist',
+        observerHub: 'centralhub',
         teacherUid: teacher.uid,
         teacherName: teacher.name,
         schoolId: teacher.schoolId || null,
@@ -4227,11 +4577,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         subject: teacher.subject || '',
         level: teacher.level || 'induction',
         academicYear: (window.getCurrentAcademicYear && window.getCurrentAcademicYear()) || '',
-        // This form records F2 only — flagged so downstream readers do not
-        // mistake a partial record for a complete four-block appraisal.
-        sessionType: 'observation',
+        // Eduversal's own quality lens on teaching — scored against the F2
+        // rubric but NOT part of the school's formal appraisal record. The
+        // school's composite + predicate come from its own F1-F4 cycle in AH.
         blocks: ['F2'],
-        partial: true,
+        contributes_to_formal_score: false,
         observation: {
           date: $('obsDate').value || '',
           classGroup: $('obsClass').value || '',
@@ -4250,9 +4600,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       };
     }
 
-    async function save(status) {
+    async function save(status, silent = false) {
       const el = $('abStatus');
       if (!teacher) {
+        if (silent) return;   // autosave fires before a teacher is picked — stay quiet
         el.className = 'ab-status is-error';
         el.textContent = 'Pick a teacher before saving.';
         return;
@@ -4264,14 +4615,14 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       }
 
       el.className = 'ab-status';
-      el.textContent = 'Saving…';
+      el.textContent = silent ? 'Autosaving…' : 'Saving…';
       const payload = buildPayload(status);
 
       try {
         if (docId) {
-          await setDoc(doc(window.db, 'teacher_appraisals', docId), payload, { merge: true });
+          await setDoc(doc(window.db, 'specialist_observations', docId), payload, { merge: true });
         } else {
-          const ref = await addDoc(collection(window.db, 'teacher_appraisals'), {
+          const ref = await addDoc(collection(window.db, 'specialist_observations'), {
             ...payload, createdAt: serverTimestamp()
           });
           docId = ref.id;
@@ -4288,7 +4639,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       el.className = 'ab-status is-ok';
       el.textContent = status === 'shared'
         ? 'Shared with the teacher ✓'
-        : 'Draft saved ✓';
+        : (silent ? 'Draft autosaved ✓' : 'Draft saved ✓');
     }
 
     // ── Init ───────────────────────────────────────────────────
@@ -4316,6 +4667,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       $('formArea').hidden = false;
       $('obsDate').value = new Date().toISOString().slice(0, 10);
       renderDomains();
+      wireRubricViewToggle();
 
       // Teacher search
       let tmr = null;
@@ -4336,9 +4688,26 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       $('stClear').addEventListener('click', () => {
         teacher = null;
         $('selectedTeacher').hidden = true;
+        $('stLevelNote').hidden = true;
         $('tpGroup').style.display = '';
         $('teacherSearch').value = '';
         renderDomains();
+      });
+
+      // Changing the level re-filters the item set, so re-render. Scores for
+      // items that leave scope stay in `scores` but are not submitted — they
+      // are filtered by visibleItems() everywhere that matters.
+      $('stLevel').addEventListener('change', (e) => {
+        if (!teacher) return;
+        const next = e.target.value;
+        if (lockedLevels.has(next)) {          // belt-and-braces; option is disabled too
+          e.target.value = teacher.level || 'induction';
+          return;
+        }
+        teacher.level = next;
+        renderDomains();
+        markDirty();
+        applyLevelLock();
       });
 
       ['obsDate', 'obsClass', 'obsTopic', 'narrGlow', 'narrGrow', 'narrGo']

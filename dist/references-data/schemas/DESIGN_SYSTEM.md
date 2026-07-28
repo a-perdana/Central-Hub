@@ -83,30 +83,30 @@ Some pages have their own thematic accent (red for math pacing, green for biolog
 
 ### Role tags — one colour per position, network-wide
 
-The appraisal model names **positions**, not people (`"Biology SS"`, `"Director of Primary"`), and those labels surface as tags wherever a role is shown — the supervisor pair on `/school-appraisals`, visit-team chips, domain-lead pickers. Each position has **one canonical colour, used on every surface**. Source of truth: [`Central Hub/partials/subject-config.js`](../../Central%20Hub/partials/subject-config.js) → `ROLE_TAG_COLORS` + `roleTagStyle(role)`.
+The appraisal model names **positions**, not people (`"Biology Subject Specialist"`, `"Director of Primary Education"`), and those labels surface as tags wherever a role is shown — the supervisor pair on `/school-appraisals`, visit-team chips, domain-lead pickers. Each position has **one canonical colour, used on every surface**. Source of truth: [`Central Hub/partials/subject-config.js`](../../Central%20Hub/partials/subject-config.js) → `ROLE_TAG_COLORS` + `roleTagStyle(role)`.
 
 Two rules generate the palette, and the first one is the important one:
 
-1. **A subject specialist inherits its SUBJECT's colour.** `"Biology SS"` is Biology's green — the same green `/department-workspace` and `/department-artifacts` already use via `SUBJECT_ACCENT`. Giving roles a fresh independent palette would make Biology green on one page and something else on another, which is worse than no colour coding at all.
+1. **A subject specialist inherits its SUBJECT's colour.** `"Biology Subject Specialist"` is Biology's green — the same green `/department-workspace` and `/department-artifacts` already use via `SUBJECT_ACCENT`. Giving roles a fresh independent palette would make Biology green on one page and something else on another, which is worse than no colour coding at all.
 2. **Non-subject roles take their category colour** from [`roles-positions.json`](../../Central%20Hub/resources/roles-positions.json) → `categories`. The two Directors are `academic_leadership` (`#6c5ce7`, brand mor).
 
-**Pairs that share a scope share a hue, split by depth, not by hue.** English SS Primary / Secondary, and Director of Primary / Secondary, are the same function at different school levels — a different hue would imply they are unrelated.
+**Pairs that share a scope share a hue, split by depth, not by hue.** Primary / Secondary English Subject Specialist, and Director of Primary / Secondary Education, are the same function at different school levels — a different hue would imply they are unrelated.
 
 | Role | Fill | Basis |
 |---|---|---|
-| Biology SS | `#047857` | biology green |
-| Chemistry SS | `#b45309` | chemistry amber |
-| Physics SS | `#7c3aed` | physics violet |
-| Bahasa SS | `#e11d48` | bahasa rose |
-| Religion SS | `#4f46e5` | religion indigo |
-| EduSTEAM SS | `#0e7490` | edu_steam cyan-deep |
-| English SS Primary | `#be185d` | english pink |
-| English SS Secondary | `#9d174d` | english pink, deepened |
-| Director of Primary | `#6c5ce7` | academic_leadership mor |
-| Director of Secondary | `#3730a3` | academic_leadership, deepened |
+| Biology Subject Specialist | `#047857` | biology green |
+| Chemistry Subject Specialist | `#b45309` | chemistry amber |
+| Physics Subject Specialist | `#7c3aed` | physics violet |
+| Bahasa Indonesia Subject Specialist | `#e11d48` | bahasa rose |
+| Religion Subject Specialist | `#4f46e5` | religion indigo |
+| Edu-STEAM Subject Specialist | `#0e7490` | edu_steam cyan-deep |
+| Primary English Subject Specialist | `#be185d` | english pink |
+| Secondary English Subject Specialist | `#9d174d` | english pink, deepened |
+| Director of Primary Education | `#6c5ce7` | academic_leadership mor |
+| Director of Secondary Education | `#3730a3` | academic_leadership, deepened |
 | *(unknown role)* | `#64748b` | neutral fallback |
 
-**Fills are saturated, never 50-level tints.** A first pass used pale tints (`#d1fae5` etc.) and they were measurably indistinguishable at chip size — Physics SS and Director of Primary came out at **dE 0.0**, literally the same colour, because pale tints of different hues all collapse toward white.
+**Fills are saturated, never 50-level tints.** A first pass used pale tints (`#d1fae5` etc.) and they were measurably indistinguishable at chip size — Physics and Director of Primary Education came out at **dE 0.0**, literally the same colour, because pale tints of different hues all collapse toward white.
 
 **Editing the table means re-checking both axes — they trade off against each other:**
 - **contrast** — white-on-fill ≥ 4.5 (WCAG AA, small bold text). Current range 4.70–9.93.
