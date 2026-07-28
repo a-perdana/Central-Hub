@@ -397,8 +397,24 @@
     .domain-header-title { font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; color: #fff; line-height: 1.25; margin-bottom: 6px; }
     .domain-header-code { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(255,255,255,0.65); margin-bottom: 4px; }
     .domain-header-desc { font-size: 0.84rem; color: rgba(255,255,255,0.82); line-height: 1.6; max-width: 560px; }
-    .dh-bottom { padding: 10px 26px; background: rgba(0,0,0,0.14); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    /* Two raters, one row each. The bar used to carry a single unlabelled
+       count, which read as "the" count when it was only the school's — and
+       the appraiser's own side, the one being edited below, was absent. */
+    .dh-bottom {
+      padding: 9px 26px 10px; background: rgba(0,0,0,0.14);
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .dh-rater { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    /* Fixed column so the two counts line up under each other and the pair
+       reads as a comparison rather than two unrelated sentences. */
+    .dh-rater-who {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+      text-transform: uppercase; color: rgba(255,255,255,0.95);
+      min-width: 132px;
+    }
+    @media (max-width: 560px) { .dh-rater-who { min-width: 0; } }
     .dh-stat { font-size: 0.78rem; color: rgba(255,255,255,0.8); font-weight: 500; display: flex; align-items: center; gap: 5px; }
+    .dh-stat.is-none { color: rgba(255,255,255,0.55); font-style: italic; }
 
     /* ── Domain lead brief ────────────────────────────────────────────────
        The framework JSON carries per-domain `references[]` + `frameworkAnchors`
@@ -6217,6 +6233,36 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       if (heroExt) heroExt.textContent = avgScore(a, 'external') || '—';
     }
 
+    // The two-rater strip on a domain header. Both sides were static before:
+    // the header rendered once and kept its numbers while you rated below it,
+    // so the count sat stale until the modal was reopened. With one unlabelled
+    // count that was merely wrong; with two named ones it would read as the
+    // school's side changing when you touched Eduversal's.
+    function refreshDomainHeader(panelsEl, domainId) {
+      const a = state.currentAppraisal;
+      const domain = FRAMEWORK?.domains.find(d => d.id === domainId);
+      if (!a || !domain) return;
+      const total = domain.aspects.length;
+      const er = extReview(a);
+
+      const put = (rater, done, avg) => {
+        const countEl = panelsEl.querySelector(`[data-dh-count="${rater}"][data-domain="${domainId}"]`);
+        if (countEl) countEl.textContent = `${done}/${total} rated`;
+        const avgEl = panelsEl.querySelector(`[data-dh-avg="${rater}"][data-domain="${domainId}"]`);
+        if (avgEl) {
+          avgEl.textContent = avg ? `Avg ${avg} — ${scoreLabel(Math.round(parseFloat(avg)))}` : 'not yet rated';
+          avgEl.classList.toggle('is-none', !avg);
+        }
+      };
+
+      put('school',
+          domain.aspects.filter(x => (a.ratings?.[x.id] || 0) > 0).length,
+          domainAvg(a, domainId));
+      put('external',
+          domain.aspects.filter(x => (er.ratings?.[x.id] || 0) > 0).length,
+          domainAvg(a, domainId, 'external', er.phase));
+    }
+
     // Per-domain progress on the tab strip: a finished domain wears its own
     // colour, a started one shows it faintly, an untouched one stays grey. The
     // strip then answers "how far in am I" without opening five tabs to find
@@ -7126,6 +7172,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             overviewFill.style.width = davg ? `${(parseFloat(davg)/4)*100}%` : '0%';
             overviewNum.textContent = davg || '—';
           }
+          // The School row of the domain header carries the same numbers.
+          refreshDomainHeader(panelsEl, domainId);
         });
       });
 
@@ -7299,6 +7347,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           btn.closest('.aspect-card')?.classList.remove('is-justify-missing');
 
           refreshExternalScores(panelsEl, btn.dataset.domain);
+          refreshDomainHeader(panelsEl, btn.dataset.domain);
           // The tab strip carries per-domain progress, so the domain that just
           // gained its last aspect should light up now rather than on the next
           // full render — which does not happen while rating (deliberately:
@@ -8618,10 +8667,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
     function buildDomainPanel(domain, a, canEdit, canWriteExternal) {
       const col = domainColor(domain);
-      const davg = domainAvg(a, domain.id);
-      const done = domain.aspects.filter(asp => (a.ratings?.[asp.id] || 0) > 0).length;
       const total = domain.aspects.length;
       const er = extReview(a);
+
+      // Both sides, named. The header used to read "5/5 aspects rated · Avg
+      // 3.0" from the school's map alone, which said neither whose count it
+      // was nor that a second one existed — and the side the appraiser is
+      // editing was the one missing. Two raters, two lines.
+      const schoolDone = domain.aspects.filter(asp => (a.ratings?.[asp.id] || 0) > 0).length;
+      const davg = domainAvg(a, domain.id);
+      // Eduversal's side is per visit, so it is counted against the phase in
+      // view — the same slice the rating controls below are writing into.
+      const extDone = domain.aspects.filter(asp => (er.ratings?.[asp.id] || 0) > 0).length;
+      const extAvg = domainAvg(a, domain.id, 'external', er.phase);
+      const phaseShort = (phaseMeta(er.phase)?.label || '').split(' · ')[0];
 
       const aspectsHtml = domain.aspects.map((aspect, idx) => {
         const currentRating = a.ratings?.[aspect.id] || 0;
@@ -8777,14 +8836,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             </div>
           </div>
           <div class="dh-bottom">
-            <div class="dh-stat">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              ${done}/${total} aspects rated
+            <div class="dh-rater">
+              <span class="dh-rater-who">School</span>
+              <span class="dh-stat" data-dh-count="school" data-domain="${domain.id}">${schoolDone}/${total} rated</span>
+              <span class="dh-stat${davg ? '' : ' is-none'}" data-dh-avg="school" data-domain="${domain.id}">${davg
+                ? `Avg ${davg} — ${scoreLabel(Math.round(parseFloat(davg)))}`
+                : 'not yet rated'}</span>
             </div>
-            ${davg ? `<div class="dh-stat">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              Avg ${davg} — ${scoreLabel(Math.round(parseFloat(davg)))}
-            </div>` : ''}
+            <div class="dh-rater">
+              <span class="dh-rater-who">Eduversal${phaseShort ? ` · ${esc(phaseShort)}` : ''}</span>
+              <span class="dh-stat" data-dh-count="external" data-domain="${domain.id}">${extDone}/${total} rated</span>
+              <span class="dh-stat${extAvg ? '' : ' is-none'}" data-dh-avg="external" data-domain="${domain.id}">${extAvg
+                ? `Avg ${extAvg} — ${scoreLabel(Math.round(parseFloat(extAvg)))}`
+                : 'not yet rated'}</span>
+            </div>
           </div>
         </div>
         ${buildDomainBrief(domain)}
