@@ -850,6 +850,21 @@
       font-size: .76rem; color: var(--ink-3, #6b7280);
       margin-top: 10px; margin-bottom: 4px; font-style: italic;
     }
+    /* The multi-contributor form: a lead-in, the names as chips, then when it
+       was last touched. Not italic — names are data, and italicising a list of
+       people reads as an aside rather than the record it is. */
+    .ext-byline:has(.ext-byline-people) {
+      font-style: normal; display: flex; align-items: center;
+      gap: 7px; flex-wrap: wrap;
+    }
+    .ext-byline-lead { font-weight: 600; color: var(--ink); }
+    .ext-byline-people { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+    .ext-contrib {
+      font-size: .72rem; padding: 2px 8px; border-radius: 999px;
+      background: var(--paper); border: 1px solid var(--border); color: var(--ink);
+      cursor: help;
+    }
+    .ext-byline-meta { color: var(--ink-3); }
     /* Not the grey of .readonly-note — grey reads as "this is closed to you",
        and this box is the one thing on the page that IS ours to fill in.
        OWNERSHIP axis, so cyan rather than the amber it used to carry: it sits
@@ -5947,6 +5962,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         visitDates:     p.visitDates || '',
         evaluatedBy:    p.evaluatedBy || '',
         evaluatedAt:    p.evaluatedAt || null,
+        // Everyone who has saved this phase, oldest first. evaluatedBy is only
+        // the most recent of them — see saveAppraisal().
+        contributors:   Array.isArray(p.contributors) ? p.contributors : [],
         // Who actually went, and who took which domain. The supervision plan
         // on partner_schools says who was SCHEDULED; this records what
         // happened. They diverge often enough to matter — someone falls ill
@@ -6021,6 +6039,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         visitDates:       p.visitDates,
         evaluatedBy:      p.evaluatedBy,
         evaluatedAt:      p.evaluatedAt,
+        contributors:     p.contributors,
         frameworkVersion: er.frameworkVersion || '',
         // Present only once a draft exists — an absent report and an empty
         // one are different states, and the panel keys its wording off that.
@@ -8232,9 +8251,29 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       // line, no filter, no rule) and no record had ever carried a value.
       // Same reasoning that retired the `appraiser` field.
 
-      const byline = er.evaluatedBy
-        ? `<div class="ext-byline">Recorded by ${er.evaluatedBy}${er.evaluatedAt ? ` · ${fmtDate(er.evaluatedAt)}` : ''}${er.frameworkVersion ? ` · framework v${er.frameworkVersion}` : ''}</div>`
-        : '';
+      // Who wrote this phase. A visit is run by a team, so the byline names
+      // everyone who saved it — not only the last one, which is all
+      // evaluatedBy holds and which quietly erased the four colleagues who
+      // wrote before the fifth. Oldest first, so it reads as the order the
+      // record was built.
+      //
+      // Records written before contributors[] existed carry only evaluatedBy;
+      // those fall back to the single name rather than showing nobody.
+      const contributors = Array.isArray(er.contributors) ? er.contributors : [];
+      const byline = contributors.length
+        ? `<div class="ext-byline">
+             <span class="ext-byline-lead">Recorded by ${contributors.length} ${contributors.length === 1 ? 'person' : 'people'}</span>
+             <span class="ext-byline-people">${contributors.map(c => {
+               const label = c.name || (c.email || '').split('@')[0] || 'unknown';
+               const when = c.lastAt ? fmtDate(c.lastAt) : '';
+               const saves = (c.saves || 1) > 1 ? ` · ${c.saves} saves` : '';
+               return `<span class="ext-contrib" title="${escAttr(c.email || '')}${when ? ' · last saved ' + when : ''}${saves}">${esc(label)}</span>`;
+             }).join('')}</span>
+             ${er.evaluatedAt ? `<span class="ext-byline-meta">last saved ${fmtDate(er.evaluatedAt)}${er.frameworkVersion ? ` · framework v${er.frameworkVersion}` : ''}</span>` : ''}
+           </div>`
+        : (er.evaluatedBy
+            ? `<div class="ext-byline">Recorded by ${esc(er.evaluatedBy)}${er.evaluatedAt ? ` · ${fmtDate(er.evaluatedAt)}` : ''}${er.frameworkVersion ? ` · framework v${esc(er.frameworkVersion)}` : ''}</div>`
+            : '');
 
       return `
         <div class="field-group">
@@ -8758,12 +8797,37 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 
       // Stamp the phase being edited with who recorded it and when. Only that
       // one — the others were stamped when they were written.
+      //
+      // evaluatedBy is the LAST writer, and it overwrites: on a visit run by
+      // five domain leads the four who wrote first disappeared from the record.
+      // contributors[] keeps all of them — one row per person, first and last
+      // save, and a count. Everyone who saved this phase stays visible, which
+      // is what an appeal or a calibration review needs to start from.
+      //
+      // Appended here rather than on each field edit: saving is the moment a
+      // person commits to the record, and the same rule branch already carries
+      // the write, so no new affectedKeys() surface (it rides inside phases{}).
       const editing = state.activePhase;
       if (phases[editing]) {
+        const who = window.currentUser?.email || '';
+        const now = new Date().toISOString();
+        const prior = Array.isArray(phases[editing].contributors) ? phases[editing].contributors : [];
+        // Match on email, so a display-name change never splits one person
+        // into two rows.
+        const seen = prior.find(c => c && c.email === who);
+        const contributors = who
+          ? (seen
+              ? prior.map(c => c.email === who
+                  ? { ...c, name: window.userProfile?.displayName || c.name || '', lastAt: now, saves: (c.saves || 1) + 1 }
+                  : c)
+              : [...prior, { email: who, name: window.userProfile?.displayName || '', firstAt: now, lastAt: now, saves: 1 }])
+          : prior;
+
         phases[editing] = {
           ...phases[editing],
-          evaluatedBy: window.currentUser?.email || '',
-          evaluatedAt: new Date().toISOString(),
+          evaluatedBy: who,
+          evaluatedAt: now,
+          contributors,
         };
       }
 
