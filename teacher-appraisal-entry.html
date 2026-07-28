@@ -151,6 +151,52 @@
     .kbd-rail__hint { margin-left: auto; font-style: italic; }
     @media (max-width: 700px) { .kbd-rail { display: none; } }
 
+    /* ── Rubric density toggle ──────────────────────────────────
+       Full view keeps the descriptors on the buttons (the default — you
+       cannot pick between 3 and 4 without reading both). Simplified view
+       drops to the bare 1-Unsatisfactory … 4-Distinguished labels for the
+       specialist who already knows the rubric and wants to score fast on a
+       small screen. Purely presentational — no scoring behaviour changes. */
+    .view-rail {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin: -4px 0 16px; padding: 0 4px;
+    }
+    .view-rail__lbl { font-size: .72rem; font-weight: 600; color: var(--ink-3); }
+    .view-toggle {
+      display: inline-flex; padding: 3px; gap: 3px; border-radius: 999px;
+      background: var(--paper); border: 1px solid var(--border);
+    }
+    .view-toggle__btn {
+      border: none; background: none; cursor: pointer; font-family: inherit;
+      font-size: .72rem; font-weight: 700; letter-spacing: .01em;
+      color: var(--ink-3); padding: 5px 13px; border-radius: 999px;
+      transition: background .14s, color .14s, box-shadow .14s;
+    }
+    .view-toggle__btn:hover { color: var(--ink-2); }
+    .view-toggle__btn[aria-pressed="true"] {
+      background: var(--white); color: var(--accent);
+      box-shadow: 0 1px 3px rgba(15,23,42,.10);
+    }
+    .view-rail__note { font-size: .7rem; color: var(--ink-3); font-style: italic; }
+
+    /* Simplified: hide the descriptor, sit the number + label on one line,
+       and let the buttons shrink so all five fit a single row.
+       Selectors are ID-scoped so they beat the later .score-btn.is-na
+       block without needing !important. */
+    #domainHost.rubric-simple .score-btn {
+      flex-direction: row; align-items: center; gap: 7px;
+      min-width: 108px; padding: 9px 11px;
+    }
+    #domainHost.rubric-simple .score-btn .sb-desc { display: none; }
+    #domainHost.rubric-simple .score-btn .sb-lbl { font-size: .6rem; }
+    /* Not-seen keeps its fixed width in simplified view too — it is an
+       exclusion, not a 5th point on the scale, so it should not stretch. */
+    #domainHost.rubric-simple .score-btn.is-na { flex: 0 0 auto; min-width: 104px; }
+    @media (max-width: 860px) {
+      #domainHost.rubric-simple .score-btn,
+      #domainHost.rubric-simple .score-btn.is-na { min-width: calc(50% - 5px); }
+    }
+
     .item-row {
       padding: 16px 12px; border-bottom: 1px solid var(--border);
       border-radius: 10px; outline: none; scroll-margin-top: 90px;
@@ -386,6 +432,20 @@
         <span class="kbd-rail__hint">Click an item first, then type.</span>
       </div>
 
+      <!-- Rubric density. Full is the default; simplified is a per-user
+           convenience remembered in localStorage, never persisted to the
+           appraisal record. -->
+      <div class="view-rail">
+        <span class="view-rail__lbl">Rubric view</span>
+        <div class="view-toggle" role="group" aria-label="Rubric view">
+          <button type="button" class="view-toggle__btn" id="btnViewFull"
+                  data-view="full" aria-pressed="true">Full descriptors</button>
+          <button type="button" class="view-toggle__btn" id="btnViewSimple"
+                  data-view="simple" aria-pressed="false">Simplified</button>
+        </div>
+        <span class="view-rail__note" id="viewRailNote">Descriptors shown on every score button.</span>
+      </div>
+
       <!-- Domains render here -->
       <div id="domainHost"></div>
 
@@ -506,6 +566,41 @@
         const bar = document.querySelector(`[data-dbar="${key}"]`);
         if (bar) bar.style.width = items.length ? `${(n / items.length) * 100}%` : '0%';
       });
+    }
+
+    // ── Rubric density toggle ──────────────────────────────────
+    // Presentational only: a class on the host, not on the buttons, because
+    // selectScore() and restoreInputs() both rewrite each button's className
+    // wholesale — a per-button class would be wiped on the first click.
+    const RUBRIC_VIEW_KEY = 'ch:appraisal-entry:rubricView';
+
+    function applyRubricView(mode, persist) {
+      const simple = mode === 'simple';
+      const host = $('domainHost');
+      if (host) host.classList.toggle('rubric-simple', simple);
+      const fullBtn = $('btnViewFull');
+      const simpleBtn = $('btnViewSimple');
+      if (fullBtn)   fullBtn.setAttribute('aria-pressed', simple ? 'false' : 'true');
+      if (simpleBtn) simpleBtn.setAttribute('aria-pressed', simple ? 'true' : 'false');
+      const note = $('viewRailNote');
+      if (note) {
+        note.textContent = simple
+          ? 'Level names only — hover a button to read its descriptor.'
+          : 'Descriptors shown on every score button.';
+      }
+      if (persist) { try { localStorage.setItem(RUBRIC_VIEW_KEY, simple ? 'simple' : 'full'); } catch (e) {} }
+    }
+
+    function storedRubricView() {
+      try { return localStorage.getItem(RUBRIC_VIEW_KEY) === 'simple' ? 'simple' : 'full'; }
+      catch (e) { return 'full'; }
+    }
+
+    function wireRubricViewToggle() {
+      document.querySelectorAll('.view-toggle__btn').forEach(btn => {
+        btn.addEventListener('click', () => applyRubricView(btn.dataset.view, true));
+      });
+      applyRubricView(storedRubricView(), false);
     }
 
     // ── Render ─────────────────────────────────────────────────
@@ -931,6 +1026,7 @@
       $('formArea').hidden = false;
       $('obsDate').value = new Date().toISOString().slice(0, 10);
       renderDomains();
+      wireRubricViewToggle();
 
       // Teacher search
       let tmr = null;
