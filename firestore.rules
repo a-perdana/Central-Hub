@@ -1417,6 +1417,40 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -- specialist_observations (Eduversal Specialist Lesson Observation) ----
+    // F2-only lesson observations recorded by Eduversal Subject Specialists on
+    // an on-site school visit, from CH /teacher-appraisal-entry.
+    //
+    // DELIBERATELY SEPARATE from teacher_appraisals. A specialist observation is
+    // Eduversal's own quality lens on teaching across the network; the school's
+    // formal appraisal is owned by the school's leadership and is the record
+    // that carries a composite + predicate. Keeping them in one collection made
+    // a partial F2 row look like a whole four-block appraisal to
+    // /teacher-appraisals and /reports. Same separation principle as
+    // induction_observations vs appraisal (Charter NN1).
+    //
+    // Create:  central_user stamping themselves as the observer
+    // Read:    the teacher, the observer, AH admin, TH admin, central_admin.
+    //          AH leadership can see Eduversal's observation of their own staff.
+    // Update:  the observer who created it, while not finalised; admins
+    // Delete:  central_admin only
+    match /specialist_observations/{docId} {
+      allow read: if isAdmin()
+                  || isCentralUser()
+                  || isAHAdmin()
+                  || isTeachersAdmin()
+                  || (isTeachersUser() && resource.data.teacherUid == request.auth.uid)
+                  || (isAcademicUser() && resource.data.schoolId == userProfile().schoolId);
+      allow create: if isAdmin()
+                    || (isCentralUser()
+                        && request.resource.data.observerUid == request.auth.uid);
+      allow update: if isAdmin()
+                    || (isCentralUser()
+                        && resource.data.observerUid == request.auth.uid
+                        && resource.data.status != 'finalised');
+      allow delete: if isAdmin();
+    }
+
     // -- teacher_self_appraisals (Teacher Self-Appraisal) -----
     // Doc ID format: {userId}_{academicYear}  (e.g. abc123_2025-26)
     //
