@@ -83,7 +83,7 @@ Some pages have their own thematic accent (red for math pacing, green for biolog
 
 ### Role tags — one colour per position, network-wide
 
-The appraisal model names **positions**, not people (`"Biology Subject Specialist"`, `"Director of Primary Education"`), and those labels surface as tags wherever a role is shown — the supervisor pair on `/school-appraisals`, visit-team chips, domain-lead pickers. Each position has **one canonical colour, used on every surface**. Source of truth: [`Central Hub/partials/subject-config.js`](../../Central%20Hub/partials/subject-config.js) → `ROLE_TAG_COLORS` + `roleTagStyle(role)`.
+The appraisal model names **positions**, not people (`"Biology Subject Specialist"`, `"Math SS Primary"`), and those labels surface as tags wherever a role is shown — the supervisor pair on `/school-appraisals`, visit-team chips, domain-lead pickers. Each position has **one canonical colour, used on every surface**. Source of truth: [`Central Hub/partials/subject-config.js`](../../Central%20Hub/partials/subject-config.js) → `ROLE_TAG_COLORS` + `roleTagStyle(role)`.
 
 Two rules generate the palette, and the first one is the important one:
 
@@ -102,9 +102,14 @@ Two rules generate the palette, and the first one is the important one:
 | Edu-STEAM Subject Specialist | `#0e7490` | edu_steam cyan-deep |
 | Primary English Subject Specialist | `#be185d` | english pink |
 | Secondary English Subject Specialist | `#9d174d` | english pink, deepened |
+| Math SS Primary | `#dc2626` | math red |
+| Math SS Secondary | `#991b1b` | math red, deepened |
 | Director of Primary Education | `#6c5ce7` | academic_leadership mor |
 | Director of Secondary Education | `#3730a3` | academic_leadership, deepened |
+| Director of Islamic Schools | `#065f46` | academic_leadership, deep green |
 | *(unknown role)* | `#64748b` | neutral fallback |
+
+**Two vocabularies live side by side, on purpose.** The appraisal roster names the two Maths seats `Math SS Primary` / `Math SS Secondary`; the Coordinators Directory spells the same seats out as `Primary Mathematics Subject Specialist` / `Mathematics Subject Specialist`. Both forms are keyed to the same fills so a person's directory card and their visit chip read as one role. The reason they differ: Ridwan Sumitro, Alif Perdana and Jaini Mukhlis each hold **two** positions — a directorship *and* a subject specialty — and the two surfaces mean different ones. A blanket rename across both is what produced the 2026-07-27 wrong-hat bug, where the plan named a directorship instead of the specialty; every label still resolved and every invariant still held, so nothing looked broken. Decide which surface changes before touching either.
 
 **Fills are saturated, never 50-level tints.** A first pass used pale tints (`#d1fae5` etc.) and they were measurably indistinguishable at chip size — Physics and Director of Primary Education came out at **dE 0.0**, literally the same colour, because pale tints of different hues all collapse toward white.
 

@@ -269,14 +269,22 @@ export function subjectLabel(subjectId) {
 //   · contrast  white-on-fill >= 4.5 (WCAG AA, small bold text)
 //   · dE        >= 10 against every other fill (CIE76; below that reads as
 //               "the same colour" at chip size)
-// Measured: contrast 4.70–9.93, closest pair dE 12.0. The two closest pairs
-// are the English roles and the two Directors — which is correct, they ARE
+// Measured across all 14 entries: contrast 4.70–9.93, closest pair dE 11.5
+// (Biology vs Director of Islamic Schools — both greens, and both legitimately
+// so). Next closest is the English pair at 12.0, which is correct: they ARE
 // the same function at different school levels.
 //
 // Keys were "Biology SS" style until 2026-07-27, when the directory and the
 // appraisal roster were aligned on the spelt-out "Biology Subject Specialist".
 // Lookup is exact, so the keys had to move with the labels — a stale key does
 // not error, it silently falls back to grey.
+//
+// The two Math seats are the exception to that alignment: they keep the
+// model's "Math SS Primary/Secondary" shorthand, because the people in them
+// hold a directorship as well and the appraisal roster means the SPECIALTY.
+// Renaming them to the directorship (2026-07-27, reverted 2026-07-28) did not
+// grey anything out — it just named the wrong one of that person's two hats,
+// which is the failure this map cannot catch on its own.
 export const ROLE_TAG_COLORS = {
   // ── Subject specialists — each keeps its own subject's hue ──
   'biology subject specialist':    { fg: '#ffffff', bg: '#047857', bd: '#065f46' }, // biology green
@@ -293,10 +301,29 @@ export const ROLE_TAG_COLORS = {
   // English splits by school level: one pink family, two depths.
   'primary english subject specialist':   { fg: '#ffffff', bg: '#be185d', bd: '#9d174d' },
   'secondary english subject specialist': { fg: '#ffffff', bg: '#9d174d', bd: '#831843' },
+  // Maths splits by school level too. Red family, matching the Math pacing
+  // pages' subject gradient — same "inherit the subject's hue" rule as above.
+  // The roster keeps the model's shorthand for these two seats; see the note
+  // under the roster block in seed-school-supervisors-2026-27.js.
+  'math ss primary':                 { fg: '#ffffff', bg: '#dc2626', bd: '#991b1b' },
+  'math ss secondary':               { fg: '#ffffff', bg: '#991b1b', bd: '#7f1d1d' },
+  // The Coordinators Directory spells the same two seats out as departmental
+  // titles. Aliased to the identical fills so a person's card and their visit
+  // chip read as one role. See DIRECTORY_TITLE_MAP in
+  // scripts/appraisal/role-label-map-2026-07.js for why the two differ.
+  'primary mathematics subject specialist': { fg: '#ffffff', bg: '#dc2626', bd: '#991b1b' },
+  'mathematics subject specialist':         { fg: '#ffffff', bg: '#991b1b', bd: '#7f1d1d' },
   // ── Academic leadership — roles-positions.json categories.academic_leadership ──
+  // NOT appraisal-roster seats: these are the directorships some specialists
+  // ALSO hold (Ridwan Sumitro, Alif Perdana, Jaini Mukhlis each carry two
+  // positions). They surface on /coordinators-directory, never in a visit plan
+  // — the plan names the specialty. Coloured so the directory does not render
+  // them grey.
   // Brand mor for Primary, deepened for Secondary. Same reasoning as English.
   'director of primary education':   { fg: '#ffffff', bg: '#6c5ce7', bd: '#4c3d9e' },
   'director of secondary education': { fg: '#ffffff', bg: '#3730a3', bd: '#312e81' },
+  // Islamic Schools directorship — deep green, distinct from Biology's at dE 11.5.
+  'director of islamic schools':     { fg: '#ffffff', bg: '#065f46', bd: '#064e3b' },
 };
 
 // Neutral fallback. Deliberately grey: an unrecognised role should look
