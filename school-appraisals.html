@@ -1078,6 +1078,44 @@
        rather than looking like a missing feature. */
     .ext-section.is-nonrating { background: var(--paper); border-color: var(--border); }
 
+    /* ── OVERVIEW SECTIONS — the tab's four concerns, each foldable ──
+       The grouping existed in HTML comments only; on screen the reader met a
+       dozen panels in a row. A titled header per group, collapsible, so a
+       coordinator recording a visit can shut the other three. */
+    .ov-sec { margin: 22px 0 0; }
+    .ov-sec-head {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 9px 2px 8px; background: none; border: none;
+      border-bottom: 1.5px solid var(--border);
+      cursor: pointer; text-align: left; font: inherit; color: inherit;
+    }
+    .ov-sec-head:hover { border-bottom-color: var(--ink-3); }
+    .ov-sec-chev {
+      font-size: .7rem; color: var(--ink-3); transition: transform .15s;
+      flex-shrink: 0;
+    }
+    .ov-sec.is-collapsed .ov-sec-chev { transform: rotate(-90deg); }
+    .ov-sec-text { flex: 1; min-width: 0; }
+    .ov-sec-title {
+      display: block; font-size: .82rem; font-weight: 700;
+      letter-spacing: .02em; color: var(--ink);
+    }
+    .ov-sec-sub {
+      display: block; font-size: .72rem; color: var(--ink-3); margin-top: 1px;
+    }
+    /* Kept visible when the body is shut — the reason to fold a section is to
+       stop reading it, not to stop knowing whether it needs you. */
+    .ov-sec-pill {
+      font-size: .68rem; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .ov-sec-pill.is-ok { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+    .ov-sec-body { padding-top: 4px; }
+    /* First section sits right under the score hero, which already has its own
+       bottom margin. */
+    .ov-sec:first-of-type { margin-top: 16px; }
+
     /* ── ATTENDANCE — how many of the five experts this visit rests on ── */
     .pa-line {
       margin-top: 10px; padding: 9px 11px; border-radius: 8px;
@@ -3454,6 +3492,11 @@
       });
 
       refreshTabProgress();
+      // Overview's four sections fold, reusing the same data-collapse handler
+      // (and the same localStorage persistence) as the page-level strips. It
+      // is idempotent — wired elements carry data-wired — but the modal is
+      // rebuilt on every render, so this has to run each time.
+      wireStripCollapse(panelsEl);
 
       // Report tab — last, because it is what the visit produces.
       const reportIdx = FRAMEWORK.domains.length + 1;
@@ -4284,6 +4327,55 @@
         </div>`;
     }
 
+    // ── Overview sections ───────────────────────────────────────────────
+    // The Overview tab is one long column: supervision, the visit, the
+    // school's submission, Eduversal's response. The grouping was already
+    // real — it sat in HTML comments naming each run of blocks — but nothing
+    // on screen carried it, so the reader met a dozen panels in sequence and
+    // had to infer where one concern ended and the next began.
+    //
+    // Each group now gets a titled header that collapses, reusing the
+    // data-collapse mechanism the two page-level strips already use (same
+    // localStorage persistence, same default-open). Someone recording a visit
+    // can fold away the school's submission and Eduversal's response and work
+    // in a screen that holds only the visit.
+    //
+    // Defaults are all open: a first-time reader has chosen nothing, and a
+    // panel that hides itself on first sight is worse than a long page.
+    function overviewSection(key, title, subtitle, bodyHtml, badge) {
+      if (!bodyHtml || !bodyHtml.trim()) return '';
+      const bodyId = `ovsec-${key}`;
+      return `
+        <section class="ov-sec" data-ov-sec="${escAttr(key)}">
+          <button type="button" class="ov-sec-head" data-collapse="ov-${escAttr(key)}"
+                  aria-expanded="true" aria-controls="${bodyId}">
+            <span class="ov-sec-chev" aria-hidden="true">▾</span>
+            <span class="ov-sec-text">
+              <span class="ov-sec-title">${esc(title)}</span>
+              ${subtitle ? `<span class="ov-sec-sub">${esc(subtitle)}</span>` : ''}
+            </span>
+            ${badge ? `<span class="ov-sec-badge">${badge}</span>` : ''}
+          </button>
+          <div class="ov-sec-body" id="${bodyId}">${bodyHtml}</div>
+        </section>`;
+    }
+
+    // A collapsed section must still say whether it needs attention, or
+    // folding it away hides the one thing the reader was scanning for. The
+    // visit header carries its own coverage, so "3 of 5 domains · team
+    // unconfirmed" is legible with the body shut.
+    function visitSectionBadge(a) {
+      const code = state.activePhase;
+      if (!phaseMeta(code)?.rates) return '';
+      const att = phaseAttendance(a, code);
+      if (!att.total) return '';
+      const complete = att.covered === att.total;
+      const ok = complete && att.teamConfirmed && !att.unassigned;
+      const bits = [`${att.covered}/${att.total} domains`];
+      if (complete && !att.teamConfirmed) bits.push('team unconfirmed');
+      return `<span class="ov-sec-pill${ok ? ' is-ok' : ''}">${esc(bits.join(' · '))}</span>`;
+    }
+
     // Collapse / expand for the two page-level reference strips.
     //
     // These are orientation, not working surfaces: useful the first few times,
@@ -4303,7 +4395,7 @@
         const apply = (open) => {
           btn.setAttribute('aria-expanded', String(open));
           body.hidden = !open;
-          btn.closest('.page-howto-strip, .phase-ref')?.classList.toggle('is-collapsed', !open);
+          btn.closest('.page-howto-strip, .phase-ref, .ov-sec')?.classList.toggle('is-collapsed', !open);
         };
         // Default open — a first-time reader has not chosen anything yet.
         let stored = null;
@@ -4861,21 +4953,24 @@
             </div>
           </div>
         </div>
-        ${buildSupervisionStrip(a)}
+        ${overviewSection('plan', 'Supervision plan', 'Who appraises this school, and when', buildSupervisionStrip(a))}
 
         <!-- ── THIS VISIT ── everything below is scoped to state.activePhase:
              the switcher picks the phase, the team panel says who attended it,
              and the external review records its verdict. They were previously
              split by eight unrelated blocks, which made the phase dropdown in
              the review box read as an independent choice. -->
-        ${buildPhaseSwitcher(a)}
-        ${buildVisitTeamPanel(a, canWriteExternal)}
-        ${buildExternalReviewGroup(a, canWriteExternal)}
+        ${overviewSection('visit', 'This visit', 'Findings, the team that produced them, and the verdict',
+          `${buildPhaseSwitcher(a)}
+           ${buildVisitTeamPanel(a, canWriteExternal)}
+           ${buildExternalReviewGroup(a, canWriteExternal)}`,
+          visitSectionBadge(a))}
 
         <!-- ── THE SCHOOL'S SUBMISSION ── its own ratings and its own words,
              kept together so the ownership boundary the note describes is
              actually visible rather than asserted. -->
-        <div class="overview-grid">${overviewCards}</div>
+        ${overviewSection('school', "The school's submission", 'Its own ratings and its own words — written in Academic Hub',
+          `<div class="overview-grid">${overviewCards}</div>
         ${canEdit ? `<div class="school-owned-note">
           <strong>These are the school's own words.</strong> Ratings, evidence, Key Strengths and Areas for Improvement were written by the school in Academic Hub. You can correct them as an admin, but the school will not be told they changed — prefer writing your response under <em>Eduversal Coordinator Recommendations</em> below.
         </div>` : ''}
@@ -4897,14 +4992,15 @@
               : '<span class="field-owner is-locked">🔒 the school\'s</span>'}</label>
             <textarea aria-label="What are the priority areas to develop?" data-overview-field="improvements" placeholder="${canEdit ? 'What are the priority areas to develop?' : 'Written by the school in Academic Hub'}" ${!canEdit ? 'disabled' : ''}>${a.improvements || ''}</textarea>
           </div>
-        </div>
+        </div>`)}
 
         <!-- ── EDUVERSAL'S RESPONSE ── the year-end rating is the mean of the
              five domain cards above, so it follows them rather than preceding
              its own inputs. Action plan and appeals both only exist once the
              report is published, so they close the panel in the order the
              cycle actually produces them. -->
-        ${buildDevelopmentRatingCard(a)}
+        ${overviewSection('response', "Eduversal's response", 'The year-end rating, the reply to the school, and what follows it',
+          `${buildDevelopmentRatingCard(a)}
         <!-- The one field on this tab that is Eduversal's to write, so it
              carries visible weight rather than sitting at the same rank as
              the school's fields above and the read-only panels below. The
@@ -4920,7 +5016,8 @@
           <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
         </div>
         ${buildActionPlanPanel(a, canWriteExternal)}
-        ${buildAppealsPanel(a)}
+         ${buildAppealsPanel(a)}`)}
+
         ${state.isAdmin ? '' : `<div class="readonly-note">${canWriteFeedback
             ? 'You can write the recommendations below — that is Eduversal\'s reply to this school. The ratings and evidence above are the school\'s own submission and are read-only here. Publishing the appraisal (Mark as Reviewed) is done by a Central Hub admin.'
             : 'This appraisal has been reviewed and is now closed, so it is read-only.'}</div>`}
