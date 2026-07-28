@@ -108,8 +108,54 @@
     }
     .dh-pill.is-done { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
 
-    .item-row { padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .kbd-rail {
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+      margin: -6px 0 16px; padding: 0 4px;
+      font-size: .72rem; color: var(--ink-3);
+    }
+    .kbd-rail kbd {
+      font-family: 'DM Mono', monospace; font-size: .68rem;
+      background: var(--paper); border: 1px solid var(--border);
+      border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; margin: 0 1px;
+      color: var(--ink-2);
+    }
+    .kbd-rail__hint { margin-left: auto; font-style: italic; }
+    @media (max-width: 700px) { .kbd-rail { display: none; } }
+
+    .item-row {
+      padding: 16px 12px; border-bottom: 1px solid var(--border);
+      border-radius: 10px; outline: none; scroll-margin-top: 90px;
+      transition: background .12s, box-shadow .12s;
+    }
     .item-row:last-child { border-bottom: none; }
+    /* Keyboard focus is the primary input during a live lesson — make the
+       focused row unmistakable so the specialist never scores the wrong item. */
+    .item-row:focus-visible, .item-row.is-focused {
+      background: #fffbeb; box-shadow: inset 3px 0 0 #d97706;
+    }
+    .item-row.item-done .item-title::after {
+      content: ' ✓'; color: #16a34a; font-weight: 800; font-size: .8rem;
+    }
+
+    /* Cambridge Teacher Standards chip — cambridge-crossref.js wires the
+       popover; this only styles it. */
+    .cts-pill {
+      font-family: 'DM Mono', monospace; font-size: .65rem; font-weight: 600;
+      padding: 2px 6px; border-radius: 4px; cursor: pointer;
+      background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe;
+    }
+    .cts-pill:hover { background: #ddd6fe; }
+
+    .note-toggle {
+      background: none; border: none; cursor: pointer; font-family: inherit;
+      font-size: .73rem; font-weight: 600; color: var(--ink-3);
+      padding: 6px 0 0; text-align: left;
+    }
+    .note-toggle:hover { color: #b45309; }
+    .note-toggle.is-filled { color: #b45309; font-weight: 700; }
+    /* .item-note is display:block by default — the bare [hidden] attribute
+       loses to it, so the override is required (Common Mistake #42). */
+    .item-note[hidden] { display: none; }
     .item-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 4px; flex-wrap: wrap; }
     .item-id {
       font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500;
@@ -276,6 +322,14 @@
         <div class="pr-bar-wrap"><div class="pr-bar" id="prBar"></div></div>
         <span class="pr-mean">F2 mean <strong id="prMean">—</strong></span>
       </div>
+      <!-- Keyboard is the primary input during a live lesson. -->
+      <div class="kbd-rail" aria-hidden="true">
+        <span><kbd>1</kbd>–<kbd>4</kbd> score</span>
+        <span><kbd>N</kbd> not seen</span>
+        <span><kbd>E</kbd> evidence</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+        <span class="kbd-rail__hint">Click an item first, then type.</span>
+      </div>
 
       <!-- Domains render here -->
       <div id="domainHost"></div>
@@ -422,16 +476,27 @@
             .map(k => `<div><strong>${esc(k)} — ${esc((SCALE.find(s => String(s.value) === String(k)) || {}).label || '')}:</strong> ${esc(item.rubric[k])}</div>`)
             .join('');
 
+          // Cambridge Teacher Standards refs travel with the item in
+          // appraisal-framework-v2.json. The specialist is exactly the person
+          // who needs them to hand — cambridge-crossref.js turns .cts-pill into
+          // a click-to-expand popover carrying the verbatim standard text.
+          const ctsHtml = (Array.isArray(item.cambridge_standard_refs) ? item.cambridge_standard_refs : [])
+            .map(r => `<span class="cts-pill" data-cts-ref="${esc(r)}" role="button" tabindex="0"
+                         title="Cambridge Teacher Standards 2023 — ${esc(r)}">CTS ${esc(r)}</span>`).join('');
+
           return `
-            <div class="item-row">
+            <div class="item-row" id="row-${esc(item.id)}" tabindex="0"
+                 data-item-row="${esc(item.id)}" onkeydown="window.handleItemKey(event, '${esc(item.id)}')">
               <div class="item-head">
                 <span class="item-id">${esc(item.id)}</span>
                 <span class="item-title">${esc(item.title)}</span>
+                ${ctsHtml}
                 ${rubricHtml ? `<button type="button" class="rubric-toggle" data-rubric="${esc(item.id)}">rubric</button>` : ''}
               </div>
               ${rubricHtml ? `<div class="item-rubric" id="rub-${esc(item.id)}" hidden>${rubricHtml}</div>` : ''}
               <div class="score-row">${btns}</div>
-              <textarea class="item-note" data-note="${esc(item.id)}"
+              <button type="button" class="note-toggle" data-note-toggle="${esc(item.id)}">+ Add evidence</button>
+              <textarea class="item-note" data-note="${esc(item.id)}" hidden
                         placeholder="Evidence for this score — what you actually saw…"></textarea>
             </div>`;
         }).join('');
@@ -468,7 +533,19 @@
       });
       Object.entries(notes).forEach(([id, txt]) => {
         const ta = document.querySelector(`[data-note="${CSS.escape(id)}"]`);
-        if (ta) ta.value = txt;
+        if (!ta) return;
+        ta.value = txt;
+        // Evidence that already exists must be visible, not hidden behind a
+        // toggle the specialist has no reason to suspect.
+        if (txt && txt.trim()) {
+          ta.hidden = false;
+          const btn = document.querySelector(`[data-note-toggle="${CSS.escape(id)}"]`);
+          if (btn) { btn.classList.add('is-filled'); btn.textContent = '− Evidence'; }
+        }
+      });
+      Object.keys(scores).forEach(id => {
+        const row = document.getElementById(`row-${id}`);
+        if (row) row.classList.add('item-done');
       });
     }
 
@@ -491,32 +568,92 @@
       });
 
       document.querySelectorAll('.score-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = btn.dataset.item;
-          const raw = btn.dataset.val;
-          const val = raw === 'na' ? 'na' : Number(raw);
-          // Clicking the selected score again clears it.
-          if (scores[id] === val) delete scores[id]; else scores[id] = val;
-          document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
-            b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
-          });
-          if (scores[id] !== undefined) {
-            btn.classList.add(scores[id] === 'na' ? 'sel-na' : `sel-${scores[id]}`);
-          }
-          markDirty();
-          refreshProgress();
-        });
+        btn.addEventListener('click', () => selectScore(btn.dataset.item, btn.dataset.val));
+      });
+
+      // Evidence textarea stays folded until there is something to say, so a
+      // 30-45 item lesson doesn't scroll for pages.
+      document.querySelectorAll('[data-note-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => openNote(btn.dataset.noteToggle, true));
       });
 
       document.querySelectorAll('[data-note]').forEach(ta => {
-        ta.addEventListener('input', () => { notes[ta.dataset.note] = ta.value; markDirty(); });
+        ta.addEventListener('input', () => {
+          notes[ta.dataset.note] = ta.value;
+          const btn = document.querySelector(`[data-note-toggle="${CSS.escape(ta.dataset.note)}"]`);
+          if (btn) {
+            btn.classList.toggle('is-filled', !!ta.value.trim());
+            btn.textContent = ta.value.trim() ? '− Evidence' : '+ Add evidence';
+          }
+          markDirty();
+        });
       });
     }
 
+    // Single scoring path — the click handler and the keyboard handler both
+    // route through here so they can never drift apart.
+    function selectScore(id, raw) {
+      if (!id) return;
+      const val = raw === 'na' ? 'na' : Number(raw);
+      if (scores[id] === val) delete scores[id]; else scores[id] = val;   // click again to clear
+      document.querySelectorAll(`[data-item="${CSS.escape(id)}"]`).forEach(b => {
+        b.className = 'score-btn' + (b.dataset.val === 'na' ? ' is-na' : '');
+        if (scores[id] !== undefined && String(b.dataset.val) === String(scores[id])) {
+          b.classList.add(scores[id] === 'na' ? 'sel-na' : `sel-${scores[id]}`);
+        }
+      });
+      const row = document.getElementById(`row-${id}`);
+      if (row) row.classList.toggle('item-done', scores[id] !== undefined);
+      markDirty();
+      refreshProgress();
+    }
+
+    function openNote(id, focus) {
+      const ta  = document.querySelector(`[data-note="${CSS.escape(id)}"]`);
+      const btn = document.querySelector(`[data-note-toggle="${CSS.escape(id)}"]`);
+      if (!ta) return;
+      ta.hidden = !ta.hidden;
+      if (btn) btn.textContent = ta.hidden
+        ? (ta.value.trim() ? '− Evidence' : '+ Add evidence')
+        : '− Evidence';
+      if (!ta.hidden && focus) ta.focus();
+    }
+
+    // Keyboard scoring — the specialist is sitting in a lesson, so 1-4 / N beats
+    // hunting for buttons. Arrow keys walk the item list; E opens evidence.
+    function itemRows() { return [...document.querySelectorAll('.item-row[tabindex="0"]')]; }
+    function moveFocus(id, delta) {
+      const rows = itemRows();
+      const i = rows.findIndex(r => r.id === `row-${id}`);
+      const next = rows[i + delta];
+      if (next) next.focus();
+    }
+    window.handleItemKey = function (e, id) {
+      if (e.target && e.target.tagName === 'TEXTAREA') return;   // typing evidence
+      if (['1','2','3','4'].includes(e.key)) {
+        e.preventDefault(); selectScore(id, e.key); moveFocus(id, 1);
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault(); selectScore(id, 'na'); moveFocus(id, 1);
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault(); openNote(id, true);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault(); moveFocus(id, 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); moveFocus(id, -1);
+      }
+    };
+
+    let autoSaveTimer = null;
     function markDirty() {
       const el = $('abStatus');
       el.className = 'ab-status';
       el.textContent = 'Unsaved changes';
+      // A lesson observation is scored live; a closed tab or a flat battery
+      // used to lose the lot. Debounced draft autosave once a teacher is
+      // picked (the payload needs one) and something has been scored.
+      if (!teacher || !Object.keys(scores).length) return;
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => save('draft', true), 1500);
     }
 
     // ── Teacher picker ─────────────────────────────────────────
@@ -617,9 +754,10 @@
       };
     }
 
-    async function save(status) {
+    async function save(status, silent = false) {
       const el = $('abStatus');
       if (!teacher) {
+        if (silent) return;   // autosave fires before a teacher is picked — stay quiet
         el.className = 'ab-status is-error';
         el.textContent = 'Pick a teacher before saving.';
         return;
@@ -631,7 +769,7 @@
       }
 
       el.className = 'ab-status';
-      el.textContent = 'Saving…';
+      el.textContent = silent ? 'Autosaving…' : 'Saving…';
       const payload = buildPayload(status);
 
       try {
@@ -655,7 +793,7 @@
       el.className = 'ab-status is-ok';
       el.textContent = status === 'shared'
         ? 'Shared with the teacher ✓'
-        : 'Draft saved ✓';
+        : (silent ? 'Draft autosaved ✓' : 'Draft saved ✓');
     }
 
     // ── Init ───────────────────────────────────────────────────
