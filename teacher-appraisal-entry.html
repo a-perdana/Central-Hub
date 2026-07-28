@@ -53,12 +53,30 @@
 
     .selected-teacher {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      padding: 10px 13px; border-radius: 10px;
+      padding: 10px 13px; border-radius: 10px; margin-bottom: 16px;
       background: #fffbeb; border: 1px solid #fde68a;
       font-size: 0.85rem; color: #78350f;
     }
     .selected-teacher[hidden] { display: none; }
     .st-name { font-weight: 700; }
+    .st-level-wrap { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+    .st-level-lbl {
+      font-size: .68rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .05em; color: #a16207;
+    }
+    .st-level {
+      font-family: inherit; font-size: .78rem; font-weight: 600; color: #78350f;
+      background: #fff; border: 1px solid #fcd34d; border-radius: 7px; padding: 4px 8px;
+      cursor: pointer;
+    }
+    .st-level:disabled { cursor: not-allowed; opacity: .7; background: #fef3c7; }
+    .st-level-lock[hidden] { display: none; }
+    .st-level-note {
+      font-size: .76rem; line-height: 1.5; margin: -8px 0 16px;
+      padding: 9px 12px; border-radius: 9px;
+      background: #fef3c7; border: 1px solid #fde68a; color: #78350f;
+    }
+    .st-level-note[hidden] { display: none; }
     .st-clear {
       margin-left: auto; background: none; border: none; cursor: pointer;
       color: #92400e; font-size: 0.78rem; font-weight: 600; text-decoration: underline;
@@ -317,8 +335,19 @@
         <div class="selected-teacher" id="selectedTeacher" hidden>
           <span class="st-name" id="stName">—</span>
           <span id="stMeta">—</span>
+          <span class="st-level-wrap">
+            <label class="st-level-lbl" for="stLevel">level</label>
+            <select class="st-level" id="stLevel">
+              <option value="induction">Induction</option>
+              <option value="developing">Developing</option>
+              <option value="proficient">Proficient</option>
+              <option value="lead">Lead</option>
+            </select>
+            <span class="st-level-lock" id="stLevelLock" hidden>🔒</span>
+          </span>
           <button type="button" class="st-clear" id="stClear">change teacher</button>
         </div>
+        <div class="st-level-note" id="stLevelNote" hidden></div>
 
         <div class="setup-grid" id="setupGrid">
           <div class="form-group tp-wrap" id="tpGroup">
@@ -732,13 +761,69 @@
       if (!t) return;
       teacher = t;
       $('stName').textContent = t.name;
-      $('stMeta').textContent = [t.school, t.subject, `level: ${t.level}`].filter(Boolean).join(' · ');
+      $('stMeta').textContent = [t.school, t.subject].filter(Boolean).join(' · ');
+      $('stLevel').value = t.level || 'induction';
       $('selectedTeacher').hidden = false;
       $('tpGroup').style.display = 'none';
       $('tpResults').hidden = true;
       // Level changes which items are visible, so re-render.
       renderDomains();
       markDirty();
+      applyLevelLock();   // async — resolves against this teacher's shared records
+    }
+
+    // ── Appraisal level ────────────────────────────────────────
+    // The level decides which F2 items are in scope (30 at Induction up to 45
+    // at Lead), so changing it mid-record would silently change the denominator
+    // of an already-shared observation. Once an observation has been SHARED
+    // with the teacher for a given level, that level is frozen for this page.
+    // Drafts stay editable — a specialist who picked the wrong level and has
+    // not shared anything yet should be able to fix it.
+    let lockedLevels = new Set();
+
+    async function applyLevelLock() {
+      const sel  = $('stLevel');
+      const lock = $('stLevelLock');
+      const note = $('stLevelNote');
+      lockedLevels = new Set();
+      sel.disabled = false; lock.hidden = true; note.hidden = true;
+      if (!teacher?.uid) return;
+
+      try {
+        // Single-field equality query — served by the automatic index.
+        const snap = await getDocs(query(
+          collection(window.db, 'specialist_observations'),
+          where('teacherUid', '==', teacher.uid)
+        ));
+        snap.forEach(d => {
+          const v = d.data();
+          if (v.status === 'shared' && v.level) lockedLevels.add(v.level);
+        });
+      } catch (e) {
+        // Read failure must not block scoring — fail open, leave the picker live.
+        console.warn('level-lock lookup failed', e);
+        return;
+      }
+
+      if (!lockedLevels.size) return;
+
+      const current = sel.value;
+      [...sel.options].forEach(o => { o.disabled = lockedLevels.has(o.value) && o.value !== current; });
+
+      if (lockedLevels.has(current)) {
+        // The level in play already has a shared record — freeze it outright.
+        sel.disabled = true;
+        lock.hidden  = false;
+        note.hidden  = false;
+        note.innerHTML = `<strong>Level locked.</strong> A <strong>${esc(current)}</strong> observation
+          has already been shared with ${esc(teacher.name)}. Changing the level now would change which
+          items are in scope for a record the teacher has already seen. To observe at a different level,
+          ask an administrator to update the teacher's level on their profile.`;
+      } else {
+        note.hidden = false;
+        note.innerHTML = `Already shared at: <strong>${esc([...lockedLevels].join(', '))}</strong>.
+          Those levels cannot be picked again here.`;
+      }
     }
 
     // ── Save ───────────────────────────────────────────────────
@@ -866,9 +951,26 @@
       $('stClear').addEventListener('click', () => {
         teacher = null;
         $('selectedTeacher').hidden = true;
+        $('stLevelNote').hidden = true;
         $('tpGroup').style.display = '';
         $('teacherSearch').value = '';
         renderDomains();
+      });
+
+      // Changing the level re-filters the item set, so re-render. Scores for
+      // items that leave scope stay in `scores` but are not submitted — they
+      // are filtered by visibleItems() everywhere that matters.
+      $('stLevel').addEventListener('change', (e) => {
+        if (!teacher) return;
+        const next = e.target.value;
+        if (lockedLevels.has(next)) {          // belt-and-braces; option is disabled too
+          e.target.value = teacher.level || 'induction';
+          return;
+        }
+        teacher.level = next;
+        renderDomains();
+        markDirty();
+        applyLevelLock();
       });
 
       ['obsDate', 'obsClass', 'obsTopic', 'narrGlow', 'narrGrow', 'narrGo']

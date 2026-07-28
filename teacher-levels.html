@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Levels — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 28px 40px 48px; }
+    .page-wrap > .page-info-strip { margin: 6px 0 14px; }
+
+    /* Toolbar */
+    .tl-toolbar {
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+      margin-bottom: 18px;
+    }
+    .tl-search {
+      flex: 1; min-width: 220px; font-family: inherit; font-size: .86rem;
+      padding: 9px 13px; border: 1px solid var(--border); border-radius: 9px;
+      background: var(--white); color: var(--ink);
+    }
+    .tl-chip {
+      font-family: inherit; font-size: .76rem; font-weight: 700;
+      padding: 7px 13px; border-radius: 999px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--white); color: var(--ink-2);
+      transition: all .14s;
+    }
+    .tl-chip:hover { border-color: #fda4af; }
+    .tl-chip.is-on { background: #fff1f2; border-color: #e11d48; color: #9f1239; }
+
+    /* Level totals */
+    .tl-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .tl-stat {
+      flex: 1; min-width: 130px; background: var(--white); border: 1px solid var(--border);
+      border-left: 4px solid var(--lv-col, var(--border)); border-radius: 11px; padding: 13px 15px;
+    }
+    .tl-stat__num { font-size: 1.5rem; font-weight: 800; color: var(--ink); line-height: 1; }
+    .tl-stat__lbl {
+      font-size: .68rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin-top: 5px;
+    }
+
+    /* School group */
+    .tl-school { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--white); overflow: hidden; }
+    .tl-school__head {
+      width: 100%; font-family: inherit; text-align: left; cursor: pointer; border: none;
+      padding: 14px 18px; background: #fff5f6; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    }
+    .tl-school__name { font-size: .95rem; font-weight: 700; color: #9f1239; }
+    .tl-school__count { font-size: .72rem; font-weight: 700; color: var(--ink-3); }
+    .tl-school__body[hidden] { display: none; }
+
+    /* Rows */
+    .tl-row {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      padding: 11px 18px; border-bottom: 1px solid var(--border);
+    }
+    .tl-row:last-child { border-bottom: none; }
+    .tl-row__name { font-size: .88rem; font-weight: 600; color: var(--ink); min-width: 170px; flex: 1; }
+    .tl-row__sub { font-size: .76rem; color: var(--ink-3); min-width: 110px; }
+    .tl-row__email { font-family: 'DM Mono', monospace; font-size: .72rem; color: var(--ink-3); }
+    .lv-pill {
+      font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+      padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+    }
+    .lv-induction  { background: #eff6ff; color: #1e40af; }
+    .lv-developing { background: #fff7ed; color: #9a3412; }
+    .lv-proficient { background: #fefce8; color: #854d0e; }
+    .lv-lead       { background: #f0fdf4; color: #166534; }
+    .lv-unset      { background: var(--paper); color: var(--ink-3); font-style: italic; }
+    .tl-row__obs { font-size: .72rem; color: var(--ink-3); min-width: 92px; }
+    .tl-row__obs strong { color: var(--ink-2); }
+
+    .tl-empty { padding: 40px; text-align: center; color: var(--ink-3); font-size: .88rem; }
+
+    @media (max-width: 760px) {
+      .page-wrap { padding: 20px 16px 40px; }
+      .tl-row__email { display: none; }
+    }
+  </style>
+</head>
+<body data-page-accent="rose">
+  <!-- SHARED_NAVBAR -->
+
+  <header class="page-hero" data-accent="rose">
+    <div class="page-hero__inner">
+      <div class="page-hero__text">
+        <div class="page-hero__eyebrow">People · Appraisal levels</div>
+        <h1 class="page-hero__title">Teacher Levels</h1>
+        <p class="page-hero__desc">
+          Every teacher in the network with their appraisal level, grouped by school.
+        </p>
+      </div>
+      <div class="page-hero__kpis">
+        <div class="page-hero__kpi page-hero__kpi--primary">
+          <div class="page-hero__kpi-num" id="kpiTotal">—</div>
+          <div class="page-hero__kpi-lbl">Teachers</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="kpiSchools">—</div>
+          <div class="page-hero__kpi-lbl">Schools</div>
+        </div>
+        <div class="page-hero__kpi">
+          <div class="page-hero__kpi-num" id="kpiUnset">—</div>
+          <div class="page-hero__kpi-lbl">Level not set</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-wrap">
+    <aside class="page-info-strip" data-accent="rose" role="note">
+      <div class="page-info-strip__icon" aria-hidden="true">ℹ️</div>
+      <div class="page-info-strip__text">
+        <span class="page-info-strip__title">About this page</span>
+        <div class="page-info-strip__body">
+          A read-only directory of partner-school teachers and the appraisal level each is
+          observed against. The level decides which F2 items are in scope on
+          <a href="teacher-appraisal-entry.html">Class Observation Entry</a> &mdash; 30 items at
+          Induction, up to 45 at Lead &mdash; so it is worth knowing before a school visit.
+          The count on the right is how many observations Eduversal has shared with that teacher.
+          <br>
+          <em>Levels are set on the teacher's profile by an administrator (<code>appraisal_level</code>
+          on <code>users</code>). This page does not edit them &mdash; a teacher showing
+          <strong>not set</strong> is treated as Induction until an admin says otherwise.</em>
+        </div>
+      </div>
+    </aside>
+
+    <div class="gate-msg" id="gateMsg" hidden></div>
+
+    <div id="content" hidden>
+      <div class="tl-stats" id="stats"></div>
+
+      <div class="tl-toolbar">
+        <input class="tl-search" id="search" type="text" autocomplete="off"
+               placeholder="Search by name, email, school or subject…">
+        <button type="button" class="tl-chip is-on" data-lv="all">All</button>
+        <button type="button" class="tl-chip" data-lv="induction">Induction</button>
+        <button type="button" class="tl-chip" data-lv="developing">Developing</button>
+        <button type="button" class="tl-chip" data-lv="proficient">Proficient</button>
+        <button type="button" class="tl-chip" data-lv="lead">Lead</button>
+        <button type="button" class="tl-chip" data-lv="unset">Not set</button>
+      </div>
+
+      <div id="host"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      collection, query, where, getDocs, limit
+    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    const LEVELS = [
+      { id: 'induction',  label: 'Induction',  col: '#2563eb' },
+      { id: 'developing', label: 'Developing', col: '#ea580c' },
+      { id: 'proficient', label: 'Proficient', col: '#ca8a04' },
+      { id: 'lead',       label: 'Lead',       col: '#16a34a' },
+    ];
+
+    let teachers = [];      // { uid, name, email, school, subject, level, obsCount }
+    let filterLv = 'all';
+    let filterQ  = '';
+
+    // ── Data ───────────────────────────────────────────────────
+    // Same query the observation entry page runs, so the two always agree on
+    // who counts as a teacher.
+    async function loadTeachers() {
+      const snap = await getDocs(query(
+        collection(window.db, 'users'),
+        where('role_teachershub', 'in', ['teachers_user', 'teachers_admin']),
+        limit(600)
+      ));
+      return snap.docs.map(d => {
+        const u = d.data();
+        return {
+          // Local view-model; d.id IS the auth uid. // @lint-allow-uid
+          uid: d.id,
+          name: u.displayName || u.name || u.email || '(no name)',
+          email: (u.email || '').toLowerCase(),
+          school: u.school || '',
+          subject: u.subject || '',
+          // Deliberately NOT defaulted to 'induction' here — an unset level is
+          // a real state an admin should see and fix, not something to paper
+          // over. The entry page still treats it as Induction when scoring.
+          level: u.appraisal_level || '',
+          obsCount: 0
+        };
+      });
+    }
+
+    // How many observations Eduversal has actually shared with each teacher.
+    // Read failure is non-fatal — the directory is still useful without it.
+    async function loadObservationCounts(byUid) {
+      try {
+        const snap = await getDocs(query(
+          collection(window.db, 'specialist_observations'), limit(2000)
+        ));
+        snap.forEach(d => {
+          const v = d.data();
+          if (v.status !== 'shared' || !v.teacherUid) return;
+          const t = byUid.get(v.teacherUid);
+          if (t) t.obsCount++;
+        });
+      } catch (e) {
+        console.warn('observation counts unavailable', e);
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────────
+    function visible() {
+      return teachers.filter(t => {
+        if (filterLv === 'unset' && t.level) return false;
+        if (filterLv !== 'all' && filterLv !== 'unset' && t.level !== filterLv) return false;
+        if (!filterQ) return true;
+        return t.name.toLowerCase().includes(filterQ)
+            || t.email.includes(filterQ)
+            || t.school.toLowerCase().includes(filterQ)
+            || t.subject.toLowerCase().includes(filterQ);
+      });
+    }
+
+    function renderStats() {
+      const counts = Object.fromEntries(LEVELS.map(l => [l.id, 0]));
+      let unset = 0;
+      teachers.forEach(t => { if (t.level && counts[t.level] !== undefined) counts[t.level]++; else unset++; });
+
+      $('stats').innerHTML = LEVELS.map(l => `
+        <div class="tl-stat" style="--lv-col:${l.col};">
+          <div class="tl-stat__num">${counts[l.id]}</div>
+          <div class="tl-stat__lbl">${esc(l.label)}</div>
+        </div>`).join('') + `
+        <div class="tl-stat" style="--lv-col:#94a3b8;">
+          <div class="tl-stat__num">${unset}</div>
+          <div class="tl-stat__lbl">Not set</div>
+        </div>`;
+
+      $('kpiTotal').textContent   = teachers.length;
+      $('kpiSchools').textContent = new Set(teachers.map(t => t.school || '—')).size;
+      $('kpiUnset').textContent   = unset;
+    }
+
+    function levelPill(level) {
+      if (!level) return '<span class="lv-pill lv-unset">not set</span>';
+      const l = LEVELS.find(x => x.id === level);
+      return `<span class="lv-pill lv-${esc(level)}">${esc(l ? l.label : level)}</span>`;
+    }
+
+    function render() {
+      const rows = visible();
+      if (!rows.length) {
+        $('host').innerHTML = '<div class="tl-empty">No teachers match this filter.</div>';
+        return;
+      }
+
+      // Group by school, unnamed schools last.
+      const bySchool = new Map();
+      rows.forEach(t => {
+        const k = t.school || 'No school set';
+        if (!bySchool.has(k)) bySchool.set(k, []);
+        bySchool.get(k).push(t);
+      });
+      const schools = [...bySchool.keys()].sort((a, b) => {
+        if (a === 'No school set') return 1;
+        if (b === 'No school set') return -1;
+        return a.localeCompare(b);
+      });
+
+      $('host').innerHTML = schools.map((school, si) => {
+        const list = bySchool.get(school).sort((a, b) => a.name.localeCompare(b.name));
+        return `
+          <div class="tl-school">
+            <button type="button" class="tl-school__head" data-school-toggle
+                    aria-expanded="${si === 0 ? 'true' : 'false'}" aria-controls="sch-${si}">
+              <span class="tl-school__name">${esc(school)}</span>
+              <span class="tl-school__count">${list.length} teacher${list.length === 1 ? '' : 's'}</span>
+            </button>
+            <div class="tl-school__body" id="sch-${si}" ${si === 0 ? '' : 'hidden'}>
+              ${list.map(t => `
+                <div class="tl-row">
+                  <span class="tl-row__name">${esc(t.name)}</span>
+                  <span class="tl-row__sub">${esc(t.subject || '—')}</span>
+                  <span class="tl-row__email">${esc(t.email)}</span>
+                  ${levelPill(t.level)}
+                  <span class="tl-row__obs">${t.obsCount
+                    ? `<strong>${t.obsCount}</strong> observation${t.obsCount === 1 ? '' : 's'}`
+                    : 'no observations'}</span>
+                </div>`).join('')}
+            </div>
+          </div>`;
+      }).join('');
+
+      document.querySelectorAll('[data-school-toggle]').forEach(head => {
+        head.addEventListener('click', () => {
+          const body = document.getElementById(head.getAttribute('aria-controls'));
+          if (!body) return;
+          const open = head.getAttribute('aria-expanded') === 'true';
+          head.setAttribute('aria-expanded', open ? 'false' : 'true');
+          body.hidden = open;
+        });
+      });
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    // CH dispatches authReady on `document`, not `window` (Common Mistake #13).
+    document.addEventListener('authReady', async () => {
+      try {
+        teachers = await loadTeachers();
+      } catch (e) {
+        console.error(e);
+        $('gateMsg').innerHTML =
+          '<strong>Could not load the teacher directory.</strong> Reload the page; if it keeps failing, tell an admin.';
+        $('gateMsg').hidden = false;
+        return;
+      }
+
+      const byUid = new Map(teachers.map(t => [t.uid, t]));
+      await loadObservationCounts(byUid);
+
+      $('content').hidden = false;
+      renderStats();
+      render();
+
+      let tmr = null;
+      $('search').addEventListener('input', (e) => {
+        clearTimeout(tmr);
+        const v = e.target.value.trim().toLowerCase();
+        tmr = setTimeout(() => { filterQ = v; render(); }, 160);
+      });
+
+      document.querySelectorAll('[data-lv]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('[data-lv]').forEach(c => c.classList.remove('is-on'));
+          chip.classList.add('is-on');
+          filterLv = chip.dataset.lv;
+          render();
+        });
+      });
+    });
+  </script>
+</body>
+</html>

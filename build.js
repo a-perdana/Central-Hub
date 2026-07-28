@@ -555,6 +555,7 @@ const htmlFiles = [
   "school-appraisals.html",
   "teacher-appraisals.html",
   "teacher-appraisal-entry.html",
+  "teacher-levels.html",
   "classroom-walkthrough-entry.html",
   "teaching-progress.html",
   "primary-checkpoint-syllabus.html",
