@@ -250,6 +250,33 @@ service cloud.firestore {
       allow list:   if isAdmin() || isAHAdmin() || isCHCoordinator()
                        || isAHSchoolLeaderAnySchool();
       allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Narrow extra path: a school_principal / academic_coordinator may set
+      // ONLY the appraisal level, and ONLY for a teacher at their own school.
+      // The level decides which F2 Class Observation items are in scope
+      // (30 at Induction up to 45 at Lead), so the school that runs the
+      // appraisal needs to be able to correct it without going through HQ.
+      //
+      // Deliberately tight — this is a second write path into `users`, the
+      // collection that also holds every role field:
+      //   - affectedKeys is pinned to the level + its two audit fields, so a
+      //     leader cannot touch role_*, schoolId, approval_status_* or anything
+      //     else in the same update (the 2026-05-05 AH self-promotion incident).
+      //   - the target must already be a Teachers Hub user at the same school,
+      //     checked against the STORED doc so the schoolId cannot be rewritten
+      //     in the same call.
+      //   - setBy is pinned to the caller, so the audit trail cannot be forged.
+      allow update: if isAcademicUser()
+                    && userProfile().ah_sub_roles is list
+                    && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator'])
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy'])
+                    && resource.data.schoolId == userProfile().schoolId
+                    && resource.data.schoolId != null
+                    && resource.data.role_teachershub in ['teachers_user', 'teachers_admin']
+                    && request.resource.data.appraisal_level
+                         in ['induction', 'developing', 'proficient', 'lead', null]
+                    && request.resource.data.appraisal_level_setBy == request.auth.uid;
     }
 
     // -- staff -----------------------------------------------
