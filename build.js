@@ -991,7 +991,11 @@ const refAssetMap = [
   // standards.js (--apply).
   ["eduversal-standards/manifest.json",      path.join("..", "docs", "research", "eduversal", "academic-standards", "manifest.json")],
   ["eduversal-standards/search-blurbs.json", path.join("..", "docs", "research", "eduversal", "academic-standards", "search-blurbs.json")],
-  ...Array.from({ length: 23 }, (_, i) => {
+  // Count read from the manifest, not hard-coded: a literal silently stops
+  // copying the moment a section is added, and dist/ just quietly lacks it.
+  // Past incident 2026-07-29, adding Section 24.
+  ...Array.from({ length: JSON.parse(fs.readFileSync(path.join("..", "docs", "research",
+      "eduversal", "academic-standards", "manifest.json"), "utf8")).sections.length }, (_, i) => {
     const n = String(i + 1).padStart(2, '0');
     return [
       `eduversal-standards/section-${n}.json`,
