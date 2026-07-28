@@ -2426,7 +2426,7 @@
     // that shows a role tag. Subject specialists inherit their subject's own
     // colour, so "Biology Subject Specialist" is the same green here as on
     // /department-workspace — see partials/subject-config.js for the rule.
-    import { roleTagStyle } from './partials/subject-config.js';
+    import { roleTagStyle, roleTagLabel } from './partials/subject-config.js';
 
     // ===== FRAMEWORK DATA (loaded from JSON) =====
     let FRAMEWORK = null;
@@ -2953,8 +2953,8 @@
         // Colour comes from the role, not from primary-vs-secondary rank —
         // that distinction is carried by the solid/outlined treatment below,
         // so the hue stays free to mean "which expert".
-        if (sup.primarySupervisor) parts.push(`<span class="sv-tag" style="${roleTagStyle(sup.primarySupervisor)}" title="Primary Supervisor · signs the Phase 1 report">${esc(sup.primarySupervisor)}</span>`);
-        if (sup.secondarySupervisor) parts.push(`<span class="sv-tag is-secondary" style="${roleTagStyle(sup.secondarySupervisor)}" title="Secondary Supervisor · signs the Phase 3 report">${esc(sup.secondarySupervisor)}</span>`);
+        if (sup.primarySupervisor) parts.push(`<span class="sv-tag" style="${roleTagStyle(sup.primarySupervisor)}" title="Primary Supervisor · signs the Phase 1 report">${esc(roleTagLabel(sup.primarySupervisor))}</span>`);
+        if (sup.secondarySupervisor) parts.push(`<span class="sv-tag is-secondary" style="${roleTagStyle(sup.secondarySupervisor)}" title="Secondary Supervisor · signs the Phase 3 report">${esc(roleTagLabel(sup.secondarySupervisor))}</span>`);
         return parts.join('');
       }
       return a.appraiser ? `<span class="sv-legacy">${esc(a.appraiser)}</span>` : '';
@@ -4306,14 +4306,14 @@
         <div class="sup-visit">
           <div class="sup-visit-label">${label}</div>
           <div class="sup-visit-dates">${esc(v.dates || '')}</div>
-          <div class="sup-visit-who"><span class="sup-role">${esc(role)}</span>${who ? `<span class="role-tag" style="${roleTagStyle(who)}">${esc(who)}</span>` : '<span class="sup-none">— not set —</span>'}</div>
+          <div class="sup-visit-who"><span class="sup-role">${esc(role)}</span>${who ? `<span class="role-tag" style="${roleTagStyle(who)}" title="${esc(who)}">${esc(roleTagLabel(who))}</span>` : '<span class="sup-none">— not set —</span>'}</div>
           ${Array.isArray(v.team) && v.team.length
             // Heading, not just a gap: the supervisor tag above is the same
             // shape and colour family as these chips, so without a label the
             // block reads as one team of six rather than "who signs it" plus
             // "who attends". The count makes the five explicit.
             ? `<div class="sup-team-head">Visit team <span class="sup-team-count">${v.team.length}</span></div>
-               <div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip" style="${roleTagStyle(t)}">${esc(t)}</span>`).join('')}</div>`
+               <div class="sup-team" title="One expert per domain">${v.team.map(t => `<span class="sup-chip" style="${roleTagStyle(t)}" title="${esc(t)}">${esc(roleTagLabel(t))}</span>`).join('')}</div>`
             : ''}
         </div>` : '';
       return `
@@ -4477,7 +4477,7 @@
 
       const complete = att.covered === att.total;
       const names = att.experts.length
-        ? att.experts.map(n => `<span class="role-tag" style="${roleTagStyle(n)}">${esc(n)}</span>`).join('')
+        ? att.experts.map(n => `<span class="role-tag" style="${roleTagStyle(n)}" title="${esc(n)}">${esc(roleTagLabel(n))}</span>`).join('')
         : '<em class="pa-none">no domain fully rated yet</em>';
 
       return `
@@ -4920,7 +4920,7 @@
                      ${roster.map(r => `<option value="${escAttr(r)}" ${r === who ? 'selected' : ''}>${esc(r)}</option>`).join('')}
                    </select>
                  </span>`
-              : `<span class="vt-who">${who ? `<span class="role-tag" style="${roleTagStyle(who)}">${esc(who)}</span>` : '<em>not recorded</em>'}</span>`}
+              : `<span class="vt-who">${who ? `<span class="role-tag" style="${roleTagStyle(who)}" title="${esc(who)}">${esc(roleTagLabel(who))}</span>` : '<em>not recorded</em>'}</span>`}
             ${swapped ? `<span class="vt-swap" title="Planned: ${escAttr(wasPlanned)}">covered</span>` : ''}
           </div>`;
       }).join('');
@@ -5852,9 +5852,11 @@
       blank.value = '';
       blank.textContent = opts.blankLabel || '— none —';
       sel.appendChild(blank);
+      // `value` stays the canonical label — that is what gets saved. Only the
+      // visible text shortens, so the dropdown reads like the chips it feeds.
       expertRoster().forEach(r => {
         const o = document.createElement('option');
-        o.value = r; o.textContent = r;
+        o.value = r; o.textContent = roleTagLabel(r); o.title = r;
         sel.appendChild(o);
       });
       // A plan seeded before a roster change can name a role the framework no
@@ -5862,7 +5864,7 @@
       // so keep it as an option and mark it.
       if (value && !expertRoster().includes(value)) {
         const o = document.createElement('option');
-        o.value = value; o.textContent = `${value} (not on the current roster)`;
+        o.value = value; o.textContent = `${roleTagLabel(value)} (not on the current roster)`; o.title = value;
         sel.appendChild(o);
       }
       sel.value = value || '';
@@ -5889,7 +5891,7 @@
         // Phase 2 is the one place a name from this modal actually appears,
         // so say whose it is rather than leaving the reader to connect them.
         const lead = p.code === 'phase_2' && sup.primarySupervisor
-          ? `<span class="sup-phase-lead" style="${roleTagStyle(sup.primarySupervisor)}">${esc(sup.primarySupervisor)}</span>`
+          ? `<span class="sup-phase-lead" style="${roleTagStyle(sup.primarySupervisor)}" title="${esc(sup.primarySupervisor)}">${esc(roleTagLabel(sup.primarySupervisor))}</span>`
           : '';
         return `
           <div class="sup-phase">

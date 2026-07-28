@@ -348,3 +348,36 @@ export function roleTagStyle(role) {
   const c = roleTagColor(role);
   return `color:${c.fg};background:${c.bg};border-color:${c.bd};--role-ink:${c.bd};`;
 }
+
+/** Short form for display. "Secondary English Subject Specialist" is 36
+ *  characters and wraps to two lines in a chip; the supervision strip shows two
+ *  of them per school and the visit-team row shows five.
+ *
+ *  DISPLAY ONLY. Firestore keeps the full label, ROLE_TAG_COLORS still keys off
+ *  it, and the appraisal roster still matches on it — shortening at render time
+ *  means no migration, no second vocabulary to keep in sync, and no risk of a
+ *  short form being written back as if it were canonical. Always store
+ *  `role`, render `roleTagLabel(role)`.
+ *
+ *  Rules, applied in order:
+ *    "Subject Specialist"        -> "SS"
+ *    "Bahasa Indonesia SS"       -> "Bahasa SS"       (only Bahasa we teach)
+ *    "Primary English SS"        -> "English SS Primary"    level moves to the
+ *    "Secondary English SS"      -> "English SS Secondary"  end, matching the
+ *                                   appraisal model's own shorthand
+ *  Anything already short (the two Math seats) and the directorships pass
+ *  through untouched — a directorship is not a specialist seat, so "Director
+ *  of Islamic Schools SS" would be wrong. */
+export function roleTagLabel(role) {
+  if (!role) return '';
+  let s = String(role).trim().replace(/\s+/g, ' ');
+
+  // Level-qualified English reads better with the level trailing, and this is
+  // the form the Updated Appraisal Model itself uses in its tables.
+  const lvl = s.match(/^(Primary|Secondary) English Subject Specialist$/i);
+  if (lvl) return `English SS ${lvl[1][0].toUpperCase()}${lvl[1].slice(1).toLowerCase()}`;
+
+  s = s.replace(/\bSubject Specialist\b/i, 'SS');
+  s = s.replace(/^Bahasa Indonesia\b/i, 'Bahasa');
+  return s;
+}
