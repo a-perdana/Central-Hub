@@ -648,13 +648,46 @@
 
     /* This strip closes the tab, so it needs room above it and a word saying
        what it is — unlabelled it read as a stray row of tags. */
-    .ref-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); }
+    /* Wrapping flex left the pills ragged — six items of very different widths
+       broke onto two lines with nothing lining up. A fixed 3-column grid gives
+       them a shared left edge and equal width, and the label sits on its own
+       row above rather than stealing the first cell. */
+    .ref-row { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); }
     .ref-row-label {
+      display: block;
       font-size: .64rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .06em; color: var(--ink-3); margin-right: 3px;
+      letter-spacing: .06em; color: var(--ink-3); margin-bottom: 9px;
     }
-    .ref-pill-ch { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--paper); color: var(--ink-3); border: 1px solid var(--border); text-decoration: none; transition: background .15s, color .15s; }
-    .ref-pill-ch:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .ref-row-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px;
+    }
+    /* 2 columns on the narrower modal widths — 3 equal columns start clipping
+       the longer acronyms below roughly 720px of panel. */
+    @media (max-width: 860px) {
+      .ref-row-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .ref-pill-ch {
+      display: flex; align-items: center; justify-content: center;
+      min-width: 0; /* lets the ellipsis engage instead of forcing the column wider */
+      font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 99px;
+      background: var(--paper); color: var(--ink-3);
+      border: 1px solid var(--border); text-decoration: none;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    /* Provenance families. Colours match the chip-family conventions used
+       elsewhere: Cambridge mor, Indonesian regulation green, Eduversal
+       cyan-deep for the international accreditors, slate for practice
+       frameworks. Hover fills with the family colour rather than the single
+       brand accent, so the grouping survives the interaction. */
+    .ref-pill-ch.is-accreditor { background: #ecfeff; color: #0e7490; border-color: #a5f3fc; }
+    .ref-pill-ch.is-accreditor:hover { background: #0e7490; color: #fff; border-color: #0e7490; }
+    .ref-pill-ch.is-cambridge  { background: #f5f3ff; color: #6c5ce7; border-color: #ddd6fe; }
+    .ref-pill-ch.is-cambridge:hover { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+    .ref-pill-ch.is-regulation { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .ref-pill-ch.is-regulation:hover { background: #047857; color: #fff; border-color: #047857; }
+    .ref-pill-ch.is-practice   { background: #f8fafc; color: #475569; border-color: #cbd5e1; }
+    .ref-pill-ch.is-practice:hover { background: #475569; color: #fff; border-color: #475569; }
 
     /* Domain overall score */
     .domain-score-summary {
@@ -5067,13 +5100,38 @@
           </div>`;
       }).join('');
 
+      // Three families, coloured so the strip reads as grouped provenance
+      // rather than six identical grey tags: international accreditors
+      // (CIS / WASC / NEASC) in cyan-deep, Cambridge in brand mor, Indonesian
+      // regulation in green, and instructional-practice frameworks
+      // (Danielson) in slate. Same colour logic as the chip families on
+      // /chip-families — regulatory green, Cambridge mor — so a reader who
+      // knows those popovers reads this strip the same way.
+      // A grid cell fits roughly 22 characters before the ellipsis bites, and
+      // the generic rules below produce "Cambridge International School" and
+      // "Permendiknas No. 13/2007" — both truncate. `short` names the pill
+      // outright for those; the full name stays in the title attribute.
+      const REF_FAMILY = [
+        { test: /^(CIS|WASC|NEASC)\b/i,        family: 'accreditor' },
+        { test: /cambridge/i,                  family: 'cambridge',  short: 'Cambridge' },
+        { test: /permendiknas|permendikbud/i,  family: 'regulation', short: 'Permendiknas 13/2007' },
+        { test: /danielson/i,                  family: 'practice',   short: 'Danielson' },
+      ];
       const refs = FRAMEWORK.meta.references ? FRAMEWORK.meta.references.map(r => {
         const name = r.name || r;
         const url = r.url || null;
-        const label = name.match(/\(([^)]+)\)/)?.[1] || name.split(' ').slice(0,2).join(' ');
+        // The acronym is the useful label and it sits BEFORE the parenthetical
+        // ("CIS (Council of International Schools)"). The old rule took the
+        // text inside the brackets, so every accreditor rendered as its full
+        // name and the row wrapped onto three lines.
+        const hit = REF_FAMILY.find(f => f.test.test(name));
+        const paren = name.match(/^([A-Z][A-Za-z]*)\s*\(/);
+        const label = hit?.short
+          || (paren ? paren[1] : name.split(/\s+[—–-]\s+/)[0].split(' ').slice(0, 3).join(' '));
+        const cls = `ref-pill-ch is-${hit?.family || 'practice'}`;
         return url
-          ? `<a class="ref-pill-ch" href="${url}" target="_blank" rel="noopener" title="${name}">${label}</a>`
-          : `<span class="ref-pill-ch" title="${name}">${label}</span>`;
+          ? `<a class="${cls}" href="${url}" target="_blank" rel="noopener" title="${esc(name)}">${esc(label)}</a>`
+          : `<span class="${cls}" title="${esc(name)}">${esc(label)}</span>`;
       }).join('') : '';
 
       return `
@@ -5163,7 +5221,7 @@
         ${state.isAdmin ? '' : `<div class="readonly-note">${canWriteFeedback
             ? 'You can write the recommendations below — that is Eduversal\'s reply to this school. The ratings and evidence above are the school\'s own submission and are read-only here. Publishing the appraisal (Mark as Reviewed) is done by a Central Hub admin.'
             : 'This appraisal has been reviewed and is now closed, so it is read-only.'}</div>`}
-        ${refs ? `<div class="ref-row"><span class="ref-row-label">Framework anchored to</span>${refs}</div>` : ''}`;
+        ${refs ? `<div class="ref-row"><span class="ref-row-label">Framework anchored to</span><div class="ref-row-grid">${refs}</div></div>` : ''}`;
     }
 
     // ── Domain lead brief ───────────────────────────────────────────────
