@@ -73,6 +73,20 @@
     .lv-proficient { background: #fefce8; color: #854d0e; }
     .lv-lead       { background: #f0fdf4; color: #166534; }
     .lv-unset      { background: var(--paper); color: var(--ink-3); font-style: italic; }
+
+    /* Admin-only inline level editor. Shares the pill palette so a row reads
+       the same whether it is editable or not. */
+    .lv-select {
+      font-family: inherit; font-size: .72rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .04em;
+      padding: 4px 8px; border-radius: 999px; cursor: pointer;
+      border: 1px solid transparent; transition: box-shadow .15s, border-color .15s;
+    }
+    .lv-select:hover  { border-color: currentColor; }
+    .lv-select:focus  { outline: 2px solid #e11d48; outline-offset: 1px; }
+    .lv-select.is-saving { opacity: .6; }
+    .lv-select.is-saved  { box-shadow: 0 0 0 2px #16a34a; }
+    .lv-select.is-error  { box-shadow: 0 0 0 2px #dc2626; }
     .tl-row__obs { font-size: .72rem; color: var(--ink-3); min-width: 92px; }
     .tl-row__obs strong { color: var(--ink-2); }
 
@@ -130,9 +144,12 @@
           Induction, up to 45 at Lead &mdash; so it is worth knowing before a school visit.
           The count on the right is how many observations Eduversal has shared with that teacher.
           <br>
-          <em>Levels are set on the teacher's profile by an administrator (<code>appraisal_level</code>
-          on <code>users</code>). This page does not edit them &mdash; a teacher showing
-          <strong>not set</strong> is treated as Induction until an admin says otherwise.</em>
+          <em id="editHint" hidden>You are signed in as an administrator, so the level dropdowns are
+          live &mdash; changing one writes <code>appraisal_level</code> on that teacher's profile
+          straight away. A teacher left at <strong>not set</strong> is scored as Induction.</em>
+          <em id="readonlyHint" hidden>Levels are set on the teacher's profile by an administrator
+          (<code>appraisal_level</code> on <code>users</code>). Only a <code>central_admin</code> can
+          change them &mdash; a teacher showing <strong>not set</strong> is scored as Induction.</em>
         </div>
       </div>
     </aside>
@@ -159,7 +176,7 @@
 
   <script type="module">
     import {
-      collection, query, where, getDocs, limit
+      collection, query, where, getDocs, limit, doc, updateDoc, serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
     const $ = (id) => document.getElementById(id);
@@ -177,6 +194,10 @@
     let teachers = [];      // { uid, name, email, school, subject, level, obsCount }
     let filterLv = 'all';
     let filterQ  = '';
+    // users/{uid} write is central_admin-only (see firestore.rules match /users).
+    // Non-admins get the read-only pills — an editable-looking control that the
+    // rule would reject is worse than none.
+    let canEdit  = false;
 
     // ── Data ───────────────────────────────────────────────────
     // Same query the observation entry page runs, so the two always agree on
@@ -262,6 +283,55 @@
       return `<span class="lv-pill lv-${esc(level)}">${esc(l ? l.label : level)}</span>`;
     }
 
+    function levelControl(t) {
+      if (!canEdit) return levelPill(t.level);
+      return `<select class="lv-select lv-${esc(t.level || 'unset')}" data-lv-set="${esc(t.uid)}"
+                      aria-label="Appraisal level for ${esc(t.name)}">
+        <option value=""${t.level ? '' : ' selected'}>not set</option>
+        ${LEVELS.map(l => `<option value="${l.id}"${t.level === l.id ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}
+      </select>`;
+    }
+
+    // Writes users/{uid}.appraisal_level. Optimistic on the local model so the
+    // pill colours and the level totals move immediately; reverted if the
+    // write is rejected.
+    async function setLevel(uid, next, selectEl) {
+      const t = teachers.find(x => x.uid === uid);
+      if (!t) return;
+      const prev = t.level;
+      t.level = next;
+      selectEl.className = `lv-select lv-${next || 'unset'}`;
+      renderStats();
+      flash(selectEl, 'is-saving');
+
+      try {
+        await updateDoc(doc(window.db, 'users', uid), {
+          appraisal_level: next || null,
+          appraisal_level_setAt: serverTimestamp(),
+          appraisal_level_setBy: window.currentUser?.uid || null
+        });
+        flash(selectEl, 'is-saved');
+      } catch (e) {
+        console.error('level write failed', e);
+        t.level = prev;
+        selectEl.value = prev || '';
+        selectEl.className = `lv-select lv-${prev || 'unset'}`;
+        renderStats();
+        flash(selectEl, 'is-error');
+        $('gateMsg').innerHTML = e?.code === 'permission-denied'
+          ? '<strong>Not saved.</strong> Only a central_admin can change appraisal levels.'
+          : '<strong>Not saved.</strong> Please try again.';
+        $('gateMsg').hidden = false;
+        setTimeout(() => { $('gateMsg').hidden = true; }, 6000);
+      }
+    }
+
+    function flash(el, cls) {
+      el.classList.remove('is-saving', 'is-saved', 'is-error');
+      el.classList.add(cls);
+      if (cls !== 'is-saving') setTimeout(() => el.classList.remove(cls), 1600);
+    }
+
     function render() {
       const rows = visible();
       if (!rows.length) {
@@ -297,7 +367,7 @@
                   <span class="tl-row__name">${esc(t.name)}</span>
                   <span class="tl-row__sub">${esc(t.subject || '—')}</span>
                   <span class="tl-row__email">${esc(t.email)}</span>
-                  ${levelPill(t.level)}
+                  ${levelControl(t)}
                   <span class="tl-row__obs">${t.obsCount
                     ? `<strong>${t.obsCount}</strong> observation${t.obsCount === 1 ? '' : 's'}`
                     : 'no observations'}</span>
@@ -315,11 +385,20 @@
           body.hidden = open;
         });
       });
+
+      document.querySelectorAll('[data-lv-set]').forEach(sel => {
+        sel.addEventListener('change', (e) => setLevel(sel.dataset.lvSet, e.target.value, sel));
+      });
     }
 
     // ── Init ───────────────────────────────────────────────────
     // CH dispatches authReady on `document`, not `window` (Common Mistake #13).
-    document.addEventListener('authReady', async () => {
+    document.addEventListener('authReady', async ({ detail }) => {
+      const profile = detail?.profile || window.userProfile || null;
+      canEdit = profile?.role_centralhub === 'central_admin';
+      $('editHint').hidden = !canEdit;
+      $('readonlyHint').hidden = canEdit;
+
       try {
         teachers = await loadTeachers();
       } catch (e) {
