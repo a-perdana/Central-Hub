@@ -895,9 +895,15 @@
       what: 'Indonesia Undang-Undang 35/2014 (revision of UU 23/2002 Perlindungan Anak) — child protection law. Defines kekerasan terhadap anak (physical/psychological/sexual/neglect) + mandates reporting obligations on schools.',
       why: 'De jure anchor for school-side safeguarding policy. Eduversal partner schools must implement reporting + investigation procedures per this law; the safeguarding KPI is the operational compliance check.'
     },
+    'PERLAK Permendikdasmen 6/2026': {
+      what: 'Permendikdasmen 6/2026 — Budaya Sekolah Aman dan Nyaman (BSAN). In force 9 January 2026; REVOKES Permendikbudristek 46/2023 PPKSP. Six dimensions of safe school culture (fisik · psikis · seksual · digital · sosial · spiritual). No standing school task force — the kepala sekolah is the singular accountable officer. Regional Pokja BSAN, chaired by Bupati/Wali Kota, replaces the kab/kota Satgas PPKS.',
+      why: 'Current implementing regulation for partner-school safeguarding KPI. SPK schools running Cambridge are in scope — the regulation covers "Sekolah" under Kemendikdasmen with no SPK exemption, so partner schools comply with BOTH Cambridge safeguarding standards (daily operating layer) and this (legal-compliance anchor, Pokja as the regional escalation path). Note: 6/2026 fixes no explicit reporting deadline, so do NOT write "24 jam" or "3 hari" into a policy on its authority.'
+    },
+    // Kept so pre-2026 tags still resolve rather than rendering an error. Any
+    // NEW tagging must use the 6/2026 key above.
     'PERLAK Permendikbud 46/2023': {
-      what: 'Permendikbudristek 46/2023 — Pencegahan dan Penanganan Kekerasan di Lingkungan Satuan Pendidikan (PPKSP). Operative regulation. Mandates TPPK (school task force) + Satgas (district-level).',
-      why: 'Current implementing regulation for partner-school safeguarding KPI. ES Section on safeguarding paraphrases this; the PERLAK chip surfaces the actual regulation text + TPPK + Satgas roles.'
+      what: 'Permendikbudristek 46/2023 — Pencegahan dan Penanganan Kekerasan di Lingkungan Satuan Pendidikan (PPKSP). REVOKED by Permendikdasmen 6/2026 (BSAN) on 9 January 2026. Mandated TPPK (school task force) + Satgas PPKS (kab/kota); both structures are disbanded.',
+      why: 'SUPERSEDED — retained for historical citations only. Anything written against TPPK or Satgas PPKS describes a structure that no longer exists. Re-anchor to "PERLAK Permendikdasmen 6/2026".'
     },
     'EEF Effective PD 2021': {
       what: 'Education Endowment Foundation — Effective Professional Development (2021 guidance report). 4 mechanisms × 14 techniques. Distinguishes effective PD by design features, not by topic.',
@@ -1087,9 +1093,12 @@
     });
 
     // PERLAK chips — Indonesia child protection regulations (UU 35/2014 +
-    //   Permendikbud 46/2023 PPKSP). Chip text is short form, full brief
+    //   Permendikdasmen 6/2026 BSAN, which revoked Permendikbudristek
+    //   46/2023 PPKSP on 9 Jan 2026). Chip text is short form, full brief
     //   sits in ANCHOR_BRIEFS by full key (e.g. "PERLAK UU 35/2014").
-    //   data-perlak-ref carries the lookup key.
+    //   data-perlak-ref carries the lookup key. The 46/2023 key is still
+    //   registered so historical tags resolve to a "superseded" brief rather
+    //   than erroring — new tagging uses the 6/2026 key.
     scope.querySelectorAll('.perlak-pill, [data-perlak-ref]').forEach(el => {
       if (el.dataset.perlakWired === '1') return;
       const ref = el.dataset.perlakRef || (el.textContent || '').trim();
