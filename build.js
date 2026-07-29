@@ -913,6 +913,24 @@ const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
 const refDestRoot = path.join("dist", "references-data");
 fs.mkdirSync(refDestRoot, { recursive: true });
 
+/** How many Eduversal Academic Standards sections exist, per the manifest.
+ *
+ *  Returns 0 when the monorepo ../docs tree is not present (Vercel clones this
+ *  subrepo alone). Callers use it only to GENERATE source paths, which the copy
+ *  loop then existsSync-guards — so 0 means "emit no ES entries" rather than
+ *  "emit broken ones", matching how every other absent ../docs source behaves. */
+function esSectionCount() {
+  try {
+    const manifest = path.join("..", "docs", "research", "eduversal",
+                               "academic-standards", "manifest.json");
+    return JSON.parse(fs.readFileSync(manifest, "utf8")).sections.length;
+  } catch {
+    console.warn("WARNING: ES manifest unreadable (../docs absent?) — " +
+                 "skipping eduversal-standards section mirror.");
+    return 0;
+  }
+}
+
 // Map: [destRelativePath, sourceAbsolutePath]
 const refAssetMap = [
   // ── Cross-Module Audits ─────────────────────────────────────
@@ -994,8 +1012,16 @@ const refAssetMap = [
   // Count read from the manifest, not hard-coded: a literal silently stops
   // copying the moment a section is added, and dist/ just quietly lacks it.
   // Past incident 2026-07-29, adding Section 24.
-  ...Array.from({ length: JSON.parse(fs.readFileSync(path.join("..", "docs", "research",
-      "eduversal", "academic-standards", "manifest.json"), "utf8")).sections.length }, (_, i) => {
+  //
+  // Read defensively. Vercel clones ONLY this subrepo, so the whole ../docs
+  // tree is absent there — every other entry in this map is just a PATH that
+  // the copy loop below existsSync-guards and skips with a warning, but this
+  // one READS at module scope, which threw ENOENT and took the entire build
+  // down with it. (Deploy failure 2026-07-29; same parent-dir-on-Vercel trap
+  // as the shared-design fallback.) Falling back to 0 sections degrades the
+  // way the rest of the map already does: locally the count is derived and
+  // correct, on Vercel these entries are skipped like their siblings.
+  ...Array.from({ length: esSectionCount() }, (_, i) => {
     const n = String(i + 1).padStart(2, '0');
     return [
       `eduversal-standards/section-${n}.json`,
