@@ -295,6 +295,78 @@ function applySubjectGating(profile) {
   });
 }
 
+// ── Induction-participation gating (keys off induction_assignments) ──
+// Third gating axis, added 2026-07-29. Subject + page-access gating both
+// answer "what is this person's ROLE?"; this one answers "is this person
+// CURRENTLY IN the induction programme?" — a temporary state (one year)
+// that no sub-role can express. Without it, /my-induction and
+// /induction-walkthroughs sat in the navbar for every coordinator
+// forever, including specialists who finished their year-1 cycle years
+// ago and would only ever land on an empty state.
+//
+// Source of truth is induction_assignments/{menteeUid} — the same doc
+// /induction-admin creates when HQ names a mentee + mentor + school
+// leader (NN4). The rule already allows a signed-in user to `get` their
+// own doc, so no rules change was needed for this gate.
+const INDUCTION_GATED_SLUGS = new Set(['my-induction', 'induction-walkthroughs']);
+
+// Statuses that count as "in the programme". `completed` is included on
+// purpose: the walkthrough log and the mentee timeline are the person's
+// own record of their induction year, and hiding it the day they finish
+// would take away notes they may still want to read back. `withdrawn`
+// is excluded — that induction did not happen, so there is nothing to
+// look back on.
+const INDUCTION_ACTIVE_STATUSES = new Set([
+  'pre_arrival', 'active', 'extended', 'paused', 'completed',
+]);
+
+// Resolved once per page load in the boot sequence below.
+// null = never looked up; false = looked up, not a participant.
+let _inductionParticipant = null;
+
+async function resolveInductionParticipation(db, uid) {
+  try {
+    const snap = await getDoc(doc(db, 'induction_assignments', uid));
+    if (!snap.exists()) return false;
+    const status = snap.data()?.status || '';
+    return INDUCTION_ACTIVE_STATUSES.has(status);
+  } catch (err) {
+    // Fail OPEN, matching the page-access convention: a transient
+    // Firestore hiccup should not strip a genuine mentee of their own
+    // induction pages. Both pages render a self-explanatory empty state
+    // for non-participants anyway, so the cost of a false positive is a
+    // menu entry, not a data leak.
+    console.warn('auth-guard: induction participation lookup failed (non-fatal)', err);
+    return true;
+  }
+}
+
+// Hide induction navbar entries + dashboard cards from non-participants.
+// Reuses the [data-ch-hidden] attribute (and its "display: none
+// !important" rule) so the empty-dropdown / empty-column collapse logic
+// in applyPageAccessGating() already accounts for these items.
+function applyInductionGating(profile) {
+  if (profile?.role_centralhub === 'central_admin') return; // admin sees everything
+  if (_inductionParticipant !== false) return;              // participant, or not yet resolved
+  ensureSubjectGateStyles();
+
+  document.querySelectorAll('[data-nav-key], [data-nav-page], [data-mobile-nav-key]').forEach(el => {
+    const key = (el.getAttribute('data-nav-key')
+               || el.getAttribute('data-nav-page')
+               || el.getAttribute('data-mobile-nav-key')
+               || '').toLowerCase();
+    if (INDUCTION_GATED_SLUGS.has(key)) el.setAttribute('data-ch-hidden', '1');
+  });
+
+  document.querySelectorAll('a.card[href], a.resource-card[href]').forEach(el => {
+    const href = el.getAttribute('href') || '';
+    let slug = href.toLowerCase().replace(/^\/+/, '').replace(/\.html$/, '');
+    if (slug.includes('/')) slug = slug.split('/')[0];
+    if (slug.includes('?')) slug = slug.split('?')[0];
+    if (INDUCTION_GATED_SLUGS.has(slug)) el.setAttribute('data-ch-hidden', '1');
+  });
+}
+
 // ── Page-access helpers (sub-role gating via page_access_config) ──
 // Companion to subject-specialty gating above (which keys off
 // ch_subjects[]). This one keys off ch_sub_roles[] (director / coordinator).
@@ -1036,6 +1108,25 @@ onAuthStateChanged(auth, async (user) => {
     }
   }
 
+  // 4d. Induction-participation gate. Companion to 4b/4c above, but
+  //     keyed off induction_assignments/{uid} rather than a role field.
+  //     Resolved here (once) so both the URL gate and the UI gate at 6b2
+  //     share a single Firestore read. central_admin bypasses.
+  if (platformRole !== 'central_admin' && INDUCTION_GATED_SLUGS.has(pageKey)) {
+    _inductionParticipant = await resolveInductionParticipation(db, user.uid);
+    if (_inductionParticipant === false) {
+      try {
+        sessionStorage.setItem('ch_access_denied', JSON.stringify({
+          pageKey,
+          label: pageKey === 'my-induction' ? 'My Induction' : 'My Induction Walkthroughs',
+          at: Date.now(),
+        }));
+      } catch (_) {}
+      window.location.replace('/?denied=' + encodeURIComponent(pageKey));
+      return;
+    }
+  }
+
   // 5. Name prompt if missing
   if (!profile.displayName) {
     const name = await promptForName();
@@ -1118,6 +1209,43 @@ onAuthStateChanged(auth, async (user) => {
   // ask "which of these subject keys is this user allowed to see?".
   window.__chVisibleSubjects = (candidateKeys) =>
     visibleSubjectsForUser(profile, candidateKeys);
+
+  // 6b2. Induction UI gating — hide /my-induction + /induction-walkthroughs
+  //      from users with no induction_assignments doc. Runs on every page
+  //      (the navbar is global), so this is where the lookup happens for
+  //      pages that aren't themselves induction-gated. Deliberately NOT
+  //      awaited: it costs one Firestore read and the menu entries are
+  //      collapsed as soon as it resolves, so we don't delay the
+  //      authReady dispatch behind it.
+  if (platformRole !== 'central_admin') {
+    const runInductionGating = () => applyInductionGating(profile);
+    const inductionMo = new MutationObserver(muts => {
+      const interesting = muts.some(m =>
+        [...m.addedNodes].some(n =>
+          n.nodeType === 1 && (
+            n.matches?.('[data-nav-key], [data-nav-page], [data-mobile-nav-key], a.card[href]') ||
+            n.querySelector?.('[data-nav-key], [data-nav-page], [data-mobile-nav-key], a.card[href]')
+          )
+        )
+      );
+      if (interesting) runInductionGating();
+    });
+    inductionMo.observe(document.body, { childList: true, subtree: true });
+    window.__chInductionGate = runInductionGating;
+
+    // 4d may already have resolved this for an induction-gated page.
+    if (_inductionParticipant === null) {
+      resolveInductionParticipation(db, user.uid).then(isParticipant => {
+        _inductionParticipant = isParticipant;
+        runInductionGating();
+        // Re-run the sub-role pass so a dropdown section whose last
+        // remaining item we just hid collapses its header too.
+        try { window.__paGate?.(); } catch (_) {}
+      });
+    } else {
+      runInductionGating();
+    }
+  }
 
   // 6c. Page-access UI gating — hide navbar links + cards the user
   //     can't access by sub-role (ch_sub_roles[]). central_admin
