@@ -383,6 +383,12 @@ const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login', 'waiting', 'settings']
 // tabs pick it up immediately), which matches how rarely the tool is used.
 const PAGE_ACCESS_TTL_MS = 30 * 60 * 1000;
 
+// Sentinel returned when the page_access_config read FAILS (as opposed to
+// the doc simply not existing). Since 2026-05-20 page-access is the sole
+// authorization mechanism for non-admin users, so a failed read must not
+// silently grant access (2026-08-01 hardening — was fail-open before).
+const PAC_READ_ERROR = '__pac_read_error__';
+
 async function getPageAccessConfig(database, pageKey) {
   try {
     const raw = sessionStorage.getItem('pac:' + pageKey);
@@ -397,7 +403,17 @@ async function getPageAccessConfig(database, pageKey) {
     data = snap.exists() ? snap.data() : null;
   } catch (err) {
     console.warn('page_access_config read failed for', pageKey, err);
-    return null;
+    // Fall back to a stale cache entry (any age) before failing closed —
+    // a transient Firestore blip should not lock out a user whose tab
+    // already saw the config once.
+    try {
+      const raw = sessionStorage.getItem('pac:' + pageKey);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached && 'data' in cached) return cached.data;
+      }
+    } catch (_) {}
+    return PAC_READ_ERROR;
   }
   try {
     sessionStorage.setItem('pac:' + pageKey, JSON.stringify({ at: Date.now(), data }));
@@ -1141,6 +1157,19 @@ onAuthStateChanged(auth, async (user) => {
   //     hidden from all non-admin. Stays in sync with applyPageAccessGating.
   if (platformRole !== 'central_admin' && pageKey && !PAGE_ACCESS_BYPASS.has(pageKey)) {
     const cfg = await getPageAccessConfig(db, pageKey);
+    // Fail CLOSED on read failure (2026-08-01): page-access is the sole
+    // authorization layer for non-admins — a Firestore error (or a client
+    // deliberately blocking the request) must not skip the gate. Stale
+    // cache was already tried inside getPageAccessConfig.
+    if (cfg === PAC_READ_ERROR) {
+      try {
+        sessionStorage.setItem('ch_access_denied', JSON.stringify({
+          pageKey, label: pageKey + ' (access check unavailable)', at: Date.now(),
+        }));
+      } catch (_) {}
+      window.location.replace('/?denied=' + encodeURIComponent(pageKey));
+      return;
+    }
     if (cfg) {
       const userSubRoles = Array.isArray(profile.ch_sub_roles) ? profile.ch_sub_roles : [];
       const isHidden = cfg.hidden === true;

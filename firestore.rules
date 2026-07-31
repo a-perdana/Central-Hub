@@ -57,15 +57,39 @@ service cloud.firestore {
              && userProfile().role_centralhub == 'central_admin';
     }
 
+    // ── Approval enforcement (2026-08-01 pre-launch hardening) ──
+    // auth-guard auto-provisions role_*hub on first sign-in, so the role
+    // field alone proves nothing — before this gate, an unapproved (or
+    // rejected) account could bypass the /waiting screen with raw SDK
+    // calls and reach everything the role granted. Non-admin hub users
+    // now count ONLY once central_admin has flipped their approval to
+    // 'approved'. Missing field = NOT approved (auth-guard already
+    // treats missing as pending client-side; the 2026-05-20 backfill
+    // stamped all pre-gate users 'approved'). *_admin roles bypass —
+    // same convention as the client-side gate.
+    function chApproved() {
+      return ('approval_status_centralhub' in userProfile())
+             && userProfile().approval_status_centralhub == 'approved';
+    }
+    function ahApproved() {
+      return ('approval_status_academichub' in userProfile())
+             && userProfile().approval_status_academichub == 'approved';
+    }
+    function thApproved() {
+      return ('approval_status_teachershub' in userProfile())
+             && userProfile().approval_status_teachershub == 'approved';
+    }
+
     // isCHCoordinator: name kept for back-compat across the ~30 callsites
     // that pre-date the 2026-05-20 role architecture flattening. Now means
-    // "any signed-in central_user (sub-role-agnostic)" — page-access is the
-    // sole authorization gate; rules trust that gate. Director, coordinator,
-    // and plain central_user all match. central_admin matches isAdmin() and
-    // is OR'd separately by callsites for clarity.
+    // "any signed-in APPROVED central_user (sub-role-agnostic)" —
+    // page-access is the sole authorization gate; rules trust that gate.
+    // Director, coordinator, and plain central_user all match.
+    // central_admin matches isAdmin() and is OR'd separately by callsites.
     function isCHCoordinator() {
       return isAuthorized() && userProfileExists() &&
-             userProfile().role_centralhub == 'central_user';
+             userProfile().role_centralhub == 'central_user' &&
+             chApproved();
     }
 
     // CentralHub Subject Specialist: a central_user whose ch_subjects[]
@@ -85,8 +109,9 @@ service cloud.firestore {
     // documentation, the authoritative list lives in subject-config.js.
     function isCHSubjectSpecialist(subjects) {
       return isAuthorized() && userProfileExists()
-             && (userProfile().role_centralhub == 'central_user'
-                 || userProfile().role_centralhub == 'central_admin')
+             && (userProfile().role_centralhub == 'central_admin'
+                 || (userProfile().role_centralhub == 'central_user'
+                     && chApproved()))
              && ('ch_subjects' in userProfile())
              && userProfile().ch_subjects is list
              && userProfile().ch_subjects.hasAny(subjects);
@@ -104,14 +129,14 @@ service cloud.firestore {
       return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub  == 'central_admin'  ||
         userProfile().role_academichub == 'academic_admin' ||
-        userProfile().role_academichub == 'academic_user'
+        (userProfile().role_academichub == 'academic_user' && ahApproved())
       );
     }
 
     function isCentralUser() {
       return isAuthorized() && userProfileExists() && (
         userProfile().role_centralhub == 'central_admin' ||
-        userProfile().role_centralhub == 'central_user'
+        (userProfile().role_centralhub == 'central_user' && chApproved())
       );
     }
 
@@ -130,14 +155,14 @@ service cloud.firestore {
     function isAcademicUser() {
       return isAuthorized() && userProfileExists() && (
         userProfile().role_academichub == 'academic_admin' ||
-        userProfile().role_academichub == 'academic_user'
+        (userProfile().role_academichub == 'academic_user' && ahApproved())
       );
     }
 
     function isTeachersUser() {
       return isAuthorized() && userProfileExists() && (
         userProfile().role_teachershub == 'teachers_admin' ||
-        userProfile().role_teachershub == 'teachers_user'
+        (userProfile().role_teachershub == 'teachers_user' && thApproved())
       );
     }
 
@@ -1683,7 +1708,20 @@ service cloud.firestore {
     // Since 2026-05-20: read + update opened to CH central_user
     // (page-access gates /feedback-management). Delete stays admin-only.
     match /feedbacks/{fbId} {
-      allow create: if isAuthorized();
+      // 2026-08-01 hardening: create was a zero-validation open door for
+      // every school-domain account — now the shared payload core
+      // (subject / message / __src) is type- and size-checked, and an
+      // author uid, when present, must be the caller's own.
+      allow create: if isAuthorized()
+                    && request.resource.data.__src in ['centralhub', 'academichub', 'teachershub']
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() > 0
+                    && request.resource.data.message.size() <= 5000
+                    && request.resource.data.subject is string
+                    && request.resource.data.subject.size() <= 300
+                    && (!('userId' in request.resource.data)
+                        || request.resource.data.userId == null
+                        || request.resource.data.userId == request.auth.uid);
       allow read, update: if isAdmin() || isCentralUser();
       allow delete: if isAdmin();
     }
@@ -1958,11 +1996,18 @@ service cloud.firestore {
       allow write: if isAHAdmin();
 
       // classes subcollection — teachers add new classes for their school;
-      // only admins can delete. Mirrors the previous `schools/.../classes`
-      // rule, kept identical so the migration is invisible to users.
+      // only admins can delete.
+      // 2026-08-01 hardening: create/update was bare isSignedIn() — ANY
+      // authenticated account (students, careers magic-link users, staff
+      // of other schools) could overwrite any school's class records.
+      // Now: admin, or staff whose users/{uid}.schoolId matches this
+      // school (TH onboarding writes schoolId to the profile BEFORE the
+      // class-pool sync, so first-login class creation still works).
       match /classes/{classId} {
         allow read:           if isAuthorized();
-        allow create, update: if isSignedIn();
+        allow create, update: if isAdmin()
+                              || (isAuthorized() && userProfileExists()
+                                  && userProfile().schoolId == schoolId);
         allow delete:         if isAdmin();
       }
     }
@@ -2303,9 +2348,13 @@ service cloud.firestore {
     // -- teacher_contacts (Unregistered teacher mailing list) --
     // Since 2026-05-20: opened to CH central_user (page-access gates
     // /mail-composer). 463+ teacher addresses live here.
+    // 2026-08-01 hardening: the 463-address network mailing list was
+    // readable AND writable by any central_user via raw SDK. The only
+    // consumers are /mail-composer (central_admin page) and the Railway
+    // mail service (Admin SDK, bypasses rules) — admin-only now.
     match /teacher_contacts/{contactId} {
-      allow read:  if isAdmin() || isCentralUser();
-      allow write: if isAdmin() || isCentralUser();
+      allow read:  if isAdmin();
+      allow write: if isAdmin();
     }
 
     // -- mail_campaigns (Newsletter campaign history) --------
@@ -2391,10 +2440,13 @@ service cloud.firestore {
     // User can read/write their own doc (for material done tracking).
     // Admin can read/write any doc (for approving earned levels).
     match /user_competencies/{uid} {
-      // Owner reads/writes own doc; admin and CH central_user reviewers
-      // read/write any (for approving earned levels via /competency-admin).
+      // Owner reads/writes own doc; admin + CH reviewers read any.
+      // 2026-08-01 hardening: cross-user WRITE narrowed to admin —
+      // earned levels are approved from /competency-admin (admin tool);
+      // any central_user being able to rewrite anyone's earned_*
+      // fields broke the certification audit trail.
       allow read:   if isSignedIn() && (request.auth.uid == uid || isAdmin() || isCentralUser());
-      allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin() || isCentralUser());
+      allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
     // -- content_overrides_academic (Admin-edited reading text for Academic Hub) --
@@ -2428,13 +2480,15 @@ service cloud.firestore {
     // Update:  central_admin only (revoke flag)
     // Delete:  central_admin only
     match /competency_certificates/{certId} {
-      // Create: admin or any CH central_user (issued from /competency-admin).
-      allow create: if isAdmin() || isCentralUser();
+      // 2026-08-01 hardening: issue/revoke narrowed to admin —
+      // /competency-admin is an admin tool, and any central_user being
+      // able to mint or revoke certificates defeated the audit trail
+      // (same precedent as scorecard immutability, Common Mistake #17).
+      allow create: if isAdmin();
       allow read:   if isAdmin() || isCentralUser()
                     || (isAuthorized() && resource.data.userId == request.auth.uid);
       allow list:   if isAdmin() || isCentralUser();
-      // Update: admin or any CH central_user (revoke flag).
-      allow update: if isAdmin() || isCentralUser();
+      allow update: if isAdmin();
       // Delete: admin-only — certificates are an audit trail.
       allow delete: if isAdmin();
     }
@@ -2880,11 +2934,13 @@ service cloud.firestore {
                        || isCentralUser()    // CH reviewers via /induction-admin
                        || isAcademicUser()   // AH school leaders need to verify mentor candidates
                     );
-      // Since 2026-05-20: list + issue/revoke opened to any central_user
-      // who page-access has granted /induction-admin or
-      // /mentor-certification surface access. Delete stays admin-only.
+      // 2026-08-01 hardening: issue/revoke narrowed back to admin.
+      // This collection is Charter NN3's gate — induction_assignments
+      // creation REQUIRES an active mentor cert, so letting any
+      // central_user mint certs made NN3 self-defeating. Certs are
+      // issued from /induction-admin (central_admin page).
       allow list:   if isAdmin() || isCentralUser() || isAcademicUser();
-      allow create, update: if isAdmin() || isCentralUser();
+      allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
 

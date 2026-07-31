@@ -1321,7 +1321,10 @@ exports.easeBankProxy = onCall(
     const userSnap = await db.collection("users").doc(uid).get();
     const u = userSnap.exists ? userSnap.data() : null;
     const isAdmin = u?.role_centralhub === "central_admin";
-    const isCentralUser = u?.role_centralhub === "central_user";
+    // Approval gate (2026-08-01): auto-provisioned central_user counts only
+    // once central_admin approves — mirrors the firestore.rules helpers.
+    const isCentralUser = u?.role_centralhub === "central_user"
+      && u?.approval_status_centralhub === "approved";
     // Page-access UI is the sole gate since 2026-05-20 — any signed-in
     // central_user who reaches /ease-bank-browser can proxy upstream.
     if (!(isAdmin || isCentralUser)) {
@@ -1526,7 +1529,10 @@ exports.practiceBankAiSuggest = onCall(
     const userSnap = await db.collection("users").doc(uid).get();
     const u = userSnap.exists ? userSnap.data() : null;
     const isAdmin = u?.role_centralhub === "central_admin";
-    const isCentralUser = u?.role_centralhub === "central_user";
+    // Approval gate (2026-08-01): auto-provisioned central_user counts only
+    // once central_admin approves — mirrors the firestore.rules helpers.
+    const isCentralUser = u?.role_centralhub === "central_user"
+      && u?.approval_status_centralhub === "approved";
     const subRoles = Array.isArray(u?.ch_sub_roles) ? u.ch_sub_roles : [];
     // Page-access UI is the sole gate since 2026-05-20 — any signed-in
     // central_user who reaches /practice-assessment-author can run the
@@ -2248,7 +2254,10 @@ exports.askEduversal = onCall(
     const userSnap = await db.collection("users").doc(uid).get();
     const u = userSnap.exists ? userSnap.data() : null;
     const isAdmin = u?.role_centralhub === "central_admin";
-    const isCentralUser = u?.role_centralhub === "central_user";
+    // Approval gate (2026-08-01): auto-provisioned central_user counts only
+    // once central_admin approves — mirrors the firestore.rules helpers.
+    const isCentralUser = u?.role_centralhub === "central_user"
+      && u?.approval_status_centralhub === "approved";
     if (!(isAdmin || isCentralUser)) {
       throw new HttpsError("permission-denied", "Requires CH admin or central_user.");
     }
