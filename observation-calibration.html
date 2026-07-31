@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Observation Calibration — CentralHub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared-styles.css">
+  <style>
+    .page-wrap { max-width: var(--container-max); margin: 0 auto; padding: 28px 40px 72px; }
+    .page-wrap > .page-info-strip { margin: 6px 0 14px; }
+
+    /* ── Session bar ─────────────────────────────────────────── */
+    .sess-bar {
+      background: var(--white); border: 1px solid var(--border); border-radius: 14px;
+      padding: 16px 20px; margin-bottom: 18px; box-shadow: var(--shadow-sm);
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+    }
+    .sess-field { display: flex; flex-direction: column; gap: 4px; }
+    .sess-field label { font-size: .7rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+    .sess-field input, .sess-field select {
+      font-family: inherit; font-size: .88rem; padding: 8px 10px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--white); color: var(--ink);
+    }
+    .sess-code {
+      font-family: 'DM Mono', monospace; font-size: 1.5rem; font-weight: 600;
+      letter-spacing: .18em; color: #b45309; background: #fffbeb;
+      border: 1px solid #fde68a; border-radius: 10px; padding: 6px 16px;
+    }
+    .sess-spacer { flex: 1; }
+    .sess-msg { font-size: .8rem; font-weight: 600; color: #dc2626; flex-basis: 100%; }
+    .sess-msg:empty { display: none; }
+    .sess-msg.ok { color: #16a34a; }
+    .sess-meta { font-size: .78rem; color: var(--ink-3); }
+    .sess-meta strong { color: var(--ink); }
+
+    /* ── Stage tabs ───────────────────────────────────────────── */
+    .stage-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+    .stage-tab {
+      font-family: inherit; font-size: .82rem; font-weight: 600; cursor: pointer;
+      padding: 9px 16px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--white); color: var(--ink-2);
+    }
+    .stage-tab:hover { border-color: #fbbf24; color: #b45309; }
+    .stage-tab.active { background: #b45309; border-color: #b45309; color: #fff; }
+    .stage-tab[disabled] { opacity: .45; cursor: not-allowed; }
+
+    /* ── Scenario reader ──────────────────────────────────────── */
+    .scen-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: 14px;
+      padding: 22px 26px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
+    }
+    .scen-card h2 {
+      font-family: 'Lora', serif; font-size: 1.1rem; color: var(--ink);
+      margin-bottom: 4px; display: flex; align-items: baseline; gap: 10px;
+    }
+    .scen-badge {
+      font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+      background: #fffbeb; color: #b45309; border: 1px solid #fde68a;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .scen-card h3 {
+      font-size: .82rem; font-weight: 700; color: #b45309; text-transform: uppercase;
+      letter-spacing: .04em; margin: 18px 0 8px;
+    }
+    .scen-card p, .scen-card li { font-size: .88rem; line-height: 1.65; color: var(--ink-2); }
+    .scen-card ul { padding-left: 20px; margin: 6px 0; }
+    .scen-card li { margin-bottom: 5px; }
+    .kv { display: grid; grid-template-columns: 190px 1fr; gap: 4px 14px; font-size: .86rem; }
+    .kv dt { font-weight: 600; color: var(--ink); }
+    .kv dd { color: var(--ink-2); line-height: 1.6; }
+
+    /* timeline */
+    .tl { border-left: 2px solid #fde68a; margin: 8px 0 0 6px; padding-left: 0; }
+    .tl-row { display: grid; grid-template-columns: 62px 1fr; gap: 12px; padding: 9px 0 9px 16px; position: relative; }
+    .tl-row::before {
+      content: ''; position: absolute; left: -5px; top: 15px;
+      width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;
+    }
+    .tl-time { font-family: 'DM Mono', monospace; font-size: .78rem; font-weight: 600; color: #b45309; }
+    .tl-note { font-size: .87rem; line-height: 1.62; color: var(--ink-2); }
+
+    /* ── Scoring ──────────────────────────────────────────────── */
+    .dom-block { margin-bottom: 26px; }
+    .dom-head {
+      display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;
+      padding-bottom: 8px; border-bottom: 2px solid #fde68a;
+    }
+    .dom-head h2 { font-family: 'Lora', serif; font-size: 1.05rem; color: var(--ink); }
+    .dom-head .dom-count { font-size: .76rem; color: var(--ink-3); }
+    .dom-desc { font-size: .82rem; color: var(--ink-3); line-height: 1.6; margin: 8px 0 14px; }
+
+    .item-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px; margin-bottom: 10px;
+    }
+    .item-card.unscored { border-left: 3px solid #fbbf24; }
+    .item-card.scored   { border-left: 3px solid #16a34a; }
+    .item-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+    .item-id {
+      font-family: 'DM Mono', monospace; font-size: .74rem; font-weight: 600;
+      background: #f1f5f9; color: #475569; padding: 2px 7px; border-radius: 4px;
+    }
+    .item-title { font-size: .93rem; font-weight: 600; color: var(--ink); }
+    .item-vf {
+      font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+      padding: 2px 7px; border-radius: 999px; background: #f8fafc; color: #64748b; border: 1px solid var(--border);
+    }
+    .item-theory { font-size: .74rem; color: var(--ink-3); font-style: italic; margin-bottom: 10px; }
+
+    .score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 4px; }
+    .score-btn {
+      font-family: inherit; text-align: left; cursor: pointer;
+      border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+      background: var(--white); transition: all .12s;
+    }
+    .score-btn:hover { border-color: #fbbf24; background: #fffdf5; }
+    .score-btn .sb-num { font-size: 1.05rem; font-weight: 700; display: block; margin-bottom: 2px; }
+    .score-btn .sb-lbl { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; display: block; margin-bottom: 6px; }
+    .score-btn .sb-desc { font-size: .76rem; line-height: 1.5; color: var(--ink-2); display: block; }
+    .score-btn[data-v="1"] .sb-num, .score-btn[data-v="1"] .sb-lbl { color: #dc2626; }
+    .score-btn[data-v="2"] .sb-num, .score-btn[data-v="2"] .sb-lbl { color: #b45309; }
+    .score-btn[data-v="3"] .sb-num, .score-btn[data-v="3"] .sb-lbl { color: #0f766e; }
+    .score-btn[data-v="4"] .sb-num, .score-btn[data-v="4"] .sb-lbl { color: #16a34a; }
+    .score-btn.sel { border-width: 2px; box-shadow: var(--shadow-sm); }
+    .score-btn[data-v="1"].sel { border-color: #dc2626; background: #fff1f2; }
+    .score-btn[data-v="2"].sel { border-color: #b45309; background: #fffbeb; }
+    .score-btn[data-v="3"].sel { border-color: #0f766e; background: #f0fdfa; }
+    .score-btn[data-v="4"].sel { border-color: #16a34a; background: #f0fdf4; }
+
+    .item-ind { margin-top: 10px; }
+    .ind-toggle {
+      font-family: inherit; font-size: .74rem; font-weight: 600; cursor: pointer;
+      background: none; border: none; color: #b45309; padding: 0; text-decoration: underline;
+    }
+    .ind-panel {
+      display: none; margin-top: 8px; padding: 10px 12px;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    }
+    .ind-panel.open { display: block; }
+    .ind-panel ul { padding-left: 18px; margin: 0; }
+    .ind-panel li { font-size: .78rem; line-height: 1.55; color: #78350f; margin-bottom: 4px; }
+
+    .item-evid { margin-top: 10px; }
+    .item-evid label { font-size: .72rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 4px; }
+    .item-evid textarea {
+      width: 100%; font-family: inherit; font-size: .84rem; line-height: 1.55;
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+      resize: vertical; min-height: 46px; color: var(--ink);
+    }
+
+    /* ── Progress + submit ────────────────────────────────────── */
+    .prog-bar {
+      position: sticky; bottom: 0; z-index: 20;
+      background: var(--white); border: 1px solid var(--border); border-top-width: 2px;
+      border-radius: 14px 14px 0 0; padding: 12px 20px; margin-top: 18px;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .prog-track { flex: 1; min-width: 160px; height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+    .prog-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #b45309); width: 0%; transition: width .2s; }
+    .prog-txt { font-size: .82rem; font-weight: 600; color: var(--ink-2); }
+
+    .btn-primary {
+      font-family: inherit; font-size: .86rem; font-weight: 600; cursor: pointer;
+      padding: 10px 20px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg, #d97706, #b45309); color: #fff;
+    }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-ghost {
+      font-family: inherit; font-size: .84rem; font-weight: 600; cursor: pointer;
+      padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--white); color: var(--ink-2);
+    }
+    .btn-ghost:hover { border-color: #fbbf24; color: #b45309; }
+
+    /* ── Distribution / results ───────────────────────────────── */
+    .res-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .res-tile {
+      background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 16px; box-shadow: var(--shadow-sm);
+    }
+    .res-tile .rt-num { font-size: 1.6rem; font-weight: 700; color: var(--ink); font-family: 'Lora', serif; }
+    .res-tile .rt-lbl { font-size: .72rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+    .res-tile .rt-sub { font-size: .72rem; color: var(--ink-3); margin-top: 4px; }
+    .res-tile.alarm .rt-num { color: #dc2626; }
+
+    .res-filter { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+
+    .res-row {
+      background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 8px;
+    }
+    .res-row.spread-hi { border-left: 3px solid #dc2626; }
+    .res-row.spread-md { border-left: 3px solid #f59e0b; }
+    .res-row.spread-lo { border-left: 3px solid #16a34a; }
+    .rr-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .rr-spread {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+      padding: 2px 8px; border-radius: 999px; margin-left: auto;
+    }
+    .rr-spread.hi { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .rr-spread.md { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .rr-spread.lo { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+
+    .hist { display: flex; gap: 4px; align-items: flex-end; height: 54px; margin: 12px 0 8px; }
+    .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .hist-bar { width: 100%; border-radius: 4px 4px 0 0; min-height: 3px; }
+    .hist-col[data-v="1"] .hist-bar { background: #fca5a5; }
+    .hist-col[data-v="2"] .hist-bar { background: #fcd34d; }
+    .hist-col[data-v="3"] .hist-bar { background: #5eead4; }
+    .hist-col[data-v="4"] .hist-bar { background: #86efac; }
+    .hist-lbl { font-size: .66rem; font-weight: 700; color: var(--ink-3); }
+    .hist-n { font-size: .64rem; color: var(--ink-3); }
+
+    .who-list { font-size: .76rem; color: var(--ink-3); line-height: 1.6; margin-top: 6px; }
+    .who-list strong { color: var(--ink-2); }
+
+    .anchor-box { margin-top: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; }
+    .anchor-box label { font-size: .72rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 5px; }
+    .anchor-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+    .anchor-row select { font-family: inherit; font-size: .84rem; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; }
+    .anchor-row input {
+      flex: 1; min-width: 200px; font-family: inherit; font-size: .84rem;
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+    }
+    .anchor-saved { font-size: .78rem; color: #16a34a; font-weight: 600; }
+
+    .empty-note {
+      background: var(--white); border: 1px dashed var(--border); border-radius: 12px;
+      padding: 28px; text-align: center; color: var(--ink-3); font-size: .88rem;
+    }
+
+    .hide { display: none !important; }
+
+    @media (max-width: 820px) {
+      .page-wrap { padding: 20px 18px 60px; }
+      .score-row { grid-template-columns: repeat(2, 1fr); }
+      .kv { grid-template-columns: 1fr; }
+      .kv dt { margin-top: 8px; }
+    }
+  </style>
+</head>
+<body data-page-accent="amber">
+
+<!-- SHARED_NAVBAR -->
+
+<header class="page-hero" data-accent="amber">
+  <div class="page-hero__inner">
+    <div class="page-hero__icon">🎯</div>
+    <div class="page-hero__text">
+      <div class="page-hero__eyebrow">Assessment · Subject Specialist Team</div>
+      <h1 class="page-hero__title">Observation Calibration</h1>
+      <p class="page-hero__desc">
+        Score a shared lesson case independently, then open the distribution together.
+        Every item, scale point, and descriptor on this page is read live from the
+        Teacher Appraisal Framework v2.1 — nothing is re-typed here.
+      </p>
+    </div>
+    <div class="page-hero__kpis">
+      <div class="page-hero__kpi page-hero__kpi--primary">
+        <div class="page-hero__kpi-num" id="kpiItems">—</div>
+        <div class="page-hero__kpi-lbl">F2 items</div>
+        <div class="page-hero__kpi-sub">all four domains</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiParticipants">—</div>
+        <div class="page-hero__kpi-lbl">Scored</div>
+        <div class="page-hero__kpi-sub">in this session</div>
+      </div>
+      <div class="page-hero__kpi">
+        <div class="page-hero__kpi-num" id="kpiSpread">—</div>
+        <div class="page-hero__kpi-lbl">Split items</div>
+        <div class="page-hero__kpi-sub">spread ≥ 2</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="page-wrap">
+
+  <section class="page-info-strip" data-accent="amber">
+    <p class="pis-flow">
+      This page runs a blind-scoring calibration round for the Subject Specialist team.
+      One facilitator opens a session and shares the code; everyone else joins on their own
+      device, reads the same lesson case, and scores all F2 items without seeing anyone
+      else's answers. When everyone has submitted, the facilitator reveals the distribution —
+      and the team spends its time only on the items where it actually disagrees.
+    </p>
+    <div class="pis-pills">
+      <span class="pis-pill">Audience: Subject Specialists</span>
+      <span class="pis-pill">Framework: Teacher Appraisal v2.1 → F2</span>
+      <span class="pis-pill">Scale: 1–4, framework descriptors</span>
+      <span class="pis-pill">Blind until reveal</span>
+    </div>
+    <p class="pis-callout">
+      Calibration scores are training data, not appraisal records. Nothing entered here
+      reaches <code>specialist_observations</code> or any teacher's appraisal file. The lesson
+      case is fictional.
+    </p>
+  </section>
+
+  <!-- ── Session bar ─────────────────────────────────────────── -->
+  <div class="sess-bar" id="sessBar">
+    <div class="sess-field">
+      <label for="sessName">Your name</label>
+      <input type="text" id="sessName" placeholder="As the team will see it" autocomplete="name">
+    </div>
+    <div class="sess-field">
+      <label for="sessCodeInput">Session code</label>
+      <input type="text" id="sessCodeInput" placeholder="6 characters" maxlength="6" style="text-transform:uppercase;font-family:'DM Mono',monospace;letter-spacing:.12em;">
+    </div>
+    <button class="btn-primary" id="btnJoin">Join session</button>
+    <button class="btn-ghost" id="btnCreate">Open a new session</button>
+    <div class="sess-msg" id="sessMsg" role="status"></div>
+    <div class="sess-spacer"></div>
+    <div id="sessActive" class="hide" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span class="sess-code" id="sessCodeShow">——————</span>
+      <div class="sess-meta">
+        <div>Joined as <strong id="sessWho">—</strong><span id="sessFacil"></span></div>
+        <div><strong id="sessCount">0</strong> participant(s) submitted</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stage tabs ──────────────────────────────────────────── -->
+  <div class="stage-tabs">
+    <button class="stage-tab active" data-stage="case">1 · The lesson case</button>
+    <button class="stage-tab" data-stage="score">2 · Score independently</button>
+    <button class="stage-tab" data-stage="result">3 · Distribution &amp; anchors</button>
+  </div>
+
+  <!-- ── Stage 1: scenario ───────────────────────────────────── -->
+  <section id="stageCase">
+    <div id="scenBody"><div class="empty-note">Loading the lesson case…</div></div>
+  </section>
+
+  <!-- ── Stage 2: scoring ────────────────────────────────────── -->
+  <section id="stageScore" class="hide">
+    <div id="scoreBody"><div class="empty-note">Loading the framework…</div></div>
+    <div class="prog-bar" id="progBar">
+      <span class="prog-txt" id="progTxt">0 of 0 scored</span>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+      <button class="btn-ghost" id="btnSaveDraft">Save draft</button>
+      <button class="btn-primary" id="btnSubmit" disabled>Submit my scores</button>
+    </div>
+  </section>
+
+  <!-- ── Stage 3: results ────────────────────────────────────── -->
+  <section id="stageResult" class="hide">
+    <div id="resultBody"><div class="empty-note">Join a session and submit your scores to see the distribution.</div></div>
+  </section>
+
+</div>
+</main>
+
+<footer class="page-footer" data-accent="amber">
+  <div class="page-footer__inner">
+    <div class="page-footer__brand">
+      <div class="page-footer__logo">Eduversal</div>
+      <p class="page-footer__tagline">
+        Calibration is what turns one rubric into one standard.
+      </p>
+    </div>
+    <div class="page-footer__cta">
+      <a class="page-footer__cta-btn" href="teacher-appraisal-entry">Go to Class Observation Entry →</a>
+    </div>
+  </div>
+</footer>
+
+<script type="module">
+  import {
+    getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp
+  } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+  /* ─────────────────────────────────────────────────────────────
+     SOURCES OF TRUTH — both fetched, neither re-typed.
+     appraisal-framework-v2.json  → items, titles, 1-4 rubric text,
+                                    scoring_scale labels, visible_from
+     observation-calibration-scenario-v1.json → the lesson case
+     Both are mirrored into dist/references-data/ by build.js.
+     ───────────────────────────────────────────────────────────── */
+  const FRAMEWORK_URL = 'references-data/frameworks/appraisal-framework-v2.json';
+  const SCENARIO_URL  = 'references-data/audits/observation-calibration-scenario-v1.json';
+
+  const COL_SESSION = 'observation_calibration_sessions';
+
+  let FW = null, SCEN = null, ITEMS = [], SCALE = [];
+  let sessionCode = null, myKey = null, isFacilitator = false;
+  let myScores = {};      // { itemId: {score, evidence} }
+  let unsub = null;
+  let liveDoc = null;
+
+  const $  = id => document.getElementById(id);
+  /* Inline status instead of alert() — CH bans blocking dialogs. */
+  let msgTimer = null;
+  function say(text, ok) {
+    const el = $('sessMsg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('ok', !!ok);
+    clearTimeout(msgTimer);
+    if (text) msgTimer = setTimeout(() => { el.textContent = ''; }, 6000);
+  }
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
+  ));
+
+  /* ── Load both sources ─────────────────────────────────────── */
+  async function loadSources() {
+    const [fwRes, scRes] = await Promise.all([ fetch(FRAMEWORK_URL), fetch(SCENARIO_URL) ]);
+    if (!fwRes.ok) throw new Error(`framework ${fwRes.status}`);
+    if (!scRes.ok) throw new Error(`scenario ${scRes.status}`);
+    FW   = await fwRes.json();
+    SCEN = await scRes.json();
+
+    SCALE = (FW.scoring_scale || []).slice().sort((a, b) => a.value - b.value);
+
+    const f2 = (FW.frameworks || []).find(f => f.id === 'F2');
+    if (!f2) throw new Error('F2 not found in framework');
+    ITEMS = [];
+    (f2.domains || []).forEach(d => {
+      (d.items || []).forEach(it => ITEMS.push({ ...it, domainId: d.id, domainTitle: d.title, domainDesc: d.description }));
+    });
+    $('kpiItems').textContent = ITEMS.length;
+  }
+
+  /* ── Stage 1 — render the scenario ─────────────────────────── */
+  function renderScenario() {
+    const s = SCEN;
+    const p = s.artefact_1_lesson_plan;
+    const n = s.artefact_2_lesson_narrative;
+    const a = s.artefact_3_assessment_appendix;
+    const v = s.artefact_4_values_and_curriculum_notes;
+    const c = s.lesson_context;
+    const t = s.teacher_profile;
+
+    const seq = (p.planned_sequence || []).map(ph =>
+      `<li><strong>${esc(ph.phase)}</strong> — ${ph.planned_minutes} min · ${esc(ph.detail)}</li>`).join('');
+
+    const tl = (n.timeline || []).map(r =>
+      `<div class="tl-row"><span class="tl-time">${esc(r.time)}</span><span class="tl-note">${esc(r.note)}</span></div>`).join('');
+
+    const assess = (a.items || []).map(i =>
+      `<dt>${esc(i.label)}</dt><dd>${esc(i.detail)}</dd>`).join('');
+
+    const notes = (v.notes || []).map(i =>
+      `<dt>${esc(i.topic)}</dt><dd>${esc(i.detail)}</dd>`).join('');
+
+    $('scenBody').innerHTML = `
+      <div class="scen-card">
+        <h2>${esc(s.title)} <span class="scen-badge">Fictional case</span></h2>
+        <p style="margin-top:6px;">${esc(s.purpose)}</p>
+        <h3>Context</h3>
+        <dl class="kv">
+          <dt>Teacher</dt><dd>${esc(t.pseudonym)} — ${esc(t.subject)}, ${esc(t.years_in_service)} years in service</dd>
+          <dt>Appraisal level</dt><dd>${esc(t.appraisal_level)} — ${esc(t.note_for_observers)}</dd>
+          <dt>Class</dt><dd>${esc(t.class)} · ${esc(String(t.students_present))} students present</dd>
+          <dt>Lesson</dt><dd>${esc(String(c.duration_minutes))} minutes · ${esc(c.time_of_day)}</dd>
+          <dt>Room</dt><dd>${esc(c.room)}</dd>
+          <dt>Curriculum stage</dt><dd>${esc(c.curriculum_stage)}</dd>
+          <dt>Previous lesson</dt><dd>${esc(c.prior_lesson)}</dd>
+          <dt>Class composition</dt><dd>${esc(c.class_composition)}</dd>
+        </dl>
+      </div>
+
+      <div class="scen-card">
+        <h2>${esc(p.artefact_label)} <span class="scen-badge">Evidences D1</span></h2>
+        <h3>Stated objectives</h3>
+        <ul>${(p.stated_objectives || []).map(o => `<li>${esc(o)}</li>`).join('')}</ul>
+        <dl class="kv" style="margin-top:10px;">
+          <dt>Success criteria</dt><dd>${esc(p.success_criteria)}</dd>
+          <dt>Curriculum reference</dt><dd>${esc(p.header.curriculum_reference)}</dd>
+        </dl>
+        <h3>Planned sequence (${esc(String(p.planned_total_minutes))} min)</h3>
+        <ul>${seq}</ul>
+        <h3>Differentiation section</h3>
+        <dl class="kv">
+          <dt>Verbatim text</dt><dd>“${esc(p.differentiation_section.verbatim_text)}”</dd>
+          <dt>Named students</dt><dd>${esc(p.differentiation_section.named_students)}</dd>
+          <dt>Adapted resources</dt><dd>${esc(p.differentiation_section.adapted_resources)}</dd>
+        </dl>
+        <h3>Grouping and activity modes</h3>
+        <dl class="kv">
+          <dt>Individual work</dt><dd>${esc(p.grouping_and_modes.individual_work)}</dd>
+          <dt>Collaborative work</dt><dd>${esc(p.grouping_and_modes.collaborative_work)}</dd>
+          <dt>Rationale recorded</dt><dd>${esc(p.grouping_and_modes.rationale_recorded)}</dd>
+        </dl>
+        <h3>Materials listed</h3>
+        <ul>${(p.materials_listed || []).map(m => `<li>${esc(m)}</li>`).join('')}</ul>
+        <h3>Formative assessment planned</h3>
+        <ul>${(p.formative_assessment_planned.strategies_present || []).map(m => `<li>${esc(m)}</li>`).join('')}</ul>
+        <dl class="kv" style="margin-top:6px;">
+          <dt>How data will be used</dt><dd>${esc(p.formative_assessment_planned.how_data_will_be_used)}</dd>
+          <dt>Note</dt><dd>${esc(p.formative_assessment_planned.note)}</dd>
+        </dl>
+        <h3>Accessibility</h3>
+        <dl class="kv">
+          <dt>Recorded</dt><dd>${esc(p.accessibility_notes.verbatim_text)}</dd>
+          <dt>Observable in plan</dt><dd>${esc(p.accessibility_notes.observable_in_plan)}</dd>
+        </dl>
+        <h3>Cross-curricular connection</h3>
+        <dl class="kv">
+          <dt>Verbatim text</dt><dd>“${esc(p.cross_curricular_connections.verbatim_text)}”</dd>
+          <dt>Development</dt><dd>${esc(p.cross_curricular_connections.development)}</dd>
+        </dl>
+        <p style="margin-top:14px;font-style:italic;color:var(--ink-3);">${esc(p.observer_note)}</p>
+      </div>
+
+      <div class="scen-card">
+        <h2>${esc(n.artefact_label)} <span class="scen-badge">Evidences D2 · D3</span></h2>
+        <p style="margin-bottom:4px;"><strong>Observer position:</strong> ${esc(n.observer_position)}</p>
+        <div class="tl">${tl}</div>
+        <p style="margin-top:14px;font-style:italic;color:var(--ink-3);">${esc(n.observer_note)}</p>
+      </div>
+
+      <div class="scen-card">
+        <h2>${esc(a.artefact_label)} <span class="scen-badge">Evidences D4</span></h2>
+        <dl class="kv">${assess}</dl>
+      </div>
+
+      <div class="scen-card">
+        <h2>${esc(v.artefact_label)} <span class="scen-badge">Wider context</span></h2>
+        <dl class="kv">${notes}</dl>
+      </div>
+
+      <div class="scen-card">
+        <h2>How to run the session</h2>
+        <ul>${(s.facilitator_guidance.recommended_flow || []).map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+        <h3>Reminders for the facilitator</h3>
+        <ul>${(s.facilitator_guidance.facilitator_reminders || []).map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+        <p style="margin-top:14px;">
+          <button class="btn-primary" id="btnGoScore">I have read the case — start scoring →</button>
+        </p>
+      </div>
+    `;
+    const go = $('btnGoScore');
+    if (go) go.onclick = () => switchStage('score');
+  }
+
+  /* ── Stage 2 — render the 45 scoring cards ─────────────────── */
+  function renderScoring() {
+    const byDomain = {};
+    ITEMS.forEach(it => { (byDomain[it.domainId] ||= []).push(it); });
+
+    $('scoreBody').innerHTML = Object.keys(byDomain).map(did => {
+      const list = byDomain[did];
+      const d0 = list[0];
+      const cards = list.map(it => {
+        const btns = SCALE.map(sc => `
+          <button class="score-btn" data-item="${esc(it.id)}" data-v="${sc.value}" type="button">
+            <span class="sb-num">${sc.value}</span>
+            <span class="sb-lbl">${esc(sc.label)}</span>
+            <span class="sb-desc">${esc(it.rubric?.[String(sc.value)] || '—')}</span>
+          </button>`).join('');
+        const inds = (it.follow_up_indicators || []).map(i => `<li>${esc(i)}</li>`).join('');
+        return `
+          <div class="item-card unscored" id="card_${esc(it.id).replace('.','_')}">
+            <div class="item-top">
+              <span class="item-id">${esc(it.id)}</span>
+              <span class="item-title">${esc(it.title)}</span>
+              ${it.visible_from ? `<span class="item-vf">from ${esc(it.visible_from)}</span>` : ''}
+            </div>
+            ${it.theory_basis ? `<div class="item-theory">${esc(it.theory_basis)}</div>` : ''}
+            <div class="score-row">${btns}</div>
+            ${inds ? `
+              <div class="item-ind">
+                <button class="ind-toggle" type="button" data-ind="${esc(it.id)}">What this looks like in practice ▾</button>
+                <div class="ind-panel" id="ind_${esc(it.id).replace('.','_')}"><ul>${inds}</ul></div>
+              </div>` : ''}
+            <div class="item-evid">
+              <label for="ev_${esc(it.id)}">Evidence from the case — what did you see that decided this?</label>
+              <textarea id="ev_${esc(it.id)}" data-evid="${esc(it.id)}" placeholder="Quote the artefact, e.g. '10:47 — right column never reached'"></textarea>
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="dom-block">
+          <div class="dom-head">
+            <h2>${esc(did)} — ${esc(d0.domainTitle)}</h2>
+            <span class="dom-count">${list.length} items</span>
+          </div>
+          ${d0.domainDesc ? `<p class="dom-desc">${esc(d0.domainDesc)}</p>` : ''}
+          ${cards}
+        </div>`;
+    }).join('');
+
+    // score buttons
+    $('scoreBody').querySelectorAll('.score-btn').forEach(b => {
+      b.onclick = () => {
+        const id = b.dataset.item, v = Number(b.dataset.v);
+        myScores[id] = { ...(myScores[id] || {}), score: v };
+        const row = b.parentElement;
+        row.querySelectorAll('.score-btn').forEach(x => x.classList.remove('sel'));
+        b.classList.add('sel');
+        const card = document.getElementById('card_' + id.replace('.', '_'));
+        if (card) { card.classList.remove('unscored'); card.classList.add('scored'); }
+        updateProgress();
+      };
+    });
+    // indicator toggles
+    $('scoreBody').querySelectorAll('.ind-toggle').forEach(t => {
+      t.onclick = () => {
+        const p = document.getElementById('ind_' + t.dataset.ind.replace('.', '_'));
+        if (p) p.classList.toggle('open');
+      };
+    });
+    // evidence
+    $('scoreBody').querySelectorAll('textarea[data-evid]').forEach(ta => {
+      ta.oninput = () => {
+        const id = ta.dataset.evid;
+        myScores[id] = { ...(myScores[id] || {}), evidence: ta.value };
+      };
+    });
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const done = Object.values(myScores).filter(s => s && s.score).length;
+    const pct  = ITEMS.length ? Math.round(done / ITEMS.length * 100) : 0;
+    $('progTxt').textContent  = `${done} of ${ITEMS.length} scored`;
+    $('progFill').style.width = pct + '%';
+    $('btnSubmit').disabled   = !(sessionCode && done === ITEMS.length);
+  }
+
+  /* ── Session lifecycle ─────────────────────────────────────── */
+  function randCode() {
+    const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return Array.from({ length: 6 }, () => A[Math.floor(Math.random() * A.length)]).join('');
+  }
+
+  async function createSession() {
+    const name = ($('sessName').value || '').trim();
+    if (!name) { say('Enter your name first.'); return; }
+    const code = randCode();
+    const db = window.db;
+    await setDoc(doc(db, COL_SESSION, code), {
+      code,
+      scenarioId:       SCEN.scenarioId,
+      scenarioTitle:    SCEN.title,
+      frameworkVersion: FW.version,
+      facilitatorUid:   window.currentUser?.uid || null,
+      facilitatorName:  name,
+      revealed:         false,
+      participants:     {},
+      anchors:          {},
+      createdAt:        serverTimestamp()
+    });
+    isFacilitator = true;
+    await joinSession(code, name);
+  }
+
+  async function joinSession(code, nameArg) {
+    const db = window.db;
+    code = (code || $('sessCodeInput').value || '').trim().toUpperCase();
+    const name = (nameArg || $('sessName').value || '').trim();
+    if (!code || code.length !== 6) { say('Enter the 6-character session code.'); return; }
+    if (!name) { say('Enter your name first.'); return; }
+
+    const ref  = doc(db, COL_SESSION, code);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) { say('No session with that code.'); return; }
+
+    sessionCode = code;
+    myKey = window.currentUser?.uid || ('anon_' + name.toLowerCase().replace(/\W+/g, '_'));
+    if (snap.data().facilitatorUid && snap.data().facilitatorUid === window.currentUser?.uid) isFacilitator = true;
+
+    await updateDoc(ref, {
+      [`participants.${myKey}.name`]:     name,
+      [`participants.${myKey}.joinedAt`]: serverTimestamp(),
+      [`participants.${myKey}.submitted`]: false
+    });
+
+    $('sessCodeShow').textContent = code;
+    $('sessWho').textContent      = name;
+    $('sessFacil').textContent    = isFacilitator ? ' · facilitator' : '';
+    $('sessActive').classList.remove('hide');
+    $('btnJoin').disabled = true; $('btnCreate').disabled = true;
+    $('sessCodeInput').value = code;
+
+    if (unsub) unsub();
+    unsub = onSnapshot(ref, s => { liveDoc = s.data(); renderLive(); });
+    updateProgress();
+  }
+
+  async function submitScores() {
+    if (!sessionCode) { say('Join a session first.'); return; }
+    const db = window.db;
+    const payload = {};
+    ITEMS.forEach(it => {
+      const s = myScores[it.id];
+      if (s && s.score) payload[it.id] = { score: s.score, evidence: (s.evidence || '').slice(0, 400) };
+    });
+    await updateDoc(doc(db, COL_SESSION, sessionCode), {
+      [`participants.${myKey}.scores`]:      payload,
+      [`participants.${myKey}.submitted`]:   true,
+      [`participants.${myKey}.submittedAt`]: serverTimestamp()
+    });
+    $('btnSubmit').disabled = true;
+    $('btnSubmit').textContent = 'Submitted ✓';
+    switchStage('result');
+  }
+
+  async function saveDraft() {
+    if (!sessionCode) { say('Join a session first.'); return; }
+    const payload = {};
+    ITEMS.forEach(it => {
+      const s = myScores[it.id];
+      if (s && s.score) payload[it.id] = { score: s.score, evidence: (s.evidence || '').slice(0, 400) };
+    });
+    await updateDoc(doc(window.db, COL_SESSION, sessionCode), {
+      [`participants.${myKey}.scores`]: payload
+    });
+    $('btnSaveDraft').textContent = 'Saved ✓';
+    setTimeout(() => { $('btnSaveDraft').textContent = 'Save draft'; }, 1600);
+  }
+
+  /* ── Live session state ────────────────────────────────────── */
+  function renderLive() {
+    if (!liveDoc) return;
+    const parts = liveDoc.participants || {};
+    const submitted = Object.values(parts).filter(p => p.submitted);
+    $('sessCount').textContent      = submitted.length;
+    $('kpiParticipants').textContent = submitted.length;
+    renderResults();
+  }
+
+  /* ── Stage 3 — distribution ────────────────────────────────── */
+  function computeDistribution() {
+    const parts = (liveDoc?.participants) || {};
+    const submitted = Object.entries(parts).filter(([, p]) => p.submitted);
+    const rows = ITEMS.map(it => {
+      const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+      const voters = [];
+      submitted.forEach(([k, p]) => {
+        const s = p.scores?.[it.id];
+        if (s && s.score) { counts[s.score]++; voters.push({ name: p.name || k, score: s.score, evidence: s.evidence || '' }); }
+      });
+      const given = voters.map(v => v.score);
+      const spread = given.length ? Math.max(...given) - Math.min(...given) : 0;
+      const mean = given.length ? given.reduce((a, b) => a + b, 0) / given.length : 0;
+      return { item: it, counts, voters, spread, mean, n: given.length };
+    });
+    return rows;
+  }
+
+  function renderResults() {
+    if (!sessionCode) return;
+    const revealed = !!liveDoc?.revealed;
+    const rows = computeDistribution();
+    const withVotes = rows.filter(r => r.n > 0);
+    const split = withVotes.filter(r => r.spread >= 2);
+    $('kpiSpread').textContent = withVotes.length ? split.length : '—';
+
+    const parts = liveDoc?.participants || {};
+    const submittedN = Object.values(parts).filter(p => p.submitted).length;
+
+    if (!revealed && !isFacilitator) {
+      $('resultBody').innerHTML = `
+        <div class="empty-note">
+          <p style="font-size:1rem;color:var(--ink-2);margin-bottom:6px;">Waiting for the facilitator to reveal.</p>
+          <p><strong>${submittedN}</strong> participant(s) have submitted. Your own scores are saved.</p>
+        </div>`;
+      return;
+    }
+
+    const meanAll = withVotes.length
+      ? (withVotes.reduce((a, r) => a + r.mean, 0) / withVotes.length).toFixed(2) : '—';
+    const fullAgree = withVotes.filter(r => r.spread === 0).length;
+
+    const revealBtn = isFacilitator
+      ? `<button class="${revealed ? 'btn-ghost' : 'btn-primary'}" id="btnReveal">
+           ${revealed ? 'Revealed — hide again' : 'Reveal the distribution to everyone'}
+         </button>` : '';
+
+    const summary = `
+      <div class="res-summary">
+        <div class="res-tile"><div class="rt-num">${submittedN}</div><div class="rt-lbl">Submitted</div><div class="rt-sub">participants</div></div>
+        <div class="res-tile ${split.length ? 'alarm' : ''}"><div class="rt-num">${split.length}</div><div class="rt-lbl">Need discussion</div><div class="rt-sub">spread ≥ 2</div></div>
+        <div class="res-tile"><div class="rt-num">${fullAgree}</div><div class="rt-lbl">Full agreement</div><div class="rt-sub">spread = 0</div></div>
+        <div class="res-tile"><div class="rt-num">${meanAll}</div><div class="rt-lbl">Team mean</div><div class="rt-sub">across scored items</div></div>
+      </div>
+      <div class="res-filter">
+        ${revealBtn}
+        <button class="btn-ghost" id="fltSplit">Show only split items (${split.length})</button>
+        <button class="btn-ghost" id="fltAll">Show all ${withVotes.length}</button>
+      </div>`;
+
+    const rowHtml = r => {
+      const cls = r.spread >= 2 ? 'spread-hi' : r.spread === 1 ? 'spread-md' : 'spread-lo';
+      const pill = r.spread >= 2 ? 'hi' : r.spread === 1 ? 'md' : 'lo';
+      const maxC = Math.max(...Object.values(r.counts), 1);
+      const hist = SCALE.map(sc => {
+        const c = r.counts[sc.value] || 0;
+        return `<div class="hist-col" data-v="${sc.value}">
+                  <span class="hist-n">${c || ''}</span>
+                  <div class="hist-bar" style="height:${Math.round(c / maxC * 42)}px"></div>
+                  <span class="hist-lbl">${sc.value}</span>
+                </div>`;
+      }).join('');
+      const who = SCALE.map(sc => {
+        const names = r.voters.filter(v => v.score === sc.value).map(v => esc(v.name));
+        return names.length ? `<strong>${sc.value}:</strong> ${names.join(', ')}` : null;
+      }).filter(Boolean).join(' &nbsp;·&nbsp; ');
+      const ev = r.voters.filter(v => v.evidence).slice(0, 4)
+        .map(v => `<li><strong>${esc(v.name)} (${v.score}):</strong> ${esc(v.evidence)}</li>`).join('');
+      const saved = liveDoc?.anchors?.[r.item.id];
+
+      return `
+        <div class="res-row ${cls}" data-split="${r.spread >= 2 ? '1' : '0'}">
+          <div class="rr-top">
+            <span class="item-id">${esc(r.item.id)}</span>
+            <span class="item-title">${esc(r.item.title)}</span>
+            <span class="rr-spread ${pill}">spread ${r.spread} · mean ${r.mean.toFixed(1)}</span>
+          </div>
+          <div class="hist">${hist}</div>
+          <div class="who-list">${who}</div>
+          ${ev ? `<ul class="who-list" style="padding-left:18px;margin-top:8px;">${ev}</ul>` : ''}
+          <div class="anchor-box">
+            <label>Anchor decision — the score the team agreed, and why</label>
+            <div class="anchor-row">
+              <select data-anchor-score="${esc(r.item.id)}">
+                <option value="">Score…</option>
+                ${SCALE.map(sc => `<option value="${sc.value}" ${saved?.score == sc.value ? 'selected' : ''}>${sc.value} — ${esc(sc.label)}</option>`).join('')}
+              </select>
+              <input type="text" data-anchor-note="${esc(r.item.id)}" placeholder="One sentence: what decided it" value="${esc(saved?.note || '')}">
+              <button class="btn-ghost" data-anchor-save="${esc(r.item.id)}">Save anchor</button>
+              ${saved ? `<span class="anchor-saved">saved by ${esc(saved.by || '—')}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+    };
+
+    $('resultBody').innerHTML = summary +
+      (withVotes.length
+        ? `<div id="resRows">${withVotes.slice().sort((a, b) => b.spread - a.spread || a.item.id.localeCompare(b.item.id)).map(rowHtml).join('')}</div>`
+        : `<div class="empty-note">No scores submitted yet.</div>`);
+
+    const rb = $('btnReveal');
+    if (rb) rb.onclick = async () => {
+      await updateDoc(doc(window.db, COL_SESSION, sessionCode), { revealed: !revealed });
+    };
+    const fs = $('fltSplit'), fa = $('fltAll');
+    if (fs) fs.onclick = () => document.querySelectorAll('#resRows .res-row').forEach(el => {
+      el.style.display = el.dataset.split === '1' ? '' : 'none';
+    });
+    if (fa) fa.onclick = () => document.querySelectorAll('#resRows .res-row').forEach(el => { el.style.display = ''; });
+
+    document.querySelectorAll('[data-anchor-save]').forEach(btn => {
+      btn.onclick = async () => {
+        const id  = btn.dataset.anchorSave;
+        const sel = document.querySelector(`[data-anchor-score="${id}"]`);
+        const txt = document.querySelector(`[data-anchor-note="${id}"]`);
+        if (!sel.value) { say('Pick the agreed score.'); return; }
+        await updateDoc(doc(window.db, COL_SESSION, sessionCode), {
+          [`anchors.${id}`]: {
+            score: Number(sel.value),
+            note:  (txt.value || '').slice(0, 300),
+            by:    liveDoc?.participants?.[myKey]?.name || 'facilitator',
+            at:    new Date().toISOString()
+          }
+        });
+        btn.textContent = 'Saved ✓';
+        setTimeout(() => { btn.textContent = 'Save anchor'; }, 1500);
+      };
+    });
+  }
+
+  /* ── Stage switching ───────────────────────────────────────── */
+  function switchStage(name) {
+    document.querySelectorAll('.stage-tab').forEach(t => t.classList.toggle('active', t.dataset.stage === name));
+    $('stageCase').classList.toggle('hide',   name !== 'case');
+    $('stageScore').classList.toggle('hide',  name !== 'score');
+    $('stageResult').classList.toggle('hide', name !== 'result');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.querySelectorAll('.stage-tab').forEach(t => { t.onclick = () => switchStage(t.dataset.stage); });
+
+  /* ── Boot — CH dispatches authReady on `document` ──────────── */
+  document.addEventListener('authReady', async () => {
+    try {
+      await loadSources();
+      renderScenario();
+      renderScoring();
+    } catch (e) {
+      console.error('[observation-calibration] source load failed', e);
+      const msg = `<div class="empty-note">Could not load the framework or the lesson case
+        (<code>${esc(e.message)}</code>). Both are served from <code>references-data/</code> —
+        reload the page, and if it keeps failing tell an admin.</div>`;
+      $('scenBody').innerHTML = msg;
+      $('scoreBody').innerHTML = msg;
+      return;
+    }
+    $('btnCreate').onclick    = () => createSession().catch(e => { console.error(e); say('Could not open a session: ' + e.message); });
+    $('btnJoin').onclick      = () => joinSession().catch(e => { console.error(e); say('Could not join: ' + e.message); });
+    $('btnSubmit').onclick    = () => submitScores().catch(e => { console.error(e); say('Submit failed: ' + e.message); });
+    $('btnSaveDraft').onclick = () => saveDraft().catch(e => { console.error(e); say('Save failed: ' + e.message); });
+
+    const pre = new URLSearchParams(location.search).get('code');
+    if (pre) $('sessCodeInput').value = pre.toUpperCase();
+
+    const nm = window.userProfile?.displayName || window.currentUser?.displayName;
+    if (nm && !$('sessName').value) $('sessName').value = nm;
+  });
+</script>
+
+</body>
+</html>

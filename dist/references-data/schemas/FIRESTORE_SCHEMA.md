@@ -455,6 +455,18 @@ Branches (c) and (d) are narrow, field-scoped exceptions to the 2026-05-20 model
 #### `calibration_sessions/{docId}` + `calibration_group_sessions/{sessionCode}`
 Inter-rater reliability sessions for AH appraisers. PK uses `{uid}_{year}` for solo and 6-char codes for group sessions. Owner-write; same-school read or AH admin.
 
+#### `observation_calibration_sessions/{sessionCode}`
+**PK:** 6-char random session code (client-generated, ambiguity-free alphabet — no `I`/`O`/`0`/`1`).
+**Purpose:** Blind-scoring calibration rounds for the Eduversal Subject Specialist team on **F2 — Class Observation** (all 45 items). CH page `/observation-calibration`. Introduced 2026-07-31 ahead of the team's first school-visit round.
+
+**Fields:** `code`, `scenarioId`, `scenarioTitle`, `frameworkVersion`, `facilitatorUid →users.uid`, `facilitatorName`, `revealed` (bool — facilitator gate on the distribution view), `participants` (map keyed by uid, each `{ name, joinedAt, submitted, submittedAt, scores: { [itemId]: { score 1-4, evidence ≤400 chars } } }`), `anchors` (map keyed by item id, each `{ score, note ≤300 chars, by, at }` — the team's agreed reading of a split item), `createdAt`.
+
+**Read/Write:** any `central_user` (read to join by code + see the distribution; create to facilitate; update to join, submit own scores, and record anchors). `central_admin` delete. Per-participant write isolation is deliberately not rule-enforced — participants write into `participants.{uid}` on a shared doc and the trust boundary is a 10-person `@eduversal.org` HQ team in one room (same reasoning as the 2026-05-20 role flattening).
+
+**Boundary — training data only.** Nothing here is an appraisal record. These scores never reach `specialist_observations`, `teacher_appraisals_v2`, or any teacher's file, and the lesson case scored against is fictional (`docs/cross-module/observation-calibration-scenario-v1.json`). The anchors map is the durable artefact — it is the team's institutional memory of how a rubric level was read.
+
+**Sources of truth (neither re-typed into the page):** item set, titles, 1–4 descriptors, `visible_from`, and `follow_up_indicators` are read live from `shared-design/frameworks/appraisal-framework-v2.json → frameworks[1]`; the scale labels from its `scoring_scale`. The lesson case is read from the scenario JSON above. Both are mirrored into `dist/references-data/` by CH `build.js`.
+
 ---
 
 ### 9. KPI System
