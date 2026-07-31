@@ -3039,58 +3039,49 @@ function showBanner(type, msg) {
 
 /* ================================================================
    API HELPERS
+   2026-08-01: all mail-service calls route through the mailRelay
+   Cloud Function — the Resend bearer secret stays in Secret Manager,
+   callers are authenticated by Firebase ID token (central_admin gate
+   enforced server-side for campaign/test/get actions).
    ================================================================ */
-function getApiSecret() {
-  return window.ENV?.MAIL_SERVICE_SECRET || '';
+async function callMailRelay(data, timeoutMs) {
+  const pid = window.ENV?.FIREBASE_PROJECT_ID || 'centralhub-8727b';
+  const idToken = await window.auth.currentUser.getIdToken();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`https://asia-southeast1-${pid}.cloudfunctions.net/mailRelay`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + idToken,
+      },
+      body: JSON.stringify({ data }),
+      signal: ctrl.signal,
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.error) {
+      throw new Error(j.error?.message || res.statusText || 'mail relay error');
+    }
+    return j.result;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Mail service timed out — the server may be starting up. Please try again in a moment.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function apiGet(path) {
-  if (!MAIL_SERVICE_URL) throw new Error('MAIL_SERVICE_URL not configured');
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
-  try {
-    const res = await fetch(MAIL_SERVICE_URL + path, {
-      headers: { 'Authorization': `Bearer ${getApiSecret()}` },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || res.statusText);
-    }
-    return res.json();
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Mail service timed out — the server may be starting up. Please try again in a moment.');
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
+  return callMailRelay({ action: 'get', path }, 20000);
 }
 
 async function apiPost(path, body) {
-  if (!MAIL_SERVICE_URL) throw new Error('MAIL_SERVICE_URL not configured');
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
-  try {
-    const res = await fetch(MAIL_SERVICE_URL + path, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${getApiSecret()}`,
-      },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || res.statusText);
-    }
-    return res.json();
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Mail service timed out — the server may be starting up. Please try again in a moment.');
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
+  const action = path === '/send-campaign' ? 'campaign'
+               : path === '/send-test'     ? 'test'
+               : null;
+  if (!action) throw new Error('Unsupported mail-service path: ' + path);
+  return callMailRelay({ action, payload: body }, 30000);
 }
 
 /* ================================================================

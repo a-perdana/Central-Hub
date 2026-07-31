@@ -373,13 +373,15 @@ function applyInductionGating(profile) {
 // Both can run on the same DOM — they use different `data-*-hidden`
 // attributes and a shared "display: none !important" rule.
 const PAGE_ACCESS_BYPASS = new Set(['', 'index', 'login', 'waiting', 'settings']);
-// Cache TTL — short enough that an admin's page-access save is felt
-// almost immediately by other tabs, long enough to absorb hot navigation.
-// Was 5 min before 2026-05-05; cut to 60s when we noticed admins were
-// surprised that hidden=true didn't block coordinators until their
-// session expired. Real-time listeners would be tighter but this is
-// "good enough" for a tool admin save uses several times a year.
-const PAGE_ACCESS_TTL_MS = 60 * 1000;
+// Cache TTL — page-access config changes "several times a year", but the
+// 60s TTL (set 2026-05-05 so admin saves were felt quickly) meant every
+// non-admin session re-read the whole ~54-doc config every minute. At
+// launch scale (hundreds of users × ~20 pageviews/day) that alone was
+// ~500k Firestore reads/day. Raised to 30 min in the 2026-08-01
+// pre-launch cost pass — an admin save now takes up to 30 min to reach
+// other users' open sessions (fresh sessions and sessionStorage-cleared
+// tabs pick it up immediately), which matches how rarely the tool is used.
+const PAGE_ACCESS_TTL_MS = 30 * 60 * 1000;
 
 async function getPageAccessConfig(database, pageKey) {
   try {
@@ -413,7 +415,7 @@ async function getAllPageAccessConfigs(database) {
   } catch (_) {}
   const map = new Map();
   try {
-    // @lint-allow-unbounded — full config doc set (~54 small docs); cached for 5 min
+    // @lint-allow-unbounded — full config doc set (~54 small docs); cached per PAGE_ACCESS_TTL_MS (30 min)
     const snap = await getDocs(collection(database, 'page_access_config'));
     snap.forEach(d => {
       const data = d.data() || {};
@@ -604,6 +606,46 @@ window.firebaseApp = app;
 window.auth        = auth;
 window.db          = db;
 window.storage     = storage;
+
+// ── Global error reporter (2026-08-01 pre-launch hardening) ──────
+// Production breakage was previously invisible — no Sentry, no
+// window.onerror, and the known blank-page failure modes (Common
+// Mistakes #9/#13/#14) throw silently. This hook writes a size-capped
+// doc to `client_errors` (admin-read-only; rule caps field sizes) so
+// HQ can see user-side failures without user reports.
+// Guard-rails: max 5 reports/session, per-message dedupe, signed-in
+// users only (the rule pins uid == auth.uid), never throws.
+const _errSeen = new Set();
+let _errCount = 0;
+function reportClientError(message, stack) {
+  try {
+    if (_errCount >= 5) return;
+    const msg = String(message || '').slice(0, 2000);
+    if (!msg) return;
+    const key = msg.slice(0, 120);
+    if (_errSeen.has(key)) return;
+    _errSeen.add(key);
+    const u = auth?.currentUser;
+    if (!u) return;
+    _errCount++;
+    addDoc(collection(db, 'client_errors'), {
+      userId: u.uid,
+      message: msg,
+      stack: String(stack || '').slice(0, 4000),
+      page: (location.pathname + location.search).slice(0, 300),
+      ua: (navigator.userAgent || '').slice(0, 400),
+      hub: 'centralhub',
+      createdAt: serverTimestamp(),
+    }).catch(() => { /* reporter must never cascade */ });
+  } catch (_) { /* reporter must never throw */ }
+}
+window.addEventListener('error', (e) => {
+  reportClientError(e?.message || 'window.onerror', e?.error?.stack);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e?.reason;
+  reportClientError((r && (r.message || String(r))) || 'unhandledrejection', r?.stack);
+});
 
 // ── Academic year — single source of truth ────────────────────────
 // Derives the "YYYY-YYYY" label from `calendar_settings/current`. NEVER hardcode
@@ -889,14 +931,38 @@ function _renderTemplate(str, values) {
     Object.prototype.hasOwnProperty.call(values, k) ? String(values[k] ?? '') : '');
 }
 
-async function notifyAdminsOfPendingCHUser(user, database) {
-  const url    = (window.ENV?.MAIL_SERVICE_URL || '').replace(/\/$/, '');
-  const secret = window.ENV?.MAIL_SERVICE_SECRET || '';
-  if (!url || !secret) {
-    console.info('[pending-notif] mail-service not configured — skipping');
-    return;
+// Server-side mail relay (2026-08-01): the Resend bearer secret lives in
+// Secret Manager behind the mailRelay Cloud Function — never in the
+// browser. Clients authenticate with their Firebase ID token.
+function mailRelayUrl() {
+  const pid = window.ENV?.FIREBASE_PROJECT_ID || 'centralhub-8727b';
+  return `https://asia-southeast1-${pid}.cloudfunctions.net/mailRelay`;
+}
+async function callMailRelay(user, data, timeoutMs = 15000) {
+  const idToken = await user.getIdToken();
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(mailRelayUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + idToken,
+      },
+      body: JSON.stringify({ data }),
+      signal: ctrl.signal,
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.error) {
+      throw new Error(j.error?.message || ('HTTP ' + res.status));
+    }
+    return j.result;
+  } finally {
+    clearTimeout(timer);
   }
+}
 
+async function notifyAdminsOfPendingCHUser(user, database) {
   let subject = PENDING_NOTIFICATION_DEFAULT_SUBJECT;
   let body    = PENDING_NOTIFICATION_DEFAULT_BODY;
   try {
@@ -924,15 +990,9 @@ async function notifyAdminsOfPendingCHUser(user, database) {
   const renderedBody    = _renderTemplate(body,    values);
 
   try {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch(url + '/send-transactional', {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': 'Bearer ' + secret,
-      },
-      body: JSON.stringify({
+    await callMailRelay(user, {
+      action: 'transactional',
+      payload: {
         toEmail:      PENDING_NOTIFICATION_RECIPIENT,
         subject:      renderedSubject,
         bodyHtml:     renderedBody,
@@ -941,18 +1001,11 @@ async function notifyAdminsOfPendingCHUser(user, database) {
           { name: 'kind',     value: 'ch-pending-notification' },
           { name: 'platform', value: 'centralhub' },
         ],
-      }),
-      signal: ctrl.signal,
+      },
     });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      console.warn('[pending-notif] mail-service rejected:', res.status, data);
-    } else {
-      console.info('[pending-notif] notification email queued');
-    }
+    console.info('[pending-notif] notification email queued');
   } catch (e) {
-    console.warn('[pending-notif] network error:', e?.message);
+    console.warn('[pending-notif] relay error:', e?.message);
   }
 }
 

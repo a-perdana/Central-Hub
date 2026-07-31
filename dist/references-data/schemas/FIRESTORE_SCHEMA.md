@@ -1280,6 +1280,20 @@ The `/ask` page + `askEduversal` Cloud Function answer natural-language question
 **Fields:** `question`, `answer`, `citations[]`, `model`, `createdAt`.
 **Writers / Read:** the owner only (`request.auth.uid == uid`); `central_admin` may read for support. **Notes:** the answer mirrored here was already produced + audited server-side by `askEduversal` — this collection is the user's personal transcript, not a content trust boundary.
 
+#### Platform Operations (2026-08-01 pre-launch hardening) — `client_errors` · `fn_rate_limits`
+
+#### `client_errors/{errId}`
+**PK:** Auto-id. Append-only client-side error sink.
+**Fields:** `userId → users.uid` (pinned to caller by rule), `message` (≤2,000 chars), `stack` (≤4,000), `page` (≤300), `ua` (≤400), `hub` (`'centralhub'` — AH/TH may join later), `createdAt`.
+**Writers:** the global `window.onerror` / `unhandledrejection` hook in `Central Hub/auth-guard.js` (max 5 reports/session, per-message dedupe). **Read:** `central_admin` only.
+**Notes:** exists because production breakage was previously invisible — no Sentry, no telemetry, and the known blank-page failure modes throw silently. Size caps are rule-enforced to prevent abuse.
+
+#### `fn_rate_limits/{fnName_uid}`
+**PK:** `${fnName}_${uid}` (e.g. `askEduversal_aB3…`; the anonymous careers bucket uses `mailRelayAnon_application_received`).
+**Fields:** `fnName`, `uid`, `hourStart`, `hourCount`, `dayStart`, `dayCount`, `updatedAt`.
+**Writers \ Read:** Cloud Functions only via `enforcePerUserRateLimit()` transaction (`easeBankProxy` / `practiceBankAiSuggest` / `askEduversal` / `mailRelay`) — rule denies ALL client access.
+**Notes:** spend guardrail — the AI/proxy callables gate on auto-provisioned `central_user`, so without this a single account could loop paid API calls. `central_admin` is exempt at each call site.
+
 #### Cloud Function: `askEduversal` (asia-southeast1, callable)
 Secrets `COHERE_API_KEY` (embeddings) + `ANTHROPIC_API_KEY` (generation). Auth: signed-in `central_user`/`central_admin`. Flow: embed question (Cohere `search_query`, 256-dim) → cosine over the module-cached `ask_chunks` vectors → top-12 → read those 12 chunks' text → grounded Claude call (default `claude-sonnet-4-6`) → validate citations against the retrieved refs (strip invented) → return `{answer, citations[], usedChunkIds[], tokenUsage, cacheHit}` + write `ask_audit` + cache. Anti-hallucination: system rule answers ONLY from provided sources, says "not defined" when absent, never invents a policy/number/citation.
 

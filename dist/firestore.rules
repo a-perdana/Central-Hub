@@ -231,9 +231,52 @@ service cloud.firestore {
       );
     }
 
+    // ── users/{uid} self-write clamp helpers (2026-08-01 hardening) ──
+    // The pre-launch security audit found the old blanket self-write
+    // (`request.auth.uid == uid`) let ANY user set their own role_*hub /
+    // *_sub_roles / approval_status_* via raw SDK — a full privilege
+    // escalation that invalidated every role-based rule in this file
+    // (same class as the 2026-05-05 AH self-promotion incident).
+    // The clamp keeps every legitimate self-service path (first-login
+    // provisioning, staff-bridge prefill, settings/profile edits,
+    // read-markers, TH teaching-profile dynamic fields) while making
+    // privilege-bearing fields admin-only after first declaration:
+    //   - role_*hub          → self-set ONLY while absent AND to the
+    //                          non-admin default (cross-hub provisioning
+    //                          on first visit to a hub).
+    //   - approval_status_*  → self-set ONLY while absent AND to
+    //                          'pending' — never to 'approved'.
+    //   - ah/th_sub_roles    → one-time self-declare at the signup
+    //                          prompt (stored value absent or []);
+    //                          afterwards CH /console only.
+    //   - schoolId / school  → one-time while schoolId is unset (profile
+    //                          prompt / staff bridge); afterwards
+    //                          CH /console only.
+    //   - ch_sub_roles / ch_subjects / appraisal_level* / email / uid
+    //                        → never self-writable.
+    function usersSelfDiffKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    function selfFieldFirstSetOnly(field, allowedVal) {
+      return !usersSelfDiffKeys().hasAny([field])
+             || (!(field in resource.data)
+                 && request.resource.data[field] == allowedVal);
+    }
+    function selfOneTimeListDeclare(field) {
+      return !usersSelfDiffKeys().hasAny([field])
+             || !(field in resource.data)
+             || resource.data[field] == [];
+    }
+    function selfSchoolStillUnset() {
+      return !usersSelfDiffKeys().hasAny(['schoolId', 'school'])
+             || !('schoolId' in resource.data)
+             || resource.data.schoolId == null
+             || resource.data.schoolId == '';
+    }
+
     // -- users -----------------------------------------------
     match /users/{uid} {
-      // Any signed-in user can read/write their own doc
+      // Any signed-in user can read their own doc
       // (covers school-domain Teachers Hub / Academic Hub users logging in via Google)
       allow get:    if isSignedIn() && (request.auth.uid == uid || isAdmin());
       // List (collection query) for CentralHub console (central_admin),
@@ -249,7 +292,56 @@ service cloud.firestore {
       // (where('schoolId','==',<own school>)) rather than here.
       allow list:   if isAdmin() || isAHAdmin() || isCHCoordinator()
                        || isAHSchoolLeaderAnySchool();
-      allow write:  if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      allow delete: if isAdmin();
+
+      // Self-CREATE: first sign-in provisioning (auth-guard / login pages).
+      // Role + approval fields pinned to non-privileged defaults; identity
+      // fields pinned to the auth token; CH privilege fields banned.
+      allow create: if isAdmin() ||
+        (isSignedIn()
+         && request.auth.uid == uid
+         && (!('uid' in request.resource.data) || request.resource.data.uid == uid)
+         && (!('email' in request.resource.data)
+             || request.resource.data.email == request.auth.token.email)
+         && (!('role_centralhub' in request.resource.data)
+             || request.resource.data.role_centralhub == 'central_user')
+         && (!('role_academichub' in request.resource.data)
+             || request.resource.data.role_academichub == 'academic_user')
+         && (!('role_teachershub' in request.resource.data)
+             || request.resource.data.role_teachershub == 'teachers_user')
+         && (!('role_researchhub' in request.resource.data)
+             || request.resource.data.role_researchhub == 'research_user')
+         && (!('approval_status_centralhub' in request.resource.data)
+             || request.resource.data.approval_status_centralhub == 'pending')
+         && (!('approval_status_academichub' in request.resource.data)
+             || request.resource.data.approval_status_academichub == 'pending')
+         && (!('approval_status_teachershub' in request.resource.data)
+             || request.resource.data.approval_status_teachershub == 'pending')
+         && !request.resource.data.keys().hasAny([
+              'ch_sub_roles', 'ch_subjects',
+              'appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy'
+            ]));
+
+      // Self-UPDATE: everything EXCEPT privilege-bearing fields (see the
+      // clamp helper comment above the match block).
+      allow update: if isAdmin() ||
+        (isSignedIn()
+         && request.auth.uid == uid
+         && !usersSelfDiffKeys().hasAny([
+              'ch_sub_roles', 'ch_subjects', 'email', 'uid',
+              'appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy'
+            ])
+         && selfFieldFirstSetOnly('role_centralhub',  'central_user')
+         && selfFieldFirstSetOnly('role_academichub', 'academic_user')
+         && selfFieldFirstSetOnly('role_teachershub', 'teachers_user')
+         && selfFieldFirstSetOnly('role_researchhub', 'research_user')
+         && selfFieldFirstSetOnly('approval_status_centralhub',  'pending')
+         && selfFieldFirstSetOnly('approval_status_academichub', 'pending')
+         && selfFieldFirstSetOnly('approval_status_teachershub', 'pending')
+         && selfOneTimeListDeclare('ah_sub_roles')
+         && selfOneTimeListDeclare('th_sub_roles')
+         && selfSchoolStillUnset());
 
       // Narrow extra path: a school_principal / academic_coordinator may set
       // ONLY the appraisal level, and ONLY for a teacher at their own school.
@@ -2973,16 +3065,46 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // -- mail (Firebase Trigger Email extension queue) -------
-    // The extension reads `to` + `message.{subject,html,text}` and sends.
-    // We allow public create so the apply form can enqueue an
-    // "application received" mail; reads/updates are server-only via the extension.
+    // -- mail (RETIRED Firebase Trigger Email extension queue) --
+    // The Trigger Email path was retired 2026-05-06 (all sends go through
+    // the Resend mail-service). The old `allow create: if <shape-check>`
+    // let ANYONE on the internet enqueue mail from our verified domain —
+    // closed in the 2026-08-01 pre-launch hardening. Kept admin-readable
+    // for forensics only.
     match /mail/{mailId} {
-      allow create: if request.resource.data.keys().hasAll(['to','message'])
-                    && request.resource.data.to is string
-                    && request.resource.data.message.subject is string;
+      allow create: if false;
       allow get, list: if isAdmin();
       allow update, delete: if false;
+    }
+
+    // -- client_errors (global error-reporter sink, 2026-08-01) --
+    // Written by the window.onerror / unhandledrejection hook in each
+    // hub's auth-guard so production breakage is visible to HQ without
+    // user reports. Size-capped to prevent abuse; uid pinned to the
+    // caller; admin-only read + delete; append-only.
+    match /client_errors/{errId} {
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() <= 2000
+                    && request.resource.data.page is string
+                    && request.resource.data.page.size() <= 300
+                    && (!('stack' in request.resource.data)
+                        || (request.resource.data.stack is string
+                            && request.resource.data.stack.size() <= 4000))
+                    && (!('ua' in request.resource.data)
+                        || (request.resource.data.ua is string
+                            && request.resource.data.ua.size() <= 400));
+      allow get, list: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // -- fn_rate_limits (Cloud-Function-only, 2026-08-01) --------
+    // Per-user token buckets maintained by enforcePerUserRateLimit()
+    // in functions/index.js (easeBankProxy / practiceBankAiSuggest /
+    // askEduversal). Admin SDK bypasses rules; clients get nothing.
+    match /fn_rate_limits/{docId} {
+      allow read, write: if false;
     }
 
     // ─────────────────────────────────────────────────────────

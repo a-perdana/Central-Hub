@@ -1008,7 +1008,16 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
 //    by schoolId. Class + grade groups likewise.
 // ───────────────────────────────────────────────────────────────
 exports.rebuildLeaderboards = onSchedule(
-  { schedule: "every 60 minutes", timeZone: "Asia/Jakarta", region: "asia-southeast1" },
+  {
+    schedule: "every 60 minutes",
+    timeZone: "Asia/Jakarta",
+    region: "asia-southeast1",
+    // 2026-08-01 hardening: the default 60s/256MiB envelope OOMs/times out
+    // once the student body grows past pilot size — this job holds every
+    // student_points doc in memory while sorting per (scope × period).
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
   async () => {
     const all = await db.collection("student_points").get();
     if (all.empty) {
@@ -1023,7 +1032,11 @@ exports.rebuildLeaderboards = onSchedule(
       alltime: "totalPoints",
     };
 
-    const batch = db.batch();
+    // BulkWriter instead of a single db.batch(): batches hard-cap at 500
+    // writes, and 3 periods × (classes + grades + schools + 1) board docs
+    // crosses that around ~167 scope groups — at which point the WHOLE
+    // hourly rebuild used to fail atomically and silently (2026-08-01 fix).
+    const writer = db.bulkWriter();
     const seen = new Set();
 
     function writeBoard(scope, scopeId, period, list) {
@@ -1049,7 +1062,7 @@ exports.rebuildLeaderboards = onSchedule(
       const id = `${scope}_${scopeId}_${period}`;
       if (seen.has(id)) return;
       seen.add(id);
-      batch.set(db.collection("school_leaderboards").doc(id), {
+      writer.set(db.collection("school_leaderboards").doc(id), {
         scope, scopeId, period, entries,
         computedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -1075,7 +1088,7 @@ exports.rebuildLeaderboards = onSchedule(
       writeBoard("network", "all", p, rows);
     });
 
-    await batch.commit();
+    await writer.close();
     console.log(`[rebuildLeaderboards] wrote ${seen.size} boards across ${rows.length} students`);
   }
 );
@@ -1087,7 +1100,16 @@ exports.rebuildLeaderboards = onSchedule(
 //    totalPoints is never reset.
 // ───────────────────────────────────────────────────────────────
 exports.resetLeaderboardWindows = onSchedule(
-  { schedule: "5 0 * * *", timeZone: "Asia/Jakarta", region: "asia-southeast1" },
+  {
+    // 00:15 (was 00:05) — staggered away from rotateDailyChallenges (00:05)
+    // and the on-the-hour rebuildLeaderboards run so three collection-scanning
+    // jobs don't contend inside the shared maxInstances pool every midnight.
+    schedule: "15 0 * * *",
+    timeZone: "Asia/Jakarta",
+    region: "asia-southeast1",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+  },
   async () => {
     const now = new Date();
     const dayOfWeek = now.toLocaleString("en-GB", { weekday: "short", timeZone: "Asia/Jakarta" });
@@ -1101,15 +1123,18 @@ exports.resetLeaderboardWindows = onSchedule(
     }
 
     const all = await db.collection("student_points").get();
-    const batch = db.batch();
+    // BulkWriter — a single db.batch() hard-caps at 500 writes, which
+    // means the weekly/monthly reset would fail permanently and silently
+    // from the 501st student onward (2026-08-01 pre-launch fix).
+    const writer = db.bulkWriter();
     const stamp = admin.firestore.FieldValue.serverTimestamp();
     all.docs.forEach(d => {
       const upd = { updatedAt: stamp };
       if (resetWeekly)  { upd.weeklyPoints  = 0; upd.lastWeeklyResetAt  = stamp; }
       if (resetMonthly) { upd.monthlyPoints = 0; upd.lastMonthlyResetAt = stamp; }
-      batch.set(d.ref, upd, { merge: true });
+      writer.set(d.ref, upd, { merge: true });
     });
-    await batch.commit();
+    await writer.close();
     console.log(`[resetLeaderboardWindows] reset ${all.size} docs (weekly=${resetWeekly} monthly=${resetMonthly})`);
   }
 );
@@ -1241,6 +1266,45 @@ const LATIHAN_BASE = "https://latihan.id/api/eduversal";
 const LATIHAN_ALLOWED_PATHS = new Set(["/ease/lessons", "/ease/questions"]);
 const latihanApiToken = defineSecret("LATIHAN_API_TOKEN");
 
+// ── Per-user rate limiting (2026-08-01 pre-launch hardening) ──
+// Firestore-transaction token bucket shared by the three abusable
+// callables (easeBankProxy / practiceBankAiSuggest / askEduversal).
+// Why: each callable gates on "any signed-in central_user", which
+// auth-guard auto-provisions on first sign-in — so without a throttle a
+// single account could loop Anthropic / Cohere / latihan.id calls and
+// run unbounded spend. central_admin is exempt at each call site.
+// State doc: fn_rate_limits/{fnName_uid} — rules block ALL client access.
+// Fail-open on limiter-infrastructure errors, fail-closed on quota.
+async function enforcePerUserRateLimit(fnName, uid, perHour, perDay) {
+  const ref = db.collection("fn_rate_limits").doc(`${fnName}_${uid}`);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const now = Date.now();
+      const d = snap.exists ? (snap.data() || {}) : {};
+      let hourStart = Number(d.hourStart) || 0;
+      let hourCount = Number(d.hourCount) || 0;
+      let dayStart  = Number(d.dayStart)  || 0;
+      let dayCount  = Number(d.dayCount)  || 0;
+      if (now - hourStart >= 3600 * 1000)      { hourStart = now; hourCount = 0; }
+      if (now - dayStart  >= 24 * 3600 * 1000) { dayStart  = now; dayCount  = 0; }
+      if (hourCount >= perHour || dayCount >= perDay) {
+        throw new HttpsError("resource-exhausted",
+          `Rate limit reached (${perHour}/hour, ${perDay}/day). Try again later.`);
+      }
+      tx.set(ref, {
+        fnName, uid,
+        hourStart, hourCount: hourCount + 1,
+        dayStart,  dayCount:  dayCount + 1,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    console.warn(`[rate-limit] ${fnName} check failed for ${uid}:`, err?.message || err);
+  }
+}
+
 exports.easeBankProxy = onCall(
   {
     region: "asia-southeast1",
@@ -1265,6 +1329,13 @@ exports.easeBankProxy = onCall(
         "Requires CH admin or central_user.");
     }
 
+    // Throttle non-admins: the browser page is chatty (code-search index
+    // pre-fetch ≈15 calls), so the ceiling is generous — this only stops
+    // scripted loops from burning the latihan.id contract quota.
+    if (!isAdmin) {
+      await enforcePerUserRateLimit("easeBankProxy", uid, 120, 600);
+    }
+
     const path = String(request.data?.path || "");
     if (!LATIHAN_ALLOWED_PATHS.has(path)) {
       throw new HttpsError("invalid-argument",
@@ -1275,8 +1346,15 @@ exports.easeBankProxy = onCall(
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(query)) {
       if (v == null || v === "") continue;
+      // Clamp per_page — the raw passthrough forwarded e.g. per_page=100000
+      // verbatim, which can hammer the upstream contract (2026-08-01 fix).
+      if (k === "per_page") {
+        const pp = Math.max(1, Math.min(100, Number(v) || 25));
+        params.append(k, String(pp));
+        continue;
+      }
       if (Array.isArray(v)) {
-        for (const item of v) params.append(`${k}[]`, String(item));
+        for (const item of v.slice(0, 20)) params.append(`${k}[]`, String(item));
       } else {
         params.append(k, String(v));
       }
@@ -1296,6 +1374,9 @@ exports.easeBankProxy = onCall(
         "Authorization": token,
         "Accept": "application/json",
       },
+      // A hanging upstream must not pin the container for the full 30s
+      // callable timeout (shared maxInstances pool).
+      signal: AbortSignal.timeout(15000),
     });
     const text = await res.text();
     let body;
@@ -1454,6 +1535,11 @@ exports.practiceBankAiSuggest = onCall(
       throw new HttpsError("permission-denied",
         "Requires CH admin or central_user.");
     }
+    // Spend throttle — Anthropic calls cost real money and the auth gate
+    // above is auto-provisioned on first sign-in (2026-08-01 hardening).
+    if (!isAdmin) {
+      await enforcePerUserRateLimit("practiceBankAiSuggest", uid, 20, 100);
+    }
     // For audit log: serialise the actor's effective role string. Admin
     // takes precedence; otherwise list sub-roles (or 'central_user' for
     // plain users with no sub-role assigned).
@@ -1496,8 +1582,11 @@ exports.practiceBankAiSuggest = onCall(
     const intent = String(data.intent || "").slice(0, 600);
     const assessmentId = data.assessmentId
       ? String(data.assessmentId).slice(0, 64) : null;
+    // Opus is admin-only: it is 5-8× Sonnet's price and the model param is
+    // client-controlled — non-admins silently fall back to the default.
     const requestedModel = String(data.model || PRACTICE_AI_DEFAULT_MODEL);
-    const model = PRACTICE_AI_ALLOWED_MODELS.has(requestedModel)
+    const model = (PRACTICE_AI_ALLOWED_MODELS.has(requestedModel)
+      && (isAdmin || requestedModel !== "claude-opus-4-7"))
       ? requestedModel : PRACTICE_AI_DEFAULT_MODEL;
 
     // Build hard-filter query over practice_questions.
@@ -2163,14 +2252,22 @@ exports.askEduversal = onCall(
     if (!(isAdmin || isCentralUser)) {
       throw new HttpsError("permission-denied", "Requires CH admin or central_user.");
     }
+    // Spend throttle — each cache-miss answer costs real Anthropic+Cohere
+    // money and the cache is trivially bypassed by rephrasing (2026-08-01).
+    if (!isAdmin) {
+      await enforcePerUserRateLimit("askEduversal", uid, 20, 100);
+    }
 
     const data = request.data || {};
     const question = String(data.question || "").trim().slice(0, 600);
     if (question.length < 3) {
       throw new HttpsError("invalid-argument", "Ask a question (3+ chars).");
     }
+    // Opus is admin-only (client-controlled param, 5-8× Sonnet pricing).
     const requestedModel = String(data.model || ASK_DEFAULT_MODEL);
-    const model = ASK_ALLOWED_MODELS.has(requestedModel) ? requestedModel : ASK_DEFAULT_MODEL;
+    const model = (ASK_ALLOWED_MODELS.has(requestedModel)
+      && (isAdmin || requestedModel !== "claude-opus-4-7"))
+      ? requestedModel : ASK_DEFAULT_MODEL;
 
     // Corpus fingerprint (for cache key + freshness).
     let corpusFp = "none";
@@ -2295,5 +2392,154 @@ exports.askEduversal = onCall(
       answer, citations, usedChunkIds: chunks.map(c => c.chunkId),
       cacheHit: false, model, tokenUsage, costUsd, auditId: auditRef.id,
     };
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
+// mailRelay — server-side relay to the Resend mail-service (2026-08-01)
+//
+//   Why: MAIL_SERVICE_SECRET used to be shipped to the browser via
+//   dist/firebase-config.js (build.js env substitution). Anyone viewing
+//   source on any CH/TH page could lift the bearer token and call
+//   /send-campaign against the network address book. This relay keeps
+//   the secret in Secret Manager; clients call the relay with their
+//   Firebase ID token (or anonymously, for the single public careers
+//   confirmation path) and the relay forwards to Railway.
+//
+//   Actions (request.data.action):
+//     'transactional'        — any signed-in user (all 4 hubs share the
+//                              Firebase project). Rate-limited per uid.
+//                              Forwards to POST /send-transactional.
+//     'applicationReceived'  — UNAUTHENTICATED, for the public TH
+//                              /careers-apply confirmation only.
+//                              templateName is pinned server-side and a
+//                              global anon bucket caps volume.
+//     'campaign' | 'test'    — central_admin only (mail-composer).
+//                              Forwards to /send-campaign | /send-test.
+//     'get'                  — central_admin only. GET passthrough
+//                              limited to /recipients + /campaigns[/id].
+//
+//   Secret: MAIL_SERVICE_SECRET (Secret Manager — set with
+//   `firebase functions:secrets:set MAIL_SERVICE_SECRET`).
+// ───────────────────────────────────────────────────────────────
+const mailServiceSecret = defineSecret("MAIL_SERVICE_SECRET");
+const MAIL_SERVICE_BASE =
+  (process.env.MAIL_SERVICE_URL || "https://mail-service-production-e9e7.up.railway.app")
+    .replace(/\/$/, "");
+
+function mailRelayValidateTransactional(p) {
+  const toEmail = String(p.toEmail || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail) || toEmail.length > 200) {
+    throw new HttpsError("invalid-argument", "Invalid toEmail.");
+  }
+  const subject = String(p.subject || "").trim();
+  if (!subject || subject.length > 300) {
+    throw new HttpsError("invalid-argument", "Subject required (≤300 chars).");
+  }
+  const bodyHtml = String(p.bodyHtml || "");
+  if (!bodyHtml.trim() || bodyHtml.length > 120000) {
+    throw new HttpsError("invalid-argument", "bodyHtml required (≤120k chars).");
+  }
+  const out = { toEmail, subject, bodyHtml };
+  if (p.toName)     out.toName     = String(p.toName).slice(0, 200);
+  if (p.replyTo)    out.replyTo    = String(p.replyTo).slice(0, 200);
+  if (p.footerNote) out.footerNote = String(p.footerNote).slice(0, 500);
+  if (typeof p.templateName === "string") out.templateName = p.templateName.slice(0, 40);
+  if (Array.isArray(p.tags)) {
+    out.tags = p.tags.slice(0, 10).map(t => ({
+      name: String(t?.name || "").slice(0, 60),
+      value: String(t?.value || "").slice(0, 120),
+    }));
+  }
+  return out;
+}
+
+async function mailRelayForward(method, path, body) {
+  const secret = mailServiceSecret.value();
+  if (!secret) {
+    throw new HttpsError("failed-precondition", "MAIL_SERVICE_SECRET secret not set.");
+  }
+  const res = await fetch(MAIL_SERVICE_BASE + path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + secret,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(25000),
+  });
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok) {
+    throw new HttpsError("internal", `mail-service ${res.status}`, { status: res.status, body: data });
+  }
+  return data;
+}
+
+exports.mailRelay = onCall(
+  {
+    region: "asia-southeast1",
+    secrets: [mailServiceSecret],
+    cors: true,
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    const action = String(request.data?.action || "");
+    const payload = request.data?.payload || {};
+
+    // Public path: careers-apply confirmation (candidate is NOT signed in
+    // at submit time). Template pinned; global anon bucket caps abuse.
+    if (action === "applicationReceived") {
+      await enforcePerUserRateLimit("mailRelayAnon", "application_received", 30, 200);
+      const clean = mailRelayValidateTransactional(payload);
+      clean.templateName = "application_received";
+      return await mailRelayForward("POST", "/send-transactional", clean);
+    }
+
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const uid = request.auth.uid;
+
+    if (action === "transactional") {
+      const userSnap = await db.collection("users").doc(uid).get();
+      const isAdmin = userSnap.exists
+        && userSnap.data()?.role_centralhub === "central_admin";
+      if (!isAdmin) {
+        await enforcePerUserRateLimit("mailRelayTx", uid, 30, 200);
+      }
+      const clean = mailRelayValidateTransactional(payload);
+      return await mailRelayForward("POST", "/send-transactional", clean);
+    }
+
+    // Everything below is mail-composer tooling — central_admin only.
+    const userSnap = await db.collection("users").doc(uid).get();
+    const isAdmin = userSnap.exists
+      && userSnap.data()?.role_centralhub === "central_admin";
+    if (!isAdmin) {
+      throw new HttpsError("permission-denied", "Requires central_admin.");
+    }
+
+    if (action === "campaign") {
+      return await mailRelayForward("POST", "/send-campaign", payload);
+    }
+    if (action === "test") {
+      return await mailRelayForward("POST", "/send-test", payload);
+    }
+    if (action === "get") {
+      const path = String(request.data?.path || "");
+      const ok = path === "/recipients"
+        || path.startsWith("/recipients?")
+        || path === "/campaigns"
+        || /^\/campaigns\/[A-Za-z0-9._-]+$/.test(path);
+      if (!ok) {
+        throw new HttpsError("invalid-argument", `Path not allowed: ${path}`);
+      }
+      return await mailRelayForward("GET", path, null);
+    }
+
+    throw new HttpsError("invalid-argument", `Unknown action: ${action}`);
   }
 );

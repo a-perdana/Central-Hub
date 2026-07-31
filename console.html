@@ -1366,13 +1366,35 @@
       Object.prototype.hasOwnProperty.call(values, k) ? String(values[k] ?? '') : '');
   }
 
-  async function notifyApprovedTHUser(u) {
-    const url    = (window.ENV?.MAIL_SERVICE_URL || '').replace(/\/$/, '');
-    const secret = window.ENV?.MAIL_SERVICE_SECRET || '';
-    if (!url || !secret) {
-      console.info('[approve-mail] mail-service not configured — skipping');
-      return;
+  // 2026-08-01: sends go through the mailRelay Cloud Function (secret in
+  // Secret Manager, caller authenticated by Firebase ID token) — the
+  // Resend bearer no longer ships to the browser.
+  async function callMailRelay(data, timeoutMs = 15000) {
+    const pid = window.ENV?.FIREBASE_PROJECT_ID || 'centralhub-8727b';
+    const idToken = await window.auth.currentUser.getIdToken();
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`https://asia-southeast1-${pid}.cloudfunctions.net/mailRelay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + idToken,
+        },
+        body: JSON.stringify({ data }),
+        signal: ctrl.signal,
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j.error) {
+        throw new Error(j.error?.message || ('HTTP ' + res.status));
+      }
+      return j.result;
+    } finally {
+      clearTimeout(timer);
     }
+  }
+
+  async function notifyApprovedTHUser(u) {
     if (!u?.email) return;
 
     let subject = TH_APPROVED_DEFAULT_SUBJECT;
@@ -1395,15 +1417,9 @@
     };
 
     try {
-      const ctrl  = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      const res = await fetch(url + '/send-transactional', {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': 'Bearer ' + secret,
-        },
-        body: JSON.stringify({
+      await callMailRelay({
+        action: 'transactional',
+        payload: {
           toEmail:      u.email,
           toName:       u.displayName || '',
           subject:      _renderTpl(subject, values),
@@ -1413,18 +1429,11 @@
             { name: 'kind',     value: 'th-approved-welcome' },
             { name: 'platform', value: 'teachershub' },
           ],
-        }),
-        signal: ctrl.signal,
+        },
       });
-      clearTimeout(timer);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        console.warn('[approve-mail] mail-service rejected:', res.status, data);
-      } else {
-        console.info('[approve-mail] welcome email queued for', u.email);
-      }
+      console.info('[approve-mail] welcome email queued for', u.email);
     } catch (e) {
-      console.warn('[approve-mail] network error:', e?.message);
+      console.warn('[approve-mail] relay error:', e?.message);
     }
   }
 
