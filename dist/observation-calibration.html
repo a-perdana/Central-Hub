@@ -31,6 +31,16 @@
       border: 1px solid #fde68a; border-radius: 10px; padding: 6px 16px;
     }
     .sess-spacer { flex: 1; }
+    .sess-share { display: flex; flex-direction: column; gap: 5px; }
+    .btn-copy {
+      font-family: inherit; font-size: .74rem; font-weight: 600; cursor: pointer;
+      padding: 5px 11px; border-radius: 7px; white-space: nowrap;
+      border: 1px solid #fde68a; background: #fffbeb; color: #b45309;
+    }
+    .btn-copy:hover { border-color: #f59e0b; background: #fef3c7; }
+    .btn-copy.is-primary { background: #b45309; border-color: #b45309; color: #fff; }
+    .btn-copy.is-primary:hover { background: #92400e; border-color: #92400e; }
+    .btn-copy.copied { background: #16a34a; border-color: #16a34a; color: #fff; }
     .sess-msg { font-size: .8rem; font-weight: 600; color: #dc2626; flex-basis: 100%; }
     .sess-msg:empty { display: none; }
     .sess-msg.ok { color: #16a34a; }
@@ -3967,6 +3977,10 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <div class="sess-spacer"></div>
     <div id="sessActive" class="hide" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
       <span class="sess-code" id="sessCodeShow">——————</span>
+      <div class="sess-share">
+        <button class="btn-copy" id="btnCopyCode" type="button" title="Copy just the 6-character code">Copy code</button>
+        <button class="btn-copy is-primary" id="btnCopyLink" type="button" title="Copy a link that fills the code in automatically">Copy join link</button>
+      </div>
       <div class="sess-meta">
         <div>Joined as <strong id="sessWho">—</strong><span id="sessFacil"></span></div>
         <div><strong id="sessCount">0</strong> participant(s) submitted</div>
@@ -4060,15 +4074,17 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   let liveDoc = null;
 
   const $  = id => document.getElementById(id);
-  /* Inline status instead of alert() — CH bans blocking dialogs. */
+  /* Inline status instead of alert() — CH bans blocking dialogs.
+     `sticky` keeps the message up (join instructions must not vanish while
+     someone is still typing their name). */
   let msgTimer = null;
-  function say(text, ok) {
+  function say(text, ok, sticky) {
     const el = $('sessMsg');
     if (!el) return;
     el.textContent = text || '';
     el.classList.toggle('ok', !!ok);
     clearTimeout(msgTimer);
-    if (text) msgTimer = setTimeout(() => { el.textContent = ''; }, 6000);
+    if (text && !sticky) msgTimer = setTimeout(() => { el.textContent = ''; }, 6000);
   }
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
     { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
@@ -4293,6 +4309,45 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   }
 
   /* ── Session lifecycle ─────────────────────────────────────── */
+  /* Copy helper. navigator.clipboard needs a secure context and can still be
+     refused by permission policy, so fall back to a hidden textarea + execCommand
+     rather than leaving the facilitator with nothing mid-meeting. */
+  async function copyText(text, btn, okLabel) {
+    const original = btn.dataset.label || btn.textContent;
+    btn.dataset.label = original;
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch { /* fall through */ }
+    if (!ok) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:-9999px;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch { ok = false; }
+    }
+    if (ok) {
+      btn.textContent = okLabel;
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1800);
+    } else {
+      // Nothing copied — put it on screen so it can still be read out or selected.
+      say('Copy blocked by the browser. Session code: ' + sessionCode);
+    }
+  }
+
+  function joinLink(code) {
+    return location.origin + location.pathname + '?code=' + code;
+  }
+
   function randCode() {
     const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     return Array.from({ length: 6 }, () => A[Math.floor(Math.random() * A.length)]).join('');
@@ -4344,6 +4399,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     $('sessWho').textContent      = name;
     $('sessFacil').textContent    = isFacilitator ? ' · facilitator' : '';
     $('sessActive').classList.remove('hide');
+    say('');   // clear the sticky join instruction now that we're in
     $('btnJoin').disabled = true; $('btnCreate').disabled = true;
     $('sessCodeInput').value = code;
 
@@ -4564,12 +4620,20 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     $('btnJoin').onclick      = () => joinSession().catch(e => { console.error(e); say('Could not join: ' + e.message); });
     $('btnSubmit').onclick    = () => submitScores().catch(e => { console.error(e); say('Submit failed: ' + e.message); });
     $('btnSaveDraft').onclick = () => saveDraft().catch(e => { console.error(e); say('Save failed: ' + e.message); });
-
-    const pre = new URLSearchParams(location.search).get('code');
-    if (pre) $('sessCodeInput').value = pre.toUpperCase();
+    $('btnCopyCode').onclick  = () => copyText(sessionCode, $('btnCopyCode'), 'Copied ✓');
+    $('btnCopyLink').onclick  = () => copyText(joinLink(sessionCode), $('btnCopyLink'), 'Link copied ✓');
 
     const nm = window.userProfile?.displayName || window.currentUser?.displayName;
     if (nm && !$('sessName').value) $('sessName').value = nm;
+
+    // Arrived on a shared join link — code is pre-filled, so say what's left to do.
+    const pre = new URLSearchParams(location.search).get('code');
+    if (pre) {
+      $('sessCodeInput').value = pre.toUpperCase();
+      say($('sessName').value
+        ? 'Session code filled in from your link — press Join session.'
+        : 'Session code filled in from your link — add your name, then press Join session.', true, true);
+    }
   });
 </script>
 
