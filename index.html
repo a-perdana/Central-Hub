@@ -4723,10 +4723,15 @@
           'Since ' + weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · logins';
 
         try {
+          // limit(2000) (2026-08-01): platform_usage is a login-event log
+          // that grows as users × logins/week — unbounded, this query's
+          // cost rose linearly forever. Matches the 2000-doc cap the
+          // neighbouring userProgress / weekly_progress widgets use.
           const snap = await getDocs(query(
             collection(db, 'platform_usage'),
             where('ts', '>=', Timestamp.fromDate(weekStart)),
             orderBy('ts', 'desc'),
+            limit(2000),
           ));
 
           const docs = snap.docs.map(d => d.data());

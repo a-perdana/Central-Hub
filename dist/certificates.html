@@ -3703,8 +3703,15 @@ function onDragEnd() {
 
 <script type="module">
 import {
-  collection, getDocs, query, where
+  collection, getDocs, query, where, documentId
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// Per-session cache (2026-08-01 read-cost pass): this widget used to run
+// its queries on EVERY pageview of every navbar-bearing page. Tasks
+// change slowly — 5 min staleness is invisible, and the saving is
+// (pageviews − 1) query batches per user per 5 minutes.
+const MYTASKS_CACHE_KEY = 'chMyTasks:v1';
+const MYTASKS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const STATUS = {
   todo:         { label: 'To Do',        color: '#6b7280', bg: '#f3f4f6' },
@@ -3729,6 +3736,35 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     return;
   }
 
+  function paintTasks(rows) {
+    if (countEl) countEl.textContent = rows.length;
+    if (!listEl) return;
+    if (rows.length === 0) {
+      listEl.innerHTML = '<p class="mtd-empty">No tasks assigned to you.</p>';
+      return;
+    }
+    listEl.innerHTML = rows.map(t => {
+      const st = STATUS[t.status] || { label: t.status || '—', color: '#6b7280', bg: '#f3f4f6' };
+      return `<a class="mtd-item" href="activities">
+        <span class="mtd-task-name" title="${esc(t.name)}">${esc(t.name || 'Untitled')}</span>
+        ${t.board ? `<span class="mtd-board" title="${esc(t.board)}">${esc(t.board)}</span>` : ''}
+        <span class="mtd-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
+      </a>`;
+    }).join('');
+  }
+
+  // Session cache hit → zero Firestore reads this pageview.
+  try {
+    const raw = sessionStorage.getItem(MYTASKS_CACHE_KEY);
+    if (raw) {
+      const c = JSON.parse(raw);
+      if (c && c.who === displayName && (Date.now() - c.at) < MYTASKS_CACHE_TTL_MS) {
+        paintTasks(c.rows);
+        return;
+      }
+    }
+  } catch (_) {}
+
   try {
     // Fetch tasks assigned to this user by display name
     const snap = await getDocs(query(
@@ -3737,34 +3773,30 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     ));
     const myTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Fetch board names
+    // Fetch board names — only the referenced projects, in documentId()
+    // 'in' chunks of 30 (was an unbounded whole-collection read).
     const projectIds = [...new Set(myTasks.map(t => t.projectId).filter(Boolean))];
     const projectMap = {};
-    if (projectIds.length > 0) {
-      // @lint-allow-unbounded — auto-annotated; revisit if collection grows large
-      const projSnap = await getDocs(collection(db, 'activity_projects'));
+    for (let i = 0; i < projectIds.length; i += 30) {
+      const chunk = projectIds.slice(i, i + 30);
+      const projSnap = await getDocs(query(
+        collection(db, 'activity_projects'),
+        where(documentId(), 'in', chunk)
+      ));
       projSnap.docs.forEach(d => { projectMap[d.id] = d.data().name || ''; });
     }
 
-    // Update count badge
-    if (countEl) countEl.textContent = myTasks.length;
-
-    // Render list
-    if (!listEl) return;
-    if (myTasks.length === 0) {
-      listEl.innerHTML = '<p class="mtd-empty">No tasks assigned to you.</p>';
-      return;
-    }
-
-    listEl.innerHTML = myTasks.map(t => {
-      const st = STATUS[t.status] || { label: t.status || '—', color: '#6b7280', bg: '#f3f4f6' };
-      const boardName = projectMap[t.projectId] || '';
-      return `<a class="mtd-item" href="activities">
-        <span class="mtd-task-name" title="${esc(t.name)}">${esc(t.name || 'Untitled')}</span>
-        ${boardName ? `<span class="mtd-board" title="${esc(boardName)}">${esc(boardName)}</span>` : ''}
-        <span class="mtd-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
-      </a>`;
-    }).join('');
+    const rows = myTasks.map(t => ({
+      name: t.name || 'Untitled',
+      status: t.status || '',
+      board: projectMap[t.projectId] || '',
+    }));
+    try {
+      sessionStorage.setItem(MYTASKS_CACHE_KEY, JSON.stringify({
+        at: Date.now(), who: displayName, rows,
+      }));
+    } catch (_) {}
+    paintTasks(rows);
 
   } catch (err) {
     console.error('My Tasks navbar error:', err);
@@ -3821,8 +3853,56 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
   // First-time users have null — show the 12 newest items as unread bootstrap.
   let cutoff = window.userProfile?.lastReadNotificationsAt || null;
 
-  async function renderBell() {
+  // Per-session cache (2026-08-01 read-cost pass): the bell used to fire
+  // its 5 queries on EVERY pageview of every navbar-bearing page (~132) —
+  // the single largest read line item at launch scale (~50 reads/pageview).
+  // Feed items age in minutes, not seconds; a 10-min cache is invisible to
+  // users and cuts the cost by ~90%+. Keyed by the read-cutoff so
+  // mark-all-read invalidates naturally.
+  const BELL_CACHE_KEY = 'chBell:v1';
+  const BELL_CACHE_TTL_MS = 10 * 60 * 1000;
+
+  function paintBell(items) {
+    if (badgeEl) {
+      if (items.length > 0) {
+        badgeEl.textContent = items.length > 99 ? '99+' : items.length;
+        badgeEl.style.display = 'flex';
+      } else {
+        badgeEl.style.display = 'none';
+      }
+    }
+    if (items.length === 0) {
+      listEl.innerHTML = '<p class="nd-empty"><span class="nd-empty-icon">✓</span><br>You\'re all caught up!<br><small>Nothing new since you last read.</small></p>';
+      return;
+    }
+    listEl.innerHTML = items.map(({ type, title, ms }) => {
+      const ago = timeAgo(ms);
+      return `<a class="nd-item" href="${HREFS[type] || 'notifications'}">
+        <span class="nd-icon ic-${type}">${ICONS[type] || ''}</span>
+        <span class="nd-body">
+          <span class="nd-title" title="${escN(title)}">${escN(title)}</span>
+          <span class="nd-meta">${escN(LABELS[type] || type)} · ${ago}</span>
+        </span>
+      </a>`;
+    }).join('');
+  }
+
+  async function renderBell(force = false) {
     if (sinceEl) sinceEl.textContent = cutoff ? sinceLabel(cutoff) : 'first visit';
+    const cutoffMs = cutoff?.toMillis?.() || 0;
+
+    if (!force) {
+      try {
+        const raw = sessionStorage.getItem(BELL_CACHE_KEY);
+        if (raw) {
+          const c = JSON.parse(raw);
+          if (c && c.cutoffMs === cutoffMs && (Date.now() - c.at) < BELL_CACHE_TTL_MS) {
+            paintBell(c.items);
+            return;
+          }
+        }
+      } catch (_) {}
+    }
 
     try {
       const buildQ = (path) => cutoff
@@ -3847,33 +3927,18 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         const ta = a.data.createdAt?.toMillis?.() || 0;
         const tb = b.data.createdAt?.toMillis?.() || 0;
         return tb - ta;
-      }).slice(0, 12);
+      }).slice(0, 12).map(({ type, data }) => ({
+        type,
+        title: data.title || data.name || data.subject || 'Untitled',
+        ms: data.createdAt?.toMillis?.() || 0,
+      }));
 
-      if (badgeEl) {
-        if (items.length > 0) {
-          badgeEl.textContent = items.length > 99 ? '99+' : items.length;
-          badgeEl.style.display = 'flex';
-        } else {
-          badgeEl.style.display = 'none';
-        }
-      }
-
-      if (items.length === 0) {
-        listEl.innerHTML = '<p class="nd-empty"><span class="nd-empty-icon">✓</span><br>You\'re all caught up!<br><small>Nothing new since you last read.</small></p>';
-        return;
-      }
-
-      listEl.innerHTML = items.map(({ type, data }) => {
-        const title = data.title || data.name || data.subject || 'Untitled';
-        const ago = timeAgo(data.createdAt);
-        return `<a class="nd-item" href="${HREFS[type] || 'notifications'}">
-          <span class="nd-icon ic-${type}">${ICONS[type] || ''}</span>
-          <span class="nd-body">
-            <span class="nd-title" title="${escN(title)}">${escN(title)}</span>
-            <span class="nd-meta">${escN(LABELS[type] || type)} · ${ago}</span>
-          </span>
-        </a>`;
-      }).join('');
+      try {
+        sessionStorage.setItem(BELL_CACHE_KEY, JSON.stringify({
+          at: Date.now(), cutoffMs, items,
+        }));
+      } catch (_) {}
+      paintBell(items);
 
     } catch (err) {
       console.error('Notifications error:', err);
@@ -3889,7 +3954,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       try {
         await updateDoc(doc(db, 'users', user.uid), { lastReadNotificationsAt: serverTimestamp() });
         cutoff = { toMillis: () => Date.now() };
-        await renderBell();
+        await renderBell(true);
       } catch (err) {
         console.error('Mark-all-read failed:', err);
       }
@@ -4195,7 +4260,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
 import {
   collection, getDocs, addDoc, updateDoc,
   deleteDoc as fsDeleteDoc, doc as fsDoc,
-  query, orderBy, where, serverTimestamp
+  query, orderBy, where, limit, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 let db, isAdmin = false, rows = [], editId = null;
@@ -4326,7 +4391,7 @@ function render() {
 // ── Load ─────────────────────────────────────────────────────────
 async function load() {
   E('tbody').innerHTML = `<tr><td colspan="10" class="table-empty"><span class="skel" style="width:220px;height:14px"></span></td></tr>`;
-  const snap = await getDocs(query(collection(db, 'central_certificates'), orderBy('createdAt', 'desc')));
+  const snap = await getDocs(query(collection(db, 'central_certificates'), orderBy('createdAt', 'desc'), limit(500)));
   rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   updateStats();
   render();

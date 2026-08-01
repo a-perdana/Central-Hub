@@ -714,16 +714,11 @@ async function loadEvidence() {
     limit(200)
   );
   const snap = await getDocs(q);
-  allEvidence = snap.docs.map(d => ({ id: d.id, ...d.data(), _comments: [] }));
-
-  // Load comments sub-collections in parallel (batch, not N+1)
-  await Promise.all(allEvidence.map(async ev => {
-    const cSnap = await getDocs(query(
-      collection(window.db, 'competency_evidence', ev.id, 'comments'),
-      orderBy('createdAt', 'asc')
-    ));
-    ev._comments = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }));
+  // _comments: null = not fetched yet. Comments are lazy-loaded on first
+  // toggle (2026-08-01 read-cost pass) — the old eager Promise.all here
+  // issued 200 subcollection queries on EVERY page load for threads
+  // almost nobody opens. Promise.all parallelises latency, not billing.
+  allEvidence = snap.docs.map(d => ({ id: d.id, ...d.data(), _comments: null }));
 }
 
 async function loadIssuedCerts() {
@@ -763,6 +758,9 @@ function renderEvidence() {
     const date = ev.createdAt?.toDate?.()?.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) || '';
     const comments = ev._comments || [];
     const commentCount = comments.length;
+    const commentLabel = ev._comments === null
+      ? '💬 Comments'
+      : `💬 ${commentCount ? commentCount + ' comment' + (commentCount !== 1 ? 's' : '') : 'Add comment'}`;
 
     return `
       <div class="ev-card status-${ev.status}" id="ev-${ev.id}">
@@ -793,7 +791,7 @@ function renderEvidence() {
         ` : ''}
         <div class="ev-comments">
           <button class="ev-comments-toggle" onclick="toggleComments('${ev.id}')">
-            💬 ${commentCount ? commentCount + ' comment' + (commentCount !== 1 ? 's' : '') : 'Add comment'}
+            ${commentLabel}
           </button>
           <div class="ev-comments-body" id="comments-${ev.id}">
             <div id="comments-list-${ev.id}">
@@ -1014,9 +1012,43 @@ window.revokeCert = async function(certId, btn) {
 };
 
 // ─── COMMENTS ─────────────────────────────────────────────────────────────────
-window.toggleComments = function(evId) {
+function commentItemHtml(c) {
+  const ci = (c.authorName || c.authorEmail || '?').substring(0,2).toUpperCase();
+  const cd = c.createdAt?.toDate?.()?.toLocaleDateString('en-GB', {day:'numeric',month:'short'}) || '';
+  return `<div class="comment-item">
+    <div class="comment-avatar">${ci}</div>
+    <div class="comment-bubble">
+      <div class="comment-author">${c.authorName || c.authorEmail || 'Admin'}</div>
+      <div class="comment-text">${c.text}</div>
+      <div class="comment-date">${cd}</div>
+    </div>
+  </div>`;
+}
+
+window.toggleComments = async function(evId) {
   const body = document.getElementById(`comments-${evId}`);
   body.classList.toggle('open');
+
+  // Lazy-load on first open (2026-08-01) — replaces the 200-query eager
+  // fetch that used to run on every page load.
+  const ev = allEvidence.find(e => e.id === evId);
+  if (!ev || ev._comments !== null || !body.classList.contains('open')) return;
+  try {
+    const cSnap = await getDocs(query(
+      collection(window.db, 'competency_evidence', evId, 'comments'),
+      orderBy('createdAt', 'asc')
+    ));
+    ev._comments = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.warn('[competency-admin] comments load failed', e);
+    ev._comments = [];
+  }
+  const listEl = document.getElementById(`comments-list-${evId}`);
+  if (listEl) listEl.innerHTML = ev._comments.map(commentItemHtml).join('');
+  const toggle = document.querySelector(`#ev-${evId} .ev-comments-toggle`);
+  if (toggle) toggle.textContent = ev._comments.length
+    ? `💬 ${ev._comments.length} comment${ev._comments.length !== 1 ? 's' : ''}`
+    : '💬 Add comment';
 };
 
 window.addComment = async function(evId) {
@@ -1040,6 +1072,7 @@ window.addComment = async function(evId) {
 
   const ev = allEvidence.find(e => e.id === evId);
   if (ev) {
+    if (!Array.isArray(ev._comments)) ev._comments = [];
     ev._comments.push({ id: ref.id, ...commentData, createdAt: { toDate: () => new Date() } });
     const listEl = document.getElementById(`comments-list-${evId}`);
     if (listEl) {

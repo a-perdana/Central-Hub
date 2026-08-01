@@ -9,7 +9,7 @@
  */
 import {
   getFirestore, collection, doc, getDoc, getDocs,
-  setDoc, onSnapshot, serverTimestamp, query, where,
+  setDoc, onSnapshot, serverTimestamp, query, where, documentId,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 const COLLECTION    = window.PACING_CONFIG.collection;
@@ -901,10 +901,23 @@ async function loadProgressTab() {
   await fetchTeachers();
 
   progressByTeacher = {};
-  await Promise.all(allTeachers.map(async t => {
-    const progSnap = await getDoc(doc(db, 'userProgress', t.uid));
-    if (progSnap.exists()) {
-      const d = progSnap.data();
+  // Default every teacher to empty; the chunked reads below overwrite hits.
+  allTeachers.forEach(t => { progressByTeacher[t.uid] = { classSections: {}, updatedAt: null }; });
+
+  // Chunked documentId() 'in' queries instead of one getDoc PER teacher
+  // (2026-08-01 read-cost pass): the old N+1 issued e.g. 800 point reads
+  // for 800 teachers on every Progress-tab open; this reads only existing
+  // docs in ceil(N/30) queries.
+  const uids = allTeachers.map(t => t.uid);
+  const chunks = [];
+  for (let i = 0; i < uids.length; i += 30) chunks.push(uids.slice(i, i + 30));
+  await Promise.all(chunks.map(async chunk => {
+    const snap = await getDocs(query(
+      collection(db, 'userProgress'),
+      where(documentId(), 'in', chunk)
+    ));
+    snap.forEach(progDoc => {
+      const d = progDoc.data();
       const classSections = {};
       Object.keys(d).forEach(key => {
         const m = key.match(PROGRESS_KEY_RE);
@@ -913,10 +926,8 @@ async function loadProgressTab() {
       if (d[PROGRESS_KEY] && !Object.keys(classSections).length) {
         classSections['—'] = d[PROGRESS_KEY];
       }
-      progressByTeacher[t.uid] = { classSections, updatedAt: d.updatedAt };
-    } else {
-      progressByTeacher[t.uid] = { classSections: {}, updatedAt: null };
-    }
+      progressByTeacher[progDoc.id] = { classSections, updatedAt: d.updatedAt };
+    });
   }));
 
   renderProgressView();
