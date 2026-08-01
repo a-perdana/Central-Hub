@@ -1,0 +1,32 @@
+# Minimal CI (2026-08-01 pre-launch ops pass).
+# Scope note: the full monorepo gates (lint:firestore / check:research /
+# check:tokens) need the monorepo context (docs/ + all four hubs), which
+# this standalone repo doesn't have — those run in the local pre-commit
+# hook. This workflow catches what CAN break in isolation: a syntax error
+# in the Cloud Functions bundle or auth-guard, and a build.js regression —
+# all three previously reached Vercel/Firebase undetected.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax-check Cloud Functions
+        run: node --check functions/index.js
+
+      - name: Syntax-check auth-guard (ESM)
+        run: node --input-type=module --check < auth-guard.js
+
+      - name: Build (no env — placeholder config is expected)
+        run: node build.js

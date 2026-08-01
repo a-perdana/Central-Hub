@@ -721,6 +721,32 @@ const htmlFiles = [
 // page chrome). firebase-config.js is loaded by the page itself.
 const STANDALONE_VERBATIM = new Set(["dashboard-view.html"]);
 
+// ── Cache-busting (2026-08-01 pre-launch ops pass) ─────────────────
+// Assets ship with bare filenames (auth-guard.js, shared-styles.css…)
+// and no Cache-Control policy, so after a deploy users could hold stale
+// JS against fresh HTML for an unbounded window — the classic
+// "works for me, blank for them". Every local .js/.css reference in the
+// emitted HTML gets ?v=<git-sha> so each deploy naturally busts caches.
+let BUILD_VERSION;
+try {
+  BUILD_VERSION = require("child_process")
+    .execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+    .toString().trim();
+} catch (_) {
+  BUILD_VERSION = String(Date.now());
+}
+console.log(`Cache-bust token: ?v=${BUILD_VERSION}`);
+
+function addCacheBusting(html) {
+  return html.replace(
+    /((?:src|href)=(["']))([^"'?#]+\.(?:js|css))(\2)/g,
+    (m, pre, _q, url, post) => {
+      if (/^(?:https?:)?\/\//i.test(url) || url.startsWith("data:")) return m;
+      return pre + url + "?v=" + BUILD_VERSION + post;
+    }
+  );
+}
+
 htmlFiles.forEach((file) => {
   let source = generatedPacing[file] || null;
   if (!source) {
@@ -803,6 +829,7 @@ htmlFiles.forEach((file) => {
         + output.slice(kClose);
     }
   }
+  output = addCacheBusting(output);
   fs.writeFileSync(path.join("dist", file), output);
   console.log(`Copied: ${file}`);
 });
