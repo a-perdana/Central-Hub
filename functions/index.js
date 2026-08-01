@@ -134,13 +134,15 @@ exports.onJournalWritten = onDocumentWritten(
 
     // We re-derive totals on a small window each time. Cheaper than
     // maintaining incremental counters that can drift.
-    const weekEnd = new Date(isoWeek);
-    weekEnd.setDate(weekEnd.getDate() + 7);
+    // Range boundaries in real time: the isoWeek label is a Jakarta
+    // calendar date, so Monday 00:00 WIB = Sunday 17:00 UTC.
+    const weekStartUtc = new Date(new Date(isoWeek + "T00:00:00Z").getTime() - JAKARTA_OFFSET_MS);
+    const weekEnd = new Date(weekStartUtc.getTime() + 7 * 86400000);
 
     const entriesSnap = await db.collection("induction_journal")
       .where("programId", "==", programId)
       .where("stageId",   "==", stageId)
-      .where("entryDate", ">=", new Date(isoWeek))
+      .where("entryDate", ">=", weekStartUtc)
       .where("entryDate", "<",  weekEnd)
       .get();
 
@@ -386,32 +388,41 @@ exports.onChapterAttemptWritten = onDocumentWritten(
 
     const masteryId = slug(`${studentUid}_${subjectId}_${unitCode}`);
     const ref = db.collection("chapter_mastery").doc(masteryId);
-    const prior = (await ref.get()).data() || {};
 
     const rawScorePct = typeof after.rawScorePct === "number" ? after.rawScorePct : null;
     const passed      = after.passed === true;
     const masteryLevel = bandFor(rawScorePct);
 
-    const payload = {
-      studentUid,
-      subjectId,
-      unitCode,
-      testId,
-      testTitle: after.testTitle || null,
-      schoolId: after.schoolId || null,
-      classId: after.classId || null,
-      className: after.className || null,
-      latestAttemptId: event.params.attemptId,
-      scorePct: rawScorePct,
-      passed,
-      masteryLevel,
-      attemptsCount: (prior.attemptsCount || 0) + 1,
-      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    if (!prior.firstAttemptAt) payload.firstAttemptAt = admin.firestore.FieldValue.serverTimestamp();
+    // Transaction + lastEventId guard + FieldValue.increment (2026-08-01):
+    // the old read-modify-write on attemptsCount lost updates under
+    // concurrent scoring, and at-least-once redelivery double-counted.
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const prior = snap.exists ? snap.data() : {};
+      if (prior.lastEventId === event.id) return; // redelivered event
 
-    await ref.set(payload, { merge: true });
+      const payload = {
+        studentUid,
+        subjectId,
+        unitCode,
+        testId,
+        testTitle: after.testTitle || null,
+        schoolId: after.schoolId || null,
+        classId: after.classId || null,
+        className: after.className || null,
+        latestAttemptId: event.params.attemptId,
+        scorePct: rawScorePct,
+        passed,
+        masteryLevel,
+        attemptsCount: admin.firestore.FieldValue.increment(1),
+        lastEventId: event.id,
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (!prior.firstAttemptAt) payload.firstAttemptAt = admin.firestore.FieldValue.serverTimestamp();
+
+      tx.set(ref, payload, { merge: true });
+    });
     console.log(`[chapter-mastery] ${masteryId} ← ${rawScorePct}% (${masteryLevel})`);
   }
 );
@@ -592,47 +603,76 @@ function recomputeIsCorrect(item, answerGiven) {
 // ───────────────────────────────────────────────────────────────
 const MIN_CALIBRATION_RESPONSES = 30;
 
+// 2026-08-01 rewrite: the original version fetched up to 1,000 FULL
+// response docs per qualifying item, sequentially, inside the default
+// 60s / 256MiB envelope — with a few hundred qualifying items it timed
+// out every week, re-did the same prefix, and never reached the tail.
+// Now: explicit timeout/memory, .select() projection, a smaller
+// statistically-sufficient response sample, a per-run item cap with
+// "never-calibrated first, then stalest" ordering so every run makes
+// forward progress, a re-calibration skip until an item has ~25% more
+// data than last fit, and bounded concurrency.
+const CALIBRATE_ITEMS_PER_RUN = 250;
+const CALIBRATE_RESP_SAMPLE   = 400;
+
 exports.calibrateEaseItems = onSchedule(
   {
     schedule: "0 3 * * 0",          // Sundays 03:00
     timeZone: "Asia/Jakarta",
     region: "asia-southeast1",
+    timeoutSeconds: 540,
+    memory: "1GiB",
   },
   async () => {
     const itemsSnap = await db.collection("ease_items")
       .where("seenCount", ">=", MIN_CALIBRATION_RESPONSES)
+      .select("correctRate", "seenCount", "calibratedAt", "calibrationResponseCount")
       .get();
-    console.log(`[ease-calibrate] ${itemsSnap.size} item(s) above threshold`);
+
+    const candidates = itemsSnap.docs
+      .map(d => ({ id: d.id, ref: d.ref, ...d.data() }))
+      .filter(it => {
+        const p = typeof it.correctRate === "number" ? it.correctRate : null;
+        if (p === null || p <= 0 || p >= 1) return false; // ceiling/floor — can't fit
+        if (!it.calibratedAt) return true;                // never calibrated
+        // Re-fit only once ~25% more responses have accumulated.
+        return (it.seenCount || 0) >= Math.max(
+          MIN_CALIBRATION_RESPONSES,
+          (it.calibrationResponseCount || 0) * 1.25
+        );
+      })
+      .sort((a, b) => {
+        const ta = a.calibratedAt?.toMillis?.() || 0;   // 0 = never → first
+        const tb = b.calibratedAt?.toMillis?.() || 0;
+        return ta - tb;
+      })
+      .slice(0, CALIBRATE_ITEMS_PER_RUN);
+
+    console.log(`[ease-calibrate] ${itemsSnap.size} above threshold, ${candidates.length} selected this run`);
 
     let calibrated = 0;
-    for (const itDoc of itemsSnap.docs) {
-      const it = itDoc.data();
-      const p  = typeof it.correctRate === "number" ? it.correctRate : null;
-      if (p === null || p <= 0 || p >= 1) continue; // ceiling / floor — can't fit
-      const pClamped = Math.max(0.02, Math.min(0.98, p));
+    async function calibrateOne(it) {
+      const pClamped = Math.max(0.02, Math.min(0.98, it.correctRate));
       const logitP = Math.log(pClamped / (1 - pClamped));
 
-      // θ̄ across all responses on this item. Cap query to 1000 — beyond that,
-      // the rolling correctRate already smooths things out.
       const respSnap = await db.collection("ease_responses")
-        .where("itemId", "==", itDoc.id)
-        .limit(1000)
+        .where("itemId", "==", it.id)
+        .select("theta_after")
+        .limit(CALIBRATE_RESP_SAMPLE)
         .get();
-      if (respSnap.empty) continue;
+      if (respSnap.empty) return;
+
       let sum = 0, n = 0;
       respSnap.forEach(r => {
         const t = r.data().theta_after;
         if (typeof t === "number") { sum += t; n++; }
       });
-      if (n === 0) continue;
+      if (n === 0) return;
       const thetaMean = sum / n;
       const calibratedLogit = thetaMean - logitP;
 
-      // Discrimination proxy: variance-of-theta-around-flip approximation.
-      // Items where correctRate transitions sharply at a given θ are more
-      // discriminating; we approximate by computing the SD of theta for
-      // responders and inverting (smaller SD → tighter cut → higher a).
-      // Clamp to [0.5, 2.5] so a single weird item can't tank engine ranking.
+      // Discrimination proxy: SD of responder theta, inverted + clamped
+      // to [0.5, 2.5] so a single weird item can't tank engine ranking.
       let sqSum = 0;
       respSnap.forEach(r => {
         const t = r.data().theta_after;
@@ -641,15 +681,24 @@ exports.calibrateEaseItems = onSchedule(
       const sd = Math.sqrt(sqSum / Math.max(1, n));
       const discrimination = Math.max(0.5, Math.min(2.5, sd > 0 ? 1 / sd : 1.0));
 
-      await itDoc.ref.update({
+      await it.ref.update({
         calibratedLogit,
         discrimination,
         pilotPhase: false,
         calibratedAt: admin.firestore.FieldValue.serverTimestamp(),
-        calibrationResponseCount: n,
+        calibrationResponseCount: (it.seenCount || n),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       calibrated++;
+    }
+
+    // Bounded concurrency (5 at a time) — parallel enough to finish well
+    // inside the timeout, serial enough not to hammer Firestore.
+    for (let i = 0; i < candidates.length; i += 5) {
+      await Promise.all(candidates.slice(i, i + 5).map(it =>
+        calibrateOne(it).catch(e =>
+          console.warn(`[ease-calibrate] ${it.id} failed:`, e.message))
+      ));
     }
     console.log(`[ease-calibrate] ${calibrated} item(s) calibrated this run.`);
   }
@@ -726,8 +775,23 @@ async function loadStudentIdentity(studentUid) {
   };
 }
 
-// Award points + recompute level / streak. Always merges; safe to re-run.
-// reason: short slug for audit (used to skip duplicate awards if needed).
+// Student-facing day keys are computed in Asia/Jakarta (UTC+7, no DST).
+// Cloud Functions containers run in UTC — the old toISOString() day keys
+// silently broke streaks for students practising before 07:00 WIB
+// (2026-08-01 fix). Jakarta's offset is fixed, so shifting the epoch by
+// +7h and reading the UTC calendar is exact.
+const JAKARTA_OFFSET_MS = 7 * 3600 * 1000;
+function jakartaDayISO(epochMs = Date.now()) {
+  return new Date(epochMs + JAKARTA_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+// Award points + recompute level / streak.
+// opts.eventId: the Firestore trigger's event.id — REQUIRED for
+// at-least-once safety. onDocumentWritten redelivers the SAME
+// before/after pair on retry, so the callers' status-transition guards
+// cannot catch redelivery; the marker doc written inside this
+// transaction (student_points/{uid}/awards/{eventId}) can (2026-08-01
+// fix — previously every retry double-awarded).
 async function awardPoints(studentUid, points, opts = {}) {
   if (!studentUid || !points) return;
   const ref = db.collection("student_points").doc(studentUid);
@@ -735,6 +799,12 @@ async function awardPoints(studentUid, points, opts = {}) {
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    let markerRef = null;
+    if (opts.eventId) {
+      markerRef = ref.collection("awards").doc(String(opts.eventId));
+      const marker = await tx.get(markerRef);
+      if (marker.exists) return; // redelivered event — already awarded
+    }
     const cur  = snap.exists ? snap.data() : {};
     const totalPoints   = (cur.totalPoints   || 0) + points;
     const weeklyPoints  = (cur.weeklyPoints  || 0) + points;
@@ -747,14 +817,14 @@ async function awardPoints(studentUid, points, opts = {}) {
     // bonuses (7-day +100, 30-day +250) are awarded inside this same
     // transaction so the same calendar-day flip can never pay twice —
     // `prevDay !== today` is the idempotency gate.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = jakartaDayISO();
     const prevDay = cur.streak?.lastDayISO;
     let streak = cur.streak || { current: 0, longest: 0, lastDayISO: null, milestonesPaid: [] };
     let streakBonus = 0;
     let milestoneHit = null;
     if (prevDay !== today) {
-      // Was the last day exactly yesterday?
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      // Was the last day exactly yesterday (Jakarta calendar)?
+      const yesterday = jakartaDayISO(Date.now() - 86400000);
       const currentStreak = (prevDay === yesterday) ? (streak.current || 0) + 1 : 1;
       const milestonesPaid = Array.isArray(streak.milestonesPaid) ? streak.milestonesPaid.slice() : [];
 
@@ -813,6 +883,13 @@ async function awardPoints(studentUid, points, opts = {}) {
       update.createdAt = admin.firestore.FieldValue.serverTimestamp();
     }
     tx.set(ref, update, { merge: true });
+    if (markerRef) {
+      tx.set(markerRef, {
+        points,
+        counter: opts.counter || null,
+        at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
   });
 }
 
@@ -842,13 +919,16 @@ exports.awardChapterTestPoints = onDocumentWritten(
     points += Math.round(scorePct * 0.5);
 
     // First attempt bonus — count submissions for this (student, test) pair.
+    // count() aggregation (2026-08-01): the old .get() fetched every prior
+    // attempt as a full doc just to compare sizes — O(n) reads per award,
+    // O(n²) over a class working the same test.
     if (after.testId) {
       const dup = await db.collection("chapter_test_attempts")
         .where("studentUid", "==", studentUid)
         .where("testId", "==", after.testId)
         .where("status", "in", ["scored", "submitted", "flagged"])
-        .get();
-      if (dup.size <= 1) points += POINTS.CHAPTER_FIRST_ATTEMPT_BONUS;
+        .count().get();
+      if (dup.data().count <= 1) points += POINTS.CHAPTER_FIRST_ATTEMPT_BONUS;
     }
 
     const isPerfect = scorePct >= 100;
@@ -856,6 +936,7 @@ exports.awardChapterTestPoints = onDocumentWritten(
 
     await awardPoints(studentUid, points, {
       counter: isPerfect ? "chapter_perfect" : "chapter",
+      eventId: event.id,
     });
   }
 );
@@ -894,7 +975,7 @@ exports.awardEaseSessionPoints = onDocumentWritten(
       }
     } catch (e) { /* no growth doc yet — first window */ }
 
-    await awardPoints(studentUid, points, { counter: "ease" });
+    await awardPoints(studentUid, points, { counter: "ease", eventId: event.id });
   }
 );
 
@@ -968,19 +1049,22 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
       counter = mode === "daily_challenge" ? "daily_challenge" : "practice_perfect";
     }
 
-    // Daily-challenge first-of-day-per-subject bonus
+    // Daily-challenge first-of-day-per-subject bonus.
+    // count() aggregation (2026-08-01) — was a full-doc fetch per award.
     if (mode === "daily_challenge" && challengeId) {
       try {
         const dup = await db.collection("practice_attempts")
           .where("studentUid", "==", studentUid)
           .where("challengeId", "==", challengeId)
           .where("status", "in", ["submitted", "scored"])
-          .get();
-        if (dup.size <= 1) points += POINTS.DAILY_CHALLENGE_FIRST_BONUS;
-      } catch (e) { /* silent — first-bonus is nice-to-have, not load-bearing */ }
+          .count().get();
+        if (dup.data().count <= 1) points += POINTS.DAILY_CHALLENGE_FIRST_BONUS;
+      } catch (e) {
+        console.warn("[awardPracticeAttemptPoints] first-bonus count failed", e.message);
+      }
     }
 
-    await awardPoints(studentUid, points, { counter });
+    await awardPoints(studentUid, points, { counter, eventId: event.id });
 
     // Write pointsAwarded back so SH can render it in the summary screen
     // + recent-runs list. Best-effort: a failure here doesn't void the
@@ -2098,10 +2182,14 @@ exports.onMaturityAppraisalWritten = onDocumentWritten(
 // ───────────────────────────────────────────────────────────────
 // HELPERS
 // ───────────────────────────────────────────────────────────────
+// Monday-of-week key in the Asia/Jakarta calendar (2026-08-01 fix — the
+// old version used the container's UTC calendar, misfiling Monday-early-
+// morning WIB entries into the previous week). Uses the fixed +7h offset
+// trick (see JAKARTA_OFFSET_MS by awardPoints).
 function isoWeekStart(d) {
-  const date = new Date(d);
-  const day = date.getDay() || 7;
-  if (day !== 1) date.setHours(-24 * (day - 1));
+  const date = new Date(new Date(d).getTime() + JAKARTA_OFFSET_MS);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() - (day - 1));
   return date.toISOString().slice(0, 10);
 }
 
