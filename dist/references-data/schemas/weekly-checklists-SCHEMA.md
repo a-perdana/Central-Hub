@@ -152,7 +152,7 @@ For roles with a Year-1 induction track (`subject_teacher`, `school_principal`, 
 String slug that maps the task to a `competency_framework/{trackId}.competencies[].id` doc — when the user marks the task complete, the UI can suggest "this counts as evidence toward competency XYZ at level practitioner". Optional but powerful: it converts daily ritual into competency-framework progress.
 
 ### `first_time_guide`
-The Eduversal-specific innovation. Every task has a 2-3 sentence description aimed at someone in their **first three months** in the role. Names tools, file paths, named contacts ("see your HoD"), where outputs are filed. This is the difference between a checklist and a step-by-step rehber.
+The Eduversal-specific innovation. Every task has a 2-3 sentence description aimed at someone in their **first three months** in the role. Names tools, file paths, named contacts ("see your HoD"), where outputs are filed. This is the difference between a checklist and a step-by-step guide.
 
 ## ID convention
 
@@ -167,7 +167,7 @@ Role prefixes:
 - `SL` — Subject Leader
 - `SP` — School Principal (cross-references existing `T-P{N}-{NNN}` ids in `principal-operating-cadence.json`)
 - `AC` — Academic Coordinator
-- `CC` — Cambridge Coordinator (Cambridge Exam Officer)
+- `CC` — Cambridge Coordinator (Cambridge Exams Officer)
 - `FR` — Foundation Representative
 - `SS` — Subject Specialist (CH)
 - `DR` — Director (CH)

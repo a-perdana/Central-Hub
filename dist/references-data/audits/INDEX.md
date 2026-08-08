@@ -73,7 +73,7 @@ Per-sub-role weekly checklists; shared appraisal/competency.
 | Layer | Source-of-truth | Firestore | UI |
 |---|---|---|---|
 | Practice rhythm | `docs/weekly-checklists/subject-specialist.json` | `weekly_templates/{year}_w{NN}_coordinator` | CH `weekly-checklist.html` (coordinator tab) |
-| Visit cycle (school appraisal) | `Central Hub/resources/school-appraisal-framework.json` (5 domains × 31 aspects) | `school_appraisals_v2/{docId}` | CH + AH `school-appraisals.html` |
+| Visit cycle (school appraisal) | `Central Hub/resources/school-appraisal-framework.json` (5 domains × 32 aspects) | `school_appraisals_v2/{docId}` | CH + AH `school-appraisals.html` |
 | Visit cycle (teacher appraisal) | `appraisal-framework-v2.json` | `teacher_appraisals/{docId}` (cross-school write) | AH `TeacherAppraisalEntry.html` |
 | Competency CPD | (specialists track — generated content currently) | `competency_framework/specialists` (24 × 4 = 96 generated entries) | CH `learning-path.html` |
 | Year-1 induction | `docs/induction/handbook-specialist-v1.json` | `induction_programs/eduversal_specialist_v1` | CH `my-induction.html`, `my-mentees.html` |
@@ -207,7 +207,7 @@ Walkthrough notes use Semesta D1-D6 for simplicity; appraisal items use CTS for 
 | **Specialist Induction** | ✓ live | Full | ✓ |
 | **Principal Observation Rubric** | ✓ live (`/principal-observation-entry`) — 8 foci × E/D/N + 4 narrative fields, no score, immutable on submit | Full | ✓ |
 | **Principal Operating Cadence** | ✓ live, surfaces in weekly-checklist | Full | ✓ |
-| **Principal 360°** | ✓ UI live (`/principal-360-respond` + `/principal-360-results` + CH `/principal-360-admin`) — anonymous respond + threshold-gated aggregate view + cycle launch admin. Cloud Function `aggregatePrincipal360Responses` deployed 2026-05-09 (write-trigger; weight redistribution for below-threshold cohorts; persists no respondent uid). | Full | ✓ NN5 enforced (no respondent uid persisted; aggregator never reads respondent identifier) |
+| **Principal 360°** | ✓ UI live (`/principal-360-respond` + `/principal-360-results` + CH `/principal-360-admin`) — anonymous respond + threshold-gated aggregate view + cycle launch admin. Cloud Function `aggregatePrincipal360Responses` deployed 2026-05-09 (write-trigger; weight redistribution for below-threshold cohorts; persists no respondent uid). | Full | ✓ Respondent anonymity enforced (no respondent uid persisted; aggregator never reads respondent identifier) |
 | **Principal Coaching cycle** | ✓ live — CH `/principal-coaching-session` (mentor form, HQ Director only) + AH `/principal-coaching-view` (coachee read-only). 5-stage agenda · Foundation Reps EXCLUDED at rule level | Full | ✓ |
 | **School Appraisal v2 ↔ Principal Rubric mapping** | ✓ ([file](school-appraisal-x-principal-rubric-mapping.json)) | — | — |
 | **References & Standards hub** (CH /references; narrowed AH+TH variants) | ✓ live — 49 docs in CH (full superset) · 16 in AH · 15 in TH. Modal viewer auto-wires CTS/SKL/PIGP chips | Full | ✓ |
