@@ -12,7 +12,7 @@
  *   3. PIGP chips          — Indonesian induction articles + lampiran sections
  *                            (Permendiknas 27/2010, statutory induction framework).
  *   4. ES chips            — Eduversal Academic Standards madde id anchors
- *                            (23-section network-wide standards manual,
+ *                            (24-section network-wide standards manual,
  *                             docs/research/eduversal/academic-standards/).
  *   5. AICF chips          — Eduversal AI Competency Framework v1.0 refIds
  *                            (3 parts × competency blocks + UNESCO selections,
@@ -427,7 +427,7 @@
   }
 
   // ──────────────────────────────────────────────────────────────────
-  // ES popover (Eduversal Academic Standards — 23-section network manual)
+  // ES popover (Eduversal Academic Standards — 24-section network manual)
   // ──────────────────────────────────────────────────────────────────
   //
   // Ref forms accepted:
@@ -442,7 +442,7 @@
   function parseEsRef(ref) {
     const s = String(ref || '').trim();
     if (!s) return null;
-    // "ES-7.3.1" / "ES 7.3.1" / "es:7.3.1" — strip prefix if author wrote it.
+    // "ES-7.3" / "ES 7.3" / "es:7.3" — strip prefix if author wrote it.
     return s.replace(/^ES[\s:_-]*/i, '');
   }
 
@@ -1002,7 +1002,7 @@
       makeClickable(el, ref, openPigpCrossref);
     });
 
-    // ES chips — handbook + framework + competency render <span class="hb-tag es">ES 7.3.1</span>
+    // ES chips — handbook + framework + competency render <span class="hb-tag es">ES 7.3</span>
     //   Accepted forms: "ES 7.3", "ES 15.1.1", "ES-1.2", "ES:5.15b".
     //   Whole-section refs ("ES 7") also work; popover shows section header only.
     scope.querySelectorAll('.hb-tag.es, [data-es-ref]').forEach(el => {

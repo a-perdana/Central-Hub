@@ -1029,7 +1029,7 @@ const refAssetMap = [
   ["organization/partner-school-org-structure-lampiran-v.json",  path.join("..", "docs", "research", "eduversal", "partner-school-org-structure-lampiran-v.json")],
   ["organization/roles-positions.json",                          path.join("resources", "roles-positions.json")],
 
-  // ── Eduversal Academic Standards (23-section network-wide manual) ─
+  // ── Eduversal Academic Standards (24-section network-wide manual) ─
   // The whole standards corpus is mirrored here so the /references reader
   // can deep-link any madde (e.g. "ES 7.3" → /references?doc=eduversal-
   // standards-section-07). manifest.json is the flat madde id index used
