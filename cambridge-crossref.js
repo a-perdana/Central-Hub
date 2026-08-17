@@ -400,6 +400,35 @@
       }
     }
 
+    // Pasal 1 is the definitions article. The extraction stores it as a
+    // `definitions` block keyed by term rather than as an `articles` entry, so
+    // articles[] runs pasal-2..pasal-13 and a "pasal-1" tag found nothing —
+    // TH's mentor-certification.html carries exactly that tag. Render the
+    // defined terms instead of reporting the reference as missing.
+    if (!entry && Array.isArray(data?.definitions?.terms) &&
+        /^pasal-0*1$/i.test(String(ref).trim()) ) {
+      const terms = data.definitions.terms;
+      pop.innerHTML = `
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'DM Mono',monospace;font-size:11px;color:#991b1b;font-weight:700;letter-spacing:.05em;">PIGP · ARTICLE (DEFINITIONS)</div>
+            <div style="font-size:11px;color:#8888a8;margin-top:2px;">Permendiknas 27/2010 · ${escHtml(data.definitions.sourceArticle || 'Pasal 1')}</div>
+          </div>
+          ${closeBtn()}
+        </div>
+        <div style="border-top:1px solid #f1ece4;padding-top:8px;">
+          ${terms.map(t => `
+            <div style="margin-bottom:8px;">
+              <div style="font-size:12px;font-weight:700;color:#1c1c2e;">${escHtml(t.term_id || t.id || '')}</div>
+              ${t.term_en ? `<div style="font-size:11px;color:#8888a8;">${escHtml(t.term_en)}</div>` : ''}
+              ${t.verbatimDefinition_id ? `<div style="font-size:12px;color:#44445a;line-height:1.5;margin-top:2px;">${escHtml(t.verbatimDefinition_id)}</div>` : ''}
+            </div>`).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:#8888a8;">${terms.length} defined term${terms.length === 1 ? '' : 's'}.</div>
+      `;
+      return;
+    }
+
     if (!entry) {
       pop.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
