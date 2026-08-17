@@ -140,6 +140,6 @@ The five reference families you will see cited (these are the same "chip familie
 |---|---|---|
 | **CTS** | Cambridge Teacher Standards 2023 | `docs/research/cambridge/teacher-standards-2023.json` |
 | **CSLS** | Cambridge School Leader Standards 2023 | `docs/research/cambridge/school-leader-standards-2023.json` |
-| **ES** | Eduversal Academic Standards (23 sections) | `docs/research/eduversal/academic-standards/` |
+| **ES** | Eduversal Academic Standards (24 sections) | `docs/research/eduversal/academic-standards/` |
 | **PIGP / Permendiknas** | Indonesian regulations | `docs/research/permendiknas/` |
 | **AICF** | Eduversal AI Competency Framework v1.0 | `docs/research/eduversal/ai-competency-framework/` |

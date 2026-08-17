@@ -148,7 +148,7 @@
 
 
 /* ── Academic Standards shelf (2026-07-24) ──────────────────────────
-   The 23-section Eduversal Academic Standards manual — the network-wide
+   The 24-section Eduversal Academic Standards manual — the network-wide
    policy authority. It is NOT an induction_programs handbook; it lives in
    the canonical research archive (docs/research/eduversal/academic-
    standards/) and is read through the References hub. The /handbook
@@ -496,7 +496,7 @@ function bootBrowserMode() {
   renderShelfRail('hbShelfInduction', induction);
   renderShelfRail('hbShelfRole', role);
   renderShelfRail('hbShelfSchool', school);
-  // Academic Standards rail — static 23-section deep-link shelf (not from
+  // Academic Standards rail — static 24-section deep-link shelf (not from
   // induction_programs). Rendered even when the handbook bank is otherwise
   // empty, since it doesn't depend on the Firestore fetch.
   renderStandardsRail();

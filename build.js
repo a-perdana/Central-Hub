@@ -883,6 +883,20 @@ const { copyFiles, copyDir } = require("./build-tools/copy-tree.js");
     ["no-27-2010-pigp.json", "no-10-2025-skl.json", "no-16-2007.json"],
     "dist/research/permendiknas"
   );
+  // 13/2007 (principal standard — five competency dimensions) lives one level
+  // down in mevzuat/ under a long descriptive filename. Flatten AND shorten it
+  // to permendiknas-13-2007.json so every hub exposes the chip's source at one
+  // predictable path (the AH/TH mirrors emit the same name). copyFiles cannot
+  // rename, so this is a direct copy rather than another copyFiles call.
+  const p13src = path.join(src, "mevzuat", "permendiknas-13-2007-standar-kepala-sekolah.json");
+  const p13dest = path.join("dist", "research", "permendiknas", "permendiknas-13-2007.json");
+  if (fs.existsSync(p13src)) {
+    fs.mkdirSync(path.dirname(p13dest), { recursive: true });
+    fs.copyFileSync(p13src, p13dest);
+    console.log("  dist/research/permendiknas: +1 permendiknas-13-2007.json");
+  } else {
+    console.warn("WARNING: permendiknas 13/2007 source missing:", p13src);
+  }
 }
 
 // Cambridge research archive (CSLS chip popovers — also surfaced cross-hub

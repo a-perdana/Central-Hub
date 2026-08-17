@@ -73,9 +73,13 @@
     // CSLS — Cambridge School Leader Standards 2023 (AH only)
     csls: null,
     inflightCsls: null,
-    // PMD — Permendiknas No.16/2007 four-pillar competency definitions
+    // PMD — Permendiknas competency standards. TWO instruments share the
+    // family: 16/2007 defines the four TEACHER pillars, 13/2007 the five
+    // PRINCIPAL dimensions. Separate files, separate caches.
     pmd: null,
     inflightPmd: null,
+    pmd13: null,
+    inflightPmd13: null,
     popover: null,
   };
 
@@ -138,6 +142,11 @@
   // PMD — Permendiknas No.16/2007 Four Pillars (kompetensi pedagogik, profesional,
   // sosial, kepribadian). Static lookup; small JSON, single fetch caches all four.
   const loadPmd        = () => loadJson('/research/permendiknas/no-16-2007.json',  'pmd',  'inflightPmd');
+  // PMD (principal) — Permendiknas No.13/2007 Standar Kepala Sekolah/Madrasah.
+  // Five dimensions (kepribadian, manajerial, kewirausahaan, supervisi,
+  // sosial) with 33 verbatim indicators, in a derived `dimensions` block.
+  // Both hubs' build.js flatten it out of mevzuat/ to this filename.
+  const loadPmd13      = () => loadJson('/research/permendiknas/permendiknas-13-2007.json', 'pmd13', 'inflightPmd13');
 
   // AICF loaders — 5 reference files in docs/research/eduversal/ai-competency-framework/reference/
   // build.js copies these to dist/research/eduversal/ai-competency-framework/reference/
@@ -736,11 +745,70 @@
     return last.replace(/[^a-z]/g, '');
   }
 
+  // Renders one Permendiknas 13/2007 principal dimension. Kept separate from
+  // the 16/2007 renderer because the two instruments have different shapes:
+  // 16/2007 nests indicators under numbered core competencies, 13/2007 is a
+  // flat indicator list under each dimension.
+  function renderPmd13(pop, ref, dim, doc) {
+    const inds = Array.isArray(dim.indicators) ? dim.indicators : [];
+    const revoked = doc && doc.revoked;
+    pop.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:#92400e;font-weight:700;letter-spacing:.05em;">PERMENDIKNAS NO.13/2007 · DIMENSI</div>
+          <div style="font-size:13px;font-weight:700;color:#1c1c2e;margin-top:4px;">${escHtml(dim.label || ref)}</div>
+        </div>
+        ${closeBtn()}
+      </div>
+      <div style="border-top:1px solid #f1ece4;padding-top:8px;">
+        ${dim.definition_en ? `<div style="font-size:12.5px;color:#44445a;line-height:1.55;">${escHtml(dim.definition_en)}</div>` : ''}
+        ${inds.length ? `
+          <ol style="margin:10px 0 0;padding-left:0;list-style:none;">
+            ${inds.map(i => `
+              <li style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;color:#44445a;line-height:1.5;">
+                <span style="font-family:'DM Mono',monospace;font-size:11px;color:#92400e;flex:0 0 auto;">${escHtml(i.id)}</span>
+                <span>${escHtml(i.text)}</span>
+              </li>`).join('')}
+          </ol>` : ''}
+      </div>
+      ${dim.indicatorNumberingNote ? `
+        <div style="margin-top:8px;font-size:11px;color:#8888a8;line-height:1.5;font-style:italic;">${escHtml(dim.indicatorNumberingNote)}</div>` : ''}
+      <div style="margin-top:10px;font-size:11px;color:#8888a8;line-height:1.5;">
+        Standar Kepala Sekolah/Madrasah — the Indonesian principal qualification and competency standard (2007).
+        ${dim.definitionSource ? 'The English summary above is an Eduversal gloss, not regulation text.' : ''}
+        ${revoked ? `<br><strong style="color:#b91c1c;">Revoked</strong> by ${escHtml(doc.revokedBy || 'a later regulation')} — retained for historical reference.` : ''}
+      </div>
+    `;
+  }
+
   async function openPmdCrossref(ref, anchorEl) {
     const pop = ensurePopoverEl();
     pop.innerHTML = `<div style="color:#8888a8;font-size:12px;">Loading Permendiknas pillar <code>${escHtml(ref)}</code>…</div>`;
     pop.style.display = 'block';
     positionPopover(pop, anchorEl);
+
+    const key = slugifyPillar(ref);
+
+    // The family covers two instruments. "kepribadian" and "sosial" exist in
+    // BOTH — as a teacher pillar in 16/2007 and a principal dimension in
+    // 13/2007 — so resolve by which file the label is unique to, and only fall
+    // back to the teacher standard for the genuinely shared labels.
+    const PRINCIPAL_ONLY = ['manajerial', 'kewirausahaan', 'supervisi'];
+    const TEACHER_ONLY   = ['pedagogik', 'profesional'];
+
+    if (PRINCIPAL_ONLY.includes(key)) {
+      const d13 = await loadPmd13();
+      const dim = d13 && !d13.__loadError && (d13.dimensions || {})[key];
+      if (dim) { renderPmd13(pop, ref, dim, d13); return; }
+      pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
+          <div style="font-weight:700;">Permendiknas · ${escHtml(ref)}</div>
+          ${closeBtn()}
+        </div>
+        <div style="color:#8888a8;line-height:1.55;">Permendiknas No.13/2007 source JSON is not available offline.</div>
+      `;
+      return;
+    }
 
     const data = await loadPmd();
     if (!data || data.__loadError) {
@@ -754,17 +822,39 @@
       return;
     }
 
-    const key = slugifyPillar(ref);
     const pillar = (data.fourPillars || {})[key];
 
+    // KPI rows tag the pillar WITH a core-competency number ("pedagogik.1"),
+    // which slugifyPillar strips down to the pillar. Recover the suffix so the
+    // popover can name the competency that was actually cited instead of
+    // describing the whole pillar.
+    //
+    // The suffix is an index WITHIN the pillar (1-based), not the `id` field:
+    // 16/2007 numbers its core competencies continuously across the whole
+    // regulation (pedagogik 1-10, kepribadian 11-15, sosial 16-19, profesional
+    // 20-24), so matching on id resolves "pedagogik.1" by luck and silently
+    // fails for "sosial.2". Index into the pillar's own list instead.
+    const suffix = /\.(\d+)\s*$/.exec(String(ref));
+    const cores = (pillar && pillar.competencies) || [];
+    const core = suffix ? cores[Number(suffix[1]) - 1] || null : null;
+
     if (!pillar) {
+      // Not a teacher pillar — try the principal standard before giving up, so
+      // a label we did not anticipate still resolves if 13/2007 defines it.
+      if (!TEACHER_ONLY.includes(key)) {
+        const d13 = await loadPmd13();
+        const dim = d13 && !d13.__loadError && (d13.dimensions || {})[key];
+        if (dim) { renderPmd13(pop, ref, dim, d13); return; }
+      }
       pop.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;">
           <div style="font-weight:700;">Permendiknas · ${escHtml(ref)}</div>
           ${closeBtn()}
         </div>
         <div style="color:#8888a8;line-height:1.55;">
-          Pillar <code>${escHtml(key)}</code> not found. Expected one of: pedagogik, profesional, sosial, kepribadian.
+          <code>${escHtml(key)}</code> is not a Permendiknas competency label.
+          Teacher pillars (16/2007): pedagogik, profesional, sosial, kepribadian.
+          Principal dimensions (13/2007): kepribadian, manajerial, kewirausahaan, supervisi, sosial.
         </div>
       `;
       return;
@@ -780,7 +870,14 @@
       </div>
       <div style="border-top:1px solid #f1ece4;padding-top:8px;">
         <div style="font-size:12.5px;color:#44445a;line-height:1.55;">${escHtml(pillar.definition)}</div>
-        ${Array.isArray(pillar.competencies) && pillar.competencies.length ? `
+        ${core ? `
+          <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #f1ece4;">
+            <div style="font-family:'DM Mono',monospace;font-size:11px;color:#92400e;font-weight:700;">Kompetensi inti ${escHtml(suffix[1])}${core.id && String(core.id) !== suffix[1] ? ` <span style="font-weight:400;color:#8888a8;">(no. ${escHtml(core.id)} in the regulation)</span>` : ''}</div>
+            <div style="margin-top:4px;font-size:12px;color:#44445a;line-height:1.5;">${escHtml(core.core)}</div>
+            ${Array.isArray(core.indicators) && core.indicators.length ? `
+              <div style="margin-top:6px;font-size:11px;color:#8888a8;">${core.indicators.length} indicators — full text in /references → Permendiknas 16/2007.</div>` : ''}
+          </div>` : ''}
+        ${!core && Array.isArray(pillar.competencies) && pillar.competencies.length ? `
           <div style="margin-top:10px;font-size:11px;color:#8888a8;">
             ${pillar.competencies.length} core competencies + indicators (full text in /references → Permendiknas 16/2007).
           </div>
