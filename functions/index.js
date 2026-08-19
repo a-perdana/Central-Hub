@@ -980,6 +980,98 @@ exports.awardEaseSessionPoints = onDocumentWritten(
 );
 
 // ───────────────────────────────────────────────────────────────
+// 6a-bis. recomputeEaseGrowth — on ease_sessions write (2026-08-19)
+//    Fires on transition INTO 'submitted'. Rebuilds the student's
+//    ease_growth/{uid}_{subjectId} aggregate SERVER-SIDE from the
+//    full set of submitted sessions, replacing the client-written
+//    read-modify-write (SH audit H3: two concurrent tabs could drop
+//    a window entry, and the student's browser was the sole author
+//    of its own growth record). The client's optimistic write in
+//    ease-test.html stays for instant UX; this recompute lands a
+//    second later and is authoritative.
+//
+//    Scoring source preference per session: serverTheta (written by
+//    onEaseResponseCreated) → clamp(200 + θ·33, 100, 300); falls
+//    back to the client ritScore when serverTheta is absent.
+//    One entry per windowId (latest submittedAt wins); entries
+//    ordered by submittedAt; growthVsPrev derived from the ordering.
+//    Equality-only query — no composite index needed.
+// ───────────────────────────────────────────────────────────────
+exports.recomputeEaseGrowth = onDocumentWritten(
+  { document: "ease_sessions/{sessionId}", region: "asia-southeast1" },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+    if (!after) return;
+
+    const wasSubmitted = before && before.status === "submitted";
+    const isSubmitted  = after.status === "submitted";
+    if (!isSubmitted || wasSubmitted) return;
+
+    const studentUid = after.studentUid;
+    const subjectId  = after.subjectId;
+    if (!studentUid || !subjectId) return;
+
+    const ritFrom = (s) => {
+      if (typeof s.serverTheta === "number") {
+        return Math.max(100, Math.min(300, Math.round(200 + s.serverTheta * 33)));
+      }
+      return typeof s.ritScore === "number" ? s.ritScore : null;
+    };
+    const millis = (ts) => (ts && typeof ts.toMillis === "function") ? ts.toMillis() : 0;
+
+    const growthRef = db.collection("ease_growth").doc(`${studentUid}_${subjectId}`);
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(
+          db.collection("ease_sessions")
+            .where("studentUid", "==", studentUid)
+            .where("subjectId", "==", subjectId)
+            .where("status", "==", "submitted")
+        );
+        // One entry per window — the latest submission wins.
+        const byWindow = new Map();
+        snap.forEach((d) => {
+          const s = d.data();
+          const rit = ritFrom(s);
+          if (rit === null || !s.windowId) return;
+          const cur = byWindow.get(s.windowId);
+          if (!cur || millis(s.submittedAt) > millis(cur.submittedAtTs)) {
+            byWindow.set(s.windowId, {
+              windowId: s.windowId,
+              ritScore: rit,
+              sessionId: d.id,
+              submittedAtTs: s.submittedAt || null,
+            });
+          }
+        });
+        const ordered = [...byWindow.values()]
+          .sort((a, b) => millis(a.submittedAtTs) - millis(b.submittedAtTs));
+        const windows = ordered.map((w, i) => ({
+          windowId: w.windowId,
+          ritScore: w.ritScore,
+          sessionId: w.sessionId,
+          submittedAt: w.submittedAtTs,
+          growthVsPrev: i > 0 ? w.ritScore - ordered[i - 1].ritScore : null,
+        }));
+        if (windows.length === 0) return;
+        tx.set(growthRef, {
+          studentUid,
+          subjectId,
+          windows,
+          latestRit: windows[windows.length - 1].ritScore,
+          serverRecomputedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+      console.log(`[ease-growth-recompute] ${studentUid}_${subjectId} rebuilt`);
+    } catch (e) {
+      console.warn(`[ease-growth-recompute] ${studentUid}_${subjectId} failed`, e.message);
+    }
+  }
+);
+
+// ───────────────────────────────────────────────────────────────
 // 6b. awardPracticeAttemptPoints — on practice_attempts write (2026-05-13)
 //    Fires on transition INTO 'submitted' (or 'scored', for parity
 //    with chapter test pipeline). Mode-aware point formula:
