@@ -1007,12 +1007,16 @@ service cloud.firestore {
     // Students cannot self-award; client write paths are blocked at the
     // rule level. Admin SDK (Cloud Functions) bypasses rules entirely.
     //
-    // Read scope is intentionally permissive so any active student can
-    // browse leaderboards across all 4 scopes (class / grade / school /
-    // network). Fields surfaced are minimal — see FIRESTORE_SCHEMA §20.
+    // Read scope hardened 2026-08-20 (SH audit M8): a student may LIST only
+    // rows from their own school — class / grade / school boards. Network
+    // rankings are served exclusively by the school_leaderboards CF
+    // aggregate (own read rule below); the client fallback no longer
+    // queries network-wide. Staff (isAuthorized) keep full read.
     match /student_points/{uid} {
       allow get:    if isAuthorized() || isActiveStudent();
-      allow list:   if isAuthorized() || isActiveStudent();
+      allow list:   if isAuthorized()
+                    || (isActiveStudent()
+                        && resource.data.schoolId == studentDoc().data.schoolId);
       allow create, delete: if false;           // Cloud Function (admin SDK) only
 
       // Owner can flip lastStreakMilestone.seen from false to true,
