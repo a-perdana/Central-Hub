@@ -983,6 +983,7 @@ const refAssetMap = [
   ["audits/principal-360-framework-v1.json",                  path.join("..", "docs", "cross-module", "principal-360-framework-v1.json")],
   ["audits/principal-coaching-framework-v1.json",             path.join("..", "docs", "cross-module", "principal-coaching-framework-v1.json")],
   ["audits/observation-calibration-scenario-v1.json",         path.join("..", "docs", "cross-module", "observation-calibration-scenario-v1.json")],
+  ["audits/es-section-ownership.json",                        path.join("..", "docs", "cross-module", "es-section-ownership.json")],
   // Provenance / hand-author backfills — preserved as an audit trail
   // for the May 2026 content-quality sweep. Source-of-truth is now in
   // Firestore; these JSONs are the hand-authored set the seeders read.
