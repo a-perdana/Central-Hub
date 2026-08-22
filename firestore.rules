@@ -141,7 +141,8 @@ service cloud.firestore {
     }
 
     // CH director sub-role check. Used by principal_coaching_sessions
-    // for Charter NN5 (coaching confidentiality) — only HQ Directors
+    // for coaching confidentiality (Principal Coaching Framework →
+    // data_model.access_control) — only HQ Directors
     // mentor principals; coordinator + plain central_user cannot write
     // coaching sessions even if the page-access doc lets them open the
     // form. admin always bypasses.
@@ -2731,7 +2732,11 @@ service cloud.firestore {
     // Doc id: {principalUid}_{YYYY-MM-DD}.
     // Logged sessions are immutable.
     //
-    // Charter NN5 — director-only-write one-off exception (2026-05-27).
+    // Coaching confidentiality — director-only-write one-off exception
+    // (2026-05-27). Source: docs/cross-module/principal-coaching-framework-v1.json → data_model.access_control →
+    // foundation_representative "no_access (preserves coaching
+    // confidentiality)". NOT an Induction Charter Non-Negotiable; that
+    // label was wrong and was retired 2026-08-08.
     // The 2026-05-20 CH role flattening opened writes to any central_user
     // who reached the form via page-access. That left a privacy boundary
     // soft: a manually-crafted Firestore SDK write from a non-director
@@ -2754,7 +2759,7 @@ service cloud.firestore {
       // would let any central_user enumerate principal coaching history.
       allow list:   if isAdmin()
                     || (isSignedIn() && isCHDirector());
-      // Director-only write (Charter NN5 exception, see note above).
+      // Director-only write (coaching-confidentiality exception, see above).
       allow create: if isSignedIn()
                     && request.auth.uid == request.resource.data.mentorUid
                     && isCHDirector();
@@ -2782,9 +2787,10 @@ service cloud.firestore {
 
     // -- principal_360_responses -----------------------------
     // Anonymous response docs — auto-id, no respondent uid persisted.
-    // Charter NN5: only Cloud-Function-maintained aggregates expose any
-    // computed mean to a human; raw response docs are list-blocked from
-    // ordinary clients.
+    // Respondent anonymity (Principal 360 Framework →
+    // design_principles: "Anonymity is non-negotiable"): only
+    // Cloud-Function-maintained aggregates expose any computed mean to a
+    // human; raw response docs are list-blocked from ordinary clients.
     match /principal_360_responses/{respId} {
       // Reads: only admin (forensic). No list at all — even the principal
       // sees only the aggregated view via principal_360_aggregates.

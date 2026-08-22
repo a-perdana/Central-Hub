@@ -8,7 +8,8 @@
  *
  * Principal Evaluation Module (Phase-2, 2026-05-09):
  *   4. aggregatePrincipal360Responses   — recompute principal_360_aggregates/{cycleId}
- *                                         on every response write. Charter NN5:
+ *                                         on every response write. Respondent
+ *                                         anonymity (Principal 360 Framework):
  *                                         threshold-gated cohort visibility, no
  *                                         respondent uid in any output.
  *
@@ -212,7 +213,8 @@ exports.expireMentorCerts = onSchedule(
 //    On every principal_360_responses write, recompute the matching
 //    principal_360_aggregates/{cycleId} doc:
 //      - per-cohort respondentCount + perFocusMean (P1..P8) + narrativesCount
-//      - aboveThreshold[c] = (respondentCount >= COHORT_THRESHOLD)  (Charter NN5)
+//      - aboveThreshold[c] = (respondentCount >= COHORT_THRESHOLD)
+//        (framework cohort_definitions → min_respondents_to_report: 5)
 //      - composite.F3_360_score: weighted across ABOVE-THRESHOLD cohorts only.
 //        Below-threshold cohort weight is redistributed proportionally to the
 //        remaining cohorts (per framework data_aggregation_rules).
@@ -276,7 +278,9 @@ exports.aggregatePrincipal360Responses = onDocumentWritten(
       const responses = r.responses || {};
       Object.keys(responses).forEach((qId) => {
         const v = responses[qId];
-        // Charter NN5: 0 = "Cannot Comment / Not Observed" — explicitly excluded.
+        // Framework scoring_scale: 0 = "Cannot Comment / Not Observed" carries
+        // exclude_from_aggregate — it is not a low score, so it never enters
+        // the mean.
         if (typeof v !== "number" || v <= 0 || v > 4) return;
         const focus = (qId || "").slice(0, 2).toUpperCase();
         if (!FOCUS_KEYS.includes(focus)) return;
@@ -288,7 +292,8 @@ exports.aggregatePrincipal360Responses = onDocumentWritten(
     });
 
     // Convert sums → means; drop the working _focus* fields from the persisted
-    // doc so we never expose raw count/sum (NN5 — only the mean is observable).
+    // doc so we never expose raw count/sum (anonymity — only the mean is
+    // observable).
     const aboveThreshold = {};
     Object.keys(cohortStats).forEach((c) => {
       const s = cohortStats[c];
