@@ -22,6 +22,34 @@ export const SUBJECTS = [
   'civics',
 ];
 
+// Canonical ch_phase[] enum — the grade-band scope of an Eduversal Specialist,
+// added 2026-08-23. Orthogonal to SUBJECTS: the Academic Board runs separate
+// Specialists for Mathematics (Primary) and Mathematics (Secondary), and both
+// carry ch_subjects: ['math'], so the subject enum alone cannot tell them apart.
+//
+// An EMPTY or absent ch_phase[] means every phase. The field is opt-in, so a
+// profile that has never been scoped keeps exactly the access it had.
+// Enforced by CH auth-guard.js (SUBJECT_PAGE_PHASES + isPhaseAllowed).
+export const PHASES = [
+  'primary',
+  'secondary',
+  'early_years',
+];
+
+export const PHASE_LABELS = {
+  primary:     'Primary',
+  secondary:   'Secondary',
+  early_years: 'Early Years',
+};
+
+export function isValidPhase(phaseId) {
+  return PHASES.includes(phaseId);
+}
+
+export function phaseLabel(phaseId) {
+  return PHASE_LABELS[phaseId] || phaseId;
+}
+
 export const SUBJECT_LABELS = {
   math:      'Math',
   biology:   'Biology',

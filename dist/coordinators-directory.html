@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="shared-styles.css?v=354eaf72">
+  <link rel="stylesheet" href="shared-styles.css?v=44ea2601">
   <style>
     .main-content { padding: 24px 40px; max-width: var(--container-max); margin: 0 auto; }
     /* Align canonical page-footer to this page's content wrapper. */
@@ -233,6 +233,8 @@
     .ec-pill.subj   { background: #eef4ff; color: #1d4ed8; border-color: #dbe7ff; }
     .ec-pill.grade  { background: #fef3c7; color: #92400e; border-color: #fde68a; }
     .ec-pill.school { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+    .ec-pill.board  { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+    .ec-pill.domain { background: #ffe4e6; color: #9f1239; border-color: #fecdd3; }
     .ec-meta { font-size: 0.82rem; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
     .ec-meta-line { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
     .ec-meta-line svg { width: 13px; height: 13px; color: var(--ink-3); flex-shrink: 0; }
@@ -421,8 +423,8 @@
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <span id="main-content" tabindex="-1"></span>
 
-  <script src="firebase-config.js?v=354eaf72"></script>
-  <script type="module" src="auth-guard.js?v=354eaf72"></script>
+  <script src="firebase-config.js?v=44ea2601"></script>
+  <script type="module" src="auth-guard.js?v=44ea2601"></script>
 
   <style>
   .btn-my-tasks {
@@ -4270,6 +4272,27 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
           <input aria-label="e.g. ease_g7, ease_g8" type="text" class="form-input" id="eGradeContext" placeholder="e.g. ease_g7, ease_g8">
           <div class="form-hint">Open string. Today's usage: EASE per-grade committees from the meeting corpus.</div>
         </div>
+        <!-- Academic Board membership + Domain Lead seat (2026-08-23). The
+             roster used to live only in an org-chart graphic and the Appraisal
+             Module's internal guide, so nothing could check clause 24.2's
+             "two Domain Leads per domain" against real data. -->
+        <div class="form-group" id="eBoardGroup">
+          <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="eBoardMember" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+            <span>Academic Board member</span>
+          </label>
+          <div class="form-hint">The ten Subject Specialists who form the CAO's academic team and the School Appraisal visiting team.</div>
+          <label class="form-label" style="margin-top:8px;">Domain Lead seat</label>
+          <select class="form-select" id="eDomainLead">
+            <option value="">— None —</option>
+            <option value="d1">D1 — Leadership &amp; Governance</option>
+            <option value="d2">D2 — Teaching &amp; Learning Quality</option>
+            <option value="d3">D3 — Curriculum &amp; Academic Programmes</option>
+            <option value="d4">D4 — Student Achievement &amp; Learning Outcomes</option>
+            <option value="d5">D5 — School Culture &amp; Community</option>
+          </select>
+          <div class="form-hint" id="eDomainLeadHint">Each domain is owned by two Leads, and the pair is split across a school's two visits (ES 24.2).</div>
+        </div>
         <div class="form-group">
           <label class="form-label">Previous institutions (optional)</label>
           <div class="chip-input-wrap" id="ePrevInstWrap">
@@ -4903,6 +4926,10 @@ function renderCard(e) {
   subjectIds.forEach(s => pills.push(`<span class="ec-pill subj">${escHtml(SUBJECT_LABELS[s] || s)}</span>`));
   if (e.gradeLevel) pills.push(`<span class="ec-pill grade">G${e.gradeLevel}${e.gradeContext ? ` · ${escHtml(e.gradeContext)}` : ''}</span>`);
   if (school || e.schoolName) pills.push(`<span class="ec-pill school">${escHtml(school?.name || e.schoolName)}</span>`);
+  // Academic Board roster (2026-08-23) — the Domain Lead seat is what clause
+  // 24.2's "two Leads per domain" pairing is checked against.
+  if (e.academicBoardMember) pills.push('<span class="ec-pill board">Academic Board</span>');
+  if (e.domainLead) pills.push(`<span class="ec-pill domain">${escHtml(String(e.domainLead).toUpperCase())} Lead</span>`);
 
   const mailSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 7 9-7"/></svg>`;
   const phoneSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
@@ -5019,6 +5046,8 @@ function openModal(entryId) {
     $('eSchool').value = e.schoolId || '';
     $('eGrade').value = e.gradeLevel || '';
     $('eGradeContext').value = e.gradeContext || '';
+    $('eBoardMember').checked = e.academicBoardMember === true;
+    $('eDomainLead').value = e.domainLead || '';
     $('eNotes').value = e.roleNotes || '';
     $('eUser').value = e.userId || '';
     $('eStatus').value = e.status || 'active';
@@ -5039,6 +5068,8 @@ function openModal(entryId) {
     $('eSchool').value = '';
     $('eGrade').value = '';
     $('eGradeContext').value = '';
+    $('eBoardMember').checked = false;
+    $('eDomainLead').value = '';
     $('eNotes').value = '';
     $('eUser').value = '';
     $('eStatus').value = 'active';
@@ -5102,6 +5133,11 @@ async function saveEntry() {
     schoolName: school ? (school.name || schoolId) : null,
     gradeLevel,
     gradeContext: $('eGradeContext').value.trim(),
+    // Academic Board roster (2026-08-23). domainLead is '' when the member
+    // holds no Domain Lead seat; the two fields are independent because a
+    // Board member need not hold a seat in a given year.
+    academicBoardMember: $('eBoardMember').checked,
+    domainLead: $('eDomainLead').value || null,
     roleNotes: $('eNotes').value.trim(),
     userId,
     status: $('eStatus').value,
@@ -5196,7 +5232,7 @@ async function confirmDelete(id, btn) {
   });
 })();
 </script>
-<script src="cambridge-crossref.js?v=354eaf72" defer></script>
-<script src="keyboard-enabler.js?v=354eaf72" defer></script>
+<script src="cambridge-crossref.js?v=44ea2601" defer></script>
+<script src="keyboard-enabler.js?v=44ea2601" defer></script>
 </body>
 </html>

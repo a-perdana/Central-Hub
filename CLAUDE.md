@@ -82,11 +82,13 @@ Each platform has its own role field — there is no shared `role` field (legacy
 
 | Platform | Field | Values |
 |---|---|---|
-| Central Hub | `ch_sub_roles[]` | `director`, `coordinator` |
+| Central Hub | `ch_sub_roles[]` | `director`, `consultant`, `coordinator` |
 | Academic Hub | `ah_sub_roles[]` | `foundation_representative`, `school_principal`, `academic_coordinator`, `cambridge_coordinator` |
 | Teachers Hub | `th_sub_roles[]` | `subject_teacher`, `subject_leader`, `interviewer`, `hiring_manager` |
 
 **Subject specialty (CH only):** `ch_subjects[] ⊂ {math, biology, chemistry, physics, science, english, bahasa, religion, edu_steam, early_years, civics}` (11-value enum; canonical list in [`partials/subject-config.js`](partials/subject-config.js) `SUBJECTS` — keep the underscore form `edu_steam`, never `steam`). `science` is the combined-science specialty (Lower Secondary / Primary Checkpoint); `edu_steam` = Edu-STEAM, `civics` = Civic Education / PPKn, `early_years` = Early Years. Checkpoint Science **also accepts** any of `biology` / `chemistry` / `physics` specialists — a Biology Coordinator can enter the Science syllabus + pacing pages to see how their subject builds up at lower-secondary level. The reverse is not true: a `science` specialist does NOT see IGCSE / AS-A-Level Biology, Chemistry, or Physics (those remain single-subject).
+
+**Grade-band scope (CH only, 2026-08-23):** `ch_phase[] ⊂ {primary, secondary, early_years}` — a second, orthogonal axis. The Academic Board has separate Specialists for Mathematics (Primary) and Mathematics (Secondary), and both carry `ch_subjects: ['math']`; before this field a Primary Maths Specialist reached the AS/A-Level pacing pages. **Empty or absent means every phase** — the field is opt-in, so no existing profile lost access when it landed. Canonical enum in [`partials/subject-config.js`](partials/subject-config.js) `PHASES`; page mapping in `auth-guard.js` `SUBJECT_PAGE_PHASES`, enforced by `isPhaseAllowed()` ahead of the subject check so it also covers the syllabus pages. `central_admin` and `director` bypass. The national-alignment pages span both phases and are deliberately left ungated. Edited from `/console`.
 
 **Authorization model (since 2026-05-20):**
 - `central_admin` → bypass everything (page-access, rule-level write capacity, subject-specialty gate). Full management.

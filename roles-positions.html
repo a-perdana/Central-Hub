@@ -1496,8 +1496,8 @@
         $('metaDate').textContent = DATA.effective_date;
         $('cntCatalogue').textContent = DATA.positions.length;
         $('cntIssues').textContent = openIssues;
-        // Count of roles that appear on the org chart (excludes hq_central per Framework v1.0)
-        var orgRoles = DATA.positions.filter(function (p) { return p.category !== 'hq_central'; }).length;
+        // Count of roles that appear on the org chart (excludes hq_central + governance_body per Framework v1.0)
+        var orgRoles = DATA.positions.filter(function (p) { return p.category !== 'hq_central' && p.category !== 'governance_body'; }).length;
         var orgCount = $('cntOrg');
         if (orgCount) orgCount.textContent = orgRoles;
         // Count of roles with at least one pathway edge (in or out)
@@ -1741,15 +1741,17 @@
 
       // ── Org Chart (HTML collapsible tree) ──────────────────────────────
       // Build child-index from reportsTo. Synthetic 'foundation_board' as root.
-      // Excludes hq_central category — Framework v1.0 is the "Partner School Edition",
-      // it describes partner-school topology only. Eduversal-side roles remain in the Catalogue
-      // tab but not on the org chart until an Eduversal org chart reference exists.
+      // Excludes hq_central and governance_body categories — Framework v1.0 is the
+      // "Partner School Edition", it describes partner-school topology only. Eduversal-side
+      // roles and the two governance organs (Board of Trustees, Academic Board) remain in the
+      // Catalogue tab but not on this chart until an Eduversal org chart reference exists.
       // For multi-parent positions: a position is reachable on the org chart as long as
-      // ANY of its parents survive the hq_central filter. If ALL of a position's parents are
-      // hq_central, the position would otherwise vanish — we ignore such cases for now
-      // (no current partner-school position has only hq_central parents).
+      // ANY of its parents survive the filter. If ALL of a position's parents are
+      // Eduversal-side, it falls back to the synthetic root below rather than vanishing —
+      // which is how the Foundation Representative stays reachable now that it reports
+      // to the CAO (ES 1.3 Level 3, corrected 2026-08-23).
       function isOrgChartPosition(p) {
-        return p && p.category !== 'hq_central';
+        return p && p.category !== 'hq_central' && p.category !== 'governance_body';
       }
       function buildOrgIndex() {
         var childrenOf = { foundation_board: [] };
@@ -1762,7 +1764,7 @@
           var filtered = parents.filter(function (parent) {
             if (parent === 'foundation_board') return true;
             var pp = POS_BY_ID[parent];
-            return pp && pp.category !== 'hq_central';
+            return pp && pp.category !== 'hq_central' && pp.category !== 'governance_body';
           });
           // If every parent was Eduversal-side, fall back to foundation_board so the node stays reachable
           if (filtered.length === 0) filtered = ['foundation_board'];
@@ -1848,8 +1850,8 @@
         html += '<div class="rp-org-root">';
         html += '  <div class="rp-org-card rp-org-card--root">';
         html += '    <div class="rp-org-card-icon">⬢</div>';
-        html += '    <div class="rp-org-card-title">Foundation Board</div>';
-        html += '    <div class="rp-org-card-sub">Eduversal Foundation</div>';
+        html += '    <div class="rp-org-card-title">Eduversal Governance</div>';
+        html += '    <div class="rp-org-card-sub">Board of Trustees → Executive Director → CAO — see Catalogue</div>';
         html += '    <div class="rp-org-card-meta">' + topReports.length + ' direct · ' + totalDesc + ' total</div>';
         html += '  </div>';
         html += '</div>';

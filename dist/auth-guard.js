@@ -124,6 +124,53 @@ const SYLLABUS_PAGE_SUBJECTS = {
   'primary-checkpoint-syllabus':    ['math', 'english', 'science', 'biology', 'chemistry', 'physics', 'bahasa', 'edu_steam'],
 };
 
+// ── Phase (grade-band) gating ────────────────────────────────────
+// ch_phase[] ⊂ {'primary','secondary','early_years'} — added 2026-08-23.
+//
+// The subject enum cannot express the Primary/Secondary split. The Academic
+// Board runs separate Specialists for Mathematics (Primary) and Mathematics
+// (Secondary), and for English likewise; both carry ch_subjects: ['math'] /
+// ['english'], so before this gate a Primary Maths Specialist reached the
+// AS/A-Level pacing pages and vice versa.
+//
+// An EMPTY or absent ch_phase[] means every phase, so existing profiles keep
+// exactly the access they had — the field is opt-in. Same bypass hierarchy as
+// the subject gate: central_admin and director see everything.
+const PHASES = ['primary', 'secondary', 'early_years'];
+
+// Only slugs whose phase is unambiguous appear here. The national-alignment
+// pages map Cambridge to the Indonesian curriculum across both phases and are
+// deliberately left ungated.
+const SUBJECT_PAGE_PHASES = {
+  'primary-math-pacing':          ['primary'],
+  'primary-english-pacing':       ['primary'],
+  'primary-science-pacing':       ['primary'],
+  'primary-bahasa-pacing':        ['primary'],
+  'primary-edu-steam-pacing':     ['primary'],
+  'primary-checkpoint-syllabus':  ['primary'],
+
+  'checkpoint-math-pacing':       ['secondary'],
+  'checkpoint-english-pacing':    ['secondary'],
+  'checkpoint-science-pacing':    ['secondary'],
+  'checkpoint-bahasa-pacing':     ['secondary'],
+  'checkpoint-edu-steam-pacing':  ['secondary'],
+  'secondary-checkpoint-syllabus':['secondary'],
+  'igcse-math-pacing':            ['secondary'],
+  'igcse-biology-pacing':         ['secondary'],
+  'igcse-chemistry-pacing':       ['secondary'],
+  'igcse-physics-pacing':         ['secondary'],
+  'igcse-bahasa-pacing':          ['secondary'],
+  'igcse-edu-steam-pacing':       ['secondary'],
+  'igcse-syllabus':               ['secondary'],
+  'as-alevel-math-pacing':        ['secondary'],
+  'as-alevel-biology-pacing':     ['secondary'],
+  'as-alevel-chemistry-pacing':   ['secondary'],
+  'as-alevel-physics-pacing':     ['secondary'],
+  'as-alevel-bahasa-pacing':      ['secondary'],
+  'as-alevel-edu-steam-pacing':   ['secondary'],
+  'as-alevel-syllabus':           ['secondary'],
+};
+
 // Pages that NEVER get gated regardless of role (auth flow + dashboard).
 const SUBJECT_GATE_BYPASS = new Set(['', 'index', 'login']);
 
@@ -205,9 +252,30 @@ function currentPageKey() {
   return slug;
 }
 
+// Answers "may this user open a page that belongs to this grade band?".
+// Absent or empty ch_phase[] means every phase, so this only ever narrows
+// access for a profile that has been explicitly scoped on /console.
+function isPhaseAllowed(profile, pageKey) {
+  if (profile?.role_centralhub === 'central_admin') return true;
+
+  const requiredPhases = SUBJECT_PAGE_PHASES[pageKey];
+  if (!requiredPhases) return true; // not a phase-gated page
+
+  const chSubRoles = Array.isArray(profile?.ch_sub_roles) ? profile.ch_sub_roles : [];
+  if (chSubRoles.includes('director')) return true;
+
+  const userPhases = Array.isArray(profile?.ch_phase) ? profile.ch_phase : [];
+  if (userPhases.length === 0) return true; // unscoped profile — every phase
+  return userPhases.some(p => requiredPhases.includes(p));
+}
+
 function isSubjectAllowed(profile, pageKey) {
   // central_admin bypasses unconditionally.
   if (profile?.role_centralhub === 'central_admin') return true;
+
+  // The phase gate runs first and applies to syllabus pages too, which the
+  // subject map below does not cover.
+  if (!isPhaseAllowed(profile, pageKey)) return false;
 
   const requiredSubjects = SUBJECT_PAGE_MAP[pageKey];
   if (!requiredSubjects) return true; // not a subject-gated page
@@ -264,6 +332,9 @@ function applySubjectGating(profile) {
   const slugHidden = (key) => {
     if (key in SUBJECT_PAGE_MAP) return !isSubjectAllowed(profile, key);
     if (key in SYLLABUS_PAGE_SUBJECTS) {
+      // A syllabus page is hidden when the user's phase excludes it, or when
+      // none of its subject tabs intersect ch_subjects[].
+      if (!isPhaseAllowed(profile, key)) return true;
       return visibleSubjectsForUser(profile, SYLLABUS_PAGE_SUBJECTS[key]).length === 0;
     }
     return false; // not a subject-gated slug
@@ -1291,6 +1362,11 @@ onAuthStateChanged(auth, async (user) => {
   // ask "which of these subject keys is this user allowed to see?".
   window.__chVisibleSubjects = (candidateKeys) =>
     visibleSubjectsForUser(profile, candidateKeys);
+  // Grade-band scope, for pages that render primary and secondary content
+  // side by side and need to know which half to show.
+  window.__chPhaseAllowed = (pageKey) => isPhaseAllowed(profile, pageKey);
+  window.__chPhases = () =>
+    (Array.isArray(profile?.ch_phase) && profile.ch_phase.length ? profile.ch_phase.slice() : PHASES.slice());
 
   // 6b2. Induction UI gating — hide /my-induction + /induction-walkthroughs
   //      from users with no induction_assignments doc. Runs on every page

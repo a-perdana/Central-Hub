@@ -445,8 +445,31 @@
               <span style="font-size:0.875rem;color:var(--ink)">Director</span>
             </label>
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+              <input type="checkbox" id="fieldChConsultant" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.875rem;color:var(--ink)">Consultant</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
               <input type="checkbox" id="fieldChCoordinator" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
               <span style="font-size:0.875rem;color:var(--ink)">Coordinator</span>
+            </label>
+          </div>
+          <p class="form-hint" style="margin-top:6px;font-size:0.75rem;color:var(--ink-3)">The three Academic Board ranks. <strong>Director</strong> is the senior rank and carries the widest page access; <strong>Consultant</strong> and <strong>Coordinator</strong> hold the same access as each other. Rank is seniority, not a reporting line — every Specialist reports to the CAO.</p>
+        </div>
+        <div class="form-group" id="chPhaseGroup" style="display:none">
+          <span class="form-label">CentralHub Grade-Band Scope</span>
+          <p class="form-hint" style="margin-top:0;margin-bottom:8px;font-size:0.75rem;color:var(--ink-3)">Which phases this Specialist covers. <strong>Leave all unchecked for every phase</strong> — only tick boxes when the person is scoped, e.g. a Mathematics (Primary) Specialist who should not reach the AS/A-Level pages. Directors and admins bypass this.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:6px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-phase="primary" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Primary</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-phase="secondary" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Secondary</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+              <input type="checkbox" data-ch-phase="early_years" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+              <span style="font-size:0.85rem;color:var(--ink)">Early Years</span>
             </label>
           </div>
         </div>
@@ -1111,11 +1134,20 @@
     // CH sub-roles — visible only when user has a CentralHub role
     const chSubRolesGroup = document.getElementById('chSubRolesGroup');
     const chSubjectsGroup = document.getElementById('chSubjectsGroup');
+    const chPhaseGroup    = document.getElementById('chPhaseGroup');
     chSubRolesGroup.style.display = u.role_centralhub ? '' : 'none';
     chSubjectsGroup.style.display = u.role_centralhub ? '' : 'none';
+    chPhaseGroup.style.display    = u.role_centralhub ? '' : 'none';
     const chSubs = Array.isArray(u.ch_sub_roles) ? u.ch_sub_roles : [];
     document.getElementById('fieldChDirector').checked   = chSubs.includes('director');
+    document.getElementById('fieldChConsultant').checked  = chSubs.includes('consultant');
     document.getElementById('fieldChCoordinator').checked = chSubs.includes('coordinator');
+    // Grade-band scope — empty means every phase, so an unscoped profile
+    // shows all boxes unchecked rather than all checked.
+    const chPhases = Array.isArray(u.ch_phase) ? u.ch_phase : [];
+    document.querySelectorAll('[data-ch-phase]').forEach(cb => {
+      cb.checked = chPhases.includes(cb.dataset.chPhase);
+    });
     // CH subject specialties (math, biology, chemistry, physics, science, english, bahasa, religion)
     const chSubjects = Array.isArray(u.ch_subjects) ? u.ch_subjects : [];
     document.querySelectorAll('[data-ch-subject]').forEach(cb => {
@@ -1124,9 +1156,12 @@
     document.getElementById('fieldRoleCH').addEventListener('change', function() {
       chSubRolesGroup.style.display = this.value ? '' : 'none';
       chSubjectsGroup.style.display = this.value ? '' : 'none';
+      chPhaseGroup.style.display    = this.value ? '' : 'none';
       if (!this.value) {
         document.getElementById('fieldChDirector').checked   = false;
+        document.getElementById('fieldChConsultant').checked  = false;
         document.getElementById('fieldChCoordinator').checked = false;
+        document.querySelectorAll('[data-ch-phase]').forEach(cb => cb.checked = false);
         document.querySelectorAll('[data-ch-subject]').forEach(cb => cb.checked = false);
       }
     });
@@ -1200,10 +1235,15 @@
     const approvalCH   = document.getElementById('fieldApprovalCH').value;
     const chSubRoles   = roleCH ? [
       document.getElementById('fieldChDirector').checked    ? 'director'    : null,
+      document.getElementById('fieldChConsultant').checked  ? 'consultant'  : null,
       document.getElementById('fieldChCoordinator').checked ? 'coordinator' : null,
     ].filter(Boolean) : [];
     const chSubjects   = roleCH
       ? [...document.querySelectorAll('[data-ch-subject]:checked')].map(cb => cb.dataset.chSubject)
+      : [];
+    // Empty ch_phase[] is the "every phase" default, not a misconfiguration.
+    const chPhase      = roleCH
+      ? [...document.querySelectorAll('[data-ch-phase]:checked')].map(cb => cb.dataset.chPhase)
       : [];
     const roleAH       = document.getElementById('fieldRoleAH').value;
     const approvalAH   = document.getElementById('fieldApprovalAH').value;
@@ -1223,10 +1263,10 @@
       document.getElementById('fieldThHiringManager').checked  ? 'hiring_manager'  : null,
     ].filter(Boolean) : [];
     if (!displayName) { showErr('Name is required.'); document.querySelectorAll('.drawer-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'profile')); document.querySelectorAll('.drawer-panel').forEach(p => p.classList.remove('active')); document.getElementById('panelProfile').classList.add('active'); return; }
-    // Coordinator IS a subject specialist — must pick at least one subject.
-    // Director is cross-subject and may stay empty.
-    if (chSubRoles.includes('coordinator') && chSubjects.length === 0) {
-      showErr('Coordinators must have at least one subject specialty selected.');
+    // Consultant and Coordinator ARE subject specialists — each must pick at
+    // least one subject. Director is cross-subject and may stay empty.
+    if ((chSubRoles.includes('coordinator') || chSubRoles.includes('consultant')) && chSubjects.length === 0) {
+      showErr('Consultants and Coordinators must have at least one subject specialty selected.');
       document.querySelectorAll('.drawer-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'roles'));
       document.querySelectorAll('.drawer-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('panelRoles').classList.add('active');
@@ -1246,6 +1286,7 @@
         approval_status_centralhub:   approvalCH,
         ch_sub_roles:                 chSubRoles,
         ch_subjects:                  chSubjects,
+        ch_phase:                     chPhase,
         role_academichub:             roleAH,
         approval_status_academichub:  approvalAH,
         ah_sub_roles:                 ahSubRoles,
@@ -1259,7 +1300,7 @@
         u.displayName = displayName; u.email = email;
         u.school = school; u.position = position; u.schoolId = schoolId;
         u.role_centralhub = roleCH; u.approval_status_centralhub = approvalCH;
-        u.ch_sub_roles = chSubRoles; u.ch_subjects = chSubjects;
+        u.ch_sub_roles = chSubRoles; u.ch_subjects = chSubjects; u.ch_phase = chPhase;
         u.role_academichub = roleAH;
         u.approval_status_academichub = approvalAH; u.ah_sub_roles = ahSubRoles;
         u.role_teachershub = roleTH; u.approval_status_teachershub = approvalTH;
