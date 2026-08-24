@@ -452,9 +452,16 @@
       return `<div class="doc-view-block doc-view-block-list">${titleHtml}${renderList(block.items)}</div>`;
     }
     if (t === 'process' && Array.isArray(block.steps) && block.steps.length) {
-      const lis = block.steps
-        .filter(x => typeof x === 'string')
-        .map((s, i) => `<li><span class="step-num">${i + 1}</span><span class="step-body">${richString(s)}</span></li>`).join('');
+      /* A step is either a plain string or { text, items[] } — the nested form
+         carries the sub-points that belong under that numbered step. Filtering
+         to strings (as this did before 2026-08-24) dropped them silently. */
+      const lis = block.steps.map((s, i) => {
+        const isNode = s && typeof s === 'object' && typeof s.text === 'string';
+        if (typeof s !== 'string' && !isNode) return '';
+        const body = richString(isNode ? s.text : s);
+        const kids = isNode && Array.isArray(s.items) && s.items.length ? renderList(s.items) : '';
+        return `<li><span class="step-num">${i + 1}</span><span class="step-body">${body}${kids}</span></li>`;
+      }).join('');
       return `<div class="doc-view-block doc-view-block-process">${titleHtml}<ol class="doc-view-process">${lis}</ol></div>`;
     }
     if (t === 'table' && Array.isArray(block.headers) && Array.isArray(block.rows)) {
