@@ -42,8 +42,18 @@
     return out;
   }
 
+  /* The Academic Standards corpus carries inline **bold** — 662 markers across 11
+     sections — because the same JSON is pushed to Google Docs, which renders it.
+     Without this the reader printed the asterisks literally. Runs after escaping
+     (so the content is already safe) and before chip injection (so a CTS/PIGP/SKL
+     token inside a bold run still becomes a chip). Only paired markers convert;
+     a stray ** is left alone. */
+  function renderInlineMarkdown(html) {
+    return html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
+
   function richString(s) {
-    return injectCrossrefChips(escapeHtml(String(s ?? '')));
+    return injectCrossrefChips(renderInlineMarkdown(escapeHtml(String(s ?? ''))));
   }
 
   function humaniseKey(k) {
