@@ -413,6 +413,22 @@
                           'process' {steps[],title?} · 'table' {headers[],rows[][],title?}.
      Renders subsection cards (id chip + title + typed content blocks) instead
      of raw JSON. */
+  /* A list item is either a plain string or { text, items[] } — the nested form
+     carries sub-points that would otherwise read as siblings of their parent
+     ("Design principles:" followed by the principles themselves). Depth is not
+     capped here; the corpus goes three levels at most. */
+  function renderList(items) {
+    const lis = (items || []).map((it) => {
+      if (typeof it === 'string') return `<li>${richString(it)}</li>`;
+      if (it && typeof it === 'object' && typeof it.text === 'string') {
+        const kids = Array.isArray(it.items) && it.items.length ? renderList(it.items) : '';
+        return `<li>${richString(it.text)}${kids}</li>`;
+      }
+      return '';
+    }).join('');
+    return `<ul>${lis}</ul>`;
+  }
+
   function renderContentBlock(block) {
     if (!block || typeof block !== 'object') return '';
     const t = block.type;
@@ -423,10 +439,7 @@
       return `<div class="doc-view-block doc-view-block-text">${titleHtml}<p>${richString(block.text)}</p></div>`;
     }
     if (t === 'list' && Array.isArray(block.items) && block.items.length) {
-      const lis = block.items
-        .filter(x => typeof x === 'string')
-        .map(s => `<li>${richString(s)}</li>`).join('');
-      return `<div class="doc-view-block doc-view-block-list">${titleHtml}<ul>${lis}</ul></div>`;
+      return `<div class="doc-view-block doc-view-block-list">${titleHtml}${renderList(block.items)}</div>`;
     }
     if (t === 'process' && Array.isArray(block.steps) && block.steps.length) {
       const lis = block.steps
