@@ -191,13 +191,13 @@ EPDP inherits the Charter pattern directly from the principal induction module a
 
 | # | Rule |
 |---|---|
-| **NN1** | **Principal induction data (the first 12 months) does not feed annual appraisal.** Direct counterpart of induction Charter NN1. |
-| **NN2** | **The principal's weekly reflection journal is never read by HQ in named form.** Counterpart of induction Charter NN2 — `principal_journal` rule has `list:false`, `get` only by owner. |
-| **NN3** | **Observers must be certified before assignment.** Reuses existing `mentor_certifications/{uid}_principal_observer` (new cert type, same schema family). |
-| **NN4** | **`principal_observations` create requires three named uids:** principalUid + observerUid + schoolId. |
-| **NN5** | **Annual appraisal output is a binary recommendation triplet** (`compositeScore + predicateBand + recommendation`) shared with yayasan in confidence. Item-level scores, observation notes, and 360 responses are never shared with yayasan. |
+| **EPDP-NN1** | **Principal induction data (the first 12 months) does not feed annual appraisal.** Direct counterpart of induction Charter NN1. |
+| **EPDP-NN2** | **The principal's weekly reflection journal is never read by HQ in named form.** Counterpart of induction Charter NN2 — `principal_journal` rule has `list:false`, `get` only by owner. |
+| **EPDP-NN3** | **Observers must be certified before assignment.** Reuses existing `mentor_certifications/{uid}_principal_observer` (new cert type, same schema family). |
+| **EPDP-NN4** | **`principal_observations` create requires three named uids:** principalUid + observerUid + schoolId. |
+| **EPDP-NN5** | **Annual appraisal output is a binary recommendation triplet** (`compositeScore + predicateBand + recommendation`) shared with yayasan in confidence. Item-level scores, observation notes, and 360 responses are never shared with yayasan. Not the same rule as Charter NN5 — the canonical source for this boundary is `principal-appraisal-framework-v1.json` → `yayasan_triplet_boundary`. |
 
-NN1+NN2 are hard-coded at the firestore.rules level. No admin can loosen them client-side.
+EPDP-NN1 + EPDP-NN2 are hard-coded at the firestore.rules level. No admin can loosen them client-side.
 
 ---
 
@@ -221,7 +221,7 @@ Inherits the Eduversal Teacher Appraisal Framework v2.1 schema directly — same
 
 | Level | Anchor | Item set |
 |---|---|---|
-| `induction` | Year-1 principal | F1 + F2 only (others zeroed and redistributed) — but no formal appraisal during induction (NN1) |
+| `induction` | Year-1 principal | F1 + F2 only (others zeroed and redistributed) — but no formal appraisal during induction (EPDP-NN1) |
 | `developing` | Years 2–3 | All 5 frameworks; F2 weight 0.45 (less experience, observation weighted higher) |
 | `proficient` | Years 4–6 | All 5 frameworks; default weights |
 | `lead` | Year 7+, mentor principals | All 5 frameworks + F-Lead 0.10 (cross-school mentoring + network leadership) — direct counterpart of Teacher v2.1 F3L |
@@ -249,7 +249,7 @@ principal_annual_appraisals/{principalUid}_{academicYear}
 ```
 principal_observations/{obsId}                         — leadership rubric visit form
 principal_progress/{principalUid}_{taskId}             — cadence task completion
-principal_journal/{entryId}                            — weekly private reflection (NN2)
+principal_journal/{entryId}                            — weekly private reflection (EPDP-NN2)
 principal_coaching_sessions/{sessionId}                — monthly coaching record
 principal_360_cycles/{cycleId}                         — termly 360 cycle controller
   └── responses/{respondentUid}                        — anonymous subcollection
@@ -289,7 +289,7 @@ Cambridge cross-ref popovers (CTS chips) auto-wire onto rubric P1–P8 + apprais
 ### Phase 0 — Preparation (2026-05-07 → 2026-06-30)
 - [ ] Board approval
 - [ ] Pilot school selection (3 schools: 1 Cambridge Approved Centre + 1 pre-centre + 1 national-only)
-- [ ] **Observer calibration training** for Academic Director + 2 backup observers (NN3) — uses existing `mentor_certifications` ledger
+- [ ] **Observer calibration training** for Academic Director + 2 backup observers (EPDP-NN3) — uses existing `mentor_certifications` ledger
 - [ ] Deploy Firestore rules for `principal_*` collections in CH (test mode)
 - [ ] SHA-256-pin Cadence + Rubric + new Appraisal Framework JSON files (`docs/research/` pattern)
 - [ ] Pilot Charter v1.0 signed (Eduversal + 3 yayasans)
@@ -348,9 +348,9 @@ Cambridge cross-ref popovers (CTS chips) auto-wire onto rubric P1–P8 + apprais
 |---|---|---|---|
 | Cadence task count balloons in the field (83 too many) | High | Medium | Phase 1 starts with core+compliance only (73); recommended (10) in Phase 2 |
 | Principals perceive observation as inspection | Medium | High | Charter Principle 1 explicit in workshop; pilot-school yayasans briefed in advance; rubric never produces a numerical score |
-| Academic Director's visit capacity insufficient | Medium | High | Pair with existing School Appraisal v2 visit (single trip); NN3 calibration trains 2 backup observers |
+| Academic Director's visit capacity insufficient | Medium | High | Pair with existing School Appraisal v2 visit (single trip); EPDP-NN3 calibration trains 2 backup observers |
 | Cambridge syllabus update ages rubric content | Low | Low | Annual review cycle (Eduversal Annual Workshop) |
-| Yayasan tries to use annual appraisal as performance-management tool | High | Very high | NN5 + Charter Principle 1: yayasan-facing report is binary triplet only |
+| Yayasan tries to use annual appraisal as performance-management tool | High | Very high | EPDP-NN5 + Charter Principle 1: yayasan-facing report is binary triplet only |
 | Data leak (`confidential_note` field) | Low | Very high | Firestore rule: `eduversal_internal_only` field hard-coded admin-only |
 | 360° feedback turns retaliatory | Medium | Medium | Anonymous + ≥5 respondents threshold + termly cycle + Academic Director moderation |
 | F2 (observation) drifts from formative rubric | Medium | High | Calibration session before each appraisal cycle; ≥1 paired visit per cohort per year |
@@ -409,7 +409,7 @@ Four specific decisions:
 | Modular SDK v10.7.1 | EPDP also v10.7.1 | existing `auth-guard.js` |
 | Per-platform role + sub-role | `school_principal` ⊂ `ah_sub_roles[]`, existing | [`Academic Hub/CLAUDE.md`](../../Academic%20Hub/CLAUDE.md) |
 | Page-access gating | EPDP pages follow `page_access_config/{slug}` | existing |
-| Charter NN1+NN2 rule pattern | EPDP NN1+NN2 copy directly | [`Central Hub/firestore.rules`](../../Central%20Hub/firestore.rules) "INDUCTION MODULE" |
+| Charter NN1+NN2 rule pattern | EPDP-NN1 + EPDP-NN2 copy directly | [`Central Hub/firestore.rules`](../../Central%20Hub/firestore.rules) "INDUCTION MODULE" |
 | Cambridge cross-ref popover | rubric P1–P8 + appraisal F1–F5 chips auto-wired | existing `cambridge-crossref.js` |
 | `weekly_progress` doc-id pattern | EPDP cadence checklist same pattern | `${uid}_${ACADEMIC_YEAR}_w${week}_school_principal` |
 | `induction_*` collection family | `principal_*` is a direct copy | `docs/architecture/FIRESTORE_SCHEMA.md` §16 |

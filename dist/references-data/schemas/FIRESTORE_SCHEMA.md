@@ -811,7 +811,7 @@ the others (`principal_360_responses`, `principal_coaching_sessions`,
 **FKs:** `users.uid`, `partner_schools.id`.
 **Writers:** `central_admin` only (cycle launch is governed).
 **Read scope:** any signed-in user (so respondents can verify cycle is open).
-**Notes:** Source framework: `docs/cross-module/principal-360-framework-v1.json`. NN5: status='open' is the only state in which `principal_360_responses` accepts new docs (rule reads cycles to gate respond writes).
+**Notes:** Source framework: `docs/cross-module/principal-360-framework-v1.json`. Cycle-state gate: status='open' is the only state in which `principal_360_responses` accepts new docs (rule reads cycles to gate respond writes). NOT an Induction Charter Non-Negotiable.
 
 #### `principal_360_responses/{respId}` — Anonymous individual response
 **PK:** auto-id.
@@ -827,7 +827,7 @@ the others (`principal_360_responses`, `principal_coaching_sessions`,
 **FKs:** `users.uid`, `partner_schools.id`.
 **Writers:** Cloud Function only.
 **Read scope:** principal (own); same-school AH leadership; `central_admin`. NEVER exposed when below threshold.
-**Notes:** This is the only collection a human reads for 360 results. NN5 enforced: `aboveThreshold[c] === false` → cohort hidden in UI.
+**Notes:** This is the only collection a human reads for 360 results. Respondent-anonymity threshold enforced: `aboveThreshold[c] === false` → cohort hidden in UI. Source: `principal-360-framework-v1.json` → `design_principles[0]` + `cohort_definitions[].min_respondents_to_report` (5). NOT an Induction Charter Non-Negotiable.
 
 ---
 

@@ -219,7 +219,7 @@ Items resolved 2026-05-08:
 - ✓ Teacher + Leader competency content backfill (35 entries hand-authored — 16 TH + 19 AH; both tracks now at 96/96 coverage)
 - ✓ Specialist competency content backfill (96 hand-authored entries replacing 72 generated; Indonesia-context density 0 → 1.0)
 - ✓ Specialist competency polish round (43 entries expanded; reading length 70% → 94% of TH+AH baseline; audit moves from MARGINAL to MINOR gap)
-- ✓ Principal Coaching cycle framework spec ([file](principal-coaching-framework-v1.json)) — 2 modes (year-1 induction overlay + year-2+ ongoing), 5-stage 60-min agenda, charter NN1+NN2+NN3+NN5 compliant, full evidence lineage to F2/F5
+- ✓ Principal Coaching cycle framework spec ([file](principal-coaching-framework-v1.json)) — 2 modes (year-1 induction overlay + year-2+ ongoing), 5-stage 60-min agenda, charter NN1+NN2+NN3 compliant plus its own `coaching_confidentiality` rule, full evidence lineage to F2/F5
 
 All Phase-2 UIs landed 2026-05-09 (form/skeleton level). Remaining work is functional rounding rather than authoring:
 

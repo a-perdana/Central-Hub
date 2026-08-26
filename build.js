@@ -693,7 +693,7 @@ const htmlFiles = [
   "induction-walkthroughs.html",
   // Walkthrough review queue (2026-05-19; renamed from specialist-mentor-review
   // 2026-05-26) — Department Office > Workspace. Director-only. HQ Director
-  // sees submitted specialist walkthroughs, leaves NN2-confidential coaching
+  // sees submitted specialist walkthroughs, leaves confidential coaching
   // feedback, flips notesState 'submitted' → 'mentor_reviewed' (or back to
   // 'draft' for revision).
   "walkthrough-review.html",
