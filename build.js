@@ -991,10 +991,6 @@ const refAssetMap = [
   // (3 specialist-content-backfill/polish v1 JSONs removed 2026-06-26 —
   //  archived to docs/competency/legacy/, no longer surfaced in /references.
   //  Their manifest entries in references.html were dropped at the same time.)
-  // Heyet board proposal — early Round 1 deliverable, archived but
-  // kept reachable for executive context.
-  ["audits/HEYET-PROPOSAL.md",                                path.join("..", "docs", "principal-development", "HEYET-PROPOSAL.md")],
-
   // ── Frameworks ──────────────────────────────────────────────
   // Appraisal v2 + Principal Appraisal v1 — read from AH/CH resources
   // which are kept byte-identical with TH copies via tag scripts.
