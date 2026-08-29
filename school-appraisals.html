@@ -983,7 +983,7 @@
       border: 1px dashed var(--border); border-radius: 8px;
     }
     /* Collapsed-card badge so the appraiser can see which aspects came with
-       evidence without opening all 31 of them. */
+       evidence without opening all 33 of them. */
     .ev-count {
       flex: none; font-size: .72rem; font-weight: 600;
       color: var(--ink-2); background: var(--paper);
@@ -1343,36 +1343,40 @@
     /* A partial validation is real but incomplete — amber, not green. */
     .st-validated.is-partial { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 
-    /* ── SCHOOL DEVELOPMENT RATING (§8) — year-end, computed ── */
+    /* ── DEVELOPMENT RATING — one row per domain, no composite (ES 17.8) ── */
     .dev-rating {
       margin: 18px 0 8px; padding: 16px 18px;
-      border: 1px solid var(--border); border-left-width: 4px; border-radius: 12px;
+      border: 1px solid var(--border); border-radius: 12px;
       background: var(--white);
     }
     .dev-rating-label {
       font-size: .72rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .06em; color: var(--ink-3); margin-bottom: 7px;
     }
-    .dev-rating-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-    .dev-rating-band { font-family: 'Lora', serif; font-size: 1.2rem; font-weight: 600; }
+    .dev-rating-row {
+      display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+      padding: 7px 0 7px 10px; border-left: 3px solid var(--border);
+    }
+    .dev-rating-row + .dev-rating-row { border-top: 1px solid var(--border); }
+    .dev-rating-domain { flex: 1 1 200px; font-size: .84rem; color: var(--ink-2); }
+    .dev-rating-band { font-family: 'Lora', serif; font-size: 1rem; font-weight: 600; }
     .dev-rating-mean { font-size: .8rem; color: var(--ink-3); }
-    .dev-rating-meaning { font-size: .84rem; line-height: 1.55; color: var(--ink-2); margin-top: 6px; }
-    .dev-rating-note { font-size: .74rem; color: var(--ink-3); font-style: italic; margin-top: 6px; }
-    .dev-rating-pending { font-size: .84rem; line-height: 1.55; color: var(--ink-3); font-style: italic; }
+    .dev-rating-note { font-size: .74rem; color: var(--ink-3); font-style: italic; margin-top: 8px; }
+    .dev-rating-pending { font-size: .84rem; color: var(--ink-3); font-style: italic; }
     /* QUALITY axis — same ramp as .score-*, so the two scales agree on
        direction even though their labels differ. Strong was cyan, which
        stepped out of the ramp exactly as score-4's blue did: it sat between
        green (Outstanding) and amber (Developing) but read as a different
        kind of thing entirely. Mid-green keeps the descent continuous. */
-    .dev-rating.is-outstanding        { border-left-color: #059669; }
-    .dev-rating.is-outstanding .dev-rating-band { color: #065f46; }
-    .dev-rating.is-strong             { border-left-color: #34d399; }
-    .dev-rating.is-strong .dev-rating-band { color: #047857; }
-    .dev-rating.is-developing         { border-left-color: #d97706; }
-    .dev-rating.is-developing .dev-rating-band { color: #b45309; }
-    .dev-rating.is-needs_intervention { border-left-color: #dc2626; }
-    .dev-rating.is-needs_intervention .dev-rating-band { color: #b91c1c; }
-    .dev-rating.is-pending            { border-left-color: var(--ink-3); }
+    .dev-rating-row.is-outstanding        { border-left-color: #059669; }
+    .dev-rating-row.is-outstanding .dev-rating-band { color: #065f46; }
+    .dev-rating-row.is-strong             { border-left-color: #34d399; }
+    .dev-rating-row.is-strong .dev-rating-band { color: #047857; }
+    .dev-rating-row.is-developing         { border-left-color: #d97706; }
+    .dev-rating-row.is-developing .dev-rating-band { color: #b45309; }
+    .dev-rating-row.is-needs_intervention { border-left-color: #dc2626; }
+    .dev-rating-row.is-needs_intervention .dev-rating-band { color: #b91c1c; }
+    .dev-rating-row.is-pending            { border-left-color: var(--ink-3); }
 
     /* ── ACTION PLAN (ES 17.8) ── */
     .ap-panel {
@@ -2548,7 +2552,7 @@
     // would be a fiction.
     const REVIEW_PHASES = [
       { code: 'phase_1', label: 'Phase 1 · Teaching Quality', rates: true },
-      { code: 'phase_2', label: 'Phase 2 · Mid-Year Check-in', rates: false },
+      { code: 'phase_2', label: 'Phase 2 · Progress Check-in', rates: false },
       { code: 'phase_3', label: 'Phase 3 · Validation',       rates: true },
     ];
     const RATING_PHASES = REVIEW_PHASES.filter(p => p.rates).map(p => p.code);
@@ -2905,39 +2909,48 @@
       return FRAMEWORK?.meta?.rating_scale?.[n]?.label || scoreLabel(n);
     }
 
-    // ── SCHOOL DEVELOPMENT RATING (Updated Appraisal Model §8) ──
-    // Year-end rating COMPUTED from the mean of the five domain scores. It is
-    // never entered by hand — the model defines it as a formula.
+    // ── DEVELOPMENT RATING — ONE PER DOMAIN, NEVER A SCHOOL COMPOSITE ──
+    // Each of the five domains carries its own Development Rating, banded from
+    // that domain's own score. There is no sixth number.
+    //
+    // This used to return the MEAN of the five domains and the report printed
+    // it as "School Development Rating: <band> (mean N of 4)". That is the one
+    // thing the model forbids. ES 17.8: "Eduversal does not publish a single
+    // composite school score: the five domains measure different things, and a
+    // mean would hide the differences that matter for action." The AY 2026-2027
+    // School Appraisal Handbook, Overview, Quick Reference and the Scorecard
+    // Layer workbook all repeat it, and the school-facing handbook already said
+    // so — so the handbook a school read and the report we generated for it
+    // disagreed. Corrected 2026-08-30. Do not reintroduce an average here.
     //
     // Deliberately distinct from externalReview.outcome (On Track / Needs
-    // Support / Critical Attention), which is a per-visit judgement that
+    // Support / Critical Attention), which is a per-visit judgment that
     // triggers escalation during the year. A school can sit at Needs Support
-    // after Phase 1 and still finish the year Strong; the two answer
-    // different questions.
+    // after Phase 1 and still finish the year Strong on a domain; the two
+    // answer different questions.
     //
     // Careful with the labels: "Developing" names BOTH an aspect band on the
-    // 1–4 scale and a school rating here. Always render this one as a School
-    // Development Rating so the two cannot be read as the same thing.
-    function developmentRating(a, rater, phaseCode) {
+    // 1–4 scale and a Development Rating. Always render this one with its
+    // domain named so the two cannot be read as the same thing.
+    function developmentRatings(a, rater, phaseCode) {
       const bands = extMeta().development_rating?.bands || [];
       if (!bands.length || !FRAMEWORK) return null;
-      // Year-end rating, so it reads the standing position — the latest phase
-      // that has been rated — unless a specific phase is asked for.
+      // Reads the standing position — the latest phase that has been rated —
+      // unless a specific phase is asked for.
       const code = phaseCode || (rater === 'external' ? currentRatingPhase(a) : undefined);
-      const perDomain = FRAMEWORK.domains
-        .map(d => parseFloat(domainAvg(a, d.id, rater, code)))
-        .filter(n => n > 0);
-      // The model says "mean across all five domains" — a partial year does
-      // not produce a rating, it produces a gap.
-      if (perDomain.length < FRAMEWORK.domains.length) {
-        return { incomplete: true, rated: perDomain.length, total: FRAMEWORK.domains.length };
-      }
-      const mean = perDomain.reduce((x, y) => x + y, 0) / perDomain.length;
-      const band = bands.find(b => mean >= b.min && mean <= b.max)
-        // Guard the seams: the published bands leave no gap, but floating
-        // point can land a hair outside a boundary.
-        || bands.reduce((best, b) => (Math.abs(mean - b.min) < Math.abs(mean - best.min) ? b : best), bands[0]);
-      return { mean: mean.toFixed(2), code: band.code, label: band.label, meaning: band.meaning };
+      const rows = FRAMEWORK.domains.map(d => {
+        const score = parseFloat(domainAvg(a, d.id, rater, code));
+        if (!(score > 0)) return { id: d.id, code: d.code, title: d.title, rated: false };
+        const band = bands.find(b => score >= b.min && score <= b.max)
+          // Guard the seams: the published bands leave no gap, but floating
+          // point can land a hair outside a boundary.
+          || bands.reduce((best, b) => (Math.abs(score - b.min) < Math.abs(score - best.min) ? b : best), bands[0]);
+        return {
+          id: d.id, code: d.code, title: d.title, rated: true,
+          score: score.toFixed(2), band: band.code, label: band.label, meaning: band.meaning
+        };
+      });
+      return { rows, rated: rows.filter(r => r.rated).length, total: rows.length };
     }
 
     // The plan is stored per academic year, so the field name carries the
@@ -3021,8 +3034,6 @@
       const er = extReview(a);
       const meta = extMeta();
       const deltas = reportDeltas(a);
-      const overallSchool = avgScore(a);
-      const overallExt = avgScore(a, 'external');
       const outcomeLabel = meta.outcome_scale?.[er.outcome]?.label || '';
 
       // 1 + 3 — scope, and the performance level per ES 17.8
@@ -3038,25 +3049,32 @@
       const summary = [
         visitLine,
         `We used the Eduversal School Appraisal Framework version ${FRAMEWORK?.meta?.version || '2.0'}. It has five domains and ${totalAspects} aspects. We rated ${ratedCount} of them.`,
-        overallExt
-          ? `Our overall rating is ${overallExt} out of 4 (${compositeBand(overallExt)}). The school rated itself ${overallSchool || '—'}.`
-          : `We have not yet given an overall rating for this cycle.`,
         deltas.length
           ? `Our rating is different from the school's on ${deltas.length} aspect${deltas.length === 1 ? '' : 's'}. We explain each difference in the domain findings below.`
           : `Our ratings match the school's own ratings on every aspect we rated. This tells us the school knows itself well.`,
         outcomeLabel ? `Overall outcome: ${outcomeLabel}.` : '',
-        // §7 lists the School Development Rating as report content, and §8
-        // defines it as computed. State it here rather than leaving the
-        // reader to work it out from five domain numbers.
+        // The report states a Development Rating for EACH domain and stops
+        // there. It used to open with "Our overall rating is N out of 4" and
+        // close with "School Development Rating: <band> (mean N of 4)" — two
+        // whole-school composites, in the document the school actually reads.
+        // ES 17.8 forbids exactly that: the five domains measure different
+        // things, and a mean would hide the differences that matter for
+        // action. Removed 2026-08-30; do not reintroduce an overall number.
         (() => {
-          const dr = developmentRating(a, 'external');
-          if (!dr || dr.incomplete) return '';
-          return `School Development Rating: ${dr.label} (mean ${dr.mean} of 4). ${dr.meaning}`;
+          const dr = developmentRatings(a, 'external');
+          if (!dr) return '';
+          const done = dr.rows.filter(r => r.rated);
+          if (!done.length) return 'We have not yet rated any domain for this cycle.';
+          const each = done.map(r => `${r.code} ${r.title} — ${r.label}`).join('; ');
+          const pending = dr.total - done.length;
+          return `Development Rating by domain: ${each}.`
+            + (pending ? ` ${pending} domain${pending === 1 ? '' : 's'} not yet rated.` : '')
+            + ' Each domain is read on its own terms; Eduversal does not publish a single composite school score.';
         })()
       ].filter(Boolean).join(' ');
 
       // 1 — findings for EACH domain, aspect by aspect.
-      // The framework carries a written descriptor for all 4 bands on all 31
+      // The framework carries a written descriptor for all 4 bands on all 33
       // aspects (rating_scale_guide). Quoting the descriptor for the band we
       // awarded is what turns a number into a finding the school can act on —
       // it says what "Developing" MEANS for this particular aspect, in the
@@ -3336,7 +3354,7 @@
     }
 
     // A justification is required whenever Eduversal's rating differs from a
-    // rating the school actually gave. Rules cannot express this over 31
+    // rating the school actually gave. Rules cannot express this over 33
     // aspects, so this is the single source of truth for the protocol in
     // handbook s6_external_evaluation_cycle: "Where you disagree, explain
     // with evidence."
@@ -4982,31 +5000,34 @@
         </div>`;
     }
 
-    // Year-end rating, computed. Shown with its full name so it is never read
-    // as an aspect band — "Developing" means different things on the two
-    // scales.
+    // One Development Rating per domain, each shown with its domain named so
+    // it is never read as an aspect band — "Developing" means different things
+    // on the two scales — and never as a whole-school verdict. There is no
+    // composite row here by design (ES 17.8); a domain left unrated shows as a
+    // gap rather than being averaged away.
     function buildDevelopmentRatingCard(a) {
-      const dr = developmentRating(a, 'external');
+      const dr = developmentRatings(a, 'external');
       if (!dr) return '';
-      if (dr.incomplete) {
-        return `
-          <div class="dev-rating is-pending">
-            <div class="dev-rating-label">School Development Rating</div>
-            <div class="dev-rating-pending">
-              Not yet available — ${dr.rated} of ${dr.total} domains rated by Eduversal.
-              The rating is the mean of all five domain scores, so it appears once every domain has been rated.
-            </div>
-          </div>`;
-      }
+      const rows = dr.rows.map(r => r.rated
+        ? `<div class="dev-rating-row is-${esc(r.band)}">
+             <span class="dev-rating-domain">${esc(r.code)} ${esc(r.title)}</span>
+             <span class="dev-rating-band">${esc(r.label)}</span>
+             <span class="dev-rating-mean">${esc(r.score)} / 4</span>
+           </div>`
+        : `<div class="dev-rating-row is-pending">
+             <span class="dev-rating-domain">${esc(r.code)} ${esc(r.title)}</span>
+             <span class="dev-rating-pending">not yet rated</span>
+           </div>`).join('');
       return `
-        <div class="dev-rating is-${esc(dr.code)}">
-          <div class="dev-rating-label">School Development Rating</div>
-          <div class="dev-rating-row">
-            <span class="dev-rating-band">${esc(dr.label)}</span>
-            <span class="dev-rating-mean">mean ${esc(dr.mean)} / 4</span>
+        <div class="dev-rating">
+          <div class="dev-rating-label">Development Rating — one per domain</div>
+          ${rows}
+          <div class="dev-rating-note">
+            Each domain is banded from its own score and read on its own terms. Eduversal does not
+            publish a single composite school score — the five domains measure different things, and a
+            mean would hide the differences that matter for action (ES 17.8). A development indicator,
+            not a ranking.
           </div>
-          <div class="dev-rating-meaning">${esc(dr.meaning)}</div>
-          <div class="dev-rating-note">Computed from the five domain means — not entered by hand. A development indicator, not a ranking.</div>
         </div>`;
     }
 
