@@ -141,8 +141,8 @@ These five rules are encoded directly in Firestore rules and admin tooling. Bypa
 
 1. **Level 1.** Mentee raises a concern with mentor (or vice versa).
 2. **Level 2.** Either party raises a concern with the school leader.
-3. **Level 3.** Any party raises a concern with the Eduversal Induction Coordinator (a designated `central_admin` sub-role).
-4. **Level 4.** Eduversal Induction Coordinator escalates to the school's Foundation Representative if the school-leader is the source of the concern.
+3. **Level 3.** Any party raises a concern with the Induction Coordinator (a designated `central_admin` sub-role).
+4. **Level 4.** Induction Coordinator escalates to the school's Foundation Representative if the school-leader is the source of the concern.
 
 **Principle:** an escalation never disadvantages the person raising it. Retaliation is a Significant Concern in itself.
 
@@ -150,7 +150,7 @@ These five rules are encoded directly in Firestore rules and admin tooling. Bypa
 
 ## Review
 
-This Charter is reviewed annually every May, before the next academic year's cohort intake. The Eduversal Induction Coordinator publishes a year-end review note alongside the next year's cohort planning. The Charter version is bumped only on substantive change.
+This Charter is reviewed annually every May, before the next academic year's cohort intake. The Induction Coordinator publishes a year-end review note alongside the next year's cohort planning. The Charter version is bumped only on substantive change.
 
 **Next review due:** 2027-05-01.
 

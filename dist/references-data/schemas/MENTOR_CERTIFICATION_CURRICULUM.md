@@ -175,8 +175,8 @@ The curriculum is anchored in the [University of Cambridge Mentoring Guide June 
 **Escalation route** (4 levels — Charter §Escalation Route):
 1. Mentee raises concern with mentor (or vice versa).
 2. Either party raises with the school leader.
-3. Any party raises with the Eduversal Induction Coordinator.
-4. The Eduversal Induction Coordinator escalates to Foundation Rep if school leader is the source.
+3. Any party raises with the Induction Coordinator.
+4. The Induction Coordinator escalates to Foundation Rep if school leader is the source.
 
 **Two-way contract (Charter Principle 5):**
 - Mentor commits to: active certification; weekly time (1 hr stages 1-2, 30 min stage 3); 7-day observation write-up turnaround; raising concerns through the published route.
@@ -238,7 +238,7 @@ For Principal Mentor Endorsement (additional 1-hour module) the same shape with 
 ## Refresher (24-month cycle)
 
 **Duration:** 1 hour.
-**Format:** small-group video with the Eduversal Induction Coordinator.
+**Format:** small-group video with the Induction Coordinator.
 **Content:**
 - Highlights of M2 (Listening) + M5 (GROW) — the two modules that fade fastest
 - One new case study, drafted from the previous year's pilot incidents
