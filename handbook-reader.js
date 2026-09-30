@@ -666,7 +666,7 @@ function openSpineModal(handbookId) {
   // the primary live document (the reader page lists the rest).
   const openLink = document.getElementById('hbModalOpen');
   const OPEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
-  if (openLink && hb.liveSource) {
+  if (openLink && hb.liveSource && !hb.liveSource.structured) {
     const docs = Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents : [];
     const primary = docs.find(d => d.primary) || docs[0];
     openLink.href = primary ? primary.url : `handbook?id=${encodeURIComponent(hb.id)}`;
@@ -741,11 +741,12 @@ function renderShelfRail(railId, handbooks) {
       : (stages ? `📚 ${stages}` : '');
     const chips = detectSpineChips(hb).slice(0, 3);
     const title = hb.title || hb.id;
-    const driveDocs = hb.liveSource && Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents.length : 0;
-    const shownThickness = hb.liveSource ? `☁ ${driveDocs} doc${driveDocs === 1 ? '' : 's'}` : thickness;
+    const isPointer = !!(hb.liveSource && !hb.liveSource.structured);
+    const driveDocs = isPointer && Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents.length : 0;
+    const shownThickness = isPointer ? `☁ ${driveDocs} doc${driveDocs === 1 ? '' : 's'}` : thickness;
     return `
-      <a class="hb-spine" data-kind="${dataKind}"${hb.liveSource ? ' data-drive="1"' : ''} href="handbook?id=${encodeURIComponent(hb.id)}" title="${escapeHtml(title)}${hb.liveSource ? ' — lives in Google Drive' : ''}">
-        ${hb.liveSource ? '<span class="hb-spine-ext" aria-hidden="true" title="Lives in Google Drive">↗</span>' : ''}
+      <a class="hb-spine" data-kind="${dataKind}"${isPointer ? ' data-drive="1"' : ''} href="handbook?id=${encodeURIComponent(hb.id)}" title="${escapeHtml(title)}${isPointer ? ' — lives in Google Drive' : ''}">
+        ${isPointer ? '<span class="hb-spine-ext" aria-hidden="true" title="Lives in Google Drive">↗</span>' : ''}
         <span class="hb-spine-kind">${kindEmoji}</span>
         <span class="hb-spine-title">${escapeHtml(title)}</span>
         <span class="hb-spine-audience">${escapeHtml(audienceShort)}</span>
@@ -890,7 +891,8 @@ function renderHandbook(id) {
     document.getElementById('hbTocList').innerHTML = '';
     return;
   }
-  if (hb.liveSource) { renderDriveLanding(hb); return; }
+  const isDrivePointer = !!(hb.liveSource && !hb.liveSource.structured);
+  if (isDrivePointer) { renderDriveLanding(hb); return; }
 
   // Hero — eyebrow + title + subtitle + 3 KPI tiles
   const audienceLine = [
@@ -983,7 +985,28 @@ function renderHandbook(id) {
     hasSectionsArr ? renderSection(s, i) : renderStage(s, i)
   ).join('');
 
+  // Structured handbooks (induction tracks) keep their stages — the induction
+  // app reads them — and point at the live documents for everything else.
+  const liveBanner = (() => {
+    const docs = hb.liveSource?.structured && Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents : [];
+    if (!docs.length) return '';
+    const primary = docs.find(d => d.primary) || docs[0];
+    const rest = docs.filter(d => d !== primary);
+    return `
+      <aside class="hb-charter hb-charter-school hb-live-banner" id="hb-sec-live">
+        <div>
+          <strong>The full handbook lives in Google Drive.</strong>
+          ${escapeHtml(hb.liveSource.note || 'This page keeps the stages and tasks your induction dashboard uses; the live document is the reference for everything else.')}
+          <ul class="hb-drive-list" style="margin-top:10px;">
+            <li class="hb-drive-item is-primary"><a href="${escapeHtml(primary.url)}" target="_blank" rel="noopener"><span class="hb-drive-ic" aria-hidden="true">📄</span><span class="hb-drive-t">${escapeHtml(primary.title)}</span><span class="hb-drive-tag">Start here</span><span class="hb-drive-go">Open ↗</span></a></li>
+            ${rest.map(d => `<li class="hb-drive-item"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener"><span class="hb-drive-ic" aria-hidden="true">📄</span><span class="hb-drive-t">${escapeHtml(d.title)}</span><span class="hb-drive-go">Open ↗</span></a></li>`).join('')}
+          </ul>
+        </div>
+      </aside>`;
+  })();
+
   content.innerHTML = `
+    ${liveBanner}
     ${hasSectionsArr ? `
       <aside class="hb-charter hb-charter-school" id="hb-sec-charter">
         <div>
@@ -1879,6 +1902,7 @@ function buildTOC(hb, stages) {
   const isSchoolFacing = kind === 'school-facing' || kind === 'policy-topic' || kind === 'aicf-companion';
   const stageLabelPlural = isSchoolFacing ? 'Sections' : 'Stages';
   const items = [];
+  if (hb.liveSource?.structured) items.push(`<li><a href="#hb-sec-live">Live documents</a></li>`);
   items.push(`<li><a href="#hb-sec-charter">Charter</a></li>`);
   if (hb.designPhilosophy) items.push(`<li><a href="#hb-sec-design">Design philosophy</a></li>`);
   if (hb.rolesAndResponsibilities) items.push(`<li><a href="#hb-sec-roles">Roles &amp; responsibilities</a></li>`);
