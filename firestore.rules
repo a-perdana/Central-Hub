@@ -1681,7 +1681,13 @@ service cloud.firestore {
                   || isAHAdmin()
                   || isTeachersAdmin()
                   || (isTeachersUser() && resource.data.teacherUid == request.auth.uid)
-                  || (isAcademicUser() && resource.data.observerUid == request.auth.uid);
+                  || (isAcademicUser() && resource.data.observerUid == request.auth.uid)
+                  // School leaders read their own school's walkthroughs (the
+                  // developmental history beside a teacher's appraisal).
+                  // Added 2026-10-01.
+                  || (isAcademicUser()
+                      && resource.data.schoolId == userProfile().schoolId
+                      && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator', 'cambridge_coordinator']));
       // central_user branch: Eduversal Subject Specialists run walkthroughs
       // alongside the formal observation on an on-site visit (ES 17.8.2,
       // "Day 1: Subject Teacher Appraisals and Walkthroughs"), entered from
@@ -2801,7 +2807,10 @@ service cloud.firestore {
       // own principalUid_YYYY-MM-DD pattern). Discoverability via list
       // would let any central_user enumerate principal coaching history.
       allow list:   if isAdmin()
-                    || (isSignedIn() && isCHDirector());
+                    || (isSignedIn() && isCHDirector())
+                    // The principal lists only their own sessions (AH My
+                    // Coaching queries principalUid == auth.uid). Added 2026-10-01.
+                    || (isSignedIn() && resource.data.principalUid == request.auth.uid);
       // Director-only write (coaching-confidentiality exception, see above).
       allow create: if isSignedIn()
                     && request.auth.uid == request.resource.data.mentorUid
