@@ -992,6 +992,35 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── EASE Growth results — AH /ease-growth-results (2026-09-30) ──
+    // One administration = one network doc + one roster per school + one
+    // internal doc. Seeded by scripts/ease/seed-ease-growth-reports.js
+    // (Admin SDK); no client ever writes. The split IS the privacy model:
+    //  - network rows are anonymous (opaque key, school CODE, grade,
+    //    status, responses) → any approved AH user, so every school sees
+    //    its own results against the Network Reference;
+    //  - schools/{schoolId} holds student names + classes → only AH users
+    //    of that school (and AH admins). Minors' names never leave their
+    //    own school;
+    //  - internal/{docId} maps codes to school names and carries Zerone's
+    //    ranking + question excerpts → AH admins only (EASE Growth
+    //    Version 1: no ranking in any school-facing surface).
+    match /ease_growth_reports/{administrationId} {
+      allow get: if isAcademicUser() || isAdmin();
+      allow list: if isAHAdmin();
+      allow write: if false;
+
+      match /schools/{schoolId} {
+        allow get: if isAHAdmin() || isAHUserAtSchool(schoolId);
+        allow list: if isAHAdmin();
+        allow write: if false;
+      }
+      match /internal/{docId} {
+        allow read: if isAHAdmin();
+        allow write: if false;
+      }
+    }
+
     match /parent_share_tokens/{token} {
       // get-by-id only — no list, even for admin.
       allow get: if true;     // token IS the auth — anyone with the URL
