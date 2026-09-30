@@ -4391,14 +4391,16 @@
       return a?.externalReview?.report?.status === 'published';
     }
 
-    // ES 17.8 gives the school 4 weeks from the report. Surfacing the deadline
-    // is what makes it a commitment rather than an aspiration.
+    // "Within two weeks of receiving the report, the school transfers those two
+    // agreed priorities into the School Development Plan" (School Appraisal:
+    // Handbook 26-27). Four weeks was the retired model; it now applies only to a
+    // Needs Intervention domain's action plan. Changed 2026-10-01 with AH.
     function actionPlanDue(a) {
       const pub = a?.externalReview?.report?.publishedAt;
       if (!pub) return null;
       const d = new Date(pub);
       if (isNaN(d)) return null;
-      d.setDate(d.getDate() + 28);
+      d.setDate(d.getDate() + 14);
       const overdue = Date.now() > d.getTime() && actionPlan(a).status !== 'submitted';
       return { date: d, overdue };
     }
@@ -4848,10 +4850,10 @@
       if (!published) {
         return `
           <div class="ap-panel is-waiting">
-            <div class="ap-head">Action Plan</div>
+            <div class="ap-head">School Development Plan</div>
             <div class="ap-empty">
-              The school writes its action plan after the report is published. ES 17.8 gives it four weeks
-              from publication to respond with an action per recommendation, each with an owner and a date.
+              After the report is published, the school has two weeks to transfer the two agreed School
+              Development Priorities into its School Development Plan in Academic Hub.
             </div>
           </div>`;
       }
@@ -4861,8 +4863,21 @@
         ? `<span class="ap-due${due.overdue ? ' is-overdue' : ''}">Due ${due.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}${due.overdue ? ' · overdue' : ''}</span>`
         : '';
 
-      const itemsHtml = ap.items.length
-        ? ap.items.map((it, i) => `
+      // Two School Development Priorities in the SDP Step 3 fields (AH writes
+      // them since 2026-10-01); older records carry action/owner/due rows.
+      const SDP_LABELS = [['title','Priority'],['why','Why this matters'],['baseline','Baseline'],['outcome','Desired outcome'],['actions','Key actions'],['owner','Owner'],['evidence','Success evidence'],['support','Eduversal support'],['reviews','Review points']];
+      const sdpItems = ap.items.filter(it => it && it.title !== undefined);
+      const legacyItems = ap.items.filter(it => it && it.title === undefined);
+      const sdpHtml = sdpItems.map((it, i) => `
+            <div class="ap-item">
+              <div class="ap-item-head">
+                <span class="ap-item-num">${i + 1}</span>
+                <span class="ap-item-action">${esc(it.title || 'School Development Priority ' + (i + 1))}</span>
+              </div>
+              ${SDP_LABELS.slice(1).filter(([k]) => it[k]).map(([k, l]) => `<div class="ap-item-meta"><span><strong>${esc(l)}:</strong> ${esc(it[k])}</span></div>`).join('')}
+            </div>`).join('');
+      const itemsHtml = sdpItems.length
+        ? sdpHtml + (legacyItems.length ? '<div class="ap-reviews-label">Earlier action plan (retired format)</div>' : '') + legacyItems.map((it, i) => `
             <div class="ap-item">
               <div class="ap-item-head">
                 <span class="ap-item-num">${i + 1}</span>
@@ -4875,7 +4890,19 @@
               </div>
               ${it.priority ? `<div class="ap-item-ref">Responds to: ${esc(it.priority)}</div>` : ''}
             </div>`).join('')
-        : `<div class="ap-empty">The school has not written its action plan yet.${due && due.overdue ? ' It is past the four-week deadline — raise it at the next check-in.' : ''}</div>`;
+        : (legacyItems.length ? legacyItems.map((it, i) => `
+            <div class="ap-item">
+              <div class="ap-item-head">
+                <span class="ap-item-num">${i + 1}</span>
+                <span class="ap-item-action">${esc(it.action || '')}</span>
+              </div>
+              <div class="ap-item-meta">
+                ${it.owner ? `<span><strong>Owner:</strong> ${esc(it.owner)}</span>` : ''}
+                ${it.due ? `<span><strong>By:</strong> ${esc(it.due)}</span>` : ''}
+              </div>
+              ${it.priority ? `<div class="ap-item-ref">Responds to: ${esc(it.priority)}</div>` : ''}
+            </div>`).join('')
+          : `<div class="ap-empty">The school has not written its School Development Plan yet.${due && due.overdue ? ' It is past the two-week deadline — raise it with the Visit I Supervisor.' : ''}</div>`);
 
       const reviewsHtml = ap.reviews.length
         ? ap.reviews.map(r => `
@@ -4891,14 +4918,14 @@
       return `
         <div class="ap-panel">
           <div class="ap-head">
-            Action Plan
+            School Development Plan
             <span class="ap-status is-${esc(ap.status)}">${esc(ap.status.replace(/_/g, ' '))}</span>
             ${dueLine}
           </div>
           <div class="ap-note">
-            Written by the school in Academic Hub — read-only here. Your part is the progress review:
-            the model puts action-plan status on the Phase 2 check-in agenda, and ES 17.8 asks for
-            quarterly monitoring after that.
+            Written by the school in Academic Hub — read-only here. Your part is the progress review
+            and, near the end of the year, the Phase 4 Impact Review: for each priority, Achieved, Partly
+            Achieved, Not Yet Achieved or Carry Forward. It creates no new Domain Rating.
           </div>
           <div class="ap-items">${itemsHtml}</div>
 
