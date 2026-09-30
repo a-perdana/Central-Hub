@@ -1,68 +1,142 @@
 {
-  "schema_version": "2.0",
+  "schema_version": "3.0",
   "title": "Eduversal Teacher Appraisal Level Definitions v2.1",
   "version": "2.1",
   "effective_date": "2026-07-01",
-  "description": "Defines the four appraisal levels, their entry criteria, item set sizes, and scoring logic. A teacher's level is determined jointly by their Eduversal subject leader (zümre başkanı) and the partner school principal at the beginning of each academic year. Level assignment is recorded in the teacher's profile and governs which items appear in their formal appraisal.",
-  "scoring_correction_2026_08_27": "v2.0 carried the Early Years composite formula on all four levels — F1 0.20 / F2 0.60 / F3 0.20, with F4 dropped as 'informative only'. That was wrong for Primary and Secondary teachers. Per Teacher Appraisal: Handbook 26-27 (Academic Services 26-27 Drive pack, 'Score and Predicate'), F4 is a scored framework carrying 10% for Primary and Secondary, F2 carries 50%, and the 0.60 F2 weight applies only at Early Years where F4 is not administered. The appraisal entry forms already computed 20/50/20/10; this file was the outlier.",
+  "description": "Defines the four appraisal levels, the item set each level is appraised on, the scoring logic and the progression criteria. Source: Teacher Appraisal: Handbook 26-27 (\"Appraisal Level Visibility\", \"Level Progression Criteria\", \"Appointing appraisers\", \"Score and Predicate\"). The stored level id `induction` is the Post-Induction level; it is shown as \"Post-Induction\" everywhere.",
+  "aligned_2026_10_01": "Rewritten by scripts/appraisal/align-teacher-appraisal-framework-2026-10-01.js to follow the live Teacher Appraisal Handbook. Retired: level assignment by years of service, previous predicate or title; the demotion path (predicate C–F placing a teacher at Developing); the Lead two-appraiser panel with an Eduversal representative; walkthrough-count and report-deadline calendars; the Turkish terms. None of these appear in any live document.",
   "level_determination": {
-    "authority": ["Eduversal Subject Leader (zümre başkanı)", "Partner School Principal"],
-    "timing": "Start of each academic year (July), recorded before appraisal observations begin",
-    "basis": ["Years of service (kıdem)", "Previous appraisal predicate score", "Professional title / role (unvan)", "Subject Leader recommendation"],
+    "rule": "Teacher levels are not assigned automatically at the end of each appraisal cycle. Progression from one level to the next requires a formal recommendation from the appraiser, supported by appraisal evidence, and confirmed by school management in consultation with Eduversal.",
+    "basis": "For progression decisions, the annual F2 composite is the unrounded arithmetic mean of all valid school-owned formal-observation composite scores from the appraisal cycle. Where a progression rule refers to an individual F2 item, the relevant item score is the unrounded arithmetic mean of that same applicable item across all valid formal observations in the cycle. Informal walkthroughs, Eduversal Subject Specialist observations, and Network Peer Review learning walks are excluded from both calculations.",
+    "general_conditions": "General conditions applying to all progression decisions: No progression recommendation may be submitted in a cycle where the teacher's overall appraisal predicate falls below Good (B). Progression is not guaranteed by meeting the minimum thresholds — thresholds define eligibility, not entitlement. Where a teacher meets the thresholds but the appraiser judges that progression is premature, the appraiser must provide a written rationale and agree a development plan with the teacher before the next cycle.",
+    "not_meeting_thresholds": "Teachers who do not yet meet progression thresholds continue at their current level. This is not a disciplinary matter and should be communicated as a developmental status, not a failure outcome.",
+    "never_a_demotion": "Progression is a formal recommendation — never automatic, never a demotion when it does not happen (Appraisal Suite: Master Overview 26-27).",
+    "induction_teachers": "Current induction teachers remain in Teacher Induction and are not formally appraised (Appraisal Suite: Master Overview 26-27). Post-Induction is the first appraisal cycle after the 3-semester induction programme.",
+    "off_calendar_completions": "Teachers who complete induction outside the normal August start — through the Mid-Year Entry Pathway or the Accelerated Track — do not wait for the following academic year's scheduled visit week. Their first appraisal cycle begins at the next appraisal visit window after their Induction Completion Certificate is issued. This may be the current year's scheduled week, if it has not yet taken place, or an additional interim check arranged by the school leader if the scheduled week has already passed for that year. The school leader records the teacher's Induction Completion date in the school's appraisal roster, so Eduversal can confirm the correct entry point. Until the first formal cycle begins, the teacher is not yet assessed at the Post-Induction appraisal level.",
     "firestore_field": "appraisal_level",
-    "firestore_values": ["induction", "developing", "proficient", "lead"]
+    "firestore_values": [
+      "induction",
+      "developing",
+      "proficient",
+      "lead"
+    ]
+  },
+  "progression": {
+    "developing": {
+      "from": "induction",
+      "f2_composite_min": 65,
+      "f2_item_floor": 2,
+      "f2_items_at_2_max": null,
+      "rule": "Post-Induction → Developing: The teacher must achieve a minimum F2 composite score of 65 and no individual F2 item rated below 2 (Basic). F1 must be fully completed with no outstanding submission failures. The teacher must have completed the full induction programme, including all mandatory orientation sessions.",
+      "induction_certificate": "Before an appraiser recommends a teacher for Post-Induction → Developing progression, the appraiser must confirm that the teacher's Induction Completion Certificate shows the status \"completed\" (not \"extended\" or \"withdrawn\").",
+      "requires": [
+        "f2_composite_min",
+        "f2_item_floor",
+        "f1_complete_no_outstanding_failures",
+        "full_induction_programme_completed",
+        "induction_certificate_completed"
+      ]
+    },
+    "proficient": {
+      "from": "developing",
+      "f2_composite_min": 70,
+      "f2_item_floor": 2,
+      "f2_items_at_2_max": 2,
+      "rule": "Developing → Proficient: The teacher must achieve a minimum F2 composite score of 70, with no more than two F2 items rated at 2 (Basic) and none rated at 1 (Unsatisfactory). F3 must reflect consistent professional conduct with no active concerns on record. A minimum of one full appraisal cycle at Developing level must have been completed.",
+      "min_cycles_at_current_level": 1,
+      "requires": [
+        "f2_composite_min",
+        "f2_items_at_2_max",
+        "f2_item_floor",
+        "f3_consistent_conduct_no_active_concerns",
+        "min_cycles_at_current_level"
+      ]
+    },
+    "lead": {
+      "from": "proficient",
+      "f2_composite_min": 78,
+      "f2_item_floor": 3,
+      "f2_items_at_2_max": 0,
+      "rule": "Proficient → Lead: The teacher must achieve a minimum F2 composite score of 78, with no F2 item rated below 3 (Proficient) in any of the four domains. F3 must reflect evidence of initiative and contribution beyond individual classroom duties. The recommendation must be accompanied by a written rationale from the appraiser and endorsed by school management. A minimum of two full appraisal cycles at Proficient level must have been completed.",
+      "min_cycles_at_current_level": 2,
+      "requires": [
+        "f2_composite_min",
+        "f2_item_floor",
+        "f3_initiative_beyond_classroom",
+        "written_rationale",
+        "endorsed_by_school_management",
+        "min_cycles_at_current_level"
+      ]
+    }
+  },
+  "appraisers": {
+    "roles": [
+      "Subject Leader or Head of Department",
+      "Principal",
+      "Academic Coordinator",
+      "Cambridge Coordinator"
+    ],
+    "rule": "An appraiser must be one of the following: Subject Leader or Head of Department, Principal, Academic Coordinator, or Cambridge Coordinator. They must hold a superintendent, mid-management (principal), or supervisor certification, and have at least three years of teaching experience at early years, primary, or secondary level.",
+    "school_role": "The school appoints the appraisers who produce the official F2 score. This is a school role, not an Eduversal one - see Section 1.",
+    "mentor_rule": "One further rule: a mentor does not formally observe their own mentee. This protects the mentoring relationship, which depends on the mentee being able to admit difficulty without it appearing in a score.",
+    "mentor_history_check": "Before assigning an appraiser, the school checks whether that person was ever the teacher's induction mentor, at any point in the past. If so, that person may not act as the teacher's appraiser for that appraisal cycle, and school management assigns a different qualified appraiser instead. Schools keep a simple internal record of past mentor–mentee pairings — name and induction period only — for this purpose, kept separately from any induction observation data, so this check can be made without reopening or reviewing the mentee's induction file.",
+    "subject_specialist": "Eduversal Subject Specialist visits are separate and formative only: they never produce or change an F2 score."
   },
   "levels": [
     {
       "id": "induction",
-      "label": "Induction",
-      "label_tr": "İndüksiyon",
-      "description": "Teachers in their first or second year of service, or teachers new to the Eduversal network regardless of prior experience, are placed at the Induction level. The appraisal at this level focuses on establishing foundational professional competencies. Expectations are calibrated to support rather than evaluate against full professional mastery.",
-      "typical_profile": "Year 1–2 of teaching service; no prior Eduversal appraisal score on record",
-      "entry_criteria": {
-        "primary": "Years of service ≤ 2 years in the Eduversal network",
-        "override": "May be assigned by Subject Leader / Principal if a teacher is new to the Eduversal context regardless of total years taught elsewhere"
-      },
+      "label": "Post-Induction",
+      "description": "Teachers in their first appraisal cycle immediately following completion of the 3-semester induction programme (see Teacher Induction Program, Section 8). Not applied during the induction programme itself — induction-period data is never scored (Induction Charter, NN1). All items marked for the Post-Induction level apply.",
       "item_counts": {
         "F1": 9,
         "D1": 10,
         "D2": 8,
         "D3": 8,
         "D4": 4,
-        "F3": 5,
+        "F3": 6,
         "F3L": 0,
         "F4_survey": 17,
-        "total_scored": 44,
-        "total_with_survey": 61
+        "total_scored": 45,
+        "total_with_survey": 62
       },
-      "d3_visible_items": ["D3.1", "D3.3", "D3.4", "D3.11", "D3.12", "D3.13", "D3.18", "D3.19"],
-      "d4_visible_items": ["D4.1", "D4.2", "D4.3", "D4.4"],
-      "f3_visible_items": ["F3.1", "F3.2", "F3.3", "F3.4", "F3.8"],
+      "d3_visible_items": [
+        "D3.1",
+        "D3.3",
+        "D3.4",
+        "D3.11",
+        "D3.12",
+        "D3.13",
+        "D3.18",
+        "D3.19"
+      ],
+      "d4_visible_items": [
+        "D4.1",
+        "D4.2",
+        "D4.3",
+        "D4.4"
+      ],
+      "f3_visible_items": [
+        "F3.1",
+        "F3.2",
+        "F3.3",
+        "F3.4",
+        "F3.5",
+        "F3.8"
+      ],
       "scoring": {
-        "formula": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.50) + ((mean_F3 / 4) * 0.20) + ((mean_F4 / 4) * 0.10)) * 100",
-        "formula_early_years": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.60) + ((mean_F3 / 4) * 0.20)) * 100 — Early Years (EY1–EY3) only, where F4 is not administered and its 10% is assigned in full to F2",
-        "f2_mean_note": "Each valid formal observation is converted to its own observation-level F2 composite from the D1 + D2 + D3 + D4 items visible at this level. The annual F2 score is the equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle (at least 3 per semester). Eduversal Subject Specialist visits, informal walkthroughs, coaching visits and induction observations are excluded.",
-        "f4_mean_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 is scored and carries 10% of the composite for Primary and Secondary teachers; it is not administered at Early Years.",
+        "formula": "(F1% × 0.20) + (F2% × 0.50) + (F3% × 0.20) + (F4% × 0.10), where each framework % = (mean of the applicable item ratings ÷ 4) × 100",
+        "formula_early_years": "(F1% × 0.20) + (F2% × 0.60) + (F3% × 0.20) — Early Years (EY1–EY3) only, using the Early Years F1 and F2 instruments; F4 is not administered",
+        "f2_note": "Each valid formal observation produces its own observation-level F2 composite: (mean applicable-item rating ÷ 4) × 100. The annual F2 score is the unrounded, equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle — at least 3 per semester, 6 or more per academic year. Informal walkthroughs, Eduversal Subject Specialist observations, Network Peer Review learning walks, coaching or mentoring visits and induction observations are excluded. If the minimum is not met, F2 stays incomplete and the final composite is not published until the requirement is met or a documented exception is agreed by school management in consultation with Eduversal.",
+        "f4_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 carries 10% for Primary and Secondary teachers; it is not administered at Early Years.",
+        "completeness_note": "The composite score and predicate are calculated only when all applicable frameworks are complete, at the close of the End-of-Year Conference.",
         "rounding_note": "Calculations remain unrounded when predicate thresholds and progression thresholds are applied.",
         "output": "Score expressed as percentage (0–100); predicate assigned per predicate_bands table"
-      },
-      "support_provisions": [
-        "Assigned a mentor (Subject Leader) who conducts monthly walkthrough observations from Month 2 onwards",
-        "Mentor debrief after each walkthrough — narrative feedback using walkthrough-rubric.json",
-        "Formal Appraisal conducted once per year (Term 2 or 3) by Subject Leader + one external appraiser",
-        "Induction stages: Stage 0 (June preparation), Stage 1 (July orientation), Stage 2 (July–Sept foundation), Stage 3 (Oct–May anchoring)"
-      ]
+      }
     },
     {
       "id": "developing",
       "label": "Developing",
-      "label_tr": "Gelişmekte Olan",
-      "description": "Teachers who have completed their induction period but have not yet achieved a Proficient predicate (B or above) in their most recent formal appraisal. The Developing level introduces a broader item set — adding higher-order thinking, teaching strategy variety, values integration, and fuller work inspection responsibilities.",
-      "typical_profile": "Year 3–5 in service; or most recent appraisal predicate C, D, or F",
-      "entry_criteria": {
-        "primary": "Years of service 3–5 AND/OR most recent appraisal predicate in range C–F",
-        "note": "A teacher who completed induction with predicate A or B may be placed directly at Proficient at the discretion of the Subject Leader and Principal"
-      },
+      "description": "Teachers who have completed the Post-Induction appraisal stage. Includes all Post-Induction items plus additional items.",
       "item_counts": {
         "F1": 9,
         "D1": 10,
@@ -75,34 +149,56 @@
         "total_scored": 56,
         "total_with_survey": 73
       },
-      "d3_visible_items": ["D3.1", "D3.3", "D3.4", "D3.5", "D3.8", "D3.9", "D3.11", "D3.12", "D3.13", "D3.14", "D3.16", "D3.18", "D3.19", "D3.20"],
-      "d4_visible_items": ["D4.1", "D4.2", "D4.3", "D4.4", "D4.5"],
-      "f3_visible_items": ["F3.1", "F3.2", "F3.3", "F3.4", "F3.5", "F3.6", "F3.7", "F3.8", "F3.9", "F3.10"],
+      "d3_visible_items": [
+        "D3.1",
+        "D3.3",
+        "D3.4",
+        "D3.5",
+        "D3.8",
+        "D3.9",
+        "D3.11",
+        "D3.12",
+        "D3.13",
+        "D3.14",
+        "D3.16",
+        "D3.18",
+        "D3.19",
+        "D3.20"
+      ],
+      "d4_visible_items": [
+        "D4.1",
+        "D4.2",
+        "D4.3",
+        "D4.4",
+        "D4.5"
+      ],
+      "f3_visible_items": [
+        "F3.1",
+        "F3.2",
+        "F3.3",
+        "F3.4",
+        "F3.5",
+        "F3.6",
+        "F3.7",
+        "F3.8",
+        "F3.9",
+        "F3.10"
+      ],
+      "progression_into": "Post-Induction → Developing: The teacher must achieve a minimum F2 composite score of 65 and no individual F2 item rated below 2 (Basic). F1 must be fully completed with no outstanding submission failures. The teacher must have completed the full induction programme, including all mandatory orientation sessions.",
       "scoring": {
-        "formula": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.50) + ((mean_F3 / 4) * 0.20) + ((mean_F4 / 4) * 0.10)) * 100",
-        "formula_early_years": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.60) + ((mean_F3 / 4) * 0.20)) * 100 — Early Years (EY1–EY3) only, where F4 is not administered and its 10% is assigned in full to F2",
-        "f2_mean_note": "Each valid formal observation is converted to its own observation-level F2 composite from the D1 + D2 + D3 + D4 items visible at this level. The annual F2 score is the equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle (at least 3 per semester). Eduversal Subject Specialist visits, informal walkthroughs, coaching visits and induction observations are excluded.",
-        "f4_mean_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 is scored and carries 10% of the composite for Primary and Secondary teachers; it is not administered at Early Years.",
+        "formula": "(F1% × 0.20) + (F2% × 0.50) + (F3% × 0.20) + (F4% × 0.10), where each framework % = (mean of the applicable item ratings ÷ 4) × 100",
+        "formula_early_years": "(F1% × 0.20) + (F2% × 0.60) + (F3% × 0.20) — Early Years (EY1–EY3) only, using the Early Years F1 and F2 instruments; F4 is not administered",
+        "f2_note": "Each valid formal observation produces its own observation-level F2 composite: (mean applicable-item rating ÷ 4) × 100. The annual F2 score is the unrounded, equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle — at least 3 per semester, 6 or more per academic year. Informal walkthroughs, Eduversal Subject Specialist observations, Network Peer Review learning walks, coaching or mentoring visits and induction observations are excluded. If the minimum is not met, F2 stays incomplete and the final composite is not published until the requirement is met or a documented exception is agreed by school management in consultation with Eduversal.",
+        "f4_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 carries 10% for Primary and Secondary teachers; it is not administered at Early Years.",
+        "completeness_note": "The composite score and predicate are calculated only when all applicable frameworks are complete, at the close of the End-of-Year Conference.",
         "rounding_note": "Calculations remain unrounded when predicate thresholds and progression thresholds are applied.",
         "output": "Score expressed as percentage (0–100); predicate assigned per predicate_bands table"
-      },
-      "support_provisions": [
-        "Walkthrough observations at least once per term (3 per year minimum)",
-        "Post-walkthrough debrief within 5 working days",
-        "Formal Appraisal conducted once per year",
-        "Eligible for targeted professional development based on weakest framework area"
-      ]
+      }
     },
     {
       "id": "proficient",
       "label": "Proficient",
-      "label_tr": "Yetkin",
-      "description": "Teachers with a sustained track record of competent practice — typically 5 or more years of service and a most recent appraisal predicate of B or above. The Proficient level adds the full D3 instructional range (except the Lead-only item), full D4 assessment items, and expects comprehensive professional engagement.",
-      "typical_profile": "5+ years in service; most recent appraisal predicate B or A",
-      "entry_criteria": {
-        "primary": "Years of service ≥ 5 AND most recent appraisal predicate B (66–85) or A (86–100)",
-        "alternative": "Outstanding performance at Developing level (predicate A) may accelerate placement at Subject Leader recommendation"
-      },
+      "description": "Experienced teachers demonstrating consistent professional practice.",
       "item_counts": {
         "F1": 9,
         "D1": 10,
@@ -113,36 +209,65 @@
         "F3L": 0,
         "F4_survey": 17,
         "total_scored": 63,
-        "total_with_survey": 79
+        "total_with_survey": 80
       },
-      "d3_visible_items": ["D3.1", "D3.2", "D3.3", "D3.4", "D3.5", "D3.6", "D3.7", "D3.8", "D3.9", "D3.10", "D3.11", "D3.12", "D3.13", "D3.14", "D3.15", "D3.16", "D3.17", "D3.18", "D3.19", "D3.20"],
-      "d4_visible_items": ["D4.1", "D4.2", "D4.3", "D4.4", "D4.5", "D4.6"],
-      "f3_visible_items": ["F3.1", "F3.2", "F3.3", "F3.4", "F3.5", "F3.6", "F3.7", "F3.8", "F3.9", "F3.10"],
+      "d3_visible_items": [
+        "D3.1",
+        "D3.2",
+        "D3.3",
+        "D3.4",
+        "D3.5",
+        "D3.6",
+        "D3.7",
+        "D3.8",
+        "D3.9",
+        "D3.10",
+        "D3.11",
+        "D3.12",
+        "D3.13",
+        "D3.14",
+        "D3.15",
+        "D3.16",
+        "D3.17",
+        "D3.18",
+        "D3.19",
+        "D3.20"
+      ],
+      "d4_visible_items": [
+        "D4.1",
+        "D4.2",
+        "D4.3",
+        "D4.4",
+        "D4.5",
+        "D4.6"
+      ],
+      "f3_visible_items": [
+        "F3.1",
+        "F3.2",
+        "F3.3",
+        "F3.4",
+        "F3.5",
+        "F3.6",
+        "F3.7",
+        "F3.8",
+        "F3.9",
+        "F3.10"
+      ],
+      "progression_into": "Developing → Proficient: The teacher must achieve a minimum F2 composite score of 70, with no more than two F2 items rated at 2 (Basic) and none rated at 1 (Unsatisfactory). F3 must reflect consistent professional conduct with no active concerns on record. A minimum of one full appraisal cycle at Developing level must have been completed.",
       "scoring": {
-        "formula": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.50) + ((mean_F3 / 4) * 0.20) + ((mean_F4 / 4) * 0.10)) * 100",
-        "formula_early_years": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.60) + ((mean_F3 / 4) * 0.20)) * 100 — Early Years (EY1–EY3) only, where F4 is not administered and its 10% is assigned in full to F2",
-        "f2_mean_note": "Each valid formal observation is converted to its own observation-level F2 composite from the D1 + D2 + D3 + D4 items visible at this level. The annual F2 score is the equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle (at least 3 per semester). Eduversal Subject Specialist visits, informal walkthroughs, coaching visits and induction observations are excluded.",
-        "f4_mean_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 is scored and carries 10% of the composite for Primary and Secondary teachers; it is not administered at Early Years.",
+        "formula": "(F1% × 0.20) + (F2% × 0.50) + (F3% × 0.20) + (F4% × 0.10), where each framework % = (mean of the applicable item ratings ÷ 4) × 100",
+        "formula_early_years": "(F1% × 0.20) + (F2% × 0.60) + (F3% × 0.20) — Early Years (EY1–EY3) only, using the Early Years F1 and F2 instruments; F4 is not administered",
+        "f2_note": "Each valid formal observation produces its own observation-level F2 composite: (mean applicable-item rating ÷ 4) × 100. The annual F2 score is the unrounded, equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle — at least 3 per semester, 6 or more per academic year. Informal walkthroughs, Eduversal Subject Specialist observations, Network Peer Review learning walks, coaching or mentoring visits and induction observations are excluded. If the minimum is not met, F2 stays incomplete and the final composite is not published until the requirement is met or a documented exception is agreed by school management in consultation with Eduversal.",
+        "f4_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 carries 10% for Primary and Secondary teachers; it is not administered at Early Years.",
+        "completeness_note": "The composite score and predicate are calculated only when all applicable frameworks are complete, at the close of the End-of-Year Conference.",
         "rounding_note": "Calculations remain unrounded when predicate thresholds and progression thresholds are applied.",
         "output": "Score expressed as percentage (0–100); predicate assigned per predicate_bands table"
-      },
-      "support_provisions": [
-        "Walkthrough observations at least twice per year",
-        "Formal Appraisal conducted once per year",
-        "Eligible to serve as peer observer for Induction or Developing level colleagues",
-        "Encouraged to pursue Cambridge or Marzano professional credentials"
-      ]
+      }
     },
     {
       "id": "lead",
       "label": "Lead",
-      "label_tr": "Lider",
-      "description": "Subject Leaders, Heads of Department, or teachers formally designated with pedagogical leadership responsibilities across the Eduversal network. The Lead level assesses all 64 standard items plus 10 additional leadership items (F3L). The full D3 instructional range applies including D3.21 (Determination and Persistence).",
-      "typical_profile": "Subject Leader or HoD designation; typically 5+ years with sustained predicate A or B; formal leadership title assigned by Eduversal",
-      "entry_criteria": {
-        "primary": "Formal designation as Subject Leader (zümre başkanı) or Head of Department by Eduversal HQ",
-        "secondary": "May include teachers assigned network-wide pedagogical leadership responsibilities even without HoD title"
-      },
+      "description": "Subject Leaders and Heads of Department. Assessed on all items including the F3L Leadership Responsibilities framework.",
       "item_counts": {
         "F1": 9,
         "D1": 10,
@@ -150,51 +275,112 @@
         "D3": 21,
         "D4": 6,
         "F3": 10,
-        "F3L": 10,
+        "F3L": 6,
         "F4_survey": 17,
-        "total_scored": 74,
-        "total_with_survey": 91
+        "total_scored": 70,
+        "total_with_survey": 87
       },
-      "d3_visible_items": ["D3.1", "D3.2", "D3.3", "D3.4", "D3.5", "D3.6", "D3.7", "D3.8", "D3.9", "D3.10", "D3.11", "D3.12", "D3.13", "D3.14", "D3.15", "D3.16", "D3.17", "D3.18", "D3.19", "D3.20", "D3.21"],
-      "d4_visible_items": ["D4.1", "D4.2", "D4.3", "D4.4", "D4.5", "D4.6"],
-      "f3_visible_items": ["F3.1", "F3.2", "F3.3", "F3.4", "F3.5", "F3.6", "F3.7", "F3.8", "F3.9", "F3.10"],
-      "f3l_visible_items": ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "L10"],
+      "d3_visible_items": [
+        "D3.1",
+        "D3.2",
+        "D3.3",
+        "D3.4",
+        "D3.5",
+        "D3.6",
+        "D3.7",
+        "D3.8",
+        "D3.9",
+        "D3.10",
+        "D3.11",
+        "D3.12",
+        "D3.13",
+        "D3.14",
+        "D3.15",
+        "D3.16",
+        "D3.17",
+        "D3.18",
+        "D3.19",
+        "D3.20",
+        "D3.21"
+      ],
+      "d4_visible_items": [
+        "D4.1",
+        "D4.2",
+        "D4.3",
+        "D4.4",
+        "D4.5",
+        "D4.6"
+      ],
+      "f3_visible_items": [
+        "F3.1",
+        "F3.2",
+        "F3.3",
+        "F3.4",
+        "F3.5",
+        "F3.6",
+        "F3.7",
+        "F3.8",
+        "F3.9",
+        "F3.10"
+      ],
+      "f3l_visible_items": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6"
+      ],
+      "progression_into": "Proficient → Lead: The teacher must achieve a minimum F2 composite score of 78, with no F2 item rated below 3 (Proficient) in any of the four domains. F3 must reflect evidence of initiative and contribution beyond individual classroom duties. The recommendation must be accompanied by a written rationale from the appraiser and endorsed by school management. A minimum of two full appraisal cycles at Proficient level must have been completed.",
       "scoring": {
-        "formula": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.50) + ((mean_F3_combined / 4) * 0.20) + ((mean_F4 / 4) * 0.10)) * 100",
-        "formula_early_years": "(((mean_F1 / 4) * 0.20) + ((mean_F2 / 4) * 0.60) + ((mean_F3_combined / 4) * 0.20)) * 100 — Early Years (EY1–EY3) only, where F4 is not administered and its 10% is assigned in full to F2",
-        "f3_combined_note": "F3 combined mean = simple mean of all F3 items (F3.1–F3.10) + all F3L items (L1–L10) — 20 items total",
-        "f2_mean_note": "Each valid formal observation is converted to its own observation-level F2 composite from all D1 + D2 + D3 + D4 items (including D3.21). The annual F2 score is the equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle (at least 3 per semester). Eduversal Subject Specialist visits, informal walkthroughs, coaching visits and induction observations are excluded.",
-        "f4_mean_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 is scored and carries 10% of the composite for Primary and Secondary teachers; it is not administered at Early Years.",
+        "formula": "(F1% × 0.20) + (F2% × 0.50) + (F3% × 0.20) + (F4% × 0.10), where each framework % = (mean of the applicable item ratings ÷ 4) × 100",
+        "formula_early_years": "(F1% × 0.20) + (F2% × 0.60) + (F3% × 0.20) — Early Years (EY1–EY3) only, using the Early Years F1 and F2 instruments; F4 is not administered",
+        "f2_note": "Each valid formal observation produces its own observation-level F2 composite: (mean applicable-item rating ÷ 4) × 100. The annual F2 score is the unrounded, equal-weight arithmetic mean of every valid school-owned formal-observation composite in the cycle — at least 3 per semester, 6 or more per academic year. Informal walkthroughs, Eduversal Subject Specialist observations, Network Peer Review learning walks, coaching or mentoring visits and induction observations are excluded. If the minimum is not met, F2 stays incomplete and the final composite is not published until the requirement is met or a documented exception is agreed by school management in consultation with Eduversal.",
+        "f4_note": "Annual F4 is the arithmetic mean of the valid Semester 1 and Semester 2 Student Survey scores, both semesters weighted equally. F4 carries 10% for Primary and Secondary teachers; it is not administered at Early Years.",
+        "completeness_note": "The composite score and predicate are calculated only when all applicable frameworks are complete, at the close of the End-of-Year Conference.",
         "rounding_note": "Calculations remain unrounded when predicate thresholds and progression thresholds are applied.",
-        "output": "Score expressed as percentage (0–100); predicate assigned per predicate_bands table"
-      },
-      "support_provisions": [
-        "Formal Appraisal conducted once per year with a two-appraiser panel (Eduversal Representative + Partner School Principal)",
-        "Pre-appraisal self-evaluation required using the Lead self-assessment tool",
-        "Post-appraisal leadership development plan produced jointly with Eduversal zümre başkanı",
-        "Eligible for recognition in Eduversal Educator of the Year programme (predicate A only)"
-      ]
+        "output": "Score expressed as percentage (0–100); predicate assigned per predicate_bands table",
+        "f3_combined_note": "F3 score = mean of all F3 items (F3.1–F3.10) and all six F3L items (L1–L6) together — 16 items — carrying the 20% F3 weight."
+      }
     }
   ],
-  "predicate_bands": [
-    { "label": "A", "min": 86, "max": 100, "description": "Excellent" },
-    { "label": "B", "min": 66, "max": 85, "description": "Good" },
-    { "label": "C", "min": 51, "max": 65, "description": "Satisfactory" },
-    { "label": "D", "min": 36, "max": 50, "description": "Needs Improvement" },
-    { "label": "F", "min": 0,  "max": 35, "description": "Unsatisfactory" }
-  ],
-  "appraisal_calendar": {
-    "level_assignment": "July — first two weeks of academic year",
-    "walkthrough_cycle": {
-      "induction": "Monthly from Month 2 (August onwards)",
-      "developing": "Minimum 3 per academic year",
-      "proficient": "Minimum 2 per academic year",
-      "lead": "Minimum 2 per academic year (one by Eduversal representative)"
-    },
-    "formal_appraisal_window": "Term 2 preferred (January–February); may be conducted Term 3 by exception",
-    "report_deadline": "Two weeks after observation date",
-    "teacher_acknowledgement_deadline": "One week after report is shared with teacher"
+  "early_years_item_counts": {
+    "F1": 5,
+    "F2": 17,
+    "note": "Early Years teachers use the Early Years F1 (5 items) and F2 (17 items) instruments at every level; F3 is shared and level-gated as for Primary and Secondary; F4 is not administered."
   },
+  "predicate_bands": [
+    {
+      "label": "A",
+      "min": 86,
+      "max": 100,
+      "description": "Excellent"
+    },
+    {
+      "label": "B",
+      "min": 66,
+      "max": 85,
+      "description": "Good"
+    },
+    {
+      "label": "C",
+      "min": 51,
+      "max": 65,
+      "description": "Satisfactory"
+    },
+    {
+      "label": "D",
+      "min": 36,
+      "max": 50,
+      "description": "Needs Improvement"
+    },
+    {
+      "label": "F",
+      "min": 0,
+      "max": 35,
+      "description": "Unsatisfactory"
+    }
+  ],
   "firestore_integration": {
     "collection_teacher_profiles": "users/{uid}",
     "appraisal_level_field": "appraisal_level",
@@ -202,26 +388,39 @@
     "formal_appraisal_document_fields": {
       "teacherUid": "string",
       "appraiserUid": "string",
-      "secondAppraiserUid": "string (lead level only)",
       "schoolId": "string",
       "academicYear": "string",
-      "level": "string (induction | developing | proficient | lead)",
+      "level": "string (induction | developing | proficient | lead) — `induction` is shown as Post-Induction",
       "observationDate": "timestamp",
       "scores": "map (itemId → score 1–4)",
       "narratives": "map (itemId → string, optional per-item comment)",
       "f1Score": "number (mean, 0–4)",
-      "f2Score": "number (mean, 0–4)",
+      "f2Score": "number (0–4). On an observation record: that observation's mean item rating. On the annual record: the mean of the valid observation means (= annual F2 % ÷ 25)",
       "f3Score": "number (mean, 0–4)",
-      "f4Score": "number (mean of the valid Semester 1 and Semester 2 survey means, 0–4; absent for Early Years)",
+      "f4Score": "number (0–4) — see surveyMean",
       "compositePercent": "number (0–100)",
       "predicate": "string (A | B | C | D | F)",
-      "surveyData": "map (F4 item responses, aggregated — scored at 10% for Primary and Secondary)",
-      "surveyMean": "number (0–4, per-semester survey mean feeding f4Score)",
+      "surveyData": "map (F4 itemId → per-item mean across the entered semesters, decimal 1–4)",
+      "surveyMean": "number (0–4) — annual F4: mean of the Semester 1 and Semester 2 survey scores; null until both are entered; absent for Early Years",
       "appraiserNarrative": "string",
       "teacherResponse": "string",
       "status": "string (draft | shared | acknowledged | finalised)",
       "createdAt": "timestamp",
-      "updatedAt": "timestamp"
+      "updatedAt": "timestamp",
+      "sessionType": "string ('observation' = one formal observation | 'endofyear' = the annual record)",
+      "phase": "string ('primary_secondary' | 'early_years')",
+      "semester": "number (1 | 2) — observation records",
+      "observationPurpose": "string ('official_f2_school') — only this purpose produces F2 evidence",
+      "appraiserRole": "string ('subject_leader_hod' | 'principal' | 'academic_coordinator' | 'cambridge_coordinator')",
+      "appraiserValidity": "map { certification, threeYearsTeaching, neverMentor } (booleans) — observation records",
+      "evidenceSources": "map (F2 itemId → lesson_plan_review | live | post_lesson) — observation records",
+      "f2ObservationPercent": "number (0–100) — this observation's F2 composite",
+      "voided": "boolean — only for a documented procedural defect; with voidReason, voidDetail, voidedBy, voidedAt",
+      "f2Annual": "map on the annual record { percent, observationCount, semesterCounts {s1,s2}, observationIds[], itemMeans {itemId → mean}, minimumMet, exception {reason, agreedBy, agreedAt} }",
+      "surveyBySemester": "map { s1: {itemId → mean}, s2: {itemId → mean} } — decimal per-item means entered by the appraiser",
+      "surveySemesterMeans": "map { s1, s2 } (0–4)",
+      "compositeWithheld": "boolean — true while a required framework is incomplete; readers must not compute a composite of their own",
+      "levelProgression": "map on the annual record { targetLevel, recommendation (recommend | premature | not_eligible), rationale, checks {…}, developmentPlan }"
     },
     "collection_walkthroughs": "teacher_walkthroughs"
   }
