@@ -80,7 +80,7 @@ body { background: var(--paper); }
     <div class="page-hero__text">
       <p class="page-hero__eyebrow">Principal Coaching · 60-min session</p>
       <h1 class="page-hero__title">Coaching Session</h1>
-      <p class="page-hero__desc">5-stage agenda. Personal check-in is private (mentor + coachee only). Other stages, commitments, and outcome metrics are visible to network governance for audit.</p>
+      <p class="page-hero__desc">One coaching conversation in five stages. The personal check-in stays between you and the principal. The rest of the record is read only by you, the principal and a central admin (record audit) — never by the appraiser, the Foundation Representative / General Manager or the yayasan.</p>
     </div>
   </div>
 </header>
@@ -93,8 +93,9 @@ body { background: var(--paper); }
       <span class="page-info-strip__title">About this page</span>
       <div class="page-info-strip__body">
         <p style="margin:0"><strong>One 60-minute coaching conversation, captured in 5 stages.</strong> Each stage has its own time-box and prompt set. Save as you go — the form auto-keeps your draft until you submit. After submit the record becomes immutable.</p>
-        <p style="margin:6px 0 0">Use <em>Stage 1 — Personal check-in</em> to listen, not to log. Anything written there stays between you and the principal. Stages 2-5 (focus area, evidence, commitments, outcome metrics) are visible to network governance for audit.</p>
-        <p style="margin:8px 0 0;font-size:12px;opacity:0.85"><strong>Confidential by framework rule.</strong> Coaching is never appraisal. If a topic belongs in Annual Appraisal or School Visit, log it there instead of here.</p>
+        <p style="margin:6px 0 0">Use <em>Stage 1 — Personal check-in</em> to listen, not to log. Anything written there stays between you and the principal. Stages 2–5 (commitments, focus area, evidence, next steps) are kept in the coaching record for you, the principal and a central admin (record audit only).</p>
+        <p style="margin:6px 0 0"><strong>Rhythm.</strong> In Year 1 the Principal Mentor meets the principal weekly in Window 1, every two weeks in Windows 2–3 and monthly in Window 4 (Induction Module: Principal 26-27). From Year 2, coaching is monthly through both semesters (Coaching Cycle Framework).</p>
+        <p style="margin:8px 0 0;font-size:12px;opacity:0.85"><strong>Coaching is never appraisal.</strong> Neither what is discussed nor how many sessions take place feeds F5 or any appraisal score, and the appraiser does not see coaching records (Principal Appraisal: Handbook 26-27 §2, §10). If a topic belongs in the annual appraisal or a school visit, record it there instead.</p>
       </div>
     </div>
     <a href="/handbook?id=eduversal_principal_v1" class="page-info-strip__cta">Coaching guide →</a>
@@ -111,7 +112,7 @@ body { background: var(--paper); }
     <div class="page-footer__cta">
       <span class="page-footer__cta-eyebrow">Leadership Programs · Coaching Session</span>
       <h2 class="page-footer__cta-title">Capture commitments. Leave the rest unwritten.</h2>
-      <p class="page-footer__cta-desc">The 5-stage agenda exists to keep the hour productive. What you log on this page is auditable; the personal check-in stays between you and the principal — a coaching-framework confidentiality rule.</p>
+      <p class="page-footer__cta-desc">The 5-stage agenda keeps the hour productive. The personal check-in stays between you and the principal, and nothing on this page enters the principal's appraisal or F5.</p>
       <a href="/principal-coaching-hub" class="page-footer__cta-btn" style="background:linear-gradient(135deg,#6c5ce7,#4e3db8);">Back to Coaching Hub <span aria-hidden="true">→</span></a>
     </div>
     <nav class="page-footer__nav" aria-label="Coaching Session footer navigation">
@@ -130,7 +131,7 @@ body { background: var(--paper); }
   </div>
   <div class="page-footer__meta">
     <span class="page-footer__meta-left">© Eduversal · Central Hub</span>
-    <span class="page-footer__meta-right">Submitted sessions are immutable — framework rule: personal check-in stays private.</span>
+    <span class="page-footer__meta-right">Logged sessions are immutable · coaching never feeds appraisal or F5.</span>
   </div>
 </footer>
 
@@ -158,16 +159,18 @@ let formData = {
 document.addEventListener('authReady', async () => {
   document.body.style.display = '';
 
-  // Audience: HQ Director (CH director sub-role) or central_admin.
-  // Foundation Reps explicitly excluded per the framework's
-  // access_control table — coaching confidentiality protected.
+  // Audience gate (unchanged): CH director sub-role or central_admin.
+  // Confidentiality source: Principal Appraisal: Handbook 26-27 §10 and
+  // docs/cross-module/principal-coaching-framework-v1.json →
+  // data_model.access_control (the principal's own FR/GM, the appraiser
+  // and the yayasan have no access to coaching records).
   const profile = window.userProfile;
   mentorProfile = profile;
   const chSubs = profile?.ch_sub_roles || [];
   const isAdmin = profile?.role_centralhub === 'central_admin';
   const eligible = isAdmin || chSubs.includes('director');
   if (!eligible) {
-    showAccessDenied('Coaching sessions can only be logged by HQ Directors. Foundation Reps are intentionally excluded to protect coaching confidentiality (Charter NN).');
+    showAccessDenied('This form is open to Central Hub Directors and administrators only. A principal\'s own Foundation Representative / General Manager never has access to coaching records — coaching is confidential (Principal Appraisal: Handbook 26-27 §10).');
     return;
   }
   if (!PRINCIPAL_UID) {
@@ -207,7 +210,7 @@ function render() {
   root.innerHTML = `
     <div class="charter-banner">
       <strong>Confidentiality</strong>
-      Stage 1 (personal check-in) is visible only to mentor + coachee. Other stages contribute to audit. Submitted sessions are immutable — open the next session date for the next conversation.
+      Stage 1 (personal check-in) stays between you and the principal. Nothing in this record reaches the appraiser, the FR/GM or the yayasan, or feeds F5 or any appraisal score. Logged sessions are immutable — open the next session date for the next conversation.
     </div>
 
     <div class="context-card">
@@ -216,8 +219,8 @@ function render() {
       <div class="ctx-row"><span class="ctx-label">Session date</span><span class="ctx-value">${escapeHtml(SESSION_DATE)}</span></div>
       <div class="ctx-row"><span class="ctx-label">Mode</span>
         <select id="mode">
-          <option value="year_1_induction" ${formData.mode === 'year_1_induction' ? 'selected' : ''}>Year 1 Induction</option>
-          <option value="year_2_plus" ${formData.mode !== 'year_1_induction' ? 'selected' : ''}>Year 2+</option>
+          <option value="year_1_induction" ${formData.mode === 'year_1_induction' ? 'selected' : ''}>Year 1 — Principal Mentor (induction)</option>
+          <option value="year_2_plus" ${formData.mode !== 'year_1_induction' ? 'selected' : ''}>Year 2+ — ongoing coaching</option>
         </select>
       </div>
     </div>
