@@ -1257,6 +1257,7 @@ const PRACTICE_DAILY_POINT_RUNS = 20;
 const PRACTICE_PUBLIC_FIELDS = [
   "subjectId", "topic", "topicGroup", "difficulty", "stem", "stemHtml",
   "options", "optionsHtml", "hasDiagram", "diagramUrl", "diagramStoragePath",
+  "diagramType", "diagramAlt",
 ];
 
 function jakartaDayStart() {
