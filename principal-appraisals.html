@@ -513,8 +513,26 @@
       isAdmin: false,
     };
 
+    // Friendly state when the rules refuse the list query. Only the
+    // principal's appraiser (CH director / AH academic_admin) and
+    // central_admin may list principal_annual_appraisals (firestore.rules;
+    // Principal Appraisal: Appraiser Guide 26-27 §8 confidentiality matrix).
+    function showNoAccess() {
+      const tbody = document.getElementById('apTableBody');
+      if (tbody) tbody.innerHTML = '';
+      const empty = document.getElementById('tableEmpty');
+      const loading = document.getElementById('tableLoading');
+      if (loading) loading.style.display = 'none';
+      if (!empty) return;
+      empty.style.display = 'block';
+      empty.querySelector('.empty-icon').textContent = '🔒';
+      empty.querySelector('.empty-title').textContent = 'You do not have access to principal appraisals';
+      empty.querySelector('.empty-desc').textContent =
+        'Full principal appraisal records are open only to the appraiser (the Chief Academic Officer / designated Academic Director) and to central admins. Item-level scores stay inside the appraisal process. If you need access for your role, please ask a central admin.';
+    }
+
     document.addEventListener('authReady', async ({ detail }) => {
-      state.isAdmin = detail?.profile?.role_centralhub === 'central_admin';
+      state.isAdmin = (detail?.profile || window.userProfile)?.role_centralhub === 'central_admin';
       try {
         await loadFramework();
         await loadAppraisals();
@@ -524,6 +542,7 @@
         updateKpis();
       } catch (err) {
         console.error('[principal-appraisals] init error', err);
+        if (err?.code === 'permission-denied') { showNoAccess(); return; }
         const tbody = document.getElementById('apTableBody');
         if (tbody) tbody.innerHTML = '';
         const empty = document.getElementById('tableEmpty');

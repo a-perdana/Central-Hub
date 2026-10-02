@@ -274,6 +274,34 @@ If you need `z-index: 9999`, you're fighting the system. Stop and check whether 
 
 ---
 
+## Academic Hub — module families (2026-10-01)
+
+**Academic Hub no longer picks colour by function.** Every AH page belongs to one part of the Academic Quality Ecosystem and wears that part's **Drive document family**, so a school leader moving between a hub page and the Google Doc behind it stays in one colour world. The eight function families below still govern **CH and TH**; AH replaced them.
+
+**One attribute per page:** `<body data-module="appraisal">`. That alone sets the hero gradient, page paper, footer, navbar rule, `--accent`/`.btn-primary`, info strip, toolbar, card hover, focus ring and selection colour. Pages never set hero or footer colours themselves.
+
+| `data-module` | Drive family (`scripts/gdocs/module-theme.js`) | Cover | Web mid |
+|---|---|---|---|
+| `curriculum` | curriculum (navy) | `#1B356A` | `#365697` |
+| `induction` | induction (magenta) | `#6A1B6A` | `#973697` |
+| `ease` | ease (indigo) | `#351B6A` | `#563697` |
+| `student_learning` | student_learning (olive) | `#556A1B` | `#64792b` |
+| `appraisal` | appraisal (rust) | `#6A351B` | `#975636` |
+| `career_growth` | career_growth (rose) | `#711A50` | `#9e3576` |
+| `teaching_learning` | teacher (grass green) | `#2E6B1B` | `#407f2d` |
+| `digital_citizenship` | digital_citizenship (steel blue) | `#1B4F6A` | `#367697` |
+| `academic_insights` | academic_insights (mustard) | `#6A5A1B` | `#82712f` |
+| `quality_ecosystem` | ecosystem (emerald) | `#1B6A35` | `#2e8048` |
+| `school_workspace` | school_leadership (teal) | `#1B6B6B` | `#2c7c7c` |
+| `hub` | Eduversal brand (mor → cyan), not a module | `#2B2470` | `#4b3fc4` |
+
+- **Generated, never hand-edited.** `node scripts/design/build-ah-module-css.js --apply` writes `Academic Hub/modules.css` (imported by `base.css`) from the Drive palette. Each family exposes `--m-cover --m-dark --m-mid --m-soft --m-tint --m-tint-2 --m-border --m-deep --m-vivid --m-paper --m-end --m-mid-rgb`.
+- **Web mid ≠ Drive mid in five families, on purpose.** Drive clamps mid to 4.0:1 on white for 13pt headings; on the web mid also sets button labels and link text, so it is darkened at constant hue until it clears WCAG AA 4.5:1 on the page paper. The generator refuses to write if any family fails.
+- **Warmth comes from treatment, not hue:** a warm paper (`#fcfaf6`) under each family tint, a warm highlight in the hero, a white footer CTA. A navy module stays navy.
+- **Moving a page onto its module:** `node scripts/design/apply-ah-module.js --page=<file> --module=<key> --apply`. It sets the attribute, drops `data-page-accent`/`data-accent`, turns an `Academic Hub · X` eyebrow into the module row (dot · module name linked to its live *Start Here* Google Doc · cycle verb), and rewrites hard-coded brand violets to `var(--m-*, <orig>)`. It reports — but does not touch — canvas drawing (a canvas cannot read a CSS variable: read `getComputedStyle(document.body).getPropertyValue('--m-mid')`) and colour maps in JS object literals (those usually carry category meaning). Cyan is never remapped.
+- **Category and status colours stay.** F1–F4 section colours, domain colours, W1–W4, RAG/status green-red-amber carry meaning, not identity.
+- **Enforced:** pre-commit Gate 7 (`npm run check:modules`) fails if `modules.css` is stale against the Drive palette **or** an AH page (root + `dashboards/`) has no known `data-module`. Deliberate exceptions live in `EXEMPT` in the generator, each with its reason (auth flow, the public `academic-services` landing, the handbook redirect, the handbook shell template).
+
 ## Page families & canonical hero
 
 Feature pages (user-facing content surfaces) AND admin/authoring tools belong to one of **eight semantic families**. The family chooses the hero gradient + accent by **function group**; the page does not pick its own colour scheme.

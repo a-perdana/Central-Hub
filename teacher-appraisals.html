@@ -91,6 +91,14 @@
       font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
       background: #fffbeb; color: #92400e; border: 1px solid #fde68a; vertical-align: middle;
     }
+    /* A stored composite saved under the 2025-26 weights. Neutral, not a
+       warning: the number is correct for the method it was made with. */
+    .method-flag {
+      display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+      font-size: .62rem; font-weight: 600; letter-spacing: .02em;
+      background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; vertical-align: middle;
+      white-space: nowrap;
+    }
     .partial-note {
       margin: 10px 0 4px; padding: 10px 12px; border-radius: 8px;
       background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #d97706;
@@ -942,6 +950,28 @@ function isEarlyYears(a) { return a?.phase === 'early_years'; }
 function weightsFor(a) {
   return isEarlyYears(a) ? { f1: 20, f2: 60, f3: 20, f4: 0 } : { f1: 20, f2: 50, f3: 20, f4: 10 };
 }
+// Old composites. The AY 2026-27 weights (above) apply from 2026-10-01. A
+// composite STORED on a record before then was calculated with the earlier
+// weights, so it is shown exactly as stored, never recalculated or
+// overwritten, with a small marker saying which method made it. A record
+// re-saved by the Academic Hub writer since 2026-10-01 carries
+// compositeWithheld (true or false), which means its composite is the new
+// method; an explicit compositeMethod field, if one is ever written, wins.
+const COMPOSITE_METHOD_CHANGE = new Date('2026-10-01T00:00:00+07:00');
+function isLegacyComposite(data) {
+  if (data.compositeMethod) return String(data.compositeMethod) === '2025-26';
+  if ('compositeWithheld' in data) return false;
+  const c = data.createdAt;
+  const t = c?.toDate ? c.toDate() : (c ? new Date(c) : null);
+  return !!t && !isNaN(t) && t < COMPOSITE_METHOD_CHANGE;
+}
+const LEGACY_COMPOSITE_TIP = 'Calculated under the 2025-26 method, when the record was saved before 1 October 2026. Shown as stored; it is not recalculated with the 2026-27 weights (F1 20 / F2 50 / F3 20 / F4 10; Early Years 20 / 60 / 20).';
+function methodFlag(a) {
+  return a.compositeLegacyMethod
+    ? `<span class="method-flag" title="${esc(LEGACY_COMPOSITE_TIP)}">2025-26 method</span>`
+    : '';
+}
+
 function sessionLabel(a) {
   if (a.sessionType === 'endofyear') return 'Annual record';
   if (a.sessionType === 'observation') return `Formal observation${a.semester ? ' · S' + a.semester : ''}`;
@@ -1018,7 +1048,7 @@ function renderAppraisals() {
       <td>${scoreBar(a.f1Score)}</td>
       <td>${scoreBar(a.f2Score)}</td>
       <td>${scoreBar(a.f3Score)}</td>
-      <td><strong>${typeof a.compositePercent === 'number' ? a.compositePercent.toFixed(1) + '%' : '—'}</strong>${a.isIncomplete ? '<span class="partial-flag" title="Not every applicable framework is complete yet — the composite is calculated only when all of them are (Teacher Appraisal: Handbook 26-27)">incomplete</span>' : ''}</td>
+      <td><strong>${typeof a.compositePercent === 'number' ? a.compositePercent.toFixed(1) + '%' : '—'}</strong>${methodFlag(a)}${a.isIncomplete ? '<span class="partial-flag" title="Not every applicable framework is complete yet — the composite is calculated only when all of them are (Teacher Appraisal: Handbook 26-27)">incomplete</span>' : ''}</td>
       <td><span class="${predClass(a.predicate)}">${a.predicate||'—'}</span></td>
       <td>${statusPill(a.status)}</td>
       <td>
@@ -1281,8 +1311,10 @@ window.openAppraisalModal = async function(id) {
         <div class="dss-val">${typeof a.compositePercent === 'number' ? a.compositePercent.toFixed(1) + '%' : '—'}
           <span style="font-size:.9rem;color:${pc};"> ${a.predicate||''}</span>
         </div>
+        ${a.compositeLegacyMethod ? `<div style="font-size:.7rem;color:#475569;margin-top:4px;">Calculated under the 2025-26 method</div>` : ''}
       </div>
     </div>
+    ${a.compositeLegacyMethod ? `<div class="partial-note">${esc(LEGACY_COMPOSITE_TIP)}</div>` : ''}
     ${typeof a.compositePercent !== 'number' ? `<div class="partial-note">
       ${a.sessionType === 'observation'
         ? 'This is one formal observation. The annual F2 is the mean of all valid formal observations (at least three per semester), and the composite is calculated on the annual record.'
@@ -1605,6 +1637,11 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
     // all valid observations, built on the annual record.
     // Records written by AH since 2026-10-01 carry compositeWithheld:true while
     // a framework is incomplete; nothing is computed for them either.
+    // Remember whether the composite came from the stored record, before the
+    // fill-in below can add one in memory. Only a STORED composite can carry
+    // the 2025-26 marker; one filled in here already uses the 2026-27 weights.
+    const compositeStored = typeof data.compositePercent === 'number';
+    data.compositeLegacyMethod = compositeStored && isLegacyComposite(data);
     const ey = data.phase === 'early_years';
     const isObservationDoc = data.sessionType === 'observation';
     const haveCore = data.f1Score != null && data.f2Score != null && data.f3Score != null;

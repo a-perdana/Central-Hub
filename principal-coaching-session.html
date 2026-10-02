@@ -61,6 +61,12 @@ body { background: var(--paper); }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 11px 22px; border-radius: 10px; font-size: 13px; opacity: 0; transition: all 0.25s; pointer-events: none; z-index: 100; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { background: #dc2626; }
+/* Read-only session view (2026-10-02) — page-local classes. */
+.ro-label { font-size: 10.5px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; margin: 10px 0 3px; }
+.ro-text { font-size: 13.5px; color: var(--ink); line-height: 1.6; white-space: pre-wrap; background: var(--paper); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.ro-text.ro-empty { color: var(--ink-3); font-style: italic; background: transparent; }
+.ro-list { margin: 0 0 6px; padding-left: 20px; font-size: 13.5px; line-height: 1.6; }
+.ro-due { font-family: 'DM Mono', monospace; font-size: 11px; padding: 1px 7px; border-radius: 5px; background: var(--accent-2); color: var(--accent-dk); margin-left: 4px; }
 .loading-state, .access-denied { text-align: center; padding: 80px 20px; color: var(--ink-3); }
 .access-denied h2 { font-family: 'Lora', serif; color: #991b1b; margin-bottom: 8px; }
 @media (max-width: 720px) {
@@ -94,6 +100,7 @@ body { background: var(--paper); }
       <div class="page-info-strip__body">
         <p style="margin:0"><strong>One 60-minute coaching conversation, captured in 5 stages.</strong> Each stage has its own time-box and prompt set. Save as you go — the form auto-keeps your draft until you submit. After submit the record becomes immutable.</p>
         <p style="margin:6px 0 0">Use <em>Stage 1 — Personal check-in</em> to listen, not to log. Anything written there stays between you and the principal. Stages 2–5 (commitments, focus area, evidence, next steps) are kept in the coaching record for you, the principal and a central admin (record audit only).</p>
+        <p style="margin:6px 0 0"><strong>Who can use this form.</strong> Only the principal's assigned coach or mentor with a Central Hub account: the Year-1 Principal Mentor recorded in Induction Admin, who must hold active Eduversal Mentor Certification (Induction Module: Principal 26-27 §2.2), or the Year-2+ coach assigned on the Coaching Hub. A Director role on its own gives no access. A mentor who is the Foundation Representative / General Manager of a different school works in Academic Hub and cannot log sessions here yet.</p>
         <p style="margin:6px 0 0"><strong>Rhythm.</strong> In Year 1 the Principal Mentor meets the principal weekly in Window 1, every two weeks in Windows 2–3 and monthly in Window 4 (Induction Module: Principal 26-27). From Year 2, coaching is monthly through both semesters (Coaching Cycle Framework).</p>
         <p style="margin:8px 0 0;font-size:12px;opacity:0.85"><strong>Coaching is never appraisal.</strong> Neither what is discussed nor how many sessions take place feeds F5 or any appraisal score, and the appraiser does not see coaching records (Principal Appraisal: Handbook 26-27 §2, §10). If a topic belongs in the annual appraisal or a school visit, record it there instead.</p>
       </div>
@@ -137,7 +144,7 @@ body { background: var(--paper); }
 
 <script type="module" src="auth-guard.js"></script>
 <script type="module">
-import { collection, doc, getDoc, setDoc, serverTimestamp }
+import { collection, query, where, getDocs, documentId, doc, getDoc, setDoc, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // URL params: ?principalUid=X[&date=YYYY-MM-DD]
@@ -146,9 +153,34 @@ const PRINCIPAL_UID = params.get('principalUid');
 const SESSION_DATE  = params.get('date') || new Date().toISOString().slice(0, 10);
 const DOC_ID = PRINCIPAL_UID ? `${PRINCIPAL_UID}_${SESSION_DATE}` : null;
 
+// ── Access model (2026-10-02) ───────────────────────────────────────────
+// A session is written and read by the principal's ASSIGNED coach/mentor,
+// read by the coachee principal (AH /principal-coaching-view) and by
+// central_admin for audit only — never by the appraiser (CAO), by
+// directors as such, or by any FR/GM ("Principal Appraisal: Handbook
+// 26-27" §10, §13; docs/cross-module/principal-coaching-framework-v1.json
+// → data_model.access_control).
+// The relationship is read from:
+//   Year 1  → induction_assignments/{principalUid}.mentorUid
+//             (programId 'eduversal_principal_v1') + active
+//             mentor_certifications/{uid}_mentor_base ("Induction Module:
+//             Principal 26-27" §2.2 — every Year-1 mentor is certified)
+//   Year 2+ → principal_coaching_assignments/{principalUid}.coachUid,
+//             status 'active' (assigned by a central admin on the hub)
+// Old sessions keep rendering, read-only, for their author (mentorUid),
+// the coachee and central_admin.
+const PRINCIPAL_PROGRAM = 'eduversal_principal_v1';
+const YEAR1_OPEN_STATUSES = ['pre_arrival', 'active', 'paused', 'extended'];
+const MODE_LABELS = {
+  year_1_induction: 'Year 1 — Principal Mentor (induction)',
+  year_2_plus: 'Year 2+ — ongoing coaching',
+};
+
 let framework = null;
 let principal = null;
+let principalSchoolName = null;
 let mentorProfile = null;
+let allowedModes = [];   // modes this user may log for this principal
 let formData = {
   agenda: {},          // { '1_check_in': { notes }, '2_review_commitments': { commitment, outcome, outcome_reason }, ... }
   newCommitments: [],  // [ { text, dueWeek, supportNeeded } ]
@@ -156,25 +188,20 @@ let formData = {
   status: 'draft',
 };
 
-document.addEventListener('authReady', async () => {
+document.addEventListener('authReady', async ({ detail }) => {
   document.body.style.display = '';
 
-  // Audience gate (unchanged): CH director sub-role or central_admin.
-  // Confidentiality source: Principal Appraisal: Handbook 26-27 §10 and
-  // docs/cross-module/principal-coaching-framework-v1.json →
-  // data_model.access_control (the principal's own FR/GM, the appraiser
-  // and the yayasan have no access to coaching records).
-  const profile = window.userProfile;
+  const profile = detail?.profile || window.userProfile;
   mentorProfile = profile;
-  const chSubs = profile?.ch_sub_roles || [];
+  const uid = window.currentUser?.uid || detail?.user?.uid;
   const isAdmin = profile?.role_centralhub === 'central_admin';
-  const eligible = isAdmin || chSubs.includes('director');
-  if (!eligible) {
-    showAccessDenied('This form is open to Central Hub Directors and administrators only. A principal\'s own Foundation Representative / General Manager never has access to coaching records — coaching is confidential (Principal Appraisal: Handbook 26-27 §10).');
+
+  if (!PRINCIPAL_UID) {
+    showMessage('Cannot open form', 'Missing principalUid in the page address. Open a session from the Coaching Hub.');
     return;
   }
-  if (!PRINCIPAL_UID) {
-    showAccessDenied('Missing principalUid in URL.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(SESSION_DATE)) {
+    showMessage('Cannot open form', 'The session date must look like 2026-10-02. Open a session from the Coaching Hub.');
     return;
   }
 
@@ -183,25 +210,91 @@ document.addEventListener('authReady', async () => {
     if (!fwRes.ok) throw new Error('Could not load framework (HTTP ' + fwRes.status + ')');
     framework = await fwRes.json();
 
-    const pSnap = await getDoc(doc(window.db, 'users', PRINCIPAL_UID));
-    if (pSnap.exists()) principal = pSnap.data();
+    // 1. Relationship — who may log for this principal.
+    const [y1Snap, coachSnap, certSnap] = await Promise.all([
+      getDoc(doc(window.db, 'induction_assignments', PRINCIPAL_UID)).catch(() => null),
+      getDoc(doc(window.db, 'principal_coaching_assignments', PRINCIPAL_UID)).catch(() => null),
+      getDoc(doc(window.db, 'mentor_certifications', uid + '_mentor_base')).catch(() => null),
+    ]);
+    const y1 = y1Snap && y1Snap.exists() ? y1Snap.data() : null;
+    const isYear1Mentor = !!(y1 && y1.programId === PRINCIPAL_PROGRAM && y1.mentorUid === uid
+      && (!y1.status || YEAR1_OPEN_STATUSES.includes(y1.status)));
+    const certActive = !!(certSnap && certSnap.exists() && certSnap.data().active === true);
+    const c = coachSnap && coachSnap.exists() ? coachSnap.data() : null;
+    const isCoach = !!(c && c.coachUid === uid && c.status === 'active');
+    allowedModes = [];
+    if (isYear1Mentor && certActive) allowedModes.push('year_1_induction');
+    if (isCoach) allowedModes.push('year_2_plus');
 
-    const sSnap = await getDoc(doc(window.db, 'principal_coaching_sessions', DOC_ID));
-    if (sSnap.exists()) {
-      const d = sSnap.data();
-      formData = { ...formData, ...d };
-      if (d.status === 'logged') {
-        showAccessDenied('This session is logged and immutable. Open the next session date to record the next conversation.');
-        return;
-      }
+    // 2. Principal name + school (users is list-readable for CH users; a
+    //    direct get is self/admin only).
+    try {
+      const pSnap = await getDocs(query(collection(window.db, 'users'), where(documentId(), '==', PRINCIPAL_UID)));
+      if (!pSnap.empty) principal = pSnap.docs[0].data();
+    } catch (_) { /* name falls back to uid */ }
+    if (principal?.schoolId) {
+      try {
+        const sSnap = await getDoc(doc(window.db, 'partner_schools', principal.schoolId));
+        if (sSnap.exists()) principalSchoolName = sSnap.data().name || null;
+      } catch (_) { /* ignore */ }
     }
 
+    // 3. The session doc itself.
+    let existing = null;
+    try {
+      const sSnap = await getDoc(doc(window.db, 'principal_coaching_sessions', DOC_ID));
+      if (sSnap.exists()) existing = sSnap.data();
+    } catch (err) {
+      if (err?.code !== 'permission-denied') throw err;
+      if (allowedModes.length) {
+        showMessage('This date cannot be opened', 'The session for this principal on ' + SESSION_DATE + ' cannot be opened. Usually this means another coach already recorded a session on this date — please choose a different date. If it happens on every date, the coaching access rule may not be deployed yet; please tell a central admin.');
+      } else {
+        showNotAssigned({ isYear1Mentor, certActive });
+      }
+      return;
+    }
+
+    if (existing) {
+      formData = { ...formData, ...existing };
+      const isAuthor = existing.mentorUid === uid;
+      if (existing.status !== 'logged' && isAuthor && allowedModes.length) {
+        if (!allowedModes.includes(formData.mode)) formData.mode = allowedModes[0];
+        render();
+        return;
+      }
+      let reason;
+      if (existing.status === 'logged') reason = 'This session is logged and can no longer be changed. Open a new session date for the next conversation.';
+      else if (isAuthor) reason = 'This draft was started by you, but you are no longer an assigned coach or mentor for this principal, so it is read-only.';
+      else reason = 'Audit view for central admins. You can read this record but not change it.';
+      if (isAdmin && !isAuthor) reason = 'Audit view for central admins. You can read this record but not change it. The personal check-in stays between the coach and the principal, so it is not shown here.';
+      renderReadOnly({ showCheckIn: isAuthor, reason });
+      return;
+    }
+
+    if (!allowedModes.length) {
+      showNotAssigned({ isYear1Mentor, certActive, isAdmin });
+      return;
+    }
+    formData.mode = allowedModes[0];
     render();
   } catch (err) {
     console.error('boot', err);
-    document.getElementById('content').innerHTML = `<div class="access-denied"><h2>Could not load</h2><p>${escapeHtml(err.message || 'unknown error')}</p></div>`;
+    showMessage('Could not load', err.message || 'unknown error');
   }
 });
+
+function showNotAssigned({ isYear1Mentor, certActive, isAdmin }) {
+  if (isYear1Mentor && !certActive) {
+    showMessage('Mentor Certification needed',
+      'You are this principal\'s Year-1 Principal Mentor, but your Eduversal Mentor Certification is not active. Every Year-1 mentor must hold active certification (Induction Module: Principal 26-27 §2.2). Please contact the Induction Coordinator to renew it.');
+    return;
+  }
+  showMessage('You are not this principal\'s coach',
+    'Coaching sessions are logged only by the principal\'s assigned coach or mentor: the Year-1 Principal Mentor recorded in Induction Admin (with active Mentor Certification), or the Year-2+ coach assigned on the Coaching Hub. '
+    + (isAdmin
+      ? 'As a central admin you can read logged sessions for audit, but there is no session on this date. To log sessions yourself, you must be assigned as the coach.'
+      : 'A Director role on its own gives no access, and the principal\'s appraiser does not see coaching records (Principal Appraisal: Handbook 26-27 §10).'));
+}
 
 function render() {
   const root = document.getElementById('content');
@@ -215,13 +308,13 @@ function render() {
 
     <div class="context-card">
       <div class="ctx-row"><span class="ctx-label">Coachee (Principal)</span><span class="ctx-value">${escapeHtml(principal?.displayName || PRINCIPAL_UID)}</span></div>
-      <div class="ctx-row"><span class="ctx-label">School</span><span class="ctx-value">${escapeHtml(principal?.school || '—')}</span></div>
+      <div class="ctx-row"><span class="ctx-label">School</span><span class="ctx-value">${escapeHtml(principalSchoolName || principal?.school || '—')}</span></div>
       <div class="ctx-row"><span class="ctx-label">Session date</span><span class="ctx-value">${escapeHtml(SESSION_DATE)}</span></div>
       <div class="ctx-row"><span class="ctx-label">Mode</span>
-        <select id="mode">
-          <option value="year_1_induction" ${formData.mode === 'year_1_induction' ? 'selected' : ''}>Year 1 — Principal Mentor (induction)</option>
-          <option value="year_2_plus" ${formData.mode !== 'year_1_induction' ? 'selected' : ''}>Year 2+ — ongoing coaching</option>
-        </select>
+        ${allowedModes.length > 1 ? `
+          <select id="mode">
+            ${allowedModes.map(m => `<option value="${m}" ${formData.mode === m ? 'selected' : ''}>${escapeHtml(MODE_LABELS[m])}</option>`).join('')}
+          </select>` : `<span class="ctx-value">${escapeHtml(MODE_LABELS[formData.mode] || formData.mode)}</span>`}
       </div>
     </div>
 
@@ -236,11 +329,81 @@ function render() {
     </div>
   `;
 
-  document.getElementById('mode').addEventListener('change', e => { formData.mode = e.target.value; });
+  const modeSel = document.getElementById('mode');
+  if (modeSel) modeSel.addEventListener('change', e => { formData.mode = e.target.value; });
   stages.forEach(s => wireStage(s));
   document.getElementById('btnSaveDraft').addEventListener('click', () => save('draft'));
-  document.getElementById('btnLog').addEventListener('click', () => save('logged'));
+  document.getElementById('btnLog').addEventListener('click', onLogClick);
   updateProgress();
+}
+
+// Read-only view for logged sessions and for audit. Old records written
+// under the director-only model render the same way for their author,
+// the coachee (in AH) and central_admin.
+function renderReadOnly({ showCheckIn, reason }) {
+  const root = document.getElementById('content');
+  const stages = (framework.session_structure?.agenda_stages) || [];
+  const d = formData;
+  const text = (v) => (v || '').trim()
+    ? `<div class="ro-text">${escapeHtml(v)}</div>`
+    : '<div class="ro-text ro-empty">Nothing recorded.</div>';
+  const outcomeLabel = { landed: 'Landed', partial: 'Partial', did_not_land: 'Did not land' };
+
+  root.innerHTML = `
+    <div class="charter-banner">
+      <strong>Read-only</strong>
+      ${escapeHtml(reason)}
+    </div>
+
+    <div class="context-card">
+      <div class="ctx-row"><span class="ctx-label">Coachee (Principal)</span><span class="ctx-value">${escapeHtml(principal?.displayName || PRINCIPAL_UID)}</span></div>
+      <div class="ctx-row"><span class="ctx-label">School</span><span class="ctx-value">${escapeHtml(principalSchoolName || principal?.school || '—')}</span></div>
+      <div class="ctx-row"><span class="ctx-label">Session date</span><span class="ctx-value">${escapeHtml(d.sessionDate || SESSION_DATE)}</span></div>
+      <div class="ctx-row"><span class="ctx-label">Mode</span><span class="ctx-value">${escapeHtml(MODE_LABELS[d.mode] || d.mode || '—')}</span></div>
+      <div class="ctx-row"><span class="ctx-label">Coach / mentor</span><span class="ctx-value">${escapeHtml(d.mentorName || d.mentorUid || '—')}</span></div>
+      <div class="ctx-row"><span class="ctx-label">Status</span><span class="ctx-value">${escapeHtml(d.status === 'logged' ? 'Logged' : 'Draft')}</span></div>
+    </div>
+
+    ${stages.map(s => {
+      const cur = (d.agenda || {})[s.stage_id] || {};
+      let body;
+      if (s.stage_id === '1_check_in' && !showCheckIn) {
+        body = '<div class="ro-text ro-empty">Private to the coach and the principal — not shown in this view.</div>';
+      } else if (s.stage_id === '2_review_commitments') {
+        body = `
+          <div class="ro-label">Last session's commitment</div>${text(cur.commitment)}
+          <div class="ro-label">Outcome</div>${text(outcomeLabel[cur.outcome] || '')}
+          <div class="ro-label">Why it landed or not</div>${text(cur.outcome_reason)}`;
+      } else {
+        body = text(cur.notes);
+      }
+      return `
+        <div class="stage-card">
+          <div class="stage-head">
+            <span class="stage-id">${escapeHtml(s.stage_id)}</span>
+            <h2 class="stage-title">${escapeHtml(s.label)}</h2>
+            <span class="stage-time">${s.duration_minutes} min</span>
+          </div>
+          ${body}
+        </div>`;
+    }).join('')}
+
+    <div class="stage-card">
+      <div class="stage-head">
+        <span class="stage-id">Outputs</span>
+        <h2 class="stage-title">New commitments &amp; mentor reflection</h2>
+      </div>
+      ${(d.newCommitments || []).length
+        ? `<ul class="ro-list">${d.newCommitments.map(cm => `<li>${escapeHtml(cm.text || '')}${cm.dueWeek ? ` <span class="ro-due">${escapeHtml(cm.dueWeek)}</span>` : ''}</li>`).join('')}</ul>`
+        : '<div class="ro-text ro-empty">No new commitments recorded.</div>'}
+      <div class="ro-label">Mentor reflection</div>${text(d.mentorReflection)}
+    </div>
+
+    <div class="action-bar">
+      <div class="progress-info">Read-only record</div>
+      <a class="btn btn-secondary" href="/principal-coaching-hub" style="text-decoration:none">Back to Coaching Hub</a>
+    </div>
+  `;
 }
 
 function renderStage(s) {
@@ -262,7 +425,7 @@ function renderStage(s) {
           <ul>${s.facilitator_questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ul>
         </div>
       ` : ''}
-      ${isPrivate ? '<div class="private-hint">⚠ Private — visible only to you and the coachee.</div>' : ''}
+      ${isPrivate ? '<div class="private-hint">⚠ Private — between you and the coachee. Not shown in the central admin audit view.</div>' : ''}
       ${isReview ? renderReviewBlock(cur) : `<textarea aria-label="Notes…" class="notes-area ${isPrivate ? 'private' : ''}" data-stage="${escapeAttr(s.stage_id)}" placeholder="Notes…">${escapeHtml(cur.notes || '')}</textarea>`}
     </div>
   `;
@@ -334,7 +497,10 @@ function wireStage(s) {
   }
   // Mentor reflection
   const mr = document.querySelector('[data-stage="mentor_reflection"]');
-  if (mr) mr.addEventListener('input', e => { formData.mentorReflection = e.target.value; });
+  if (mr && !mr.dataset.wired) {
+    mr.dataset.wired = '1';
+    mr.addEventListener('input', e => { formData.mentorReflection = e.target.value; });
+  }
   // Commitments
   const addBtn = document.getElementById('btnAddCommitment');
   if (addBtn && !addBtn.dataset.wired) {
@@ -375,18 +541,32 @@ function updateProgress() {
   if (info) info.innerHTML = `<strong>${stagesFilled}/${stages.length}</strong> stages noted · <strong>${com}</strong> new commitment${com === 1 ? '' : 's'}`;
 }
 
-async function save(targetStatus) {
-  if (targetStatus === 'logged') {
-    if (!confirm('Log this session? Logged sessions are immutable. Use the next session date for the next conversation.')) return;
+// "Log session" needs a second click within 3 s (CH pages never use
+// confirm()). Logged sessions are immutable.
+function onLogClick(e) {
+  const btn = e.currentTarget;
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1';
+    btn.textContent = 'Click again to log (cannot be changed later)';
+    setTimeout(() => {
+      if (btn.isConnected && btn.dataset.confirming) { delete btn.dataset.confirming; btn.textContent = 'Log session'; }
+    }, 3000);
+    return;
   }
+  delete btn.dataset.confirming;
+  btn.textContent = 'Log session';
+  save('logged');
+}
 
+async function save(targetStatus) {
+  const mode = allowedModes.includes(formData.mode) ? formData.mode : allowedModes[0];
   const payload = {
     principalUid: PRINCIPAL_UID,
     schoolId: principal?.schoolId || null,
     mentorUid: window.currentUser.uid,
     mentorName: mentorProfile?.displayName || null,
     sessionDate: SESSION_DATE,
-    mode: formData.mode || 'year_1_induction',
+    mode,
     agenda: { ...formData.agenda },
     newCommitments: formData.newCommitments.filter(c => (c.text || '').trim()),
     mentorReflection: formData.mentorReflection || '',
@@ -403,23 +583,30 @@ async function save(targetStatus) {
   try {
     await setDoc(doc(window.db, 'principal_coaching_sessions', DOC_ID), payload, { merge: true });
     toast(targetStatus === 'logged' ? 'Session logged ✓' : 'Draft saved ✓');
+    if (targetStatus === 'logged') {
+      formData = { ...formData, ...payload, status: 'logged' };
+      renderReadOnly({ showCheckIn: true, reason: 'This session is logged and can no longer be changed. Open a new session date for the next conversation.' });
+      return;
+    }
   } catch (err) {
     console.error('save', err);
-    toast('Could not save: ' + (err.message || err.code), true);
+    toast(err?.code === 'permission-denied'
+      ? 'Could not save: only the principal\'s assigned coach or mentor can save sessions. If you are assigned, ask a central admin to check the coaching assignment.'
+      : 'Could not save: ' + (err.message || err.code), true);
   } finally {
     if (btnLog)   btnLog.disabled = false;
     if (btnDraft) btnDraft.disabled = false;
   }
 }
 
-function showAccessDenied(msg) {
+function showMessage(title, msg) {
   document.body.style.display = '';
-  document.getElementById('content').innerHTML = `<div class="access-denied"><h2>Cannot open form</h2><p>${escapeHtml(msg)}</p></div>`;
+  document.getElementById('content').innerHTML = `<div class="access-denied"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(msg)}</p><p style="margin-top:14px"><a href="/principal-coaching-hub" style="color:var(--accent-dk);font-weight:600">Back to Coaching Hub →</a></p></div>`;
 }
 function toast(msg, isErr) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.toggle('error', !!isErr); t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  setTimeout(() => t.classList.remove('show'), isErr ? 5000 : 2500);
 }
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function escapeAttr(s) { return escapeHtml(s); }

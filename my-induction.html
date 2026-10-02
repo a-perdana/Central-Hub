@@ -180,7 +180,7 @@
     <div class="page-intro-body">
       <div class="page-intro-title">First time on My Induction?</div>
       <div class="page-intro-text">
-        This is a <strong>365-day guide for new Subject Specialists</strong> in their first year. The year is split into <strong>5 phases<span class="gloss-pop"><button type="button" class="gloss-pop-btn" aria-label="What is a phase?">?</button><span class="gloss-pop-body" role="tooltip">A <strong>phase</strong> is a stage of year-1 induction. <strong>Orientation &amp; Cambridge Grounding</strong> (weeks 1-4) — build subject depth and understand the role. <strong>Shadow Visits</strong> (months 2-3) — go with your Mentor Specialist. <strong>Co-Delivery</strong> (months 4-6) — lead parts of visits together. <strong>Supervised Independence</strong> (months 7-9) — lead visits with your mentor in reach. <strong>Full Independence &amp; Certification</strong> (months 10-12).</span></span></strong> (Orientation → Shadow Visits → Co-Delivery → Supervised Independence → Full Independence), and you get a Mentor Specialist. You will also do a <strong>walkthrough cycle<span class="gloss-pop"><button type="button" class="gloss-pop-btn" aria-label="What is a walkthrough cycle?">?</button><span class="gloss-pop-body" role="tooltip">A <strong>walkthrough</strong> is a short school visit you do with your mentor. The first year has <strong>10 walkthroughs</strong>. The cycle moves from shadow → co-led → solo, so by the last one you are leading on your own.</span></span></strong> — 10 short school visits with your mentor. <strong>If you are not a new hire</strong>, you will see "You don't have an active induction" below — that is correct.
+        This is a <strong>365-day guide for new Subject Specialists</strong> in their first year. The year is split into <strong>5 phases<span class="gloss-pop"><button type="button" class="gloss-pop-btn" aria-label="What is a phase?">?</button><span class="gloss-pop-body" role="tooltip">A <strong>phase</strong> is a stage of year-1 induction. <strong>Orientation &amp; Cambridge Grounding</strong> (weeks 1-4) — build subject depth and understand the role. <strong>Shadow Visits</strong> (months 2-3) — go with your Mentor Specialist. <strong>Co-Delivery</strong> (months 4-6) — lead parts of visits together. <strong>Supervised Independence</strong> (months 7-9) — lead visits with your mentor in reach. <strong>Full Independence &amp; Certification</strong> (months 10-12).</span></span></strong> (Orientation → Shadow Visits → Co-Delivery → Supervised Independence → Full Independence &amp; Certification), and you get a Mentor Specialist. Your school visits follow the same order: <strong>at least four shadow visits<span class="gloss-pop"><button type="button" class="gloss-pop-btn" aria-label="What is a shadow visit?">?</button><span class="gloss-pop-body" role="tooltip">In Phase 2 you go with your Mentor Specialist as an <strong>observer only</strong> — you do not lead, give feedback or write the report. Then you co-lead at least four visits (Phase 3), visit on your own with your mentor reviewing before anything is submitted (Phase 4), and take your own schools in Phase 5.</span></span></strong>, then co-led visits, then solo visits. You log them on <a href="induction-walkthroughs">My Induction Walkthroughs</a>. The year ends with the Readiness Checkpoint: Certified or Extended. <strong>If you are not a new hire</strong>, you will see "You don't have an active induction" below — that is correct.
       </div>
       <a class="page-intro-link" href="handbook?id=eduversal_specialist_v1">📖 Read the full guide →</a>
     </div>
@@ -215,14 +215,15 @@
 </script>
 
 <script type="module">
-import { collection, doc, getDoc, getDocs, setDoc, query, where, orderBy, limit, serverTimestamp, Timestamp }
+import { collection, doc, getDoc, getDocs, setDoc, query, where, orderBy, limit, documentId, serverTimestamp, Timestamp }
   from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 const db = window.db;
 
 let assignment = null, program = null, mentorProfile = null;
 let progressMap = {}, dayOfInduction = 0, currentWindow = null, allTasks = [];
-let walkthroughs = [];
+let myVisits = [];          // school_visits (specialist_walkthrough) logged by me
+let legacyWalkthroughs = []; // induction_observations — 2025-26 window model
 
 document.addEventListener('authReady', async ({ detail: { user } }) => {
   try {
@@ -236,20 +237,19 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       if (progSnap.exists()) program = progSnap.data();
     }
     if (assignment.mentorUid) {
-      const m = await getDoc(doc(db, 'users', assignment.mentorUid));
-      mentorProfile = m.exists() ? m.data() : null;
+      // users/{uid} `get` is self-or-admin only; the list rule admits CH
+      // users, so look the mentor up with a one-document query.
+      try {
+        const m = await getDocs(query(collection(db, 'users'), where(documentId(), '==', assignment.mentorUid), limit(1)));
+        mentorProfile = m.empty ? null : m.docs[0].data();
+      } catch (_) { mentorProfile = null; }
     }
     const hire = assignment.hireDate?.toDate ? assignment.hireDate.toDate() : new Date(assignment.hireDate);
     dayOfInduction = Math.floor((Date.now() - hire.getTime()) / (1000 * 60 * 60 * 24));
     flattenTasks();
     if (program?.stages) currentWindow = program.stages.find(s => dayOfInduction >= s.dayStart && dayOfInduction <= s.dayEnd) || program.stages[0];
 
-    const [progSnap, walkSnap] = await Promise.all([
-      getDocs(query(collection(db, 'induction_progress'), where('uid', '==', user.uid), limit(500))),
-      getDocs(query(collection(db, 'induction_observations'), where('menteeUid', '==', user.uid), where('observationType', '==', 'specialist_walkthrough'), orderBy('observationNumber', 'asc'), limit(20))),
-    ]);
-    progSnap.docs.forEach(d => { progressMap[d.data().taskId] = { id: d.id, ...d.data() }; });
-    walkthroughs = walkSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    await Promise.all([loadProgress(user.uid), loadVisits(user.uid)]);
 
     render();
     document.getElementById('loadingState').style.display = 'none';
@@ -260,6 +260,50 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     try { showStaticHero('Could not load your induction. See message below.'); } catch (_) {}
   }
 });
+
+// induction_progress: the `list` rule is admin-only, so a mentee's query
+// can fail. Fall back to reading each task by its deterministic id
+// ({uid}_{taskId}), which the `get` rule allows for the owner.
+async function loadProgress(uid) {
+  try {
+    const snap = await getDocs(query(collection(db, 'induction_progress'), where('uid', '==', uid), limit(500)));
+    snap.docs.forEach(d => { progressMap[d.data().taskId] = { id: d.id, ...d.data() }; });
+    return;
+  } catch (_) { /* fall through to per-task reads */ }
+  await Promise.all(allTasks.map(async t => {
+    try {
+      const d = await getDoc(doc(db, 'induction_progress', `${uid}_${t.taskId}`));
+      if (d.exists()) progressMap[t.taskId] = { id: d.id, ...d.data() };
+    } catch (_) {}
+  }));
+}
+
+// Visits logged on /induction-walkthroughs (school_visits) + any records
+// from the 2025-26 window model (induction_observations walkthroughs 1-10).
+async function loadVisits(uid) {
+  try {
+    const snap = await getDocs(query(collection(db, 'school_visits'), where('specialistUid', '==', uid), where('visitType', '==', 'specialist_walkthrough'), orderBy('visitDate', 'desc'), limit(200)));
+    myVisits = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) { console.warn('visits', err); myVisits = []; }
+  try {
+    const snap = await getDocs(query(collection(db, 'induction_observations'), where('menteeUid', '==', uid), where('observationType', '==', 'specialist_walkthrough'), orderBy('observationNumber', 'asc'), limit(20)));
+    legacyWalkthroughs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (_) { legacyWalkthroughs = []; }
+}
+
+// Phase of a logged visit. New records carry `phase`; 2025-26 records
+// carry windowPhase + walkthroughType and are mapped to the closest phase.
+function visitPhase(v) {
+  if (Number.isInteger(v.phase)) return v.phase;
+  switch (v.walkthroughType) {
+    case 'observe_mentor': return 2;
+    case 'co_led': case 'solo_mentor_present': return 3;
+    case 'solo_with_review': case 'solo': return 4;
+  }
+  return v.windowPhase === 'W3_solo' ? 4 : null;
+}
+// 2025-26 walkthrough numbers: 1-3 shadow, 4-7 co-led / mentor present, 8-10 solo + review.
+function legacyObservationPhase(n) { return n <= 3 ? 2 : n <= 7 ? 3 : 4; }
 
 function flattenTasks() {
   allTasks = [];
@@ -296,8 +340,16 @@ function showNoInduction() {
 function showCompletedOrWithdrawn() {
   document.getElementById('loadingState').style.display = 'none';
   document.getElementById('mainContent').style.display = '';
-  document.getElementById('mainContent').innerHTML = `<div class="no-induction"><h2>Your induction is ${escapeHtml(assignment.status)}</h2><p>Year-2 specialist development continues through the network competency framework and your subject's strategic-initiative cycle.</p></div>`;
-  showStaticHero(`Induction status: ${assignment.status}. Year-2 development continues through the competency framework.`);
+  // For the Specialist track 'completed' = Certified at the Readiness
+  // Checkpoint (Induction Module: Specialists 26-27 §3.5).
+  const certified = assignment.status === 'completed' || assignment.readinessOutcome === 'certified';
+  const label = certified ? 'Certified' : assignment.status;
+  document.getElementById('mainContent').innerHTML = certified
+    ? `<div class="no-induction"><h2>You are Certified</h2><p>You passed the Readiness Checkpoint and work as an independent Subject Specialist with your own assigned schools. Your Individual Professional Development Log is now the main tool for your growth, reviewed termly with the Academic Director. Your Mentor Specialist stays an accessible peer contact (SS-NN4). Nothing from your induction year feeds your first annual professional review (SS-NN1).</p></div>`
+    : `<div class="no-induction"><h2>Your induction is ${escapeHtml(label)}</h2><p>If this is not what you expected, speak to the Academic Director.</p></div>`;
+  showStaticHero(certified
+    ? 'Induction status: Certified. Your Individual Professional Development Log now carries your growth.'
+    : `Induction status: ${label}.`);
 }
 
 function render() {
@@ -323,7 +375,7 @@ function render() {
 
   document.getElementById('mainContent').innerHTML = `
     <div class="charter-banner">
-      <strong>Know the network before coaching it.</strong> The most damaging combination in subject specialist work is wrong advice given with confidence. You will not walk into a school alone in your first weeks: the first month is Orientation &amp; Cambridge Grounding — build your subject depth and understanding of the role first.
+      <strong>Watch first, advise later.</strong> A Subject Specialist has no positional authority in the schools they visit, and their feedback has school-wide consequences. So you will not walk into a school alone until you and your Mentor Specialist both agree you are ready. Each phase opens only after a joint sign-off by your mentor and the Academic Director — a competency gate, not a calendar gate (SS-NN2).
     </div>
 
     <div class="layout">
@@ -344,7 +396,7 @@ function render() {
         </div>
 
         <div class="section">
-          <h2>Walkthrough cycle <span class="pill">Shadow → co-led → solo · 10 walkthroughs</span></h2>
+          <h2>Your visits by phase <span class="pill">Shadow → co-deliver → supervised → independent</span></h2>
           <div id="walkthroughGrid"></div>
         </div>
       </div>
@@ -359,7 +411,12 @@ function render() {
               <div class="mentor-role">${escapeHtml(mentorProfile?.email || 'Mentor Specialist')}</div>
             </div>
           </div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:8px;">Hard cap of 2 specialist mentees per mentor — specialist mentoring is more demanding than teacher mentoring.</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:8px;">Your Mentor Specialist is with you all year: weekly in Phase 1, at every visit in Phases 2–3, a weekly check-in in Phase 4, then monthly peer-to-peer. Their review is developmental, not evaluative (SS-NN1).</div>
+        </div>
+
+        <div class="section sidebar-section">
+          <h3>Readiness Checkpoint</h3>
+          <div id="readinessCard" style="font-size:12px;color:var(--ink-2);line-height:1.5;"></div>
         </div>
 
         <div class="section sidebar-section">
@@ -380,7 +437,7 @@ function render() {
             <div class="pulse-emoji" data-score="4">🙂<span>Good</span></div>
             <div class="pulse-emoji" data-score="5">😊<span>Great</span></div>
           </div>
-          <div style="font-size:11px;color:var(--ink-3);" id="pulseMeta">One question per week. Anonymised for HQ.</div>
+          <div style="font-size:11px;color:var(--ink-3);" id="pulseMeta">One question per week. Anonymised for Eduversal.</div>
         </div>
       </aside>
     </div>
@@ -390,6 +447,7 @@ function render() {
   renderToday();
   renderThisWeek();
   renderWalkthroughs();
+  renderReadiness();
   setupJournal();
   setupPulse();
 }
@@ -451,27 +509,61 @@ function renderThisWeek() {
 function renderWalkthroughs() {
   const el = document.getElementById('walkthroughGrid');
   if (!el) return;
-  // 10 walkthroughs: 1-3 shadow, 4-6 co-led, 7 mentor-present, 8-10 solo
-  const phases = [
-    { range: [1,2,3], type: 'shadow', label: 'Shadow' },
-    { range: [4,5,6], type: 'coled', label: 'Co-led' },
-    { range: [7], type: 'solo', label: 'Mentor present' },
-    { range: [8,9,10], type: 'solo', label: 'Solo' },
+  const counts = { 2: 0, 3: 0, 4: 0, 5: 0 };
+  let legacyCount = 0;
+  myVisits.forEach(v => {
+    const p = visitPhase(v);
+    if (counts[p] != null) counts[p]++;
+    if (!Number.isInteger(v.phase)) legacyCount++;
+  });
+  // 2025-26 window-model walkthroughs (induction_observations), completed ones only.
+  legacyWalkthroughs.filter(w => w.completedAt).forEach(w => {
+    const p = legacyObservationPhase(w.observationNumber || 0);
+    counts[p]++; legacyCount++;
+  });
+  const cards = [
+    { p: 2, label: 'Shadow visits', target: 4, note: 'observer only' },
+    { p: 3, label: 'Co-led visits', target: 4, note: 'mentor in the room' },
+    { p: 4, label: 'Solo visits & PD', target: null, note: 'mentor reviews first' },
+    { p: 5, label: 'Own-school visits', target: null, note: '2 Primary + 2 Secondary' },
   ];
-  let html = '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">';
-  phases.forEach(p => {
-    html += `<div><div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:6px;">${escapeHtml(p.label)}</div><div class="walkthrough-progress">`;
-    p.range.forEach(num => {
-      const w = walkthroughs.find(w => w.observationNumber === num);
-      const isComplete = !!w?.completedAt;
-      html += `<div class="walkthrough-tile ${p.type} ${isComplete ? 'complete' : ''}" title="Walkthrough #${num}${isComplete ? ' (done)' : ''}">${isComplete ? '✓' : num}</div>`;
-    });
-    html += `</div></div>`;
+  let html = '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">';
+  cards.forEach(c => {
+    const n = counts[c.p];
+    const tiles = c.target
+      ? Array.from({ length: Math.max(c.target, n) }, (_, i) => `<div class="walkthrough-tile ${c.p === 2 ? 'shadow' : 'coled'} ${i < n ? 'complete' : ''}" title="Phase ${c.p} visit ${i + 1}${i < n ? ' (logged)' : ''}">${i < n ? '✓' : i + 1}</div>`).join('')
+      : `<div class="walkthrough-tile solo ${n ? 'complete' : ''}" style="width:auto;padding:0 8px;">${n}</div>`;
+    html += `<div><div style="font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:6px;">Phase ${c.p} · ${escapeHtml(c.label)}</div><div class="walkthrough-progress">${tiles}</div><div style="font-size:10px;color:var(--ink-3);margin-top:4px;">${escapeHtml(c.note)}${c.target ? ` · ${n} / ${c.target} minimum` : ''}</div></div>`;
   });
   html += '</div>';
-  const done = walkthroughs.filter(w => w.completedAt).length;
-  html += `<div style="margin-top:14px;font-size:12px;color:var(--ink-3);">${done} / 10 completed. You move from shadowing your Mentor Specialist (observer only) to co-leading and then leading visits; from co-delivery onward your Glow / Grow / Go feedback should be something the teacher experiences as helpful.</div>`;
+  html += `<div style="margin-top:14px;font-size:12px;color:var(--ink-3);">Log each visit on <a href="induction-walkthroughs">My Induction Walkthroughs</a>. In Phase 2 you watch your Mentor Specialist and debrief after every visit; in Phase 3 you co-lead with your mentor in the room; in Phase 4 you visit alone and send your report to your mentor within 3 working days.`
+    + (legacyCount ? ` ${legacyCount} record${legacyCount === 1 ? ' was' : 's were'} logged under the 2025-26 window model and ${legacyCount === 1 ? 'is' : 'are'} counted under the closest phase.` : '')
+    + `</div>`;
   el.innerHTML = html;
+}
+
+// Readiness Checkpoint — Phase 5, led by the Academic Director.
+// Outcome is Certified or Extended, never a score (SS-NN5).
+function renderReadiness() {
+  const el = document.getElementById('readinessCard');
+  if (!el) return;
+  const post = progressMap['s_p5_readiness_post_conference'];
+  const outcome = assignment.readinessOutcome || post?.outcome || null;
+  const gates = [
+    ['s_p2_phase_gate_signoff', 'Phase 2 → 3'],
+    ['s_p3_phase_gate_signoff', 'Phase 3 → 4'],
+    ['s_p4_phase_gate_signoff', 'Phase 4 → 5'],
+  ].map(([id, label]) => {
+    const g = progressMap[id] || {};
+    const done = !!g.completedAt || (!!g.mentorSignedOffAt && !!g.schoolLeaderSignedOffAt);
+    return `<div>${done ? '✓' : '○'} ${escapeHtml(label)} sign-off${done ? '' : (g.mentorSignedOffAt || g.schoolLeaderSignedOffAt ? ' (one of two signed)' : '')}</div>`;
+  }).join('');
+  const outcomeLine = outcome === 'certified'
+    ? '<strong style="color:#065f46;">Outcome: Certified</strong>'
+    : outcome === 'extended'
+      ? '<strong style="color:#9a3412;">Outcome: Extended</strong> — more supported time, not a penalty. By default up to one extra quarter.'
+      : 'Months 10–12, led by the Academic Director: a pre-conference on your whole year, one joint visit, then a post-conference with Glow / Grow / Go and the outcome — <strong>Certified or Extended</strong>.';
+  el.innerHTML = `${gates}<div style="margin-top:8px;">${outcomeLine}</div><div style="margin-top:6px;font-size:11px;color:var(--ink-3);">Not a score, not a grade, and not a preview of your first annual professional review (SS-NN5).</div>`;
 }
 
 async function toggleTask(taskId) {
@@ -494,7 +586,7 @@ async function toggleTask(taskId) {
   try {
     await setDoc(doc(db, 'induction_progress', docId), payload, { merge: true });
     progressMap[taskId] = { id: docId, ...payload };
-    renderToday(); renderThisWeek(); renderWindowGrid();
+    renderToday(); renderThisWeek(); renderWindowGrid(); renderReadiness();
   } catch (err) { console.error('toggleTask', err); }
 }
 
@@ -587,9 +679,9 @@ function isoWeekStart(d) {
 <footer class="page-footer" role="contentinfo">
   <div class="page-footer__inner">
     <div class="page-footer__cta">
-      <span class="page-footer__cta-eyebrow">Year 1 · Network → Apprenticeship → Solo → Strategic</span>
+      <span class="page-footer__cta-eyebrow">Year 1 · Orientation → Shadow → Co-Delivery → Supervised → Independent</span>
       <h2 class="page-footer__cta-title">Two minutes today keeps the journey honest.</h2>
-      <p class="page-footer__cta-desc">A quick pulse + a sentence in your journal lets your mentor see how the week landed. Year-1 induction is private to you — HQ never reads named entries (Charter NN2).</p>
+      <p class="page-footer__cta-desc">A quick pulse + a sentence in your journal lets your mentor see how the week landed. Your journal is private — Eduversal never reads named entries (Charter NN2).</p>
       <a href="#sidebarPulse" class="page-footer__cta-btn" onclick="document.querySelector('.sidebar-section')?.scrollIntoView({behavior:'smooth',block:'start'});return false;">Log today's pulse <span aria-hidden="true">↑</span></a>
     </div>
     <nav class="page-footer__nav" aria-label="My Induction footer navigation">
@@ -598,7 +690,7 @@ function isoWeekStart(d) {
         <a href="/learning-path" class="page-footer__nav-link">Learning Path</a>
         <a href="/competency-framework" class="page-footer__nav-link">Framework Map</a>
         <a href="/specialist-portfolio" class="page-footer__nav-link">My Portfolio</a>
-        <a href="/specialist-certificates" class="page-footer__nav-link">My Certificates</a>
+        <a href="/specialist-certificates" class="page-footer__nav-link">My Progress Record</a>
       </div>
       <div class="page-footer__nav-group">
         <span class="page-footer__nav-heading">References</span>
@@ -611,7 +703,7 @@ function isoWeekStart(d) {
   </div>
   <div class="page-footer__meta">
     <span class="page-footer__meta-left">© Eduversal · Central Hub</span>
-    <span class="page-footer__meta-right">Charter NN1: induction never feeds appraisal · NN2: HQ never reads named journal entries</span>
+    <span class="page-footer__meta-right">Charter NN1 · SS-NN1: induction never feeds your first annual review · NN2: Eduversal never reads named journal entries</span>
   </div>
 </footer>
 </body>

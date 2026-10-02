@@ -267,6 +267,31 @@
     }
     .narrative-block p:last-child { margin-bottom: 0; }
 
+    /* PNF5 confidential note — central_admin only, read-only (same block as
+       /principal-appraisals uses for PNF6). */
+    .confidential-block {
+      margin-top: 14px;
+      padding: 14px 18px;
+      background: linear-gradient(180deg, #fee2e2 0%, #fff 100%);
+      border: 1px solid #fca5a5;
+      border-radius: 10px;
+    }
+    .confidential-block h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #991b1b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .confidential-block p {
+      margin: 0;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #7f1d1d;
+      white-space: pre-wrap;
+    }
+
     .charter-banner {
       background: linear-gradient(180deg, var(--accent-2) 0%, #fff 100%);
       border: 1px solid var(--accent);
@@ -448,7 +473,7 @@
   <script type="module" src="auth-guard.js"></script>
   <script type="module">
     import {
-      collection, getDocs, query, orderBy, limit, where, documentId
+      collection, getDocs, getDoc, doc, query, orderBy, limit, where, documentId
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const FOCUS_IDS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
@@ -465,7 +490,10 @@
     };
     // Narrative fields of the Principal Leadership Observation Guide
     // (resources/principal-observation-rubric.json). PNF5, the confidential
-    // note to Eduversal, is not shown on this page.
+    // note to Eduversal, is never listed here: it lives in
+    // principal_observations/{id}/confidential/note (older records:
+    // narratives.PNF5) and is shown read-only to central_admin only, in its
+    // own block — see loadConfidentialNote() below.
     const NARRATIVE_LABELS = {
       PNF1: 'Headline Strength',
       PNF2: 'Priority Development Area',
@@ -487,10 +515,30 @@
       all: [],
       filtered: [],
       schoolNames: {},   // schoolId → name
-      principalNames: {} // uid → displayName
+      principalNames: {}, // uid → displayName
+      isAdmin: false,
     };
 
-    document.addEventListener('authReady', async () => {
+    // Friendly state when the rules refuse the list query. Only the
+    // principal's appraiser (CH director / AH academic_admin) and
+    // central_admin may list principal_observations (firestore.rules →
+    // principal_observations; Principal Appraisal: Appraiser Guide 26-27 §8).
+    function showNoAccess() {
+      const tbody = document.getElementById('obsTableBody');
+      if (tbody) tbody.innerHTML = '';
+      const empty = document.getElementById('tableEmpty');
+      const loading = document.getElementById('tableLoading');
+      if (loading) loading.style.display = 'none';
+      if (!empty) return;
+      empty.style.display = 'block';
+      empty.querySelector('.empty-icon').textContent = '🔒';
+      empty.querySelector('.empty-title').textContent = 'You do not have access to principal observations';
+      empty.querySelector('.empty-desc').textContent =
+        'Principal observation records are open only to the principal\'s appraiser (the Chief Academic Officer / designated Academic Director) and to central admins, because they hold P1–P8 notes that stay inside the appraisal process. If you need access for your role, please ask a central admin.';
+    }
+
+    document.addEventListener('authReady', async ({ detail }) => {
+      state.isAdmin = (detail?.profile || window.userProfile)?.role_centralhub === 'central_admin';
       try {
         await loadObservations();
         wireFilters();
@@ -499,6 +547,7 @@
         updateKpis();
       } catch (err) {
         console.error('[principal-observations] init error', err);
+        if (err?.code === 'permission-denied') { showNoAccess(); return; }
         const tbody = document.getElementById('obsTableBody');
         if (tbody) tbody.innerHTML = '';
         const empty = document.getElementById('tableEmpty');
@@ -769,9 +818,38 @@
             ${narrativeHtml}
           </div>
         ` : ''}
+        <div id="detailConfidential" data-for="${escapeAttr(o.id)}"></div>
       `;
 
       document.getElementById('detailModal').style.display = 'flex';
+      loadConfidentialNote(o);
+    }
+
+    // PNF5 Confidential Note to Eduversal — shown read-only to central_admin
+    // only, never to the principal or the FR/GM (Principal Leadership
+    // Observation Guide → PNF5 "eduversal_internal_only"; Principal
+    // Appraisal: Appraiser Guide 26-27 §8). Stored in
+    // principal_observations/{id}/confidential/note since 2026-10-01; older
+    // records may still carry narratives.PNF5, read as a fallback. A read
+    // the rules refuse simply leaves the slot empty.
+    async function loadConfidentialNote(o) {
+      if (!state.isAdmin) return;
+      let text = ((o.narratives || {}).PNF5 || '').trim();
+      try {
+        const c = await getDoc(doc(window.db, 'principal_observations', o.id, 'confidential', 'note'));
+        if (c.exists() && (c.data().text || '').trim()) text = c.data().text.trim();
+      } catch (e) {
+        console.warn('[principal-observations] confidential note read failed', e);
+      }
+      const slot = document.getElementById('detailConfidential');
+      if (slot && text && slot.dataset.for === o.id) {
+        slot.innerHTML = `
+          <div class="confidential-block">
+            <h4>🔒 Confidential note to Eduversal — central admins only (PNF5)</h4>
+            <p>${escapeHtml(text)}</p>
+          </div>
+        `;
+      }
     }
 
     document.getElementById('detailClose').addEventListener('click', () => {

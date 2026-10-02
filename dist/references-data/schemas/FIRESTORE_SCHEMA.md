@@ -613,6 +613,8 @@ Was the Central Hub `index.html` dashboard-sidebar order. Sidebar removed becaus
 #### `ah_categories/{catId}` + `th_resource_sections/{secId}`
 Dashboard category configuration. `visible_to[]` field filters to matching sub-roles. **Enforced at rule layer (Step 12, 2026-05-03)** — non-admin clients must run two `where()` queries (`visible_to == []` for open + `visible_to array-contains-any mySubRoles` for targeted) and merge results client-side. Admins use a single unfiltered listener. The rule rejects per-doc reads where neither branch matches, so devtools snooping can no longer enumerate gated category names.
 
+`ah_categories` fields: `name`, `color`, `cardIds[]` (tile ids from the `TOOLS` registry in `Academic Hub/index.html`), `visible_to[]`, `hidden_for_users`, `pilot_systems[]`, `order` (required — the admin listener is `orderBy('order')`), `createdAt`/`updatedAt`, and **optional `module`** (added 2026-09-30, AH home v2) — one of `school_workspace` · `curriculum` · `induction` · `ease` · `student_learning` · `appraisal` · `career_growth` · `teaching_learning` · `digital_citizenship` · `academic_insights` · `quality_ecosystem`, resolved against `HOME_FAMILIES` in the page; absent/unknown = neutral section. Seeded ids `home_<module>` by `scripts/dashboard/seed-ah-home-v2.js`. Meta doc `_uncategorized_settings_` (`isMeta`, `order: -1`, `visible_to_users`) unchanged.
+
 #### `weekly_essentials/{platform}` (also under §7)
 See above.
 
@@ -804,6 +806,14 @@ the others (`principal_360_responses`, `principal_coaching_sessions`,
 **Writers:** mentor (`mentorUid`) — must hold `ch_sub_roles.director` OR be `central_admin`. Update allowed until `status='logged'` (then immutable).
 **Read scope:** coachee (own); mentor (own); `central_admin`. **Foundation Reps explicitly EXCLUDED** to preserve coaching confidentiality (per framework `data_model.access_control`).
 **Notes:** Source framework: `docs/cross-module/principal-coaching-framework-v1.json`. Stage `1_check_in` is the personal check-in — UI surfaces it with a private treatment but rule-level access is the same as the rest of the doc; the privacy is operational ("HQ won't audit this stage") not technical. Audit access for `central_admin` is by design.
+
+#### `principal_coaching_assignments/{principalUid}` — Year 2+ coach assignment (2026-10-02)
+**PK:** `principalUid` (one active coach per principal).
+**Fields:** `principalUid →users.uid`, `coachUid →users.uid`, `coachName`, `schoolId →partner_schools.id`, `status` (`'active'`/`'ended'`), `assignedBy →users.uid`, `assignedAt`, `endedAt?`, `updatedAt`.
+**FKs:** `users.uid`, `partner_schools.id`.
+**Writers:** `central_admin` only (from `/principal-coaching-hub`). Reassignment is made by Eduversal (`principal-coaching-framework-v1.json` → `modes_of_operation.year_2_plus_mode.mentor_role`).
+**Read scope:** the assigned coach (own); the principal (own); `central_admin`. Not the appraiser (CAO), not the FR/GM, not the yayasan.
+**Notes:** Year 1 needs no doc here — the Year-1 Principal Mentor is `induction_assignments/{principalUid}.mentorUid` (programme `eduversal_principal_v1`; NN3 certification + NN4 three uids enforced there). Together the two records decide who may log `principal_coaching_sessions` for a principal (Principal Appraisal: Handbook 26-27 §10 — the appraiser does not see coaching records).
 
 #### `principal_360_cycles/{cycleId}` — Survey window
 **PK:** auto-id or `{principalUid}_{academicYear}_{window}` (W17 / W38).
@@ -1013,6 +1023,18 @@ The student-side delivery system. Chapter tests are network-uniform mastery chec
 **Writers:** student writes own doc on submit (current MVP); Phase 3 Cloud Function recomputes server-side.
 **Read:** owner; same-school staff; admin.
 **Notes:** Cross-window comparability is unreliable until items are calibrated; UI must label early windows as "window-specific norm" before window 4. See `docs/architecture/STUDENTS-HUB-ARCHITECTURE.md` §7.
+
+---
+
+#### `ease_growth_reports/{administrationId}` (+ sub-collections schools, internal)
+**PK:** Administration id, e.g. `G1-2026-27` (Growth I, AY 2026-2027). Sub-collections: `schools/{schoolId}` (one per partner school that sat) and `internal/benchmark`.
+**Fields (root — anonymous network doc):** `schema`, `administrationId`, `meta` (label, date, band, bandLabel, window, packageVersion, role, zeroneExamId, timeLimitMin), `blueprint` (3 domains × 3 skills × 6 items, with per-skill action + home-support text), `items[]` (q, qid, key, domain, skill, level, cog — no question text), `rows[]` (strings `key|code|grade|status|resp`: opaque row key, school CODE A–O, grade, F/U/N, 54 chars A–D or `.`), `zeroneNetwork`, `generated`, `updatedAt`.
+**Fields (`schools/{schoolId}`):** `schoolId → partner_schools.id`, `school` (display), `code`, `administrationId`, `students[]` (`k` row key, `sid` provisional student key, `name`, `class`, `minutes`), `updatedAt`.
+**Fields (`internal/benchmark`):** `codes` (code → {schoolId, school}), `zeroneSchools` (Zerone benchmark incl. rank / expectation), `itemProfile` (school × item %), `pAll`, `excerpts` (question text), `reconciledUnfinished`, `minutesNote`, `sources`, `updatedAt`.
+**FKs:** `schools/{schoolId}` doc id and `schoolId` → `partner_schools.id`.
+**Writers:** none from clients — `scripts/ease/seed-ease-growth-reports.js` (Admin SDK) from the payload that `Desktop/EASE Growth/Dashboard/pipeline/build_data.py --ah` writes after its 43 Zerone reconciliation checks pass.
+**Read:** root — any approved AH user (`isAcademicUser()`) or central_admin; a school roster — AH users of that school (`isAHUserAtSchool`) + AH admins; the internal doc — AH admins only.
+**Notes:** Reader is AH `/ease-growth-results` (`dashboards/EASE-Growth-Results.html`, code only — data loads after sign-in). The document split is the privacy model: student names exist only in a school's own roster, other schools stay coded, and Zerone's ranking never reaches a school (EASE Growth Version 1: baseline only, no public ranking). Row keys are regenerated on each build, so the root doc and all rosters are always written together in one batch. Distinct from `ease_growth/{studentUid}_{subjectId}` (Students Hub adaptive engine).
 
 ---
 

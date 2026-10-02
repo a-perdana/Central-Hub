@@ -662,9 +662,24 @@ function openSpineModal(handbookId) {
     `<span class="hb-modal-chip" data-chip="${c.k}" title="${escapeHtml(c.t)}">${c.label}</span>`
   ).join('');
 
-  // Open-in-new-tab CTA — full reader URL.
+  // Open-in-new-tab CTA — full reader URL, or for a Drive-hosted handbook
+  // the primary live document (the reader page lists the rest).
   const openLink = document.getElementById('hbModalOpen');
-  if (openLink) openLink.href = `handbook?id=${encodeURIComponent(hb.id)}`;
+  const OPEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+  if (openLink && hb.liveSource && !hb.liveSource.structured) {
+    const docs = Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents : [];
+    const primary = docs.find(d => d.primary) || docs[0];
+    openLink.href = primary ? primary.url : `handbook?id=${encodeURIComponent(hb.id)}`;
+    openLink.innerHTML = `Open in Google Drive ${OPEN_ICON}`;
+    document.getElementById('hbModalMeta').innerHTML = [
+      audience ? `<span class="pill">${escapeHtml(audience)}</span>` : '',
+      `<span class="pill">Google Drive · ${docs.length} document${docs.length === 1 ? '' : 's'}</span>`,
+      `<a class="pill" href="handbook?id=${encodeURIComponent(hb.id)}">See all documents</a>`,
+    ].join('');
+  } else if (openLink) {
+    openLink.href = `handbook?id=${encodeURIComponent(hb.id)}`;
+    openLink.innerHTML = `Open handbook ${OPEN_ICON}`;
+  }
 
   modal.removeAttribute('hidden');
   document.body.style.overflow = 'hidden';
@@ -726,12 +741,16 @@ function renderShelfRail(railId, handbooks) {
       : (stages ? `📚 ${stages}` : '');
     const chips = detectSpineChips(hb).slice(0, 3);
     const title = hb.title || hb.id;
+    const isPointer = !!(hb.liveSource && !hb.liveSource.structured);
+    const driveDocs = isPointer && Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents.length : 0;
+    const shownThickness = isPointer ? `☁ ${driveDocs} doc${driveDocs === 1 ? '' : 's'}` : thickness;
     return `
-      <a class="hb-spine" data-kind="${dataKind}" href="handbook?id=${encodeURIComponent(hb.id)}" title="${escapeHtml(title)}">
+      <a class="hb-spine" data-kind="${dataKind}"${isPointer ? ' data-drive="1"' : ''} href="handbook?id=${encodeURIComponent(hb.id)}" title="${escapeHtml(title)}${isPointer ? ' — lives in Google Drive' : ''}">
+        ${isPointer ? '<span class="hb-spine-ext" aria-hidden="true" title="Lives in Google Drive">↗</span>' : ''}
         <span class="hb-spine-kind">${kindEmoji}</span>
         <span class="hb-spine-title">${escapeHtml(title)}</span>
         <span class="hb-spine-audience">${escapeHtml(audienceShort)}</span>
-        ${thickness ? `<span class="hb-spine-thickness">${escapeHtml(thickness)}</span>` : ''}
+        ${shownThickness ? `<span class="hb-spine-thickness">${escapeHtml(shownThickness)}</span>` : ''}
         ${chips.length
           ? `<span class="hb-spine-chips">${chips.map(c =>
               `<span class="hb-spine-chip" data-chip="${c.k}" title="${escapeHtml(c.t)}">${c.label}</span>`
@@ -872,6 +891,8 @@ function renderHandbook(id) {
     document.getElementById('hbTocList').innerHTML = '';
     return;
   }
+  const isDrivePointer = !!(hb.liveSource && !hb.liveSource.structured);
+  if (isDrivePointer) { renderDriveLanding(hb); return; }
 
   // Hero — eyebrow + title + subtitle + 3 KPI tiles
   const audienceLine = [
@@ -964,7 +985,28 @@ function renderHandbook(id) {
     hasSectionsArr ? renderSection(s, i) : renderStage(s, i)
   ).join('');
 
+  // Structured handbooks (induction tracks) keep their stages — the induction
+  // app reads them — and point at the live documents for everything else.
+  const liveBanner = (() => {
+    const docs = hb.liveSource?.structured && Array.isArray(hb.liveSource.documents) ? hb.liveSource.documents : [];
+    if (!docs.length) return '';
+    const primary = docs.find(d => d.primary) || docs[0];
+    const rest = docs.filter(d => d !== primary);
+    return `
+      <aside class="hb-charter hb-charter-school hb-live-banner" id="hb-sec-live">
+        <div>
+          <strong>The full handbook lives in Google Drive.</strong>
+          ${escapeHtml(hb.liveSource.note || 'This page keeps the stages and tasks your induction dashboard uses; the live document is the reference for everything else.')}
+          <ul class="hb-drive-list" style="margin-top:10px;">
+            <li class="hb-drive-item is-primary"><a href="${escapeHtml(primary.url)}" target="_blank" rel="noopener"><span class="hb-drive-ic" aria-hidden="true">📄</span><span class="hb-drive-t">${escapeHtml(primary.title)}</span><span class="hb-drive-tag">Start here</span><span class="hb-drive-go">Open ↗</span></a></li>
+            ${rest.map(d => `<li class="hb-drive-item"><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener"><span class="hb-drive-ic" aria-hidden="true">📄</span><span class="hb-drive-t">${escapeHtml(d.title)}</span><span class="hb-drive-go">Open ↗</span></a></li>`).join('')}
+          </ul>
+        </div>
+      </aside>`;
+  })();
+
   content.innerHTML = `
+    ${liveBanner}
     ${hasSectionsArr ? `
       <aside class="hb-charter hb-charter-school" id="hb-sec-charter">
         <div>
@@ -1021,6 +1063,78 @@ function renderHandbook(id) {
   // Scroll to top whenever a new handbook is loaded (handles select-
   // dropdown switching between handbooks mid-scroll).
   else window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+/* ── Drive-hosted handbooks (2026-09-30) ──────────────────────────
+   Academic Services 26-27 in Google Drive is the single source for the
+   handbooks it covers. Their induction_programs doc is kept (same id, so
+   every ?id= link, checklist pairing and /references card still lands)
+   but carries only a pointer: `liveSource: { note, folder, documents[] }`.
+   The reader lists the live documents instead of a repo copy that drifts. */
+function renderDriveLanding(hb) {
+  const src = hb.liveSource || {};
+  const docs = Array.isArray(src.documents) ? src.documents : [];
+  const kind = hb.handbookKind || 'induction';
+  const kindLabel = kind === 'policy-topic' ? 'Eduversal Policy Handbook'
+    : kind === 'school-facing' ? 'Eduversal School-Facing Handbook'
+    : kind === 'role-operational' ? 'Eduversal Operational Handbook'
+    : kind === 'aicf-companion' ? 'Eduversal AI Companion Handbook'
+    : 'Eduversal Induction Handbook';
+  const audienceLine = [
+    hb.audience?.platform,
+    hb.audience?.subRole
+      || (Array.isArray(hb.audience?.subRoleValues) ? hb.audience.subRoleValues.join(', ') : null)
+      || hb.audience?.primaryReader,
+  ].filter(Boolean).join(' · ');
+
+  document.getElementById('hbReaderEyebrow').textContent = `${kindLabel} · Google Drive`;
+  document.getElementById('hbReaderTitle').textContent = hb.title || hb.id;
+  document.getElementById('hbReaderSubtitle').textContent = hb.subtitle || '';
+  document.getElementById('hbReaderKpis').innerHTML = `
+    <div class="hero-kpi hero-kpi-primary">
+      <div class="hero-kpi-num">${docs.length}</div>
+      <div class="hero-kpi-lbl">${docs.length === 1 ? 'Document' : 'Documents'}</div>
+      <div class="hero-kpi-sub">in Google Drive</div>
+    </div>
+    <div class="hero-kpi">
+      <div class="hero-kpi-num" style="font-size:1.1rem;font-family:'DM Sans',sans-serif;">Live</div>
+      <div class="hero-kpi-lbl">Source</div>
+      <div class="hero-kpi-sub">Academic Services 26-27</div>
+    </div>
+    <div class="hero-kpi">
+      <div class="hero-kpi-num" style="font-size:1.1rem;font-family:'DM Sans',sans-serif;">${escapeHtml(audienceLine || 'Network')}</div>
+      <div class="hero-kpi-lbl">Audience</div>
+      <div class="hero-kpi-sub">platform · sub-role</div>
+    </div>`;
+
+  const item = d => `
+    <li class="hb-drive-item${d.primary ? ' is-primary' : ''}">
+      <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">
+        <span class="hb-drive-ic" aria-hidden="true">${d.kind === 'sheet' ? '📊' : '📄'}</span>
+        <span class="hb-drive-t">${escapeHtml(d.title)}</span>
+        ${d.primary ? '<span class="hb-drive-tag">Start here</span>' : ''}
+        <span class="hb-drive-go">Open ↗</span>
+      </a>
+    </li>`;
+  document.getElementById('hbContent').innerHTML = `
+    <aside class="hb-charter hb-charter-school" id="hb-sec-charter">
+      <div>
+        <strong>This handbook now lives in Google Drive.</strong>
+        ${escapeHtml(src.note || 'It is maintained there as part of Academic Services 26-27, and the live document is the reference. This page only points to it.')}
+      </div>
+    </aside>
+    <section class="hb-sec" id="hb-sec-stages">
+      <h2 class="hb-sec-h">Documents <span class="count">${docs.length}</span></h2>
+      <ul class="hb-drive-list">${docs.map(item).join('')}</ul>
+      ${src.folder?.url ? `<p class="hb-drive-folder">Everything in this area: <a href="${escapeHtml(src.folder.url)}" target="_blank" rel="noopener">${escapeHtml(src.folder.title || 'Open the folder')} ↗</a></p>` : ''}
+    </section>`;
+  document.getElementById('hbTocList').innerHTML =
+    `<li><a href="#hb-sec-charter">About this handbook</a></li><li><a href="#hb-sec-stages"><strong>Documents</strong></a></li>`;
+  const filterWrap = document.getElementById('hbTocFilterWrap');
+  if (filterWrap) filterWrap.hidden = true;
+  initScrollSpy();
+  initProgress(hb, []);
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
 /* ── Reading-progress bar + per-task checkbox persistence ─────────
@@ -1788,6 +1902,7 @@ function buildTOC(hb, stages) {
   const isSchoolFacing = kind === 'school-facing' || kind === 'policy-topic' || kind === 'aicf-companion';
   const stageLabelPlural = isSchoolFacing ? 'Sections' : 'Stages';
   const items = [];
+  if (hb.liveSource?.structured) items.push(`<li><a href="#hb-sec-live">Live documents</a></li>`);
   items.push(`<li><a href="#hb-sec-charter">Charter</a></li>`);
   if (hb.designPhilosophy) items.push(`<li><a href="#hb-sec-design">Design philosophy</a></li>`);
   if (hb.rolesAndResponsibilities) items.push(`<li><a href="#hb-sec-roles">Roles &amp; responsibilities</a></li>`);

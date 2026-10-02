@@ -422,7 +422,7 @@
     <div class="page-hero__text">
       <p class="page-hero__module"><span class="page-hero__module-dot" aria-hidden="true"></span><a href="https://docs.google.com/document/d/1JZOxRnlBnS1VEubZ2fjzcjEqSemwE5whJo80dQmKnQk/edit" target="_blank" rel="noopener" title="Open Career Growth: Start Here (Google Doc)">Career Growth</a><span class="page-hero__module-sep" aria-hidden="true">·</span><span>Grow</span></p>
       <h1 class="page-hero__title">Competency Admin</h1>
-      <p class="page-hero__desc">Review evidence submissions, approve or reject competency claims, and issue official certificates to teachers and administrators.</p>
+      <p class="page-hero__desc">Review evidence submissions, approve or reject competency claims, and record domain completions. A domain completion is a developmental progress record, not a certificate: Academic Services certification credentials are recorded only in the Educamp Certificate Tracker.</p>
     </div>
   </div>
 </header>
@@ -442,7 +442,7 @@
       <ol class="info-strip__flow">
         <li>A user submits evidence from <strong>their hub's Portfolio</strong> page (TH / AH / CH). It lands here as <span class="info-strip__pill info-strip__pill--pending">Pending</span></li>
         <li>You mark it <span class="info-strip__pill info-strip__pill--review">Under Review</span>, read the description + attached file, then <span class="info-strip__pill info-strip__pill--approved">Approve</span> or <span class="info-strip__pill info-strip__pill--rejected">Reject</span> with a note</li>
-        <li>On <strong>Approve</strong>: the level is written to <code>user_competencies/{uid}.earned*</code> → user's Learning Path + Certificates update instantly</li>
+        <li>On <strong>Approve</strong>: the level is written to <code>user_competencies/{uid}.earned*</code> → user's Learning Path + Progress Record update instantly</li>
       </ol>
 
       <div class="info-strip__foot">
@@ -472,8 +472,8 @@
     <div role="button" tabindex="0" class="tab active" onclick="switchTab('review', this)">Evidence Review</div>
     <div role="button" tabindex="0" class="tab" onclick="switchTab('heatmap', this)">Network Heatmap</div>
     <div role="button" tabindex="0" class="tab" onclick="switchTab('cohort', this)">Cohort Comparison</div>
-    <div role="button" tabindex="0" class="tab" onclick="switchTab('issue', this)">Issue Certificates</div>
-    <div role="button" tabindex="0" class="tab" onclick="switchTab('issued', this)">Issued Certificates</div>
+    <div role="button" tabindex="0" class="tab" onclick="switchTab('issue', this)">Record Domain Completion</div>
+    <div role="button" tabindex="0" class="tab" onclick="switchTab('issued', this)">Completion Records</div>
   </div>
 
   <!-- TAB: EVIDENCE REVIEW -->
@@ -541,10 +541,19 @@
     </div>
   </div>
 
-  <!-- TAB: ISSUE CERTIFICATES -->
+  <!-- TAB: RECORD DOMAIN COMPLETION (was "Issue Certificates" until
+       2026-10-02). A domain completion is a developmental progress record,
+       stored in competency_certificates as before (no data migration), but
+       it is NOT a credential and carries no certificate ID — ROOT
+       "Certification Programme — Overview 26-27": "Certificate IDs are
+       assigned through the central certificate register. Do not create a
+       parallel module-specific certificate-ID sequence." Same decision as
+       AH MyCertificates.html (AH 54646bb). The Induction Completion
+       Certificate (Charter NN5) is a separate type and keeps its wording. -->
   <div id="tab-issue" style="display:none;">
     <div class="cert-issue-card">
-      <div class="cert-issue-title">Issue Certificate Manually</div>
+      <div class="cert-issue-title">Record a Domain Completion</div>
+      <p style="font-size:12.5px;color:var(--ink-2);line-height:1.55;margin:-4px 0 14px;">Use this when every competency in a domain has been approved at Lead. It adds a <strong>domain completion record</strong> to the person's progress record. It is <strong>not a certificate or a credential</strong>, it gets no certificate ID, and it cannot be verified on the public certificate page. Academic Services certification credentials (for example, the Foundation certifications) are issued and recorded only in the <strong>Educamp Certificate Tracker</strong>, the central certificate register. No stage or record here is a Career Growth Role Register level or a promotion step.</p>
       <div class="cert-issue-form">
         <div class="cert-field">
           <label class="cert-label">Platform</label>
@@ -566,16 +575,16 @@
         </div>
         <div class="cert-field">
           <label class="cert-label">Note (optional)</label>
-          <input aria-label="e.g. Issued after portfolio review" class="cert-input" id="certNote" type="text" placeholder="e.g. Issued after portfolio review">
+          <input aria-label="e.g. Recorded after portfolio review" class="cert-input" id="certNote" type="text" placeholder="e.g. Recorded after portfolio review">
         </div>
-        <button class="btn-issue-cert" onclick="issueCertificate()">🎓 Issue Certificate</button>
+        <button class="btn-issue-cert" onclick="issueCertificate()">📘 Record Completion</button>
       </div>
       <div id="certIssueError" style="font-size:12px;color:#dc2626;margin-top:10px;display:none;"></div>
       <div id="certIssueSuccess" style="font-size:13px;font-weight:600;color:#15803d;margin-top:10px;background:#dcfce7;border-radius:10px;padding:12px 14px;display:none;"></div>
     </div>
   </div>
 
-  <!-- TAB: ISSUED CERTIFICATES -->
+  <!-- TAB: COMPLETION RECORDS (was "Issued Certificates") -->
   <div id="tab-issued" style="display:none;">
     <div id="issuedCertsWrap">
       <div class="skel" style="height:60px;border-radius:10px;margin-bottom:8px;"></div>
@@ -648,7 +657,7 @@ document.addEventListener('authReady', async ({ detail: { user, profile } }) => 
   isAdmin = profile?.role_centralhub === 'central_admin';
   if (!isAdmin) {
     const heroDesc = document.querySelector('.page-hero__desc');
-    if (heroDesc) heroDesc.textContent = 'Read-only view — admin access required to review or issue certificates.';
+    if (heroDesc) heroDesc.textContent = 'Read-only view — admin access required to review evidence or record domain completions.';
   }
   applyTrackParamFromUrl();
   await Promise.all([loadEvidence(), loadIssuedCerts()]);
@@ -731,12 +740,14 @@ function renderStats() {
   const pending = allEvidence.filter(e => e.status === 'pending').length;
   const underReview = allEvidence.filter(e => e.status === 'under-review').length;
   const approved = allEvidence.filter(e => e.status === 'approved').length;
-  const certs = allCerts.length;
+  // Domain completion records only (not the Induction Completion
+  // Certificate, not withdrawn records).
+  const certs = allCerts.filter(c => c.type !== 'induction_completion' && !c.revoked).length;
   document.getElementById('statsRow').innerHTML = `
     <div class="stat-card"><div class="stat-num">${pending}</div><div class="stat-label">Pending Review</div></div>
     <div class="stat-card"><div class="stat-num">${underReview}</div><div class="stat-label">Under Review</div></div>
     <div class="stat-card"><div class="stat-num">${approved}</div><div class="stat-label">Approved Submissions</div></div>
-    <div class="stat-card"><div class="stat-num">${certs}</div><div class="stat-label">Certificates Issued</div></div>
+    <div class="stat-card"><div class="stat-num">${certs}</div><div class="stat-label">Domain Completion Records</div></div>
   `;
 }
 
@@ -877,7 +888,12 @@ window.rejectEvidence = async function(evId) {
   renderStats(); renderEvidence();
 };
 
-// ─── CERTIFICATE ISSUANCE ─────────────────────────────────────────────────────
+// ─── DOMAIN COMPLETION RECORDS ────────────────────────────────────────────────
+// Stored in competency_certificates (collection name kept — no migration).
+// New writes carry type 'domain_completion'; older docs have no type and are
+// read the same way. type 'induction_completion' = the binary Induction
+// Completion Certificate (Charter NN5), which keeps its certificate wording.
+// The function name issueCertificate() is kept so the onclick hook holds.
 function populateDomainDropdown() {
   const platSel = document.getElementById('certPlatform');
   const updateDomains = () => {
@@ -914,24 +930,26 @@ window.issueCertificate = async function() {
 
   const domainObj = domainsForPlatform(platform).find(d => d.id === domainId);
 
-  // Check for duplicate
+  // Check for duplicate. The field is userId (the old query read 'uid',
+  // a field these docs never carry, so the check never matched).
   const dupQ = query(
     collection(window.db, 'competency_certificates'),
-    where('uid', '==', uid),
+    where('userId', '==', uid),
     where('platform', '==', platform),
     where('domainId', '==', domainId)
   );
   const dupSnap = await getDocs(dupQ);
-  if (!dupSnap.empty) {
-    errEl.textContent = 'This user already has a certificate for this domain on this platform.';
+  if (dupSnap.docs.some(d => d.data().type !== 'induction_completion' && !d.data().revoked)) {
+    errEl.textContent = 'This person already has a completion record for this domain on this platform.';
     errEl.style.display = 'block';
     return;
   }
 
   const btn = document.querySelector('.btn-issue-cert');
-  btn.disabled = true; btn.textContent = 'Issuing…';
+  btn.disabled = true; btn.textContent = 'Recording…';
   try {
-    const certRef = await addDoc(collection(window.db, 'competency_certificates'), {
+    await addDoc(collection(window.db, 'competency_certificates'), {
+      type: 'domain_completion',
       userId: uid,
       userEmail: userData.email,
       userDisplayName: userData.displayName || '',
@@ -943,23 +961,23 @@ window.issueCertificate = async function() {
       note: note || null,
       issuedAt: serverTimestamp(),
     });
-    succEl.textContent = `✓ Certificate issued to ${userData.displayName || email} for "${domainObj?.name}" (${platform}). ID: ${certRef.id.substring(0,8).toUpperCase()}`;
+    succEl.textContent = `✓ Domain completion recorded for ${userData.displayName || email}: "${domainObj?.name}" (${platform}). This is a progress record, not a certificate.`;
     succEl.style.display = 'block';
     await loadIssuedCerts();
     renderStats();
     renderIssuedCerts();
   } catch (err) {
-    errEl.textContent = 'Failed to issue certificate: ' + err.message;
+    errEl.textContent = 'Could not save the completion record: ' + err.message;
     errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = '🎓 Issue Certificate';
+    btn.disabled = false; btn.textContent = '📘 Record Completion';
   }
 };
 
 function renderIssuedCerts() {
   const wrap = document.getElementById('issuedCertsWrap');
   if (!allCerts.length) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📜</div>No certificates issued yet.</div>';
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📘</div>No completion records yet.</div>';
     return;
   }
   wrap.innerHTML = `
@@ -968,25 +986,33 @@ function renderIssuedCerts() {
         <tr>
           <th>User</th>
           <th>Platform</th>
-          <th>Domain</th>
-          <th>Issued</th>
-          <th>Issued By</th>
-          <th>Cert ID</th>
+          <th>Record</th>
+          <th>Recorded</th>
+          <th>Recorded By</th>
+          <th>Status</th>
           ${isAdmin ? '<th>Actions</th>' : ''}
         </tr>
       </thead>
       <tbody>
         ${allCerts.map(cert => {
           const date = cert.issuedAt?.toDate?.()?.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) || '';
+          // Induction Completion Certificate (Charter NN5) keeps its
+          // certificate wording; everything else is a domain completion
+          // record. No record ID is shown as a certificate ID.
+          const isInduction = cert.type === 'induction_completion';
+          const what = isInduction
+            ? '<div style="font-weight:600;">Induction Completion Certificate</div>'
+            : `<div>${cert.domainName || cert.domainId || '—'}</div><div style="font-size:11px;color:var(--ink-3);">Domain completion record</div>`;
+          const status = cert.revoked ? '<span style="font-size:11px;font-weight:700;color:#dc2626;">Withdrawn</span>' : '<span style="font-size:11px;font-weight:700;color:#15803d;">Active</span>';
           return `
             <tr>
               <td><div style="font-weight:600;">${cert.userDisplayName || cert.userEmail}</div><div style="font-size:11px;color:var(--ink-3);">${cert.userEmail}</div></td>
               <td><span class="platform-tag ${cert.platform}">${cert.platform}</span></td>
-              <td style="font-size:13px;">${cert.domainName}</td>
+              <td style="font-size:13px;">${what}</td>
               <td style="font-size:12px;color:var(--ink-3);">${date}</td>
               <td style="font-size:12px;color:var(--ink-3);">${cert.issuedBy || '—'}</td>
-              <td><span style="font-family:'DM Mono',monospace;font-size:11px;">${cert.id.substring(0,8).toUpperCase()}</span></td>
-              ${isAdmin ? `<td><button style="padding:5px 12px;border-radius:8px;border:1px solid #fca5a5;background:#ffe4e6;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="revokeCert('${cert.id}',this)">Revoke</button></td>` : ''}
+              <td>${status}</td>
+              ${isAdmin ? (cert.revoked ? '<td></td>' : `<td><button style="padding:5px 12px;border-radius:8px;border:1px solid #fca5a5;background:#ffe4e6;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="revokeCert('${cert.id}',this)">Withdraw</button></td>`) : ''}
             </tr>
           `;
         }).join('')}
@@ -998,16 +1024,17 @@ function renderIssuedCerts() {
 window.revokeCert = async function(certId, btn) {
   if (!btn.dataset.confirming) {
     btn.dataset.confirming = '1';
-    btn.textContent = 'Confirm Revoke';
-    setTimeout(() => { if (btn.dataset.confirming) { btn.dataset.confirming = ''; btn.textContent = 'Revoke'; } }, 3000);
+    btn.textContent = 'Confirm Withdraw';
+    setTimeout(() => { if (btn.dataset.confirming) { btn.dataset.confirming = ''; btn.textContent = 'Withdraw'; } }, 3000);
     return;
   }
   // Actually would deleteDoc — but instead we mark revoked to keep audit trail
   await updateDoc(doc(window.db, 'competency_certificates', certId), {
     revoked: true, revokedAt: serverTimestamp(), revokedBy: window.currentUser.uid
   });
+  // Keep the row (house rule: archive, never delete) and show it as withdrawn.
   const idx = allCerts.findIndex(c => c.id === certId);
-  if (idx >= 0) allCerts.splice(idx, 1);
+  if (idx >= 0) allCerts[idx].revoked = true;
   renderIssuedCerts(); renderStats();
 };
 

@@ -677,7 +677,7 @@ async function openModal(docId) {
     }
     const d = { id: snap.id, ...snap.data() };
     state.openDoc = d;
-    // Seed the Eduversal notes from an existing notes block OR a copy of the self-rating
+    // Load any saved Eduversal area notes; new reviews start empty (never a copy of the school's levels)
     state.appraiserOverride = cloneForOverride(d);
     renderModal();
   } catch (err) {
@@ -686,35 +686,33 @@ async function openModal(docId) {
   }
 }
 
+// Eduversal adds notes only — never a level (2026-10-02). Live: AI Competency
+// Framework 26-27, "Relationship to School Appraisal": the self-assessment
+// "remains developmental and is not validated or converted into a School
+// Appraisal rating." New notes are stored per area in appraisal.areaNotes
+// (evidence / strengths / improvement areas, no levels). Older records carry
+// appraisal.validatedDomainRatings + validatedOverallLevel; those are never
+// rewritten and are shown read-only as an earlier record.
 function cloneForOverride(d) {
-  const validated = d.appraisal?.validatedDomainRatings;
-  const out = { validatedDomainRatings: {}, validatedOverallLevel: null, appraiserNotes: '', recommendations: [] };
+  const saved = d.appraisal?.areaNotes;
+  const out = { areaNotes: {}, appraiserNotes: '', recommendations: [] };
   for (const dm of DOMAINS) {
-    if (validated && validated[dm.id]) {
-      const v = validated[dm.id];
-      out.validatedDomainRatings[dm.id] = {
-        currentLevel: v.currentLevel ?? null,
-        targetLevel:  v.targetLevel  ?? null,
-        evidence:        Array.isArray(v.evidence)        ? v.evidence.slice()        : [],
-        strengths:       Array.isArray(v.strengths)       ? v.strengths.slice()       : [],
-        improvementAreas:Array.isArray(v.improvementAreas)? v.improvementAreas.slice(): []
-      };
-    } else {
-      const s = d.domainRatings?.[dm.id] || {};
-      out.validatedDomainRatings[dm.id] = {
-        currentLevel: s.currentLevel ?? null,
-        targetLevel:  s.targetLevel  ?? null,
-        evidence:        Array.isArray(s.evidence)        ? s.evidence.slice()        : [],
-        strengths:       Array.isArray(s.strengths)       ? s.strengths.slice()       : [],
-        improvementAreas:Array.isArray(s.improvementAreas)? s.improvementAreas.slice(): []
-      };
-    }
+    const v = (saved && saved[dm.id]) || {};
+    out.areaNotes[dm.id] = {
+      evidence:        Array.isArray(v.evidence)        ? v.evidence.slice()        : [],
+      strengths:       Array.isArray(v.strengths)       ? v.strengths.slice()       : [],
+      improvementAreas:Array.isArray(v.improvementAreas)? v.improvementAreas.slice(): []
+    };
   }
-  // No overall level is picked or shown any more; an older stored value is carried forward untouched.
-  out.validatedOverallLevel = d.appraisal?.validatedOverallLevel ?? null;
   out.appraiserNotes = d.appraisal?.appraiserNotes || '';
   out.recommendations = Array.isArray(d.appraisal?.recommendations) ? d.appraisal.recommendations.slice() : [];
   return out;
+}
+
+// True when the record holds the older per-area "levels noted" block and no
+// new-style area notes.
+function hasEarlierRecord(d) {
+  return !d.appraisal?.areaNotes && !!d.appraisal?.validatedDomainRatings;
 }
 
 function renderModal() {
@@ -730,10 +728,12 @@ function renderModal() {
     <span><strong>Submitted:</strong> ${submittedAt}</span>
     ${d.status === 'appraised' ? `<span><strong>Notes added:</strong> ${appraisedAt}</span>` : ''}
     <span><strong>Profile:</strong> six area levels, no overall score</span>
+    ${d.appraisal?.validatedOverallLevel != null ? `<span title="Stored before the AI Competency Framework 26-27. No longer used."><strong>Earlier record:</strong> overall level noted ${escapeHtml(d.appraisal.validatedOverallLevel)} (no longer used)</span>` : ''}
   `;
 
   const isAppraised = d.status === 'appraised';
   const canAppraise = d.status === 'submitted';
+  const earlier = hasEarlierRecord(d);
   document.getElementById('btnSaveValidation').style.display = canAppraise ? 'inline-block' : 'none';
 
   let body = '';
@@ -742,7 +742,7 @@ function renderModal() {
   for (let i = 0; i < DOMAINS.length; i++) {
     const dm = DOMAINS[i];
     const self = d.domainRatings?.[dm.id] || {};
-    const app  = state.appraiserOverride.validatedDomainRatings[dm.id];
+    const app  = state.appraiserOverride.areaNotes[dm.id];
     body += `<div class="domain-detail${isAppraised ? ' appraised' : ''}">
       <div class="dd-head">
         <div class="dd-num">${i + 1}</div>
@@ -762,8 +762,9 @@ function renderModal() {
         </div>
         <div class="compare-col appraiser">
           <div class="cc-label">Eduversal notes</div>
-          ${renderAppraiserPicker(dm.id, app, canAppraise || isAppraised)}
-          ${renderAppraiserLists(dm.id, app, canAppraise)}
+          ${earlier
+            ? renderEarlierRecord(d.appraisal.validatedDomainRatings[dm.id])
+            : renderAppraiserLists(dm.id, app, canAppraise)}
         </div>
       </div>
     </div>`;
@@ -805,26 +806,26 @@ function renderStars(level, kind, _editable) {
   return html;
 }
 
-function renderAppraiserPicker(domainId, app, editable) {
-  let html = '<div class="app-level-selector">';
-  html += `<div class="app-lvl-mini-label">Current level noted (starts as the school's own level; does not change it)</div>`;
-  html += `<div class="app-lvl-row" data-domain="${escapeHtml(domainId)}" data-field="currentLevel">`;
-  for (const lv of LEVELS) {
-    html += `<button class="app-lvl-btn ${app.currentLevel === lv.num ? 'cur-selected' : ''}" data-lvl="${lv.num}" ${!editable ? 'disabled' : ''}>${lv.num}</button>`;
-  }
-  html += '</div>';
-  html += `<div class="app-lvl-mini-label">Target level noted</div>`;
-  html += `<div class="app-lvl-row target" data-domain="${escapeHtml(domainId)}" data-field="targetLevel">`;
-  for (const lv of LEVELS) {
-    html += `<button class="app-lvl-btn ${app.targetLevel === lv.num ? 'tgt-selected' : ''}" data-lvl="${lv.num}" ${!editable ? 'disabled' : ''}>${lv.num}</button>`;
-  }
-  html += '</div></div>';
-  return html;
+// Read-only view of an older record's per-area block. Eduversal no longer
+// notes a level; the stored values are shown so the history stays readable.
+function renderEarlierRecord(v) {
+  v = v || {};
+  return `
+    <div class="cc-list">
+      <p style="font-size:11.5px;color:#64748b;margin:0 0 6px;">Earlier record, saved before the AI Competency Framework 26-27. Eduversal no longer notes levels; the school's own levels are the profile.</p>
+      <div class="cc-sub">Level noted then</div>
+      <p style="font-size:12px;margin:2px 0 4px;">Current ${escapeHtml(v.currentLevel ?? '—')} · target ${escapeHtml(v.targetLevel ?? '—')}</p>
+      ${renderListSection('Evidence noted', v.evidence)}
+      ${renderListSection('Strengths noted', v.strengths)}
+      ${renderListSection('Improvement areas noted', v.improvementAreas)}
+    </div>
+  `;
 }
 
 function renderAppraiserLists(domainId, app, editable) {
   return `
     <div class="cc-list">
+      <p style="font-size:11.5px;color:#64748b;margin:0 0 6px;">Optional. Notes only — the school's level stays as the school rated it.</p>
       <div class="cc-sub">Evidence noted</div>
       <textarea aria-label="One per line. What Eduversal saw, read or heard" class="app-textarea" data-domain="${escapeHtml(domainId)}" data-field="evidence" placeholder="One per line. What Eduversal saw, read or heard."  ${!editable ? 'disabled' : ''}>${escapeHtml((app.evidence || []).join('\n'))}</textarea>
       <div class="cc-sub" style="margin-top:8px;">Strengths noted</div>
@@ -844,26 +845,13 @@ function renderListSection(label, items) {
 function wireModalEvents(canAppraise) {
   if (!canAppraise) return;
 
-  // Per-domain level pickers
-  document.querySelectorAll('.app-lvl-row[data-domain]').forEach(row => {
-    const domain = row.dataset.domain;
-    const field = row.dataset.field;
-    row.querySelectorAll('button[data-lvl]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const lvl = parseInt(btn.dataset.lvl, 10);
-        state.appraiserOverride.validatedDomainRatings[domain][field] = lvl;
-        renderModal();
-      });
-    });
-  });
-
-  // Per-domain textareas
+  // Per-area note textareas (no level pickers — Eduversal does not note levels)
   document.querySelectorAll('.app-textarea[data-domain]').forEach(ta => {
     ta.addEventListener('input', () => {
       const domain = ta.dataset.domain;
       const field = ta.dataset.field;
       const items = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
-      state.appraiserOverride.validatedDomainRatings[domain][field] = items;
+      state.appraiserOverride.areaNotes[domain][field] = items;
     });
   });
 
@@ -911,21 +899,33 @@ function renderRecommendations(editable) {
 }
 
 // ---- Save Eduversal notes: flips status to 'appraised' + writes appraisal.* ----
-// The stored names (status 'appraised', appraisal.validated*) predate the
-// AI Competency Framework 26-27 and are kept for data continuity. The live
+// The stored status value 'appraised' (shown as "Notes added") predates the
+// AI Competency Framework 26-27 and is kept because the rules use it. New
+// saves write appraisal.areaNotes + appraiserNotes + recommendations only;
+// older appraisal.validated* fields stay on old records untouched. The live
 // framework: the self-assessment "remains developmental and is not validated
 // or converted into a School Appraisal rating" — so they are presented as
 // Eduversal's developmental support notes only.
 async function submitValidation() {
   const d = state.openDoc;
   if (!d || d.status !== 'submitted') return;
-  // Sanity check: every area carries a noted level (seeded from the school's own level)
+  const o = state.appraiserOverride;
+  const recs = o.recommendations.map(s => String(s).trim()).filter(Boolean);
+  const areaNotes = {};
+  let anyAreaNote = false;
   for (const dm of DOMAINS) {
-    const v = state.appraiserOverride.validatedDomainRatings[dm.id];
-    if (!v.currentLevel) {
-      showToast(`Note a current level for ${dm.title} (the school left it blank).`, 'error');
-      return;
-    }
+    const v = o.areaNotes[dm.id] || {};
+    areaNotes[dm.id] = {
+      evidence:         (v.evidence         || []).map(s => String(s).trim()).filter(Boolean),
+      strengths:        (v.strengths        || []).map(s => String(s).trim()).filter(Boolean),
+      improvementAreas: (v.improvementAreas || []).map(s => String(s).trim()).filter(Boolean)
+    };
+    if (areaNotes[dm.id].evidence.length || areaNotes[dm.id].strengths.length || areaNotes[dm.id].improvementAreas.length) anyAreaNote = true;
+  }
+  // Nothing to save is not a review: ask for at least one note or support action.
+  if (!String(o.appraiserNotes || '').trim() && !recs.length && !anyAreaNote) {
+    showToast('Add a note or a support action before saving.', 'error');
+    return;
   }
   if (!confirm('Save the Eduversal notes for this school?\n\nAfter saving, the school can see your notes and support actions. They are developmental notes, not a validation or a School Appraisal rating.')) return;
 
@@ -936,10 +936,10 @@ async function submitValidation() {
       appraisal: {
         appraiserUid: window.currentUser.uid,
         appraisedAt: serverTimestamp(),
-        validatedDomainRatings: state.appraiserOverride.validatedDomainRatings,
-        validatedOverallLevel: state.appraiserOverride.validatedOverallLevel,
-        appraiserNotes: state.appraiserOverride.appraiserNotes || '',
-        recommendations: state.appraiserOverride.recommendations.map(s => String(s).trim()).filter(Boolean)
+        // Notes only: no validatedDomainRatings / validatedOverallLevel on new saves.
+        areaNotes,
+        appraiserNotes: o.appraiserNotes || '',
+        recommendations: recs
       }
     };
     await updateDoc(ref, payload);

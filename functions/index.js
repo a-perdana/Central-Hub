@@ -1975,7 +1975,8 @@ exports.practiceBankAiSuggest = onCall(
 );
 
 // ───────────────────────────────────────────────────────────────
-// AICF PHASE 3 — rebuildAiCompetencyAggregates (2026-05-18)
+// AICF PHASE 3 — rebuildAiCompetencyAggregates (2026-05-18,
+// reworked 2026-10-02 for the AI Competency Framework 26-27 v2.0)
 //   Walks ai_competency_self_assessments + ai_maturity_assessments
 //   for each (schoolId, academicYear) pair and writes summary docs
 //   to ai_competency_aggregates/{schoolId}_{academicYear} and one
@@ -1984,7 +1985,43 @@ exports.practiceBankAiSuggest = onCall(
 //   Two triggers:
 //     (a) Weekly schedule (Mondays 02:00 Asia/Jakarta) — full rebuild.
 //     (b) onDocumentWritten on ai_maturity_assessments — partial
-//         rebuild when a single school flips to 'appraised'.
+//         rebuild when a school shares (marks final) its profile, when
+//         Eduversal adds notes, or when shared area levels change.
+//
+//   What the live framework allows (Digital Citizenship & AI: AI
+//   Competency Framework 26-27, Part Three):
+//     - "Institutional Assessment Process": the SCHOOL self-assesses and
+//       rates its current level for each of the six domains.
+//     - "Relationship to School Appraisal": the self-assessment "remains
+//       developmental and is not validated or converted into a School
+//       Appraisal rating."
+//     - "Benchmarking and Reporting": network reporting "may summarise
+//       patterns ... It should not rank schools".
+//     - Annex 4: "retain a six-domain maturity profile rather than
+//       reducing the framework to a single official score".
+//   So, since 2026-10-02 (aggregateShapeVersion 2):
+//     - the six area levels are taken AS THE SCHOOL SELF-RATED THEM
+//       (domainRatings), never from Eduversal notes (the legacy
+//       appraisal.validatedDomainRatings is no longer read);
+//     - only shared profiles (status 'submitted' or 'appraised' — the
+//       stored value 'appraised' means "Eduversal notes added") count;
+//     - no single overall level, no year-on-year overall delta, no
+//       count of schools per overall level, no top/bottom school lists.
+//       The network doc carries a per-area level DISTRIBUTION only, with
+//       no schoolIds in it (aggregate-only, no ranking).
+//   Retired output fields (no longer written; values already stored on
+//   older docs are left untouched — readers must check
+//   aggregateShapeVersion >= 2 and ignore them):
+//     school:  institutionalCurrentLevel, institutionalAppraised,
+//              previousOverallLevel, levelDelta
+//     network: schoolsByMaturityLevel, networkDomainMedian,
+//              topSchoolsByDomain, bottomSchoolsByDomain
+//   No page reads ai_competency_aggregates today (grep 2026-10-02).
+//
+//   🚨 NOT DEPLOYED: written 2026-10-02 while the billing account is
+//   closed (Blaze needed). The deployed version is still the old one
+//   until `firebase deploy --only functions:rebuildAiCompetencyAggregates,
+//   functions:onMaturityAppraisalWritten --project centralhub-8727b`.
 //
 //   Schema: docs/architecture/FIRESTORE_SCHEMA.md §24
 //   (ai_competency_aggregates).
@@ -1992,6 +2029,22 @@ exports.practiceBankAiSuggest = onCall(
 //   Admin SDK bypasses rules — aggregate docs are Cloud-Function-only
 //   writers per the rule block.
 // ───────────────────────────────────────────────────────────────
+
+const AICF_MATURITY_DOMAINS = [
+  "strategy_leadership", "policy_compliance", "staff_capability",
+  "teaching_learning", "student_outcomes", "infrastructure_resources",
+];
+const AICF_AGGREGATE_SHAPE_VERSION = 2;
+
+// A profile counts once the school has marked it final ('submitted') or
+// Eduversal has added notes to it (stored status 'appraised').
+function isSharedMaturityProfile(mat) {
+  return !!mat && (mat.status === "submitted" || mat.status === "appraised");
+}
+
+function validMaturityLevel(v) {
+  return (typeof v === "number" && v >= 1 && v <= 5) ? v : null;
+}
 
 async function recomputeSchoolAggregate(schoolId, academicYear) {
   if (!schoolId || !academicYear) return;
@@ -2011,22 +2064,31 @@ async function recomputeSchoolAggregate(schoolId, academicYear) {
     staffSnap = { docs: [] };
   }
 
+  // Staff distribution = the level each teacher SELF-DECLARED on a shared
+  // self-assessment. Live AICF 26-27, Part One "Verification and
+  // Validation": "Formal level certification is not required, but schools
+  // should track overall staff competency distribution". The stored status
+  // 'validated' now means "professional development conversation recorded"
+  // (AH ai-validate-teacher-assessments), and a legacy validation.agreedLevel
+  // no longer overrides the teacher's own level.
   const staffCounts = { foundation: 0, practitioner: 0, leader: 0, unsubmitted: 0 };
   let validationLagSum = 0, validationLagN = 0, pendingValidation = 0, submittedCount = 0;
 
   staffSnap.docs.forEach((d) => {
     const data = d.data() || {};
-    if (data.status === "submitted") {
-      pendingValidation += 1;
+    if (data.status === "submitted" || data.status === "validated") {
       submittedCount += 1;
+      const lvl = data.selfDeclaredLevel;
+      if (lvl && Object.prototype.hasOwnProperty.call(staffCounts, lvl) && lvl !== "unsubmitted") {
+        staffCounts[lvl] += 1;
+      }
+    }
+    if (data.status === "submitted") {
+      // Shared, conversation not yet recorded.
+      pendingValidation += 1;
     }
     if (data.status === "validated") {
-      submittedCount += 1;
-      const agreed = data?.validation?.agreedLevel || data.selfDeclaredLevel;
-      if (agreed && Object.prototype.hasOwnProperty.call(staffCounts, agreed)) {
-        staffCounts[agreed] += 1;
-      }
-      // Validation lag (submittedAt → validatedAt)
+      // Lag from submission to the recorded conversation.
       const sub = data.submittedAt?.toMillis?.();
       const val = data?.validation?.validatedAt?.toMillis?.();
       if (sub && val && val > sub) {
@@ -2034,11 +2096,8 @@ async function recomputeSchoolAggregate(schoolId, academicYear) {
         validationLagN += 1;
       }
     }
-    if (data.status === "draft" || !data.status) {
-      // We don't count drafts as 'unsubmitted staff' here because we
-      // can't tell the eligible-staff denominator without a separate
-      // staff roster query. Field is left for future expansion.
-    }
+    // Drafts are not counted: there is no eligible-staff denominator
+    // without a separate staff roster query. Field left for expansion.
   });
 
   const submissionRate = submittedCount > 0
@@ -2058,26 +2117,18 @@ async function recomputeSchoolAggregate(schoolId, academicYear) {
     console.warn(`[rebuildAiCompetencyAggregates] maturity load failed for ${aggregateId}`, err);
   }
 
-  let institutionalCurrentLevel = null;
-  let institutionalDomainLevels = [];
-  let institutionalAppraised = false;
-  if (mat) {
-    institutionalAppraised = mat.status === "appraised";
-    const ratings = institutionalAppraised
-      ? (mat.appraisal?.validatedDomainRatings || mat.domainRatings || {})
-      : (mat.domainRatings || {});
-    institutionalCurrentLevel = institutionalAppraised
-      ? (mat.appraisal?.validatedOverallLevel ?? mat.overallLevel ?? null)
-      : (mat.overallLevel ?? null);
-    institutionalDomainLevels = [
-      "strategy_leadership","policy_compliance","staff_capability",
-      "teaching_learning","student_outcomes","infrastructure_resources"
-    ].map((k) => ratings?.[k]?.currentLevel ?? null);
-  }
+  // Six area levels exactly as the school self-rated them. Never an
+  // overall level; never Eduversal's (legacy) noted levels.
+  const institutionalProfileShared = isSharedMaturityProfile(mat);
+  const selfRatings = institutionalProfileShared ? (mat.domainRatings || {}) : {};
+  const institutionalDomainLevels = AICF_MATURITY_DOMAINS
+    .map((k) => validMaturityLevel(selfRatings?.[k]?.currentLevel));
+  const institutionalDomainTargets = AICF_MATURITY_DOMAINS
+    .map((k) => validMaturityLevel(selfRatings?.[k]?.targetLevel));
 
-  // 3. Look up the previous year for trend (best-effort).
+  // 3. Previous year — staff trend only (best-effort). No overall-level
+  //    delta: there is no overall level to compare.
   const previousYear = previousAcademicYear(academicYear);
-  let previousOverallLevel = null, levelDelta = null;
   let previousStaffPractitionerCount = null, practitionerDelta = null;
   if (previousYear) {
     try {
@@ -2087,11 +2138,7 @@ async function recomputeSchoolAggregate(schoolId, academicYear) {
         .get();
       if (prevAgg.exists) {
         const pd = prevAgg.data();
-        previousOverallLevel = pd.institutionalCurrentLevel ?? null;
         previousStaffPractitionerCount = pd.staffCounts?.practitioner ?? null;
-        if (institutionalCurrentLevel != null && previousOverallLevel != null) {
-          levelDelta = institutionalCurrentLevel - previousOverallLevel;
-        }
         if (previousStaffPractitionerCount != null) {
           practitionerDelta = (staffCounts.practitioner || 0) - previousStaffPractitionerCount;
         }
@@ -2103,17 +2150,17 @@ async function recomputeSchoolAggregate(schoolId, academicYear) {
 
   const payload = {
     scopeKind: "school",
+    aggregateShapeVersion: AICF_AGGREGATE_SHAPE_VERSION,
     schoolId,
     academicYear,
     staffCounts,
     submissionRate,
     pendingValidationCount: pendingValidation,
     medianDaysToValidation,
-    institutionalCurrentLevel,
+    institutionalProfileShared,
+    institutionalStatus: mat?.status || null,
     institutionalDomainLevels,
-    institutionalAppraised,
-    previousOverallLevel,
-    levelDelta,
+    institutionalDomainTargets,
     previousStaffPractitionerCount,
     practitionerDelta,
     recomputedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -2121,7 +2168,7 @@ async function recomputeSchoolAggregate(schoolId, academicYear) {
   };
 
   await db.collection("ai_competency_aggregates").doc(aggregateId).set(payload, { merge: true });
-  console.log(`[rebuildAiCompetencyAggregates] wrote school aggregate ${aggregateId} (institutional level ${institutionalCurrentLevel}, staff ${JSON.stringify(staffCounts)})`);
+  console.log(`[rebuildAiCompetencyAggregates] wrote school aggregate ${aggregateId} (profile shared ${institutionalProfileShared}, area levels ${JSON.stringify(institutionalDomainLevels)}, staff ${JSON.stringify(staffCounts)})`);
 }
 
 async function recomputeNetworkAggregate(academicYear) {
@@ -2137,65 +2184,58 @@ async function recomputeNetworkAggregate(academicYear) {
     .get();
 
   const staffTotals = { foundation: 0, practitioner: 0, leader: 0, unsubmitted: 0 };
-  const schoolsByMaturityLevel = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, unknown: 0 };
-  // Per-domain levels collected for median later
-  const domainSamples = [[], [], [], [], [], []]; // 6 domains, index 0-5
-  const perDomainTop = [[], [], [], [], [], []];
+  // Per-area distribution: how many shared school profiles sit at each
+  // self-rated level, per area. Counts only — no schoolIds, no order, so
+  // nothing here can rank a school (AICF 26-27 "Benchmarking and Reporting").
+  const emptyDist = () => ({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, notRated: 0 });
+  const domainLevelDistribution = {};
+  const domainTargetDistribution = {};
+  for (const k of AICF_MATURITY_DOMAINS) {
+    domainLevelDistribution[k] = emptyDist();
+    domainTargetDistribution[k] = emptyDist();
+  }
+  let schoolsWithSharedProfile = 0;
+  let schoolsWithoutSharedProfile = 0;
 
   aggsSnap.docs.forEach((d) => {
     const data = d.data() || {};
     for (const k of ["foundation", "practitioner", "leader", "unsubmitted"]) {
       staffTotals[k] += (data.staffCounts?.[k] || 0);
     }
-    const lvl = data.institutionalCurrentLevel;
-    if (lvl >= 1 && lvl <= 5) {
-      schoolsByMaturityLevel[lvl] += 1;
-    } else {
-      schoolsByMaturityLevel.unknown += 1;
+    // Only school docs already in the v2 shape carry self-rated levels
+    // for shared profiles; a v1 doc's institutionalDomainLevels may hold
+    // Eduversal's legacy noted levels, so it is skipped until recomputed.
+    const shared = data.aggregateShapeVersion >= AICF_AGGREGATE_SHAPE_VERSION
+      && data.institutionalProfileShared === true;
+    if (!shared) {
+      schoolsWithoutSharedProfile += 1;
+      return;
     }
-    const domains = Array.isArray(data.institutionalDomainLevels) ? data.institutionalDomainLevels : [];
-    for (let i = 0; i < 6; i++) {
-      const v = domains[i];
-      if (typeof v === "number" && v >= 1 && v <= 5) {
-        domainSamples[i].push(v);
-        perDomainTop[i].push({ schoolId: data.schoolId, level: v });
-      }
-    }
+    schoolsWithSharedProfile += 1;
+    const levels = Array.isArray(data.institutionalDomainLevels) ? data.institutionalDomainLevels : [];
+    const targets = Array.isArray(data.institutionalDomainTargets) ? data.institutionalDomainTargets : [];
+    AICF_MATURITY_DOMAINS.forEach((k, i) => {
+      const lv = validMaturityLevel(levels[i]);
+      domainLevelDistribution[k][lv ?? "notRated"] += 1;
+      const tg = validMaturityLevel(targets[i]);
+      domainTargetDistribution[k][tg ?? "notRated"] += 1;
+    });
   });
-
-  const networkDomainMedian = domainSamples.map((arr) => median(arr));
-  const domainNames = [
-    "strategy_leadership","policy_compliance","staff_capability",
-    "teaching_learning","student_outcomes","infrastructure_resources"
-  ];
-  const topSchoolsByDomain = {};
-  const bottomSchoolsByDomain = {};
-  for (let i = 0; i < 6; i++) {
-    const sorted = perDomainTop[i].slice().sort((a, b) => b.level - a.level);
-    topSchoolsByDomain[domainNames[i]] = sorted.slice(0, 3).map((s) => s.schoolId);
-    bottomSchoolsByDomain[domainNames[i]] = sorted.slice(-3).reverse().map((s) => s.schoolId);
-  }
 
   const payload = {
     scopeKind: "network",
+    aggregateShapeVersion: AICF_AGGREGATE_SHAPE_VERSION,
     academicYear,
     staffCounts: staffTotals,
-    schoolsByMaturityLevel,
-    networkDomainMedian,
-    topSchoolsByDomain,
-    bottomSchoolsByDomain,
+    schoolsWithSharedProfile,
+    schoolsWithoutSharedProfile,
+    domainLevelDistribution,
+    domainTargetDistribution,
     recomputedAt: admin.firestore.FieldValue.serverTimestamp(),
     recomputedBy: "rebuildAiCompetencyAggregates",
   };
   await db.collection("ai_competency_aggregates").doc(aggregateId).set(payload, { merge: true });
-  console.log(`[rebuildAiCompetencyAggregates] wrote network aggregate ${aggregateId} (${aggsSnap.size} schools, ${JSON.stringify(schoolsByMaturityLevel)})`);
-}
-
-function median(arr) {
-  if (!arr.length) return null;
-  const sorted = arr.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  console.log(`[rebuildAiCompetencyAggregates] wrote network aggregate ${aggregateId} (${aggsSnap.size} school docs, ${schoolsWithSharedProfile} shared profiles)`);
 }
 
 function previousAcademicYear(year) {
@@ -2251,7 +2291,11 @@ exports.rebuildAiCompetencyAggregates = onSchedule(
   }
 );
 
-// On-demand: recompute one school when its maturity doc flips to 'appraised'.
+// On-demand: recompute one school when its maturity profile changes in a
+// way the aggregate sees — the status moves (draft → submitted when the
+// school marks it final, submitted → 'appraised' when Eduversal adds notes,
+// or back), or the self-rated area levels change on a shared profile.
+// The function name is kept (renaming a deployed function deletes it).
 exports.onMaturityAppraisalWritten = onDocumentWritten(
   {
     document: "ai_maturity_assessments/{docId}",
@@ -2263,8 +2307,15 @@ exports.onMaturityAppraisalWritten = onDocumentWritten(
     const before = event.data?.before?.data?.() || null;
     const after  = event.data?.after?.data?.()  || null;
     if (!after) return; // delete — skip
-    const flippedToAppraised = (after.status === "appraised") && (!before || before.status !== "appraised");
-    if (!flippedToAppraised) return;
+    const levelsOf = (m) => JSON.stringify(AICF_MATURITY_DOMAINS.map((k) => [
+      m?.domainRatings?.[k]?.currentLevel ?? null,
+      m?.domainRatings?.[k]?.targetLevel ?? null,
+    ]));
+    const statusChanged = (before?.status || null) !== (after.status || null);
+    const sharedLevelsChanged = isSharedMaturityProfile(after) && levelsOf(before) !== levelsOf(after);
+    if (!statusChanged && !sharedLevelsChanged) return;
+    // A draft that stays a draft changes nothing in the aggregate.
+    if (!isSharedMaturityProfile(before) && !isSharedMaturityProfile(after)) return;
     const { schoolId, academicYear } = after;
     if (!schoolId || !academicYear) return;
     try {

@@ -1460,6 +1460,31 @@
     .ap-add textarea:focus { outline: none; border-color: var(--accent); }
     .ap-add button { align-self: flex-start; }
 
+    /* ── TWO SCHOOL DEVELOPMENT PRIORITIES (Annual School Quality Report
+       26-27 §8) and the PHASE 4 IMPACT REVIEW (§9). Reuses the .ap-* panel
+       chrome; only the field grid is new. ── */
+    .sdp-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 8px; }
+    .sdp-grid label {
+      display: block; font-size: .7rem; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px;
+    }
+    .sdp-grid input, .sdp-grid select, .sdp-grid textarea {
+      width: 100%; padding: 8px 10px; border: 1.5px solid var(--border);
+      border-radius: 8px; font-family: inherit; font-size: .85rem;
+      color: var(--ink); background: var(--white); line-height: 1.5;
+    }
+    .sdp-grid textarea { min-height: 70px; resize: vertical; }
+    .sdp-grid input:disabled, .sdp-grid select:disabled, .sdp-grid textarea:disabled {
+      background: var(--paper); color: var(--ink-2); border-style: dashed;
+    }
+    .ir-status-chip {
+      display: inline-block; padding: 1px 8px; border-radius: 999px;
+      font-size: .7rem; font-weight: 600; text-transform: none; letter-spacing: 0;
+      background: var(--paper); border: 1px solid var(--border); color: var(--ink-2);
+    }
+    .ir-msg { font-size: .76rem; color: var(--ink-3); }
+    .ir-msg.is-error { color: #b91c1c; }
+
     /* ── PHASE REFERENCE — the five phases, page level ── */
     .phase-ref {
       background: var(--white); border: 1px solid var(--border);
@@ -3290,6 +3315,26 @@
       if (rep.recommendations)  { out.push('<h2>Recommendations</h2>');      out.push(para(rep.recommendations)); }
       if (rep.priorities)       { out.push('<h2>Priority Recommendations</h2>'); out.push(para(rep.priorities)); }
 
+      // §8 of the report form — the two agreed School Development Priorities.
+      // The report is where they are agreed and recorded (School Appraisal:
+      // Handbook 26-27, Phase 3), so they come from the report's own field.
+      // If that is empty but the school has already written its plan in
+      // Academic Hub (a report returned to draft after publishing), the
+      // school's own priorities are used instead, so nothing is invented.
+      const agreed = hasAgreedPriorities(a)
+        ? agreedPriorities(a)
+        : schoolSdpItems(a).slice(0, 2).map(it => ({ ...blankAgreedPriority(), ...Object.fromEntries(ASQR_PRIORITY_FIELDS.map(([k]) => [k, it[k] || ''])) }));
+      if (agreed.some(p => ASQR_PRIORITY_FIELDS.some(([k]) => String(p[k] || '').trim()))) {
+        out.push('<h2>Two School Development Priorities</h2>');
+        agreed.forEach((p, i) => {
+          out.push(`<h3>Priority ${i + 1}: ${esc2(String(p.title || '').trim() || 'not yet agreed')}</h3>`);
+          ASQR_PRIORITY_FIELDS.slice(1).forEach(([k, label]) => {
+            const v = String(p[k] || '').trim();
+            if (v) out.push(`<p><strong>${esc2(label)}:</strong> ${esc2(v)}</p>`);
+          });
+        });
+      }
+
       // Closing lines of the live form (Annual School Quality Report 26-27
       // §3, §8 and §10), so the school reads the rules that govern the report.
       out.push('<h2>What happens next</h2>');
@@ -3888,6 +3933,88 @@
         document.getElementById('saveStatus').textContent = 'Review added — save to record it';
       });
 
+      // ── Phase 4 Impact Review ──
+      // Edits go into an in-memory copy; "Save Impact Review" writes the
+      // impactReview map on its own, never through saveAppraisal(). Two
+      // reasons: the review happens after the record is signed off
+      // ('reviewed'), when the main save is closed to coordinators, and it
+      // has its own rule branch (rules-school-appraisal.md, branch i), so it
+      // must travel alone — affectedKeys() would refuse it mixed with anything else.
+      function ensureImpactDraft() {
+        const a = state.currentAppraisal;
+        const cur = impactReviewOf(a) || impactReviewOf({ impactReview: {} });
+        a.impactReview = { ...(a.impactReview || {}), reviewDate: cur.reviewDate, priorities: cur.priorities };
+        return a.impactReview;
+      }
+      const irMsg = () => panelsEl.querySelector('#irMsg');
+      panelsEl.querySelectorAll('[data-ir-field]').forEach(el => {
+        el.addEventListener('input', () => {
+          ensureImpactDraft()[el.dataset.irField] = el.value;
+          const m = irMsg(); if (m) { m.textContent = 'Unsaved changes'; m.classList.remove('is-error'); }
+        });
+      });
+      panelsEl.querySelectorAll('[data-ir-pfield]').forEach(el => {
+        el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+          const ir = ensureImpactDraft();
+          ir.priorities[parseInt(el.dataset.irIdx, 10)][el.dataset.irPfield] = el.value;
+          const m = irMsg(); if (m) { m.textContent = 'Unsaved changes'; m.classList.remove('is-error'); }
+        });
+      });
+      panelsEl.querySelector('#btnSaveImpactReview')?.addEventListener('click', async () => {
+        const a = state.currentAppraisal;
+        const m = irMsg();
+        if (!reportIsPublishedOn(a)) return;
+        const ir = ensureImpactDraft();
+        const allowed = new Set(IMPACT_STATUSES.map(([k]) => k));
+        const priorities = ir.priorities.map(p => ({
+          status:   allowed.has(p.status) ? p.status : '',
+          evidence: String(p.evidence || '').trim(),
+          decision: String(p.decision || '').trim(),
+        }));
+        // A status without evidence is an opinion. The live record asks for
+        // the evidence of change beside every status, so ask for it here too.
+        const missing = priorities.findIndex(p => p.status && !p.evidence);
+        if (missing >= 0) {
+          if (m) { m.textContent = `Not saved — add the evidence of change for priority ${missing + 1}.`; m.classList.add('is-error'); }
+          return;
+        }
+        if (!ir.reviewDate && priorities.some(p => p.status)) {
+          if (m) { m.textContent = 'Not saved — add the Impact Review date.'; m.classList.add('is-error'); }
+          return;
+        }
+        const who = window.currentUser?.email || '';
+        const now = new Date().toISOString();
+        const payload = {
+          reviewDate: String(ir.reviewDate || ''),
+          priorities,
+          recordedBy: who,
+          recordedByName: window.userProfile?.displayName || '',
+          recordedAt: now,
+          firstRecordedBy: ir.firstRecordedBy || who,
+          firstRecordedAt: ir.firstRecordedAt || now,
+        };
+        if (m) { m.textContent = 'Saving…'; m.classList.remove('is-error'); }
+        try {
+          await setDoc(doc(window.db, 'school_appraisals_v2', state.currentDocId),
+            { impactReview: payload, updatedAt: serverTimestamp(), updatedBy: who },
+            { merge: true });
+        } catch (e) {
+          if (m) {
+            m.textContent = e?.code === 'permission-denied'
+              ? 'Not saved — your account cannot store the Phase 4 record yet. Ask a Central Hub admin to save it, or to apply the pending rule update.'
+              : 'Not saved — please try again.';
+            m.classList.add('is-error');
+          }
+          return;
+        }
+        a.impactReview = payload;
+        const idx = state.appraisals.findIndex(x => x.id === state.currentDocId);
+        if (idx >= 0) state.appraisals[idx] = { ...state.appraisals[idx], impactReview: payload };
+        renderAppraisalModal();
+        const m2 = document.getElementById('irMsg');
+        if (m2) m2.textContent = 'Saved ✓';
+      });
+
       // Record an appeal decision. Admin only — the model makes this the
       // CAO's call and says the decision is final, so it goes through the
       // narrowest door available rather than any central_user.
@@ -4060,6 +4187,19 @@
         ta.addEventListener('input', () => {
           if (!canWriteExternal || reportIsPublished()) return;
           ensureReport().domains[ta.dataset.reportDomain] = ta.value;
+          document.getElementById('saveStatus').textContent = 'Unsaved changes';
+        });
+      });
+      // The two agreed School Development Priorities (report form §8).
+      // Always stored as a two-item array so the index means the same thing
+      // on every read.
+      panelsEl.querySelectorAll('[data-report-sdp-field]').forEach(el => {
+        el.addEventListener('input', () => {
+          if (!canWriteExternal || reportIsPublished()) return;
+          const rep = ensureReport();
+          const list = Array.isArray(rep.developmentPriorities) ? rep.developmentPriorities : [];
+          rep.developmentPriorities = [0, 1].map(i => ({ ...blankAgreedPriority(), ...(list[i] || {}) }));
+          rep.developmentPriorities[parseInt(el.dataset.reportSdpIdx, 10)][el.dataset.reportSdpField] = el.value;
           document.getElementById('saveStatus').textContent = 'Unsaved changes';
         });
       });
@@ -4344,7 +4484,8 @@
         <div class="field-group">
           <label>Priority Recommendations</label>
           <textarea aria-label="Priority recommendations" data-report-field="priorities" ${dis} placeholder="The few things that matter most. Agree the two School Development Priorities with the school from these…">${esc(rep.priorities)}</textarea>
-        </div>`;
+        </div>
+        ${buildAgreedPrioritiesFields(a, dis)}`;
 
       const documentView = `
         <div class="rep-doc-wrap">
@@ -4371,6 +4512,9 @@
         </div>
         ${stamp}
         ${gate}
+        ${!published && !hasAgreedPriorities(a)
+          ? '<div class="rep-stamp">The two School Development Priorities (report section 8) are not recorded yet. Agree them with the school and record them in the sections view before you compose and publish.</div>'
+          : ''}
         <div class="ext-intro-note">
           The Visit I Supervisor writes and signs the Annual School Quality Report within three weeks of the
           Phase 3 Validation Visit (ES 17.8; School Appraisal: Handbook 26-27). It is the cycle's one written
@@ -4386,6 +4530,37 @@
           Written for readers whose first language is not English: short sentences, plain words.
         </div>
         ${stage === 'sections' ? sectionsView : documentView}`;
+    }
+
+    // §8 of the report form: the two School Development Priorities agreed
+    // with the school after Phase 3. Editable while the report is a draft;
+    // read-only once it is published, like the rest of the report.
+    function buildAgreedPrioritiesFields(a, dis) {
+      const list = agreedPriorities(a);
+      return `
+        <div class="rep-section-label">Two School Development Priorities</div>
+        <div class="ext-intro-note">
+          Agree these two with the school from the validated evidence and the recommendations above
+          (School Appraisal: Annual School Quality Report 26-27, section 8). Within two weeks of receiving
+          the report, the school transfers them into its School Development Plan. They are developmental
+          priorities, not a rating.
+        </div>
+        ${list.map((p, i) => `
+          <div class="ap-item" style="margin-bottom:10px;">
+            <div class="ap-item-head">
+              <span class="ap-item-num">${i + 1}</span>
+              <span class="ap-item-action">Priority ${i + 1}</span>
+            </div>
+            <div class="sdp-grid">
+              ${ASQR_PRIORITY_FIELDS.map(([k, label, hint]) => `
+                <div>
+                  <label for="asqrP_${k}_${i}">${esc(label)}</label>
+                  ${k === 'title' || k === 'owner'
+                    ? `<input id="asqrP_${k}_${i}" data-report-sdp-idx="${i}" data-report-sdp-field="${k}" value="${escAttr(p[k] || '')}" placeholder="${escAttr(hint)}" ${dis}>`
+                    : `<textarea id="asqrP_${k}_${i}" data-report-sdp-idx="${i}" data-report-sdp-field="${k}" placeholder="${escAttr(hint)}" ${dis}>${esc(p[k] || '')}</textarea>`}
+                </div>`).join('')}
+            </div>
+          </div>`).join('')}`;
     }
 
     // Who owns this school this year, and when they visit. Seeded from the
@@ -4442,6 +4617,93 @@
 
     function reportIsPublishedOn(a) {
       return a?.externalReview?.report?.status === 'published';
+    }
+
+    // ── THE TWO AGREED SCHOOL DEVELOPMENT PRIORITIES ──
+    // "The two School Development Priorities are agreed and recorded in that
+    // report from the validated evidence and recommendations" (School
+    // Appraisal: Handbook 26-27, Phase 3). The report form gives each one six
+    // lines (School Appraisal: Annual School Quality Report 26-27 §8), so
+    // Eduversal records them here, on the report, before it is published.
+    // Stored as externalReview.report.developmentPriorities[2]. The keys match
+    // the school's own School Development Plan fields (Academic Hub writes
+    // actionPlan.items[] with title / why / outcome / owner / evidence /
+    // support, plus baseline / actions / reviews), so the school can carry
+    // them across without renaming anything.
+    const ASQR_PRIORITY_FIELDS = [
+      ['title',    'Priority',                          'One clear improvement goal.'],
+      ['why',      'Why this matters',                  'The evidence that makes this priority important.'],
+      ['outcome',  'Desired outcome',                   'What should be different by the end of the cycle.'],
+      ['owner',    'Owner',                             'One lead person at the school.'],
+      ['evidence', 'Expected evidence of improvement',  'Two or three evidence sources that will show change.'],
+      ['support',  'Eduversal support',                 'What Eduversal will provide, if anything.'],
+    ];
+    function blankAgreedPriority() {
+      return Object.fromEntries(ASQR_PRIORITY_FIELDS.map(([k]) => [k, '']));
+    }
+    // Always two, in order. Older reports have no such field: they read as two
+    // empty priorities, and nothing is written until someone types.
+    function agreedPriorities(a) {
+      const raw = a?.externalReview?.report?.developmentPriorities;
+      const list = Array.isArray(raw) ? raw : [];
+      return [0, 1].map(i => ({ ...blankAgreedPriority(), ...(list[i] || {}) }));
+    }
+    function hasAgreedPriorities(a) {
+      return agreedPriorities(a).some(p => ASQR_PRIORITY_FIELDS.some(([k]) => String(p[k] || '').trim()));
+    }
+    // The school's School Development Plan priorities (Academic Hub, SDP
+    // format). Retired-format rows (action / owner / due) have no title key.
+    function schoolSdpItems(a) {
+      return actionPlan(a).items.filter(it => it && it.title !== undefined);
+    }
+    // The title to show for priority i: the agreed one from the report first,
+    // then the school's own plan, then a neutral label.
+    function priorityTitle(a, i) {
+      const agreed = String(agreedPriorities(a)[i]?.title || '').trim();
+      if (agreed) return agreed;
+      const school = String(schoolSdpItems(a)[i]?.title || '').trim();
+      return school || `School Development Priority ${i + 1}`;
+    }
+
+    // ── PHASE 4 IMPACT REVIEW (May–Jun 2027) ──
+    // "Each priority receives a simple impact status: Achieved, Partly
+    // Achieved, Not Yet Achieved, or Carry Forward" (School Appraisal:
+    // Handbook 26-27, Phase 4). The official record lives in the report form's
+    // §9: per priority, the status, the evidence of change and the decision /
+    // next step. "This status is not a School Appraisal rating" (Appraisal
+    // Suite: School Development Plan 26-27) — so this record carries no number,
+    // feeds no Domain Rating and is never averaged into anything.
+    //
+    // Stored as a top-level impactReview map, NOT inside externalReview: the
+    // review happens months after the report is published and the record is
+    // signed off, and it needs its own narrow rule branch (proposed in
+    // rules-school-appraisal.md) rather than reopening the report.
+    const IMPACT_STATUSES = [
+      ['achieved',          'Achieved'],
+      ['partly_achieved',   'Partly Achieved'],
+      ['not_yet_achieved',  'Not Yet Achieved'],
+      ['carry_forward',     'Carry Forward'],
+    ];
+    function impactStatusLabel(id) {
+      return (IMPACT_STATUSES.find(([k]) => k === id) || [])[1] || '';
+    }
+    function impactReviewOf(a) {
+      const ir = a?.impactReview;
+      if (!ir || typeof ir !== 'object') return null;
+      const list = Array.isArray(ir.priorities) ? ir.priorities : [];
+      return {
+        reviewDate:     ir.reviewDate || '',
+        recordedBy:     ir.recordedBy || '',
+        recordedByName: ir.recordedByName || '',
+        recordedAt:     ir.recordedAt || '',
+        firstRecordedBy: ir.firstRecordedBy || '',
+        firstRecordedAt: ir.firstRecordedAt || '',
+        priorities: [0, 1].map(i => ({
+          status:   list[i]?.status || '',
+          evidence: list[i]?.evidence || '',
+          decision: list[i]?.decision || '',
+        })),
+      };
     }
 
     // "Within two weeks of receiving the report, the school transfers those two
@@ -4820,8 +5082,13 @@
         return { tone: 'now', label: 'Review their progress',
           text: 'The school has written its School Development Plan. Read it and record a progress review. The Phase 4 Impact Review in May–Jun 2027 checks each priority.' };
       }
+      const irDone = (impactReviewOf(a)?.priorities || []).filter(p => p.status).length;
+      if (irDone === 2) {
+        return { tone: 'done', label: 'Impact Review recorded',
+          text: 'The Phase 4 Impact Review is recorded for both School Development Priorities. The cycle is closed; the next School Appraisal re-rates the school with fresh evidence.' };
+      }
       return { tone: 'done', label: 'Cycle up to date',
-        text: 'Ratings, report and School Development Plan are all in place, and progress has been reviewed. Add another review after the next follow-up, or at the Phase 4 Impact Review.' };
+        text: 'Ratings, report and School Development Plan are all in place, and progress has been reviewed. Add another review after the next follow-up. In May–Jun 2027, record the Phase 4 Impact Review in its own section on the Overview.' };
     }
 
     function buildNextStep(a) {
@@ -4978,6 +5245,20 @@
             </div>`).join('')
         : '<div class="ap-empty">No progress review recorded yet.</div>';
 
+      // The two priorities as agreed in the report (§8), read-only, so the
+      // reviewer can see whether the school's plan carried them across.
+      const agreedHtml = hasAgreedPriorities(a)
+        ? `<div class="ap-reviews-label" style="border-top:none;padding-top:0;margin-top:0;">Agreed in the Annual School Quality Report</div>
+           <div class="ap-items">${agreedPriorities(a).map((p, i) => `
+            <div class="ap-item">
+              <div class="ap-item-head">
+                <span class="ap-item-num">${i + 1}</span>
+                <span class="ap-item-action">${esc(String(p.title || '').trim() || 'Priority ' + (i + 1) + ' — not recorded')}</span>
+              </div>
+              ${ASQR_PRIORITY_FIELDS.slice(1).filter(([k]) => String(p[k] || '').trim()).map(([k, l]) => `<div class="ap-item-meta"><span><strong>${esc(l)}:</strong> ${esc(p[k])}</span></div>`).join('')}
+            </div>`).join('')}</div>`
+        : '<div class="ap-empty">The two agreed priorities were not recorded as separate fields in this report. Read them in the report text.</div>';
+
       return `
         <div class="ap-panel">
           <div class="ap-head">
@@ -4987,9 +5268,11 @@
           </div>
           <div class="ap-note">
             Written by the school in Academic Hub — read-only here. Your part is the progress review
-            and, near the end of the year, the Phase 4 Impact Review: for each priority, Achieved, Partly
-            Achieved, Not Yet Achieved or Carry Forward. It creates no new Domain Rating.
+            and, near the end of the year, the Phase 4 Impact Review, which you record in its own section
+            below. It creates no new Domain Rating.
           </div>
+          ${agreedHtml}
+          <div class="ap-reviews-label">The school's School Development Plan</div>
           <div class="ap-items">${itemsHtml}</div>
 
           <div class="ap-reviews-label">Eduversal progress reviews</div>
@@ -4999,6 +5282,82 @@
               <textarea id="apReviewNote" placeholder="What has actually moved since the last check? Name evidence, not impressions…"></textarea>
               <button class="btn-secondary" id="btnAddReview">Add progress review</button>
             </div>` : ''}
+        </div>`;
+    }
+
+    // Phase 4 — Impact Review (School Appraisal: Annual School Quality Report
+    // 26-27 §9). One record per school per year: for each of the two
+    // priorities, the impact status, the evidence of change and the decision /
+    // next step, plus the review date and who recorded it. Open only once the
+    // report is published — there are no agreed priorities to review before
+    // that. Deliberately NOT gated on the record's 'reviewed' status: the
+    // review happens in May–Jun 2027, long after sign-off. It carries no number
+    // and nothing reads it into a rating.
+    function buildImpactReviewPanel(a) {
+      const published = reportIsPublishedOn(a);
+      const ir = impactReviewOf(a);
+      if (!published) {
+        return `
+          <div class="ap-panel is-waiting">
+            <div class="ap-head">Phase 4 — Impact Review</div>
+            <div class="ap-empty">
+              Opens after the report is published. In May–Jun 2027 the Visit I Supervisor and an Eduversal
+              representative review the two School Development Priorities with the school.
+            </div>
+          </div>`;
+      }
+      const view = ir || impactReviewOf({ impactReview: {} });
+      const statusOpts = sel => IMPACT_STATUSES.map(([k, l]) =>
+        `<option value="${k}" ${sel === k ? 'selected' : ''}>${esc(l)}</option>`).join('');
+      const recordedLine = ir && ir.recordedAt
+        ? `<span class="ap-due">Recorded ${esc(fmtDate(ir.recordedAt))}${ir.recordedByName || ir.recordedBy ? ' by ' + esc(ir.recordedByName || ir.recordedBy) : ''}</span>`
+        : '<span class="ir-status-chip">Not yet recorded</span>';
+      return `
+        <div class="ap-panel" id="impactReviewPanel">
+          <div class="ap-head">Phase 4 — Impact Review ${recordedLine}</div>
+          <div class="ap-note">
+            Near the end of the year (May–Jun 2027), check the impact of the two School Development
+            Priorities — not only whether the actions were done. Give each priority a simple status:
+            Achieved, Partly Achieved, Not Yet Achieved or Carry Forward. This status is not a School
+            Appraisal rating. It does not reopen or change the Phase 3 ratings, it creates no new Domain
+            Rating, and there is no school score. Use only evidence connected to the two priorities.
+            (School Appraisal: Handbook 26-27, Phase 4; Annual School Quality Report 26-27, section 9.)
+          </div>
+          <div class="sdp-grid" style="max-width:260px;">
+            <div>
+              <label for="irReviewDate">Impact Review date</label>
+              <input type="date" id="irReviewDate" data-ir-field="reviewDate" value="${escAttr(view.reviewDate)}">
+            </div>
+          </div>
+          ${view.priorities.map((p, i) => `
+            <div class="ap-item" style="margin-top:10px;">
+              <div class="ap-item-head">
+                <span class="ap-item-num">${i + 1}</span>
+                <span class="ap-item-action">${esc(priorityTitle(a, i))}</span>
+                ${p.status ? `<span class="ir-status-chip">${esc(impactStatusLabel(p.status))}</span>` : ''}
+              </div>
+              <div class="sdp-grid">
+                <div>
+                  <label for="irStatus_${i}">Impact status</label>
+                  <select id="irStatus_${i}" data-ir-idx="${i}" data-ir-pfield="status">
+                    <option value="">Not yet recorded</option>
+                    ${statusOpts(p.status)}
+                  </select>
+                </div>
+                <div>
+                  <label for="irEvidence_${i}">Evidence of change</label>
+                  <textarea id="irEvidence_${i}" data-ir-idx="${i}" data-ir-pfield="evidence" placeholder="What changed, and what evidence shows it?">${esc(p.evidence)}</textarea>
+                </div>
+                <div>
+                  <label for="irDecision_${i}">Decision / next step</label>
+                  <textarea id="irDecision_${i}" data-ir-idx="${i}" data-ir-pfield="decision" placeholder="Close, continue or carry forward — and the next step and owner.">${esc(p.decision)}</textarea>
+                </div>
+              </div>
+            </div>`).join('')}
+          <div class="ap-add" style="flex-direction:row;align-items:center;gap:12px;">
+            <button class="btn-secondary" id="btnSaveImpactReview" type="button">Save Impact Review</button>
+            <span class="ir-msg" id="irMsg"></span>
+          </div>
         </div>`;
     }
 
@@ -5360,6 +5719,7 @@
           <textarea aria-label="Recommendations for the school following review…" data-overview-field="recommendations" placeholder="${canWriteFeedback ? 'Recommendations for the school following review…' : 'Written by a Central Hub admin after review'}" ${!canWriteFeedback ? 'disabled' : ''}>${a.recommendations || ''}</textarea>
         </div>
         ${buildActionPlanPanel(a, canWriteExternal)}
+        ${buildImpactReviewPanel(a)}
          ${buildAppealsPanel(a)}`)}
 
         ${state.isAdmin ? '' : `<div class="readonly-note">${canWriteFeedback
