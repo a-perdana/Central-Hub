@@ -1099,6 +1099,17 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
     const studentUid = after.studentUid;
     if (!studentUid) return;
 
+    // 2026-10-02: only attempts graded by startPracticeRun /
+    // answerPracticeItem earn points. Students can no longer write
+    // practice_attempts at all (rules), so this is defence in depth
+    // against any doc created another way.
+    if (after.serverGraded !== true) {
+      try {
+        await event.data.after.ref.update({ pointsAwarded: 0, pointsNote: "not server-graded" });
+      } catch (e) { /* best effort */ }
+      return;
+    }
+
     // No re-entry guard needed for the pointsAwarded writeback below:
     // that update keeps status==='submitted' on both sides of the
     // transition, so wasScored becomes true and the early-return at
@@ -1139,6 +1150,25 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
       counter = mode === "daily_challenge" ? "daily_challenge" : "practice_perfect";
     }
 
+    // Daily cap (2026-10-02): free-practice runs earn points for the
+    // first PRACTICE_DAILY_POINT_RUNS completed runs of a Jakarta day;
+    // later runs still count for practice, but score 0 points. Stops
+    // point farming by speed-clicking through runs.
+    let capped = false;
+    if (mode === "practice") {
+      try {
+        const dayStart = jakartaDayStart();
+        const done = await db.collection("practice_attempts")
+          .where("studentUid", "==", studentUid)
+          .where("mode", "==", "practice")
+          .where("submittedAt", ">=", dayStart)
+          .count().get();
+        if (done.data().count > PRACTICE_DAILY_POINT_RUNS) { points = 0; capped = true; }
+      } catch (e) {
+        console.warn("[awardPracticeAttemptPoints] daily-cap count failed", e.message);
+      }
+    }
+
     // Daily-challenge first-of-day-per-subject bonus.
     // count() aggregation (2026-08-01) — was a full-doc fetch per award.
     if (mode === "daily_challenge" && challengeId) {
@@ -1154,7 +1184,28 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
       }
     }
 
-    await awardPoints(studentUid, points, { counter, eventId: event.id });
+    if (points > 0) await awardPoints(studentUid, points, { counter, eventId: event.id });
+
+    // Daily-challenge board row (2026-10-02). Students may only read
+    // their own practice_attempts, so the school x grade board reads this
+    // name + score projection instead.
+    if (mode === "daily_challenge" && challengeId) {
+      try {
+        await db.collection("daily_challenge_results").doc(`${challengeId}_${studentUid}`).set({
+          challengeId, studentUid,
+          studentName: after.studentName || "Student",
+          schoolId: after.schoolId || null,
+          gradeLevel: after.gradeLevel || null,
+          subjectId: subjectId || null,
+          rawScorePct: scorePct,
+          correctCount,
+          itemCount: Array.isArray(after.itemIds) ? after.itemIds.length : null,
+          submittedAt: after.submittedAt || admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn("[awardPracticeAttemptPoints] daily result row failed", e.message);
+      }
+    }
 
     // Write pointsAwarded back so SH can render it in the summary screen
     // + recent-runs list. Best-effort: a failure here doesn't void the
@@ -1163,12 +1214,248 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
       await event.data.after.ref.update({
         pointsAwarded: points,
         pointsAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...(capped ? { pointsNote: "daily point limit reached" } : {}),
       });
     } catch (e) {
       console.warn("[awardPracticeAttemptPoints] pointsAwarded writeback failed", e.message);
     }
   }
 );
+
+// ───────────────────────────────────────────────────────────────
+// 6c. STUDENTS HUB PRACTICE ENGINE — server-graded (2026-10-02)
+//
+//   startPracticeRun    (callable) picks the items server-side and
+//                       creates the practice_attempts doc. Free practice:
+//                       random from the WHOLE active pool for the
+//                       student's grade (subject + optional topicGroup /
+//                       difficulty), items the student has not seen in
+//                       their last PRACTICE_RECENT_ATTEMPTS runs first.
+//                       Daily challenge: the challenge's items, one
+//                       attempt per student per challenge (an unfinished
+//                       one is resumed). Returns the items WITHOUT
+//                       correctAnswer / explanation / distractorRationale.
+//   answerPracticeItem  (callable) grades one answer in a transaction,
+//                       in order, once per item; returns whether it was
+//                       right plus the key and the explanation. Marks the
+//                       attempt submitted after the last item, which
+//                       fires awardPracticeAttemptPoints.
+//   practicePoolStats   (callable) counts of active items per subject /
+//                       topicGroup / difficulty for the student's grade —
+//                       students can no longer read practice_questions.
+//
+//   Why: the client used to grade itself and write correctCount, and the
+//   points function trusted it — any student could award themselves
+//   unlimited points from DevTools, and every answer key was readable.
+// ───────────────────────────────────────────────────────────────
+const PRACTICE_SUBJECTS = ["math", "english", "science"];
+const PRACTICE_DIFFS = ["easy", "medium", "hard"];
+const PRACTICE_MAX_ITEMS = 20;
+const PRACTICE_POOL_LIMIT = 1000;
+const PRACTICE_RECENT_ATTEMPTS = 30;
+const PRACTICE_DAILY_POINT_RUNS = 20;
+const PRACTICE_PUBLIC_FIELDS = [
+  "subjectId", "topic", "topicGroup", "difficulty", "stem", "stemHtml",
+  "options", "optionsHtml", "hasDiagram", "diagramUrl", "diagramStoragePath",
+];
+
+function jakartaDayStart() {
+  const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+  return new Date(`${key}T00:00:00+07:00`);
+}
+
+function publicPracticeItem(snap) {
+  const d = snap.data() || {};
+  const out = { id: snap.id };
+  for (const k of PRACTICE_PUBLIC_FIELDS) out[k] = d[k] === undefined ? null : d[k];
+  return out;
+}
+
+async function loadActiveStudent(uid) {
+  if (!uid) throw new HttpsError("unauthenticated", "Please sign in first.");
+  const snap = await db.collection("students").doc(uid).get();
+  const s = snap.exists ? snap.data() : null;
+  if (!s || s.status !== "active") throw new HttpsError("permission-denied", "Your Students Hub account is not active.");
+  const grade = Number(s.gradeLevel);
+  if (!(grade >= 7 && grade <= 12)) {
+    throw new HttpsError("failed-precondition", "Your grade is not set yet. Ask your school or Eduversal to set it.");
+  }
+  return { ...s, grade };
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+exports.startPracticeRun = onCall({ region: "asia-southeast1" }, async (req) => {
+  const uid = req.auth && req.auth.uid;
+  const s = await loadActiveStudent(uid);
+  await enforcePerUserRateLimit("startPracticeRun", uid, 60, 300);
+  const data = req.data || {};
+  const attempts = db.collection("practice_attempts");
+  const qcol = db.collection("practice_questions");
+
+  // ── Daily challenge ─────────────────────────────────────────
+  if (typeof data.challengeId === "string" && data.challengeId) {
+    const challengeId = data.challengeId.slice(0, 80);
+    const cSnap = await db.collection("daily_challenges").doc(challengeId).get();
+    const c = cSnap.exists ? cSnap.data() : null;
+    const now = Date.now();
+    if (!c || c.status !== "open"
+        || (c.opensAt && c.opensAt.toMillis() > now)
+        || (c.closesAt && c.closesAt.toMillis() < now)) {
+      throw new HttpsError("failed-precondition", "This challenge isn't open right now.");
+    }
+    if (c.gradeLevel != null && Number(c.gradeLevel) !== s.grade) {
+      throw new HttpsError("permission-denied", "This challenge is for a different grade.");
+    }
+    const prev = await attempts.where("studentUid", "==", uid).where("challengeId", "==", challengeId).limit(10).get();
+    if (prev.docs.some(d => ["submitted", "scored"].includes(d.get("status")))) {
+      throw new HttpsError("already-exists", "You have already done this challenge today. Come back tomorrow!");
+    }
+    const open = prev.docs.find(d => d.get("status") === "in_progress" && d.get("serverGraded") === true);
+    if (open) {
+      const a = open.data();
+      const snaps = await db.getAll(...a.itemIds.map(id => qcol.doc(id)));
+      return {
+        attemptId: open.id, mode: "daily_challenge", subjectId: a.subjectId, topicGroup: null,
+        items: snaps.filter(x => x.exists).map(publicPracticeItem),
+        responses: (a.responses || []).map(r => ({ itemId: r.itemId, answer: r.answer, isCorrect: r.isCorrect })),
+        correctCount: a.correctCount || 0, streak: a.streakCurrent || 0, streakBest: a.streakBest || 0,
+        resumed: true,
+      };
+    }
+    const ids = Array.isArray(c.itemIds) ? c.itemIds.slice(0, PRACTICE_MAX_ITEMS) : [];
+    const snaps = ids.length ? await db.getAll(...ids.map(id => qcol.doc(id))) : [];
+    const usable = snaps.filter(x => x.exists && x.get("correctAnswer"));
+    if (!usable.length) throw new HttpsError("failed-precondition", "This challenge has no questions.");
+    const ref = await attempts.add({
+      studentUid: uid, studentName: s.displayName || "", schoolId: s.schoolId || null,
+      gradeLevel: s.grade, subjectId: c.subjectId || null, mode: "daily_challenge",
+      sourceType: "challenge", challengeId, topicGroup: null,
+      itemIds: usable.map(x => x.id), responses: [], status: "in_progress",
+      correctCount: 0, attemptedCount: 0, rawScorePct: 0, streakCurrent: 0, streakBest: 0,
+      pointsAwarded: null, serverGraded: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), submittedAt: null,
+    });
+    return { attemptId: ref.id, mode: "daily_challenge", subjectId: c.subjectId || null, topicGroup: null,
+      items: usable.map(publicPracticeItem), responses: [], correctCount: 0, streak: 0, streakBest: 0 };
+  }
+
+  // ── Free practice ───────────────────────────────────────────
+  const subjectId = String(data.subjectId || "");
+  if (!PRACTICE_SUBJECTS.includes(subjectId)) throw new HttpsError("invalid-argument", "Unknown subject.");
+  const topicGroup = typeof data.topicGroup === "string" && data.topicGroup ? data.topicGroup.slice(0, 40) : null;
+  const difficulty = PRACTICE_DIFFS.includes(data.difficulty) ? data.difficulty : null;
+  const n = Math.max(1, Math.min(PRACTICE_MAX_ITEMS, parseInt(data.n, 10) || 10));
+
+  let q = qcol.where("subjectId", "==", subjectId).where("status", "==", "active")
+    .where("type", "==", "mcq").where("gradeLevels", "array-contains", s.grade);
+  if (topicGroup) q = q.where("topicGroup", "==", topicGroup);
+  if (difficulty) q = q.where("difficulty", "==", difficulty);
+  const poolSnap = await q.select("correctAnswer", "options").limit(PRACTICE_POOL_LIMIT).get();
+  const pool = poolSnap.docs
+    .filter(d => d.get("correctAnswer") && Array.isArray(d.get("options")) && d.get("options").length >= 2)
+    .map(d => d.id);
+  if (!pool.length) throw new HttpsError("not-found", "No questions for your grade match this topic and difficulty yet.");
+
+  const recent = await attempts.where("studentUid", "==", uid)
+    .orderBy("createdAt", "desc").limit(PRACTICE_RECENT_ATTEMPTS).select("itemIds").get();
+  const seen = new Set(recent.docs.flatMap(d => d.get("itemIds") || []));
+  const unseen = shuffleInPlace(pool.filter(id => !seen.has(id)));
+  const again = shuffleInPlace(pool.filter(id => seen.has(id)));
+  const pickedIds = [...unseen, ...again].slice(0, n);
+
+  const snaps = await db.getAll(...pickedIds.map(id => qcol.doc(id)));
+  const items = snaps.filter(x => x.exists).map(publicPracticeItem);
+  const ref = await attempts.add({
+    studentUid: uid, studentName: s.displayName || "", schoolId: s.schoolId || null,
+    gradeLevel: s.grade, subjectId, mode: "practice", sourceType: "free", challengeId: null,
+    topicGroup, difficulty, itemIds: items.map(i => i.id), responses: [], status: "in_progress",
+    correctCount: 0, attemptedCount: 0, rawScorePct: 0, streakCurrent: 0, streakBest: 0,
+    pointsAwarded: null, serverGraded: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), submittedAt: null,
+  });
+  return { attemptId: ref.id, mode: "practice", subjectId, topicGroup, items,
+    responses: [], correctCount: 0, streak: 0, streakBest: 0, poolSize: pool.length, unseenCount: unseen.length };
+});
+
+exports.answerPracticeItem = onCall({ region: "asia-southeast1" }, async (req) => {
+  const uid = req.auth && req.auth.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Please sign in first.");
+  const data = req.data || {};
+  const attemptId = String(data.attemptId || "");
+  const itemId = String(data.itemId || "");
+  const answer = String(data.answer || "");
+  if (!attemptId || !itemId || !["A", "B", "C", "D", "E"].includes(answer)) {
+    throw new HttpsError("invalid-argument", "Missing attempt, question or answer.");
+  }
+  await enforcePerUserRateLimit("answerPracticeItem", uid, 900, 4000);
+  const ref = db.collection("practice_attempts").doc(attemptId);
+  return db.runTransaction(async (tx) => {
+    const aSnap = await tx.get(ref);
+    const a = aSnap.exists ? aSnap.data() : null;
+    if (!a || a.studentUid !== uid || a.serverGraded !== true) throw new HttpsError("permission-denied", "This run is not yours.");
+    if (a.status !== "in_progress") throw new HttpsError("failed-precondition", "This run is already finished.");
+    const ids = a.itemIds || [];
+    const responses = a.responses || [];
+    if (ids[responses.length] !== itemId) {
+      throw new HttpsError("failed-precondition", responses.some(r => r.itemId === itemId)
+        ? "You have already answered this question." : "Please answer the questions in order.");
+    }
+    const qSnap = await tx.get(db.collection("practice_questions").doc(itemId));
+    const key = qSnap.exists ? qSnap.get("correctAnswer") : null;
+    if (!key) throw new HttpsError("not-found", "This question is no longer available.");
+    const isCorrect = answer === key;
+    const streak = isCorrect ? (a.streakCurrent || 0) + 1 : 0;
+    const streakBest = Math.max(a.streakBest || 0, streak);
+    const correctCount = (a.correctCount || 0) + (isCorrect ? 1 : 0);
+    const spent = Math.max(0, Math.min(30 * 60 * 1000, Number(data.timeSpentMs) || 0));
+    const nextResponses = [...responses, { itemId, answer, isCorrect, timeSpentMs: spent, answeredAt: new Date().toISOString() }];
+    const done = nextResponses.length >= ids.length;
+    const rawScorePct = Math.round((correctCount / ids.length) * 100);
+    const update = {
+      responses: nextResponses, correctCount, attemptedCount: nextResponses.length,
+      streakCurrent: streak, streakBest, rawScorePct,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (done) { update.status = "submitted"; update.submittedAt = admin.firestore.FieldValue.serverTimestamp(); }
+    tx.update(ref, update);
+    return {
+      isCorrect, correctAnswer: key, explanation: qSnap.get("explanation") || null,
+      done, correctCount, attemptedCount: nextResponses.length, total: ids.length,
+      streak, streakBest, rawScorePct,
+    };
+  });
+});
+
+const practiceStatsCache = new Map();   // grade -> { at, data }
+exports.practicePoolStats = onCall({ region: "asia-southeast1" }, async (req) => {
+  const s = await loadActiveStudent(req.auth && req.auth.uid);
+  const hit = practiceStatsCache.get(s.grade);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.data;
+  const snap = await db.collection("practice_questions")
+    .where("status", "==", "active").where("type", "==", "mcq")
+    .where("gradeLevels", "array-contains", s.grade)
+    .select("subjectId", "topicGroup", "difficulty", "correctAnswer").get();
+  const subjects = {};
+  for (const subj of PRACTICE_SUBJECTS) subjects[subj] = { total: 0, byTopic: {}, byDifficulty: {} };
+  snap.forEach(d => {
+    const subj = d.get("subjectId");
+    if (!subjects[subj] || !d.get("correctAnswer")) return;
+    const t = d.get("topicGroup") || "mixed", diff = d.get("difficulty") || "medium";
+    subjects[subj].total++;
+    subjects[subj].byTopic[t] = (subjects[subj].byTopic[t] || 0) + 1;
+    subjects[subj].byDifficulty[diff] = (subjects[subj].byDifficulty[diff] || 0) + 1;
+  });
+  const data = { grade: s.grade, subjects };
+  practiceStatsCache.set(s.grade, { at: Date.now(), data });
+  return data;
+});
 
 // ───────────────────────────────────────────────────────────────
 // 7. rebuildLeaderboards — hourly schedule

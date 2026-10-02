@@ -706,7 +706,13 @@ service cloud.firestore {
                && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.is_hq_observer == true
                && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.status == 'active';
       }
-      allow get, list: if isAuthorized() || isActiveStudent();
+      // 2026-10-02: students no longer read this collection — every doc
+      // carries correctAnswer + explanation, and Firestore cannot hide
+      // fields. Students get items without the key from the
+      // startPracticeRun Cloud Function and are graded by
+      // answerPracticeItem. Staff (CH/AH/TH users) and Eduversal
+      // accounts (HQ observers in SH) still read it.
+      allow get, list: if isAdmin() || isEduversal() || isCentralUser() || isAcademicUser() || isTeachersUser();
       // Observer back-write for endorsement denormalisation — pure
       // increment/decrement on endorseCount + arrayUnion/Remove on
       // endorsedBy. Any other field change still requires admin /
@@ -1227,21 +1233,25 @@ service cloud.firestore {
     // mode ∈ {'practice', 'daily_challenge', 'tournament'} so the
     // Cloud Function can apply per-mode point multipliers later.
     match /practice_attempts/{attemptId} {
-      allow get: if isAuthorized() ||
-                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
-      allow list: if isAuthorized();
-      allow create: if isActiveStudent()
-                    && request.resource.data.studentUid == request.auth.uid
-                    && request.resource.data.status == 'in_progress'
-                    && request.resource.data.mode in ['practice', 'daily_challenge', 'tournament'];
-      // Owner can keep appending answers while in_progress and flip
-      // to submitted/scored exactly once. After that the doc is
-      // immutable for the student (admin still has the standard
-      // bypass via isAdmin / isAuthorized via the catch-all below).
-      allow update: if isActiveStudent()
-                    && resource.data.studentUid == request.auth.uid
-                    && resource.data.status == 'in_progress';
+      // Since 2026-10-02 every attempt is created and graded by Cloud
+      // Functions (startPracticeRun / answerPracticeItem) — the client
+      // used to write its own correctCount and the points trigger
+      // trusted it. A student reads only their own attempts (queries
+      // must filter studentUid == auth.uid); staff read all. Other
+      // students' daily-challenge scores come from
+      // daily_challenge_results, not from here.
+      allow get, list: if isAdmin() || isCentralUser() || isAcademicUser() || isTeachersUser()
+                          || (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow create, update: if false;
       allow delete: if isAdmin();
+    }
+
+    // daily_challenge_results/{challengeId}_{uid}: name + score
+    // projection for the Students Hub daily board (school x grade).
+    // Written by awardPracticeAttemptPoints only.
+    match /daily_challenge_results/{resultId} {
+      allow get, list: if isActiveStudent() || isAdmin() || isCentralUser() || isAcademicUser() || isTeachersUser();
+      allow create, update, delete: if false;
     }
 
     // daily_challenges: one curated set per day per subject.

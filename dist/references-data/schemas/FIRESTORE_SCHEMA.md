@@ -1374,8 +1374,8 @@ Two collections that wire the Practice Bank + Practice Assessments into student-
 - `createdAt`, `submittedAt`
 
 **FKs:** `studentUid → students.uid` · `schoolId → partner_schools.id` · `classId` · `assessmentId → practice_assessments.id` · `challengeId → daily_challenges.id` · `itemIds[i] → practice_questions.id`.
-**Writers:** owning student creates own draft (`status=='in_progress'`, `studentUid==auth.uid`); owner can update fields while `in_progress`; once `submitted`/`scored` doc is immutable for student. `central_admin` can update freely (for manual regrade or moderation).
-**Read:** any authorised CH/AH/TH user (admin / staff lens) OR owning student (`studentUid==auth.uid`).
+**Writers:** **Cloud Functions only since 2026-10-02** — `startPracticeRun` creates the doc (server-picked `itemIds[]`, `serverGraded: true`), `answerPracticeItem` appends each graded response in a transaction (in order, once per item) and sets `status: 'submitted'` after the last one, `awardPracticeAttemptPoints` writes `pointsAwarded` (+ `pointsNote` when the daily cap of 20 point-earning practice runs is hit, or for a non-server-graded doc). Rule: `create, update: if false`. Extra fields: `streakCurrent`, `difficulty`, `serverGraded`, `updatedAt`. (Before: the student created and updated the doc and wrote their own `correctCount`, which the points trigger trusted.)
+**Read:** staff (admin / CH / AH / TH users) OR the owning student (`studentUid==auth.uid`; student queries must filter on it). Other students' daily-challenge scores come from `daily_challenge_results`.
 **Notes:** Mirrors the `chapter_test_attempts` lifecycle but **never writes back to mastery**. The Cloud Function that maintains `student_points` reads this collection and applies a per-mode multiplier (e.g. practice 1×, daily_challenge 1.5×, tournament 2×).
 
 #### `daily_challenges/{challengeId}`
@@ -1399,6 +1399,14 @@ Two collections that wire the Practice Bank + Practice Assessments into student-
 **Writers:** `central_admin` OR CH `coordinator` / `director`.
 **Read:** any authorised user OR `isActiveStudent()`.
 **Notes:** One challenge doc per (date × subject). The deterministic id makes "did I do today's?" a `get` not a `where`. A future Cloud Function may auto-rotate challenges from the published `practice_assessments` pool at midnight; until that lands, HQ authors today's challenge from `/practice-assessment-author` and writes the `daily_challenges` doc by hand (the same HQ surface composes both `practice_assessments` and `daily_challenges`).
+
+#### `daily_challenge_results/{challengeId}_{uid}` — daily board rows (2026-10-02)
+**PK:** Deterministic `{challengeId}_{studentUid}` (e.g. `2026-10-03_math_g7_<uid>`) — one row per student per challenge.
+**Fields:** `challengeId → daily_challenges.id`, `studentUid → students.uid`, `studentName` (denormalised), `schoolId → partner_schools.id`, `gradeLevel` (number), `subjectId`, `rawScorePct` (0-100), `correctCount`, `itemCount`, `submittedAt`.
+**FKs:** `challengeId → daily_challenges` · `studentUid → students` · `schoolId → partner_schools`.
+**Writers:** Cloud Function only — `awardPracticeAttemptPoints` writes the row when a server-graded `daily_challenge` attempt is submitted. Rule: `create, update, delete: if false`.
+**Read:** active students (`isActiveStudent()`) + staff (admin / CH / AH / TH users). SH `/daily-challenge` queries `where challengeId == today's id AND schoolId == own school` (equality only — no composite index) and ranks client-side by score then time.
+**Notes:** Exists because students may only read their OWN `practice_attempts` since 2026-10-02 (attempts carry per-item answers, which would reveal the day's keys). This is the name + score projection the school × grade board needs. **NEVER feeds formal grading** — same boundary as `practice_attempts` (root CLAUDE.md #33).
 
 #### `practice_question_flags/{flagId}` — HQ observer bug reports (2026-05-13)
 **PK:** Auto-id.
