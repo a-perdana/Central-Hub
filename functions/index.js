@@ -1437,7 +1437,7 @@ const practiceStatsCache = new Map();   // grade -> { at, data }
 exports.practicePoolStats = onCall({ region: "asia-southeast1" }, async (req) => {
   const s = await loadActiveStudent(req.auth && req.auth.uid);
   const hit = practiceStatsCache.get(s.grade);
-  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.data;
+  if (hit && Date.now() - hit.at < 60 * 1000) return hit.data;   // 60 s: a new bank shows up within a minute of seeding
   const snap = await db.collection("practice_questions")
     .where("status", "==", "active").where("type", "==", "mcq")
     .where("gradeLevels", "array-contains", s.grade)
