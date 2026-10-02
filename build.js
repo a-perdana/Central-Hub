@@ -994,7 +994,6 @@ const refAssetMap = [
   ["frameworks/appraisal-framework-v2.json",               path.join("..", "Academic Hub", "resources", "appraisal-framework-v2.json")],
   ["frameworks/principal-appraisal-framework-v1.json",     path.join("..", "Academic Hub", "resources", "principal-appraisal-framework-v1.json")],
   ["frameworks/principal-observation-rubric.json",         path.join("..", "Academic Hub", "resources", "principal-observation-rubric.json")],
-  ["frameworks/principal-operating-cadence.json",          path.join("..", "Academic Hub", "resources", "principal-operating-cadence.json")],
   ["frameworks/school-appraisal-framework.json",           path.join("..", "Academic Hub", "resources", "school-appraisal-framework.json")],
   ["frameworks/appraisal-levels.json",                     path.join("..", "Academic Hub", "resources", "appraisal-levels.json")],
   ["frameworks/walkthrough-rubric.json",                   path.join("..", "Academic Hub", "resources", "walkthrough-rubric.json")],
@@ -1008,10 +1007,13 @@ const refAssetMap = [
   ["frameworks/weekly-checklists/_academic-year-arc.json",        path.join("..", "docs", "weekly-checklists", "_academic-year-arc.json")],
   ["frameworks/weekly-checklists/subject-teacher.json",           path.join("..", "docs", "weekly-checklists", "subject-teacher.json")],
   ["frameworks/weekly-checklists/subject-leader.json",            path.join("..", "docs", "weekly-checklists", "subject-leader.json")],
-  ["frameworks/weekly-checklists/school-principal.json",          path.join("..", "docs", "weekly-checklists", "school-principal.json")],
-  ["frameworks/weekly-checklists/academic-coordinator.json",      path.join("..", "docs", "weekly-checklists", "academic-coordinator.json")],
-  ["frameworks/weekly-checklists/cambridge-coordinator.json",     path.join("..", "docs", "weekly-checklists", "cambridge-coordinator.json")],
-  ["frameworks/weekly-checklists/foundation-representative.json", path.join("..", "docs", "weekly-checklists", "foundation-representative.json")],
+  // The four AH roles moved to v2 on 2026-10-02 (built from the live Academic
+  // Services documents); v1 + the Principal Operating Cadence are archived and
+  // no longer published (the cadence is a controlled source for appraisers).
+  ["frameworks/weekly-checklists/v2/school_principal.json", path.join("..", "docs", "weekly-checklists", "v2", "school_principal.json")],
+  ["frameworks/weekly-checklists/v2/academic_coordinator.json", path.join("..", "docs", "weekly-checklists", "v2", "academic_coordinator.json")],
+  ["frameworks/weekly-checklists/v2/cambridge_coordinator.json", path.join("..", "docs", "weekly-checklists", "v2", "cambridge_coordinator.json")],
+  ["frameworks/weekly-checklists/v2/foundation_representative.json", path.join("..", "docs", "weekly-checklists", "v2", "foundation_representative.json")],
   ["frameworks/weekly-checklists/subject-specialist.json",        path.join("..", "docs", "weekly-checklists", "subject-specialist.json")],
   ["frameworks/weekly-checklists/director.json",                  path.join("..", "docs", "weekly-checklists", "director.json")],
 
