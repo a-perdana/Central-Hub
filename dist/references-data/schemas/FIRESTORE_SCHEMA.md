@@ -133,19 +133,18 @@ The catalogue below groups collections by the business domain they serve. Within
 
 #### `students/{uid}`
 **PK:** Firebase Auth UID (Google SSO). Owned by **Students Hub**.
-**Fields:** `uid`, `email`, `emailLower` (lookup key), `displayName`, `photoURL`, `schoolId →partner_schools.id` (nullable until class picker resolves), `school` (denormalised), `classId →partner_schools/{id}/classes/{classId}` (nullable until class picker), `className` (denormalised), `gradeLevel` (number), `status` (`'needs_class'` | `'pending_approval'` | `'active'` | `'rejected'` | `'graduated'`), `is_hq_observer` (bool, optional — when `true` the SH runners reveal the HQ Observer Strip so the student can flag bad questions; set by `central_admin` via Firebase Console for pilot QA), `createdAt`, `classPickedAt`, `approvedAt`, `approvedBy →users.uid`, `lastLoginAt`.
+**Fields:** `uid`, `email`, `emailLower` (lookup key), `displayName`, `photoURL`, `schoolId →partner_schools.id` (nullable until class picker resolves), `school` (denormalised), `classId →partner_schools/{id}/classes/{classId}` (nullable until class picker), `className` (denormalised), `gradeLevel` (number, 7-12 — **the axis Students Hub filters practice by since 2026-10-02**), `status` (`'needs_class'` | `'pending_approval'` | `'active'` | `'rejected'` | `'graduated'` — `needs_class` now means "needs a grade"; `pending_approval` is legacy, no new doc reaches it), `is_hq_observer` (bool, optional — when `true` the SH runners reveal the HQ Observer Strip so the student can flag bad questions; set by `central_admin` via Firebase Console for pilot QA), `createdAt`, `gradePickedAt` (set by the 2026-10-02 grade picker), `classPickedAt` / `classId` / `className` / `approvedAt` / `approvedBy` (legacy class-picker flow, kept on old docs), `lastLoginAt`.
 **FKs:** `schoolId → partner_schools.id` · `classId → partner_schools/{id}/classes/{classId}` · `approvedBy → users.uid` (the teacher / admin who approved).
 **Writers:**
 - Self-CREATE on first Google SSO. Rule pins `uid == auth.uid`, `emailLower == lowercase(token.email)`, `status == 'needs_class'` so a student can't bootstrap themselves to `active` or impersonate another uid.
-- Self-UPDATE in two narrow envelopes: (1) class picker transition `needs_class → pending_approval` (affected keys ⊂ `{schoolId, school, classId, className, gradeLevel, status, classPickedAt}`); (2) login touch (affected keys ⊂ `{lastLoginAt, displayName, photoURL}`).
+- Self-UPDATE envelopes: (1) **grade picker (2026-10-02)** `needs_class → active` — affected keys ⊂ `{schoolId, school, gradeLevel, status, gradePickedAt}`, `gradeLevel` an int in 7..12, and the rule `get()`s `partner_schools/{schoolId}` to require `domain == token email domain` and `school == name`, so the school can't be spoofed from the client; afterwards the grade is **locked** for real students (admin-only change); (2) legacy class-picker transition `needs_class → pending_approval` (kept for cached old builds); (3) login touch (`{lastLoginAt, displayName, photoURL}`); (4) HQ observer grade preview — `@eduversal.org` + `is_hq_observer` may change only `{gradeLevel, gradePickedAt}`, 7..12; (5) avatar fields.
 - Admin / TH admin / AH admin can update freely (used for `pending_approval → active|rejected` and `active → graduated`).
 **Read:** owner (self) · `central_admin` · `academic_admin` · `teachers_admin` · same-school AH leadership (`school_principal` / `academic_coordinator` / `cambridge_coordinator`) for AH `/student-roster` · same-school TH staff (`subject_teacher` / `subject_leader`) for TH `/student-approvals` and per-class views. `list` gates on role+sub-role only and trusts the client query's `where('schoolId','==',ownSchool)` filter (same trust-the-filter pattern as `chapter_test_attempts.list`); `get` enforces the same-school constraint per-doc.
 **Indexes:** none yet.
 **Notes:**
 - **Distinct from `users/{uid}`** — students are NOT tracked in `users/{uid}` and do not have any `role_*hub` / sub-role / approval fields. Hub selection is the discriminator: a person who signs into `studentshub.eduversal.org` becomes a student; same email signing into `teachershub.eduversal.org` follows the staff path. Both records can co-exist for hybrid edge cases without conflict.
 - **Domain whitelist is runtime-derived** from `partner_schools.domain`. Students Hub `auth-guard.js` queries `partner_schools where domain == emailDomain limit 2` at sign-in; 0 matches → reject, 1 → schoolId pre-filled, 2+ → multi-school domain (the picker shows a school step first).
-- **Class picker filter** (`Students Hub/class-picker.html`): `ALLOWED_GRADES = [7, 8]` for the Grade-7-8 pilot. Bump when expanding.
-- **Trust-but-verify enrolment** — a student's class pick lands them in `pending_approval`, not `active`. A class teacher confirms membership via TH (Phase 1.5 `/student-approvals` page; Phase 1 stopgap = direct Firestore Console flip).
+- **Grade picker** (`Students Hub/class-picker.html` — URL kept): `GRADES = [7..12]`. Since 2026-10-02 there are **no classes and no teacher approval** — the school comes from the email domain, the student picks a grade once and is active. (Before: pick a class → `pending_approval` → teacher approved in TH `/student-approvals`; 13 of 16 schools had no classes set up, so nobody got in.)
 - **No deletion at end of year** — `status='graduated'` preserves growth history. Hard-delete only via admin Cloud Function on explicit school request.
 
 #### `user_notes/{noteId}`
@@ -1166,7 +1165,8 @@ Curriculum-adjacent question bank kept **separate from** `chapter_test_items` (w
 - Tagging: `difficultyStars` (1-3 — upstream `L1/L2/L3` rating preserved), `difficulty` (`'easy' | 'medium' | 'hard'` — derived from stars), `topic` (verbatim upstream string, e.g. `'1-5 Adding Integers'`), `topicSlug` (kebab-case of `topic`), `topicGroup` (`'number' | 'algebra' | 'geometry' | 'statistics' | 'probability' | 'problem-solving' | 'mixed' | null` — coarse heuristic bucket, used by leaderboard "Algebra Champion" / "Geometry Champion" segmentation. **Filled at import** by keyword match on `topic`. Null = unclassified (today mostly `'Uncategorised'` upstream entries — explicit decision to leave them null for HQ sweep). Later HQ tagging in `/practice-bank-admin` rewrites this).
 - Cambridge mapping (deferred — null at import time): `cambridgeStandardRefs[]`, `cambridgeUnitCode`, `cambridgeStage` (7..12). HQ Math Specialist fills these as items are curated.
 - Diagrams: `hasDiagram`, `diagramUrl` (full HTTPS URL — CH bucket after the storage copy step has run; `null` until then), `diagramOriginalUrl` (verbatim upstream URL on `igcse-tools.firebasestorage.app` for forensics + rollback), `diagramStoragePath` (CH bucket path within `centralhub-8727b.firebasestorage.app/practice-diagrams/{subjectId}/...`).
-- Lifecycle: `status` (`'active' | 'archived' | 'flagged'` — default `'active'`. Promoted-to-tournament items stay `'active'`; HQ flags items with copyright/quality concerns as `'flagged'`).
+- Grade: `gradeLevels[]` (array of int 7-12 — **required for an `'active'` item since 2026-10-02**; Students Hub serves a student only items where `gradeLevels array-contains students.gradeLevel`, and the daily-challenge rotator builds each grade's challenge the same way. Set in CH `/practice-bank-admin` → Grades.)
+- Lifecycle: `status` (`'active' | 'archived' | 'flagged'` — default `'active'`. Promoted-to-tournament items stay `'active'`; HQ flags items with copyright/quality concerns as `'flagged'`). **2026-10-02 reset:** all 805 imported ExamView items were archived (`archivedBy: 'sh-practice-reset-2026-10-02'`, `statusBeforeArchive` kept) — Students Hub now runs only on Eduversal-written items. Same reset archived every `practice_assessments`, `chapter_test_items`, `chapter_tests` and `ease_items` doc; undo with `node scripts/practice/archive-question-banks-2026-10-02.js --restore --apply`.
 - Provenance (always set on IGCSE-Tools imports): `source` (`'igcse-tools-examview' | 'hq' | string`), `sourceCollection` (e.g. `'questions'`), `sourceUid` (upstream doc id), `sourceFile` (e.g. `'Pre_Algebra_Chapter_0'` — original ExamView ZIP filename, used for "which textbook" filters), `sourceId` (e.g. `'question_42_1'` — upstream QTI id), `sourceUserId` (upstream uploader's IGCSE Tools uid — provenance only; the user who originally imported the ZIP).
 - Search: `searchTokens[]` (same `buildSearchTokens()` algorithm as `chapter_test_items.searchTokens` + `ease_items.searchTokens` — `array-contains` queries on `/practice-bank-admin`).
 - Audit: `authorUid` (sentinel `'igcse-tools-examview-import'` for migration; future HQ-authored items carry actual uid), `createdAt`, `updatedAt`, `importedAt`.
@@ -1202,6 +1202,7 @@ Practice items (§21) get composed into reusable **assessments** here. Distinct 
 Three collections + one Cloud Function:
 
 #### `practice_assessments/{assessmentId}`
+> 🗄 **Archived 2026-10-02** — every doc `status: archived`; the composer page and its AI ranker are archived, and `rotateDailyChallenges` no longer reads this collection.
 **PK:** Auto-id (firestore default).
 **Fields:**
 - `title` (string, required)
@@ -1227,6 +1228,7 @@ Three collections + one Cloud Function:
 **Notes:** Items referenced by id — never cloned. Deleting an underlying `practice_questions` doc orphans the reference (client-side filter at read time skips missing docs); this is acceptable because practice items follow a soft-delete pattern (`status: 'archived'`) by convention. `aiAssisted` lets the SH analytics tab segment "AI-composed vs hand-picked" performance.
 
 #### `practice_ai_audit/{auditId}`
+> 🗄 **Archived 2026-10-02** with the Practice Assessment Author / `practiceBankAiSuggest` (see `Central Hub/archive/README.md`). No writer is live; existing docs kept.
 **PK:** Auto-id.
 **Fields:**
 - `actorUid → users.uid`
@@ -1252,6 +1254,7 @@ Three collections + one Cloud Function:
 **Notes:** Append-only (no update / no delete via rules). Lets HQ audit AI cost + model behaviour + which intents produce useful suggestions. Drives future fine-tuning decisions.
 
 #### `ai_suggestion_cache/{cacheId}`
+> 🗄 **Archived 2026-10-02** with the Practice Assessment Author / `practiceBankAiSuggest` (see `Central Hub/archive/README.md`). No writer is live; existing docs kept.
 **PK:** Deterministic — `sha256(subjectId + targetCount + difficultyMix + topicGroups + cambridgeStage + intent + model + candidatePoolFingerprint).slice(0, 40)`. `candidatePoolFingerprint` = sha256 of the sorted candidate id list (so a cache hit is invalidated automatically when the candidate pool changes — e.g. a new item gets imported or an item gets archived).
 **Fields:**
 - `returnedIds[]`
@@ -1376,10 +1379,11 @@ Two collections that wire the Practice Bank + Practice Assessments into student-
 **Notes:** Mirrors the `chapter_test_attempts` lifecycle but **never writes back to mastery**. The Cloud Function that maintains `student_points` reads this collection and applies a per-mode multiplier (e.g. practice 1×, daily_challenge 1.5×, tournament 2×).
 
 #### `daily_challenges/{challengeId}`
-**PK:** Deterministic `{YYYY-MM-DD}_{subjectId}` (e.g. `2026-05-13_math`). Lets the SH client compute today's id without a query.
+**PK:** Deterministic `{YYYY-MM-DD}_{subjectId}_g{grade}` (e.g. `2026-10-03_math_g7`) since 2026-10-02 — one challenge per subject per grade 7-12. Lets the SH client compute today's id from the student's `gradeLevel` without a query. Older docs use `{YYYY-MM-DD}_{subjectId}`.
 **Fields:**
 - `dateKey` (string — `'YYYY-MM-DD'`)
 - `subjectId` (`'math' | 'english' | 'science'`)
+- `gradeLevel` (number 7-12 — set by the rotator since 2026-10-02)
 - `title` (string — e.g. "Friday Algebra Sprint")
 - `description` (string)
 - `itemIds[]` (array of `practice_questions.id` — typically 5 items)

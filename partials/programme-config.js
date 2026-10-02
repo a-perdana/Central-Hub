@@ -174,10 +174,8 @@ export const PROGRAMME_LINKS = {
       who: 'Eduversal subject specialists writing or editing single questions', reads: 'Chapter Tests above — this is the pool tests are built from' },
     { slug: 'assessment-management',      label: 'Pacing Assessments',     desc: 'Manage chapter-end assessments and topic activities embedded in the pacing guides.',
       who: 'Eduversal subject specialists who own the pacing guide', reads: 'Partner-school teachers following the guide in Teachers Hub' },
-    { slug: 'practice-assessment-author', label: 'Practice Tests',         desc: 'Compose or AI-rank practice assessments for Students Hub tournaments and leaderboards.',
-      who: 'Eduversal subject specialists composing practice bundles', reads: 'Students, as practice runs and daily challenges — never a formal grade' },
     { slug: 'practice-bank-admin',        label: 'Practice Questions',     desc: 'CRUD for supplemental practice items powering SH gamification (never formal grading).',
-      who: 'Eduversal subject specialists curating the practice pool', reads: 'Practice Tests above — never counted in any formal result' },
+      who: 'Eduversal subject specialists curating the practice pool', reads: 'Students in Students Hub, by grade (gradeLevels) — never counted in any formal result' },
   ],
   ease_academic: [
     { slug: 'teaching-progress',             label: 'Teaching Progress',    desc: 'Real-time view of teacher pacing progress across all subjects, live from Teachers Hub.',

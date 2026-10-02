@@ -508,7 +508,10 @@ service cloud.firestore {
       // Admin / TH admin / AH admin can update freely (including approving).
       allow update: if isAdmin() || isAHAdmin() || isTHAdmin() ||
         (isSignedIn() && request.auth.uid == uid && (
-          // Class picker transition
+          // Class picker transition (legacy pilot flow — kept so an
+          // old cached /class-picker build can still land a student
+          // in pending_approval; the 2026-10-02 grade picker below
+          // replaced it).
           ( resource.data.status == 'needs_class'
             && request.resource.data.status == 'pending_approval'
             && request.resource.data.uid == resource.data.uid
@@ -516,6 +519,41 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['schoolId','school','classId','className','gradeLevel',
                            'status','classPickedAt'])
+          ) ||
+          // Grade picker (2026-10-02): no classes, no teacher approval.
+          // The student picks Grade 7-12 once and is active straight
+          // away. The school is not trusted from the client — the
+          // chosen partner_schools doc must carry the same domain as
+          // the signed-in email, and the denormalised name must match
+          // it. After this the grade is locked: only an admin changes
+          // it (no self-update branch below touches gradeLevel for a
+          // real student).
+          ( resource.data.status == 'needs_class'
+            && request.resource.data.status == 'active'
+            && request.resource.data.uid == resource.data.uid
+            && request.resource.data.emailLower == resource.data.emailLower
+            && request.resource.data.gradeLevel is int
+            && request.resource.data.gradeLevel >= 7
+            && request.resource.data.gradeLevel <= 12
+            && request.resource.data.schoolId is string
+            && get(/databases/$(database)/documents/partner_schools/$(request.resource.data.schoolId)).data.domain
+                 == request.auth.token.email.lower().split('@')[1]
+            && request.resource.data.school
+                 == get(/databases/$(database)/documents/partner_schools/$(request.resource.data.schoolId)).data.name
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['schoolId','school','gradeLevel','status','gradePickedAt'])
+          ) ||
+          // HQ observer grade preview — an @eduversal.org account may
+          // switch its own gradeLevel freely to see each grade's
+          // practice pool. Real students can't reach this branch
+          // (token email domain check).
+          ( resource.data.is_hq_observer == true
+            && request.auth.token.email.lower().matches('.*@eduversal\\.org$')
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['gradeLevel','gradePickedAt'])
+            && request.resource.data.gradeLevel is int
+            && request.resource.data.gradeLevel >= 7
+            && request.resource.data.gradeLevel <= 12
           ) ||
           // Login touch
           ( request.resource.data.diff(resource.data).affectedKeys()

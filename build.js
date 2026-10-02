@@ -655,7 +655,6 @@ const htmlFiles = [
   "ease-bank-browser.html",
   "question-bank.html",
   "practice-bank-admin.html",
-  "practice-assessment-author.html",
   "daily-challenge-admin.html",
   "practice-bank-flags.html",
   "practice-bank-endorsements.html",
