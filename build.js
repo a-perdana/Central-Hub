@@ -1003,9 +1003,8 @@ const refAssetMap = [
   ["frameworks/teacher-kpi-legacy-backfill-v1.json",       path.join("..", "docs", "kpi", "teacher-kpi-legacy-backfill-v1.json")],
 
   // ── Weekly checklists × 8 sub-roles ────────────────────────
-  ["frameworks/weekly-checklists/_academic-year-arc.json",        path.join("..", "docs", "weekly-checklists", "_academic-year-arc.json")],
-  ["frameworks/weekly-checklists/subject-teacher.json",           path.join("..", "docs", "weekly-checklists", "subject-teacher.json")],
-  ["frameworks/weekly-checklists/subject-leader.json",            path.join("..", "docs", "weekly-checklists", "subject-leader.json")],
+  ["frameworks/weekly-checklists/v2/teachers.json", path.join("..", "docs", "weekly-checklists", "v2", "teachers.json")],
+  ["frameworks/weekly-checklists/v2/subject_leader.json", path.join("..", "docs", "weekly-checklists", "v2", "subject_leader.json")],
   // The four AH roles moved to v2 on 2026-10-02 (built from the live Academic
   // Services documents); v1 + the Principal Operating Cadence are archived and
   // no longer published (the cadence is a controlled source for appraisers).
@@ -1013,8 +1012,8 @@ const refAssetMap = [
   ["frameworks/weekly-checklists/v2/academic_coordinator.json", path.join("..", "docs", "weekly-checklists", "v2", "academic_coordinator.json")],
   ["frameworks/weekly-checklists/v2/cambridge_coordinator.json", path.join("..", "docs", "weekly-checklists", "v2", "cambridge_coordinator.json")],
   ["frameworks/weekly-checklists/v2/foundation_representative.json", path.join("..", "docs", "weekly-checklists", "v2", "foundation_representative.json")],
-  ["frameworks/weekly-checklists/subject-specialist.json",        path.join("..", "docs", "weekly-checklists", "subject-specialist.json")],
-  ["frameworks/weekly-checklists/director.json",                  path.join("..", "docs", "weekly-checklists", "director.json")],
+  ["frameworks/weekly-checklists/v2/coordinator.json", path.join("..", "docs", "weekly-checklists", "v2", "coordinator.json")],
+  ["frameworks/weekly-checklists/v2/director.json", path.join("..", "docs", "weekly-checklists", "v2", "director.json")],
 
   // ── Cambridge verbatim ──────────────────────────────────────
   ["cambridge/teacher-standards-2023.json",         path.join("..", "docs", "research", "cambridge", "teacher-standards-2023.json")],
