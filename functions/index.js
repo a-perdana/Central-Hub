@@ -1321,103 +1321,91 @@ exports.resetLeaderboardWindows = onSchedule(
 );
 
 // ───────────────────────────────────────────────────────────────
-// rotateDailyChallenges — nightly auto-publish for tomorrow
-//   Runs daily at 00:05 Asia/Jakarta. For each pilot subject
-//   (math / english / science):
-//     - If a daily_challenges/{tomorrow_subj} doc already exists,
-//       do nothing (HQ may have manual-published).
-//     - Else pick one published practice_assessments doc for that
-//       subject (prefer mode='daily_challenge', fall back to
-//       mode='practice') and write tomorrow's challenge with
-//       createdBy: 'system'.
-//   Empty pool → log + skip. Never overwrites a manual publish.
+// DAILY CHALLENGE ROTATOR — rotateDailyChallenges
+//   Runs 00:05 Asia/Jakarta and publishes TOMORROW's challenges.
 //
-//   Doc id pattern matches /daily-challenge-admin:
-//     {YYYY-MM-DD}_{subjectId}
+//   Since 2026-10-02 Students Hub is open to Grade 7-12 and has no
+//   classes, so there is one challenge per subject per grade:
+//     daily_challenges/{YYYY-MM-DD}_{subjectId}_g{grade}
+//   for subject ∈ {math, english, science} × grade ∈ 7..12.
+//
+//   Items come straight from the active practice_questions pool for
+//   that subject + grade (gradeLevels array-contains grade, auto-
+//   gradable MCQ only) — 5 picked at random. practice_assessments is
+//   no longer needed for the rotation: writing questions is enough.
+//     - Doc already exists → leave it (manual publish wins).
+//     - Fewer than DAILY_MIN_POOL usable items → skip, log as empty.
 // ───────────────────────────────────────────────────────────────
 exports.rotateDailyChallenges = onSchedule(
   { schedule: "5 0 * * *", timeZone: "Asia/Jakarta", region: "asia-southeast1" },
   async () => {
     const SUBJECTS = ["math", "english", "science"];
-    // Compute tomorrow in Asia/Jakarta. The runtime container is UTC,
-    // so build the date key from a localised string slice to avoid
-    // timezone drift on the boundary day.
-    const nowJakarta = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
-    const tomorrow = new Date(nowJakarta);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const y = tomorrow.getFullYear();
-    const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
-    const d = String(tomorrow.getDate()).padStart(2, "0");
-    const dateKey = `${y}-${m}-${d}`;
+    const GRADES = [7, 8, 9, 10, 11, 12];
+    const DAILY_ITEM_COUNT = 5;
+    const DAILY_MIN_POOL = 5;
+    const SUBJ_LABEL = { math: "Math", english: "English", science: "Science" };
 
-    // 00:00:00 → 23:59:59 in Asia/Jakarta, expressed as a UTC Date.
-    // Asia/Jakarta is UTC+7 always (no DST). So local 00:00 → UTC 17:00 prior day.
+    // Tomorrow in Asia/Jakarta (UTC+7, no DST). en-CA formats YYYY-MM-DD.
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" })
+      .format(new Date(Date.now() + 24 * 3600 * 1000));
     const opens  = new Date(`${dateKey}T00:00:00+07:00`);
     const closes = new Date(`${dateKey}T23:59:59+07:00`);
 
     const summary = { dateKey, published: [], skipped: [], empty: [] };
 
     for (const subj of SUBJECTS) {
-      const id = `${dateKey}_${subj}`;
-      const ref = db.collection("daily_challenges").doc(id);
-      const existing = await ref.get();
-      if (existing.exists) {
-        summary.skipped.push(subj);
-        continue;
-      }
+      for (const grade of GRADES) {
+        const id = `${dateKey}_${subj}_g${grade}`;
+        const ref = db.collection("daily_challenges").doc(id);
+        if ((await ref.get()).exists) { summary.skipped.push(id); continue; }
 
-      // Pick from published assessments for this subject. Prefer
-      // mode='daily_challenge' (the HQ-curated daily bucket); fall
-      // back to mode='practice' so the rotator still has something
-      // to land on during the math-only pilot.
-      let pool = await db.collection("practice_assessments")
-        .where("subjectId", "==", subj)
-        .where("status", "==", "published")
-        .where("mode", "==", "daily_challenge")
-        .limit(50).get();
-      if (pool.empty) {
-        pool = await db.collection("practice_assessments")
+        const snap = await db.collection("practice_questions")
           .where("subjectId", "==", subj)
-          .where("status", "==", "published")
-          .where("mode", "==", "practice")
-          .limit(50).get();
-      }
-      if (pool.empty) {
-        summary.empty.push(subj);
-        continue;
-      }
+          .where("status", "==", "active")
+          .where("type", "==", "mcq")
+          .where("gradeLevels", "array-contains", grade)
+          .limit(500).get();
+        const pool = snap.docs.filter(d => {
+          const v = d.data();
+          return v.correctAnswer && Array.isArray(v.options) && v.options.length >= 2;
+        });
+        if (pool.length < DAILY_MIN_POOL) { summary.empty.push(`${id}(${pool.length})`); continue; }
 
-      // Random pick. Deterministic alternative considered (e.g.
-      // round-robin by dateKey hash) but random gives more variety
-      // when the pool is small.
-      const docs = pool.docs;
-      const pickIdx = Math.floor(Math.random() * docs.length);
-      const a = docs[pickIdx];
-      const aData = a.data();
-      if (!Array.isArray(aData.itemIds) || aData.itemIds.length === 0) {
-        summary.empty.push(subj);
-        continue;
-      }
+        // Partial Fisher-Yates — first DAILY_ITEM_COUNT slots are the pick.
+        for (let i = 0; i < DAILY_ITEM_COUNT; i++) {
+          const j = i + Math.floor(Math.random() * (pool.length - i));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        const picked = pool.slice(0, DAILY_ITEM_COUNT);
+        const difficultyMix = {};
+        const topicGroups = new Set();
+        picked.forEach(d => {
+          const v = d.data();
+          const k = v.difficulty || "medium";
+          difficultyMix[k] = (difficultyMix[k] || 0) + 1;
+          if (v.topicGroup) topicGroups.add(v.topicGroup);
+        });
 
-      const SUBJ_LABEL = { math: "Math", english: "English", science: "Science" };
-      await ref.set({
-        dateKey,
-        subjectId: subj,
-        title: aData.title || `${SUBJ_LABEL[subj]} — daily rotation`,
-        description: aData.description || "",
-        itemIds: aData.itemIds,
-        itemCount: aData.itemCount || aData.itemIds.length,
-        difficultyMix: aData.difficultyMix || {},
-        topicGroups: aData.topicGroups || [],
-        sourceAssessmentId: a.id,
-        opensAt: opens,
-        closesAt: closes,
-        status: "open",
-        createdBy: "system",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      summary.published.push({ subj, assessmentId: a.id });
+        await ref.set({
+          dateKey,
+          subjectId: subj,
+          gradeLevel: grade,
+          title: `${SUBJ_LABEL[subj]} — Grade ${grade} daily challenge`,
+          description: "",
+          itemIds: picked.map(d => d.id),
+          itemCount: picked.length,
+          difficultyMix,
+          topicGroups: [...topicGroups],
+          sourceAssessmentId: null,
+          opensAt: opens,
+          closesAt: closes,
+          status: "open",
+          createdBy: "system",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        summary.published.push(id);
+      }
     }
 
     console.log("[rotateDailyChallenges]", JSON.stringify(summary));

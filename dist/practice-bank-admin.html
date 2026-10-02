@@ -6,7 +6,7 @@
   <title>Practice Bank Admin — CentralHub</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='%231a1530'/><polygon points='10,45 50,65 50,70 10,50' fill='%234e3db8'/><polygon points='90,45 50,65 50,70 90,50' fill='%235a4bd1'/><polygon points='50,25 90,45 50,65 10,45' fill='%236c5ce7'/><circle cx='76' cy='76' r='20' fill='%236c5ce7' stroke='%231a1530' stroke-width='3'/><text x='76' y='84' font-family='Georgia,serif' font-size='26' font-weight='bold' text-anchor='middle' fill='white'>C</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="shared-styles.css?v=a52ef101">
+  <link rel="stylesheet" href="shared-styles.css?v=64d078bf">
   <script>
     // MathJax — same config as /question-bank and /ease-item-author. NEVER
     // register $…$ as inline math: practice-bank stems carry literal $ as
@@ -233,6 +233,9 @@
     .qe-field input:focus, .qe-field select:focus, .qe-field textarea:focus { outline: 1.5px solid var(--accent); outline-offset: -1px; }
     .qe-field .qe-help { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
     .qe-field-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; font-size: 12.5px !important; }
+    .qe-grades { display: flex; flex-wrap: wrap; gap: 8px; }
+    .qe-grade { display: inline-flex !important; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; font-size: 13px !important; font-weight: 600; cursor: pointer; text-transform: none !important; letter-spacing: 0 !important; }
+    .qe-grade:has(input:checked) { background: #ecfeff; border-color: #0891b2; color: #0e7490; }
     .qe-field-readonly { background: var(--paper) !important; color: var(--ink-3) !important; }
     .qe-radio-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .qe-radio-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); text-transform: none; letter-spacing: 0; font-weight: 500; cursor: pointer; }
@@ -380,8 +383,8 @@
 <a class="skip-link" href="#main-content">Skip to main content</a>
 
   
-<script src="firebase-config.js?v=a52ef101"></script>
-  <script type="module" src="auth-guard.js?v=a52ef101"></script>
+<script src="firebase-config.js?v=64d078bf"></script>
+  <script type="module" src="auth-guard.js?v=64d078bf"></script>
 
   <style>
   .btn-my-tasks {
@@ -4314,15 +4317,31 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       'Pre_Calculus_Chapter_0',
     ];
 
+    // Topic groups drive the Students Hub practice topic chips. Maths
+    // buckets came with the 2026-05 ExamView import; English + Science
+    // buckets added 2026-10-02 when SH opened to Grade 7-12 on
+    // Eduversal-written questions. Keep in sync with TOPIC_LABEL in
+    // Students Hub practice.html + practice-run.html.
     const TOPIC_GROUPS = [
-      { v: 'algebra',         label: 'Algebra' },
-      { v: 'number',          label: 'Number' },
-      { v: 'geometry',        label: 'Geometry' },
-      { v: 'problem-solving', label: 'Problem-solving' },
-      { v: 'statistics',      label: 'Statistics' },
-      { v: 'probability',     label: 'Probability' },
+      { v: 'number',          label: 'Math · Number' },
+      { v: 'algebra',         label: 'Math · Algebra' },
+      { v: 'geometry',        label: 'Math · Geometry' },
+      { v: 'statistics',      label: 'Math · Statistics' },
+      { v: 'probability',     label: 'Math · Probability' },
+      { v: 'problem-solving', label: 'Math · Problem-solving' },
+      { v: 'reading',         label: 'English · Reading' },
+      { v: 'grammar',         label: 'English · Grammar' },
+      { v: 'vocabulary',      label: 'English · Vocabulary' },
+      { v: 'writing',         label: 'English · Writing' },
+      { v: 'biology',         label: 'Science · Biology' },
+      { v: 'chemistry',       label: 'Science · Chemistry' },
+      { v: 'physics',         label: 'Science · Physics' },
+      { v: 'earth-space',     label: 'Science · Earth & Space' },
       { v: 'mixed',           label: 'Mixed' },
     ];
+    // Students Hub serves each student only the items tagged with their
+    // grade (practice_questions.gradeLevels array-contains grade).
+    const GRADE_LEVELS = [7, 8, 9, 10, 11, 12];
 
     // Pagination state
     let editingId = null;
@@ -5301,6 +5320,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         topic: '',
         topicSlug: '',
         topicGroup: null,
+        gradeLevels: [],
         marks: 1,
         commandWord: '',
         assessmentObjective: '',
@@ -5450,6 +5470,11 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
             <div class="qe-field"><label for="qeTopicSlug">Topic slug</label><input id="qeTopicSlug" type="text" class="qe-field-mono qe-field-readonly" value="${escAttr(it.topicSlug || '')}" readonly tabindex="-1"><div class="qe-help">Auto-derived from topic.</div></div>
             <div class="qe-field"><label for="qeTopicGroup">Topic group</label><select id="qeTopicGroup">${tgOpts}</select><div class="qe-help">Coarse leaderboard bucket. Untagged = no SH leaderboard inclusion.</div></div>
             <div class="qe-field"><label for="qeMarks">Marks</label><input id="qeMarks" type="number" min="0" max="20" step="1" value="${escAttr(it.marks ?? 1)}"></div>
+            <div class="qe-field qe-grid-full">
+              <label>Grades <span style="color:#b91c1c">*</span></label>
+              <div class="qe-grades" id="qeGrades">${GRADE_LEVELS.map(g => `<label class="qe-grade"><input type="checkbox" name="qeGrade" value="${g}"${(Array.isArray(it.gradeLevels) && it.gradeLevels.includes(g)) ? ' checked' : ''}> ${g}</label>`).join('')}</div>
+              <div class="qe-help">Students Hub shows this question only to students in the ticked grades. Tick every grade it suits.</div>
+            </div>
             <div class="qe-field qe-grid-full">
               <label for="qeStem">Stem</label>
               <textarea id="qeStem" rows="6" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px">${escHtml(stemSrc)}</textarea>
@@ -5680,6 +5705,8 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const topic = mount.querySelector('#qeTopic').value.trim();
       const topicSlug = mount.querySelector('#qeTopicSlug').value.trim();
       const topicGroup = mount.querySelector('#qeTopicGroup').value || null;
+      const gradeLevels = [...mount.querySelectorAll('input[name="qeGrade"]:checked')]
+        .map(el => Number(el.value)).sort((a, b) => a - b);
       const marksRaw = mount.querySelector('#qeMarks').value;
       const marks = marksRaw === '' ? 1 : (Number(marksRaw) || 0);
       const stem = mount.querySelector('#qeStem').value;
@@ -5708,6 +5735,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
         topic: topic || null,
         topicSlug: topicSlug || null,
         topicGroup,
+        gradeLevels,
         marks,
         stem,
         status,
@@ -5756,6 +5784,9 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
       const draft = readEditorPayload(mount);
       // Required-field guard — minimal: subject + type + stem.
       if (!draft.stem || !draft.stem.trim()) { toast('Stem is required.'); return; }
+      if (draft.status === 'active' && (!draft.gradeLevels || draft.gradeLevels.length === 0)) {
+        toast('Tick at least one grade — students only see questions tagged with their grade.'); return;
+      }
       try {
         // Merge in derived + audit fields.
         const payload = {
@@ -5904,7 +5935,7 @@ document.addEventListener('authReady', async ({ detail: { user } }) => {
     <span class="page-footer__meta-right">Cambridge syllabus codes are the system of record across the network.</span>
   </div>
 </footer>
-<script src="cambridge-crossref.js?v=a52ef101" defer></script>
-<script src="keyboard-enabler.js?v=a52ef101" defer></script>
+<script src="cambridge-crossref.js?v=64d078bf" defer></script>
+<script src="keyboard-enabler.js?v=64d078bf" defer></script>
 </body>
 </html>
