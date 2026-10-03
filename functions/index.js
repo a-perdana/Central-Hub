@@ -1251,7 +1251,10 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
 const PRACTICE_SUBJECTS = ["math", "english", "science"];
 const PRACTICE_DIFFS = ["easy", "medium", "hard"];
 const PRACTICE_MAX_ITEMS = 20;
-const PRACTICE_POOL_LIMIT = 1000;
+// Must exceed the largest grade × subject pool: the query has no random order, so
+// a cap below the pool size silently drops the items with the highest doc ids from
+// every unfiltered run. At 1000 it hid 436 G10 and 210 G11 science items (2026-10-03).
+const PRACTICE_POOL_LIMIT = 3000;
 const PRACTICE_RECENT_ATTEMPTS = 30;
 const PRACTICE_DAILY_POINT_RUNS = 20;
 const PRACTICE_PUBLIC_FIELDS = [
