@@ -1275,6 +1275,12 @@ if (fs.existsSync("eduversal-logo-white.png")) {
   console.log("Copied: eduversal-logo-white.png");
 }
 
+// Eduversal globe logo (colour, 300x300) — used by the index network hero.
+if (fs.existsSync("eduversal-logo.png")) {
+  fs.copyFileSync("eduversal-logo.png", path.join("dist", "eduversal-logo.png"));
+  console.log("Copied: eduversal-logo.png");
+}
+
 // references-viewer schema-aware modal renderer + references-shell
 // runtime (shared CSS + ES module) — local-then-shared fallback pattern
 // (mirrors nav-edit-simple). Used by references.html. Local hub copies
