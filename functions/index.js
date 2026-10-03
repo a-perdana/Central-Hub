@@ -783,6 +783,10 @@ function jakartaDayISO(epochMs = Date.now()) {
   return new Date(epochMs + JAKARTA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+// Streak freeze: a token (earned from the daily chest) silently covers a missed day so the chain survives.
+const FREEZE_CAP = 3;       // most tokens a student can hold
+const FREEZE_MAX_GAP = 2;   // most consecutive missed days one visit can cover
+
 // Award points + recompute level / streak.
 // opts.eventId: the Firestore trigger's event.id — REQUIRED for
 // at-least-once safety. onDocumentWritten redelivers the SAME
@@ -797,6 +801,12 @@ async function awardPoints(studentUid, points, opts = {}) {
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    // Streak freeze tokens live on students/{uid} (written only by claimDailyChest). Read it up front:
+    // a Firestore transaction must finish all reads before its first write.
+    const stRef = db.collection("students").doc(studentUid);
+    const stSnap = await tx.get(stRef);
+    const freezeTokens = Math.max(0, Math.min(FREEZE_CAP, Number(stSnap.exists && stSnap.get("freezeTokens")) || 0));
+    let freezeUsed = 0;
     let markerRef = null;
     if (opts.eventId) {
       markerRef = ref.collection("awards").doc(String(opts.eventId));
@@ -823,7 +833,11 @@ async function awardPoints(studentUid, points, opts = {}) {
     if (prevDay !== today) {
       // Was the last day exactly yesterday (Jakarta calendar)?
       const yesterday = jakartaDayISO(Date.now() - 86400000);
-      const currentStreak = (prevDay === yesterday) ? (streak.current || 0) + 1 : 1;
+      // Missed days between lastDayISO and today (0 when prevDay is yesterday). A streak freeze covers up to
+      // FREEZE_MAX_GAP missed days, one token per day; otherwise the chain restarts at 1.
+      const missed = prevDay ? Math.max(0, Math.round((Date.parse(today) - Date.parse(prevDay)) / 86400000) - 1) : 0;
+      if (prevDay && prevDay !== yesterday && missed >= 1 && missed <= FREEZE_MAX_GAP && freezeTokens >= missed) freezeUsed = missed;
+      const currentStreak = (prevDay === yesterday || freezeUsed) ? (streak.current || 0) + 1 : 1;
       const milestonesPaid = Array.isArray(streak.milestonesPaid) ? streak.milestonesPaid.slice() : [];
 
       if (currentStreak >= 30 && !milestonesPaid.includes(30)) {
@@ -860,6 +874,10 @@ async function awardPoints(studentUid, points, opts = {}) {
       streak,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (freezeUsed) {
+      update.lastFreeze = { day: today, used: freezeUsed, awardedAt: admin.firestore.FieldValue.serverTimestamp() };
+      tx.set(stRef, { freezeTokens: freezeTokens - freezeUsed, lastFreezeDay: today, lastFreezeUsed: freezeUsed }, { merge: true });
+    }
     if (milestoneHit) {
       update.lastStreakMilestone = {
         day: milestoneHit,
@@ -1445,6 +1463,100 @@ exports.answerPracticeItem = onCall({ region: "asia-southeast1" }, async (req) =
 });
 
 const practiceStatsCache = new Map();   // grade -> { at, data }
+
+// ───────────────────────────────────────────────────────────────
+// Daily quests + chest (Students Hub, 2026-10-03)
+//   The home page shows three quests: (1) today's daily challenge, (2) a rotating "twist" picked
+//   deterministically from uid + Jakarta day, (3) keep the streak alive. When all three are done the
+//   student opens the chest: claimDailyChest verifies it SERVER-SIDE, then grants either a streak-freeze
+//   token or an early cosmetic unlock. One chest per Jakarta day, enforced on students/{uid}.chestDay.
+//   QUEST_VARIANTS + questHash MUST stay identical to Students Hub partials/quests.js (a node test
+//   compares them). The loot is cosmetic / protective only — it never grants points.
+// ───────────────────────────────────────────────────────────────
+function questHash(str) {              // FNV-1a 32-bit
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+const QUEST_VARIANTS = [
+  { id: "subject-math",    target: 1, progress: (a) => a.filter(x => x.subjectId === "math").length },
+  { id: "subject-english", target: 1, progress: (a) => a.filter(x => x.subjectId === "english").length },
+  { id: "subject-science", target: 1, progress: (a) => a.filter(x => x.subjectId === "science").length },
+  { id: "score-80",        target: 1, progress: (a) => a.some(x => Number(x.rawScorePct) >= 80) ? 1 : 0 },
+  { id: "two-runs",        target: 2, progress: (a) => Math.min(2, a.length) },
+];
+function pickQuestVariant(uid, dayISO) { return QUEST_VARIANTS[questHash(uid + "|" + dayISO) % QUEST_VARIANTS.length]; }
+
+// Cosmetics the chest can unlock early. Requirements mirror Students Hub avatar.html ITEMS.
+const CHEST_ITEMS = [
+  { id: "goggles-cap", rar: "common", t: "level", n: 1 },      { id: "starfire-beret", rar: "rare", t: "level", n: 10 },
+  { id: "laurel-crown", rar: "epic", t: "level", n: 20 },      { id: "page-halo", rar: "legendary", t: "level", n: 35 },
+  { id: "leather-satchel", rar: "common", t: "level", n: 3 },  { id: "cyber-satchel", rar: "rare", t: "level", n: 12 },
+  { id: "comet-cape", rar: "epic", t: "level", n: 22 },        { id: "quill-staff", rar: "legendary", t: "level", n: 28 },
+  { id: "paper-crane", rar: "common", t: "streak", n: 3 },     { id: "lantern-sprite", rar: "rare", t: "streak", n: 7 },
+  { id: "phoenix-chick", rar: "epic", t: "perfect", n: 3 },    { id: "study-aura", rar: "legendary", t: "streak", n: 30 },
+  { id: "study-nook", rar: "common", t: "level", n: 1 },       { id: "observatory", rar: "rare", t: "level", n: 8 },
+  { id: "aurora-peak", rar: "epic", t: "level", n: 16 },       { id: "golden-library", rar: "legendary", t: "level", n: 30 },
+];
+const CHEST_WEIGHTS = { common: 50, rare: 33, epic: 14, legendary: 3 };
+
+// Pure loot roll (injectable rng for tests). Returns { type: "freeze" | "item" | "cheer", id? }.
+function rollChestLoot({ owned, stats, tokens, rng }) {
+  const have = (it) => (it.t === "level" ? stats.level : it.t === "streak" ? stats.streak : stats.perfect) >= it.n;
+  const locked = CHEST_ITEMS.filter(i => !owned.has(i.id) && !have(i));
+  const canFreeze = tokens < FREEZE_CAP;
+  const roll = rng(100);
+  if (canFreeze && (roll < 40 || !locked.length)) return { type: "freeze" };
+  if (!locked.length) return { type: "cheer" };
+  const total = locked.reduce((n, i) => n + CHEST_WEIGHTS[i.rar], 0);
+  let pick = rng(total);
+  for (const i of locked) { pick -= CHEST_WEIGHTS[i.rar]; if (pick < 0) return { type: "item", id: i.id }; }
+  return { type: "item", id: locked[locked.length - 1].id };
+}
+
+exports.claimDailyChest = onCall({ region: "asia-southeast1" }, async (req) => {
+  const uid = req.auth && req.auth.uid;
+  const s = await loadActiveStudent(uid);
+  await enforcePerUserRateLimit("claimDailyChest", uid, 20, 60);
+  const today = jakartaDayISO();
+  const dayStart = Date.parse(today + "T00:00:00+07:00");
+  const SCORED = new Set(["submitted", "scored"]);
+
+  const [attSnap, spSnap] = await Promise.all([
+    db.collection("practice_attempts").where("studentUid", "==", uid).orderBy("submittedAt", "desc").limit(40).get(),
+    db.collection("student_points").doc(uid).get(),
+  ]);
+  const todays = attSnap.docs.map(d => d.data()).filter(a => SCORED.has(a.status) && a.submittedAt && a.submittedAt.toMillis() >= dayStart);
+  const practice = todays.filter(a => a.mode === "practice");
+  const sp = spSnap.exists ? spSnap.data() : {};
+  const challengeDone = todays.some(a => a.mode === "daily_challenge");
+  const variant = pickQuestVariant(uid, today);
+  const twistDone = variant.progress(practice) >= variant.target;
+  const streakAlive = !!(sp.streak && sp.streak.lastDayISO === today);
+  if (!(challengeDone && twistDone && streakAlive)) {
+    throw new HttpsError("failed-precondition", "Finish all three of today's quests to open the chest.");
+  }
+
+  const stRef = db.collection("students").doc(uid);
+  const stats = { level: sp.level || 1, streak: Math.max((sp.streak && sp.streak.longest) || 0, (sp.streak && sp.streak.current) || 0), perfect: sp.perfectScores || 0 };
+  return db.runTransaction(async (tx) => {
+    const cur = (await tx.get(stRef)).data() || {};
+    const tokens = Math.max(0, Math.min(FREEZE_CAP, Number(cur.freezeTokens) || 0));
+    if (cur.chestDay === today) {
+      return { already: true, loot: cur.chestLastLoot || null, freezeTokens: tokens, chestLoot: cur.chestLoot || [] };
+    }
+    const owned = new Set(Array.isArray(cur.chestLoot) ? cur.chestLoot : []);
+    const loot = rollChestLoot({ owned, stats, tokens, rng: (n) => require("crypto").randomInt(n) });
+    const update = { chestDay: today, chestLastLoot: loot, chestUpdatedAt: admin.firestore.FieldValue.serverTimestamp() };
+    let nextTokens = tokens;
+    if (loot.type === "freeze") { nextTokens = tokens + 1; update.freezeTokens = nextTokens; }
+    if (loot.type === "item") update.chestLoot = admin.firestore.FieldValue.arrayUnion(loot.id);
+    tx.set(stRef, update, { merge: true });
+    return { already: false, loot, freezeTokens: nextTokens, chestLoot: loot.type === "item" ? [...owned, loot.id] : [...owned] };
+  });
+});
+
+
 exports.practicePoolStats = onCall({ region: "asia-southeast1" }, async (req) => {
   const s = await loadActiveStudent(req.auth && req.auth.uid);
   const hit = practiceStatsCache.get(s.grade);
