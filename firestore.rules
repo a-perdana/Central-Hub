@@ -140,12 +140,12 @@ service cloud.firestore {
       );
     }
 
-    // CH director sub-role check. Used by principal_coaching_sessions
-    // for coaching confidentiality (Principal Coaching Framework →
-    // data_model.access_control) — only HQ Directors
-    // mentor principals; coordinator + plain central_user cannot write
-    // coaching sessions even if the page-access doc lets them open the
-    // form. admin always bypasses.
+    // CH director sub-role check. Used by isPrincipalAppraiser() (the CAO /
+    // designated Academic Director appraises principals). NOT used by the
+    // coaching collections since 2026-10-02: the appraiser does not see
+    // coaching records (Principal Appraisal: Handbook 26-27 §10), and
+    // coaching access follows the assigned coach/mentor relationship
+    // instead (see principal_coaching_sessions). admin always passes.
     function isCHDirector() {
       return isCentralUser() && (
         userProfile().role_centralhub == 'central_admin' ||
@@ -280,6 +280,19 @@ service cloud.firestore {
     //                          CH /console only.
     //   - ch_sub_roles / ch_subjects / appraisal_level* / email / uid
     //                        → never self-writable.
+    // appraisal_level only ever moves up (Teacher Appraisal: Handbook 26-27,
+    // Level Progression Criteria). Passes when the level is not in the
+    // write, when nothing was stored before (first placement), or when the
+    // new rank is >= the stored rank. Clearing a set level (null / '') fails.
+    function appraisalLevelNotLowered() {
+      let ranks  = {'induction': 1, 'developing': 2, 'proficient': 3, 'lead': 4};
+      let before = resource.data.get('appraisal_level', null);
+      let after  = request.resource.data.get('appraisal_level', null);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['appraisal_level'])
+             || before == null || before == ''
+             || (after is string && ranks.get(after, 0) >= ranks.get(before, 0));
+    }
+
     function usersSelfDiffKeys() {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
@@ -346,7 +359,8 @@ service cloud.firestore {
              || request.resource.data.approval_status_teachershub == 'pending')
          && !request.resource.data.keys().hasAny([
               'ch_sub_roles', 'ch_subjects', 'ch_phase',
-              'appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy'
+              'appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy',
+              'appraisal_level_change', 'appraisal_level_history'
             ]));
 
       // Self-UPDATE: everything EXCEPT privilege-bearing fields (see the
@@ -356,7 +370,8 @@ service cloud.firestore {
          && request.auth.uid == uid
          && !usersSelfDiffKeys().hasAny([
               'ch_sub_roles', 'ch_subjects', 'ch_phase', 'email', 'uid',
-              'appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy'
+              'appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy',
+              'appraisal_level_change', 'appraisal_level_history'
             ])
          && selfFieldFirstSetOnly('role_centralhub',  'central_user')
          && selfFieldFirstSetOnly('role_academichub', 'academic_user')
@@ -388,13 +403,15 @@ service cloud.firestore {
                     && userProfile().ah_sub_roles is list
                     && userProfile().ah_sub_roles.hasAny(['school_principal', 'academic_coordinator'])
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy'])
+                         .hasOnly(['appraisal_level', 'appraisal_level_setAt', 'appraisal_level_setBy',
+                                   'appraisal_level_change', 'appraisal_level_history'])
                     && resource.data.schoolId == userProfile().schoolId
                     && resource.data.schoolId != null
                     && resource.data.role_teachershub in ['teachers_user', 'teachers_admin']
                     && request.resource.data.appraisal_level
                          in ['induction', 'developing', 'proficient', 'lead', null]
-                    && request.resource.data.appraisal_level_setBy == request.auth.uid;
+                    && request.resource.data.appraisal_level_setBy == request.auth.uid
+                    && appraisalLevelNotLowered();
     }
 
     // -- staff -----------------------------------------------
@@ -1512,6 +1529,17 @@ service cloud.firestore {
     // (school-appraisals.html saveAppraisal) and the audit trail —
     // externalReview.evaluatedBy plus the visible delta — is what makes a
     // missing justification obvious to a reviewer.
+    // Phase 4 impact status — the four words of School Appraisal: Handbook
+    // 26-27 ("Achieved, Partly Achieved, Not Yet Achieved, or Carry
+    // Forward"), or empty while not yet recorded. Index past the end of the
+    // list passes, so a one-priority record is accepted.
+    function impactStatusOk(list, i) {
+      return list.size() <= i
+             || (list[i] is map
+                 && list[i].get('status', '') in
+                    ['', 'achieved', 'partly_achieved', 'not_yet_achieved', 'carry_forward']);
+    }
+
     match /school_appraisals_v2/{docId} {
       allow read:   if isCentralUser() || isAcademicUser();
       allow create: if isAdmin()
@@ -1584,7 +1612,31 @@ service cloud.firestore {
                         && request.resource.data.appeals is map
                         && request.resource.data.appeals.keys().hasOnly(['cases', 'decisions'])
                         && request.resource.data.appeals.get('cases', {})
-                             == resource.data.get('appeals', {}).get('cases', {}));
+                             == resource.data.get('appeals', {}).get('cases', {}))
+                    // (i) Eduversal records the Phase 4 Impact Review —
+                    // impactReview ONLY. School Appraisal: Handbook 26-27,
+                    // Phase 4 (May–Jun 2027, led by the Visit I Supervisor);
+                    // Annual School Quality Report 26-27 §9. Deliberately
+                    // NOT gated on status != 'reviewed': it happens after
+                    // sign-off. Needs the report to be published (there are
+                    // no agreed priorities to review before that). Carries
+                    // statuses and notes only — no number, no rating — and
+                    // the status vocabulary is pinned so a score cannot be
+                    // smuggled in.
+                    || (isCentralUser()
+                        && resource.data.get('externalReview', {}).get('report', {}).get('status', '') == 'published'
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['impactReview', 'updatedAt', 'updatedBy'])
+                        && request.resource.data.impactReview is map
+                        && request.resource.data.impactReview.keys().hasOnly([
+                             'reviewDate', 'priorities', 'recordedBy', 'recordedByName',
+                             'recordedAt', 'firstRecordedBy', 'firstRecordedAt'
+                           ])
+                        && request.resource.data.impactReview.recordedBy == request.auth.token.email
+                        && request.resource.data.impactReview.priorities is list
+                        && request.resource.data.impactReview.priorities.size() <= 2
+                        && impactStatusOk(request.resource.data.impactReview.priorities, 0)
+                        && impactStatusOk(request.resource.data.impactReview.priorities, 1));
       allow delete: if isAdmin();
     }
 
@@ -2404,8 +2456,48 @@ service cloud.firestore {
       // createdBy / visitedBy fields the page already writes. Phase 2 will
       // tighten this to "owner-only update + admin override" once the
       // schema gets a createdByUid field.
-      allow read:                   if isCentralUser();
-      allow create, update, delete: if isCentralUser();
+      // Subject Specialist induction visits (visitType 'specialist_walkthrough'):
+      // the Associate Specialist owns the record; only their Mentor Specialist
+      // writes the review fields (Induction Module: Specialists 26-27 §2.2, §8).
+      function isSpecWalk(d) { return d.get('visitType', '') == 'specialist_walkthrough'; }
+      function isWalkMentor(d) {
+        return d.get('mentorUid', '') == request.auth.uid || isMentorOf(d.specialistUid);
+      }
+      function reviewKeys() {
+        return ['mentorReviewNote', 'mentorReviewBy', 'mentorReviewUid', 'mentorReviewAt'];
+      }
+
+      allow read: if isCentralUser();
+
+      allow create: if isCentralUser() && (
+                      !isSpecWalk(request.resource.data)
+                      || isAdmin()
+                      || (request.resource.data.specialistUid == request.auth.uid
+                          && !request.resource.data.keys().hasAny(reviewKeys())
+                          && request.resource.data.notesState in ['draft', 'submitted'])
+                    );
+
+      allow update: if isCentralUser() && (
+                      !isSpecWalk(resource.data)
+                      || isAdmin()
+                      // owner edits own notes; cannot touch review fields or self-approve
+                      || (resource.data.specialistUid == request.auth.uid
+                          && request.resource.data.specialistUid == request.auth.uid
+                          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(reviewKeys())
+                          && request.resource.data.notesState in ['draft', 'submitted'])
+                      // mentor writes the review + state only
+                      || (isWalkMentor(resource.data)
+                          && request.resource.data.diff(resource.data).affectedKeys()
+                               .hasOnly(['notesState', 'mentorReviewNote', 'mentorReviewBy',
+                                         'mentorReviewUid', 'mentorReviewAt', 'updatedAt'])
+                          && request.resource.data.notesState in ['draft', 'mentor_reviewed'])
+                    );
+
+      allow delete: if isAdmin()
+                    || (isCentralUser() && (
+                          !isSpecWalk(resource.data)
+                          || (resource.data.specialistUid == request.auth.uid
+                              && resource.data.get('notesState', 'draft') == 'draft')));
     }
 
     // -- kpi_school_submissions (School KPI submissions reviewed by HQ) --
@@ -2781,7 +2873,22 @@ service cloud.firestore {
                     && request.resource.data.schoolLeaderUid.size() > 0
                     && request.resource.data.programId is string
                     && hasActiveMentorCertification(request.resource.data.mentorUid);
-      allow update: if isAdmin() || isCentralUser();
+      // 2026-10-02: (1) NN3 also at update — a changed mentorUid must hold an
+      // active Mentor Certification (Induction Module: Principal 26-27 §2.2);
+      // (2) the Readiness Checkpoint outcome (Specialists 26-27 §2.3, §3.5;
+      // SS-NN5 — binary, no score) is written only by the assignment's school
+      // leader (the Academic Director on the Specialist track) or admin.
+      allow update: if isAdmin()
+                    || (isCentralUser()
+                        && !request.resource.data.diff(resource.data).affectedKeys()
+                              .hasAny(['readinessOutcome', 'readinessOutcomeAt', 'readinessOutcomeBy'])
+                        && (request.resource.data.get('mentorUid', null) == resource.data.get('mentorUid', null)
+                            || hasActiveMentorCertification(request.resource.data.mentorUid)))
+                    || (isInductionSchoolLeaderOf(menteeUid)
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['status', 'readinessOutcome', 'readinessOutcomeAt', 'readinessOutcomeBy'])
+                        && request.resource.data.readinessOutcome in ['certified', 'extended']
+                        && request.resource.data.status in ['completed', 'extended']);
       allow delete: if isAdmin();   // rare; usually we transition to 'withdrew' instead
     }
 
@@ -2800,7 +2907,9 @@ service cloud.firestore {
                        || isInductionSchoolLeaderOf(resource.data.uid)
                        || isAdmin()
                     );
-      allow list:   if isAdmin();
+      // 2026-10-02: the owner lists their own docs (/my-induction).
+      allow list:   if isAdmin()
+                    || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow create: if isSignedIn() && (
                        request.auth.uid == request.resource.data.uid
                        || isMentorOf(request.resource.data.uid)
@@ -2816,58 +2925,134 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // -- principal_coaching_sessions -------------------------
-    // Mentor writes; coachee (principal) reads own. The principal's own
-    // Foundation Rep has NO access (coaching confidentiality — Principal
-    // Appraisal: Handbook 26-27 §10), and the appraiser does not read
-    // coaching records. NOTE (2026-10-01): the live "Induction Module:
-    // Principal 26-27" §1-§2.2 draws the Year-1 mentor from Specialists with
-    // school-leadership background, FRs of a DIFFERENT school or retired
-    // principals, all with active Mentor Certification. Writes below are
-    // still pinned to CH directors until the CH coaching page supports
-    // those mentors — widen together with that page, not before.
-    // Doc id: {principalUid}_{YYYY-MM-DD}.
-    // Logged sessions are immutable.
+    // -- Principal coaching — relationship helpers (2026-10-02) ----
+    // Coaching access follows the ASSIGNED coach/mentor relationship, not a
+    // sub-role. Sources: Principal Appraisal: Handbook 26-27 §10, §13
+    // (appraiser does not see coaching records; FR/GM has no access);
+    // Induction Module: Principal 26-27 §1, §2.2 (Year-1 mentor = Subject
+    // Specialist with school-leadership background, FR/GM of a DIFFERENT
+    // school, or retired principal under contract; all hold active Mentor
+    // Certification); docs/cross-module/principal-coaching-framework-v1.json
+    // → data_model.access_control. NOT an Induction Charter NN.
     //
-    // Coaching confidentiality — director-only-write one-off exception
-    // (2026-05-27). Source: docs/cross-module/principal-coaching-framework-v1.json → data_model.access_control →
-    // foundation_representative "no_access (preserves coaching
-    // confidentiality)". NOT an Induction Charter Non-Negotiable; that
-    // label was wrong and was retired 2026-08-08.
-    // The 2026-05-20 CH role flattening opened writes to any central_user
-    // who reached the form via page-access. That left a privacy boundary
-    // soft: a manually-crafted Firestore SDK write from a non-director
-    // central_user (or a UI bypass) would succeed. Coaching confidentiality
-    // is too sensitive to rely on UI gating alone, so writes are pinned to
-    // ch_sub_roles ∈ {director} via isCHDirector(). admin still bypasses.
-    // This is a deliberate exception to the flatten — every other CH
-    // collection trusts page-access (root CLAUDE.md Common Mistake #51).
+    // Year 1: induction_assignments/{principalUid}.mentorUid, principal
+    // track, induction still open, AND the caller's mentor_base cert is
+    // active NOW (certification lapses after 24 months).
+    function isYear1PrincipalMentorOf(principalUid) {
+      return isSignedIn()
+          && inductionAssignmentExists(principalUid)
+          && inductionAssignment(principalUid).get('programId', '') == 'eduversal_principal_v1'
+          && inductionAssignment(principalUid).get('mentorUid', '') == request.auth.uid
+          && inductionAssignment(principalUid).get('status', 'active')
+               in ['pre_arrival', 'active', 'paused', 'extended']
+          && hasActiveMentorCertification(request.auth.uid);
+    }
+    function principalCoachingAssignmentExists(principalUid) {
+      return exists(/databases/$(database)/documents/principal_coaching_assignments/$(principalUid));
+    }
+    function principalCoachingAssignment(principalUid) {
+      return get(/databases/$(database)/documents/principal_coaching_assignments/$(principalUid)).data;
+    }
+    // Year 2+: principal_coaching_assignments/{principalUid}.coachUid with
+    // status 'active'. Where the Year-1 mentor continues as coach, the
+    // Mentor Certification rule still applies (coaching framework →
+    // year_2_plus_mode.mentor_role).
+    function isAssignedPrincipalCoachOf(principalUid) {
+      return isSignedIn()
+          && principalCoachingAssignmentExists(principalUid)
+          && principalCoachingAssignment(principalUid).get('coachUid', '') == request.auth.uid
+          && principalCoachingAssignment(principalUid).get('status', '') == 'active'
+          && (!inductionAssignmentExists(principalUid)
+              || inductionAssignment(principalUid).get('mentorUid', '') != request.auth.uid
+              || hasActiveMentorCertification(request.auth.uid));
+    }
+    function isCurrentPrincipalCoachOf(principalUid) {
+      return isYear1PrincipalMentorOf(principalUid) || isAssignedPrincipalCoachOf(principalUid);
+    }
+    // The mode on the record must match the relationship that permits it.
+    function canLogPrincipalCoaching(principalUid, mode) {
+      return (mode == 'year_1_induction' && isYear1PrincipalMentorOf(principalUid))
+          || (mode == 'year_2_plus' && isAssignedPrincipalCoachOf(principalUid));
+    }
+
+    // -- principal_coaching_sessions -------------------------
+    // Doc id: {principalUid}_{YYYY-MM-DD}. Logged sessions are immutable.
+    //   coach / mentor (mentorUid)  read + write own sessions
+    //   coachee (principalUid)      read own sessions (AH /principal-coaching-view)
+    //   central_admin               read all — audit only; writes only if
+    //                               themselves the assigned coach
+    //   appraiser (CAO), directors as such, any FR/GM, yayasan — NO access
+    // Old sessions written under the 2026-05-27 director-only model stay
+    // readable by their author (mentorUid), the coachee and admin; they
+    // become read-only for an author who is no longer assigned.
     match /principal_coaching_sessions/{sessionId} {
-      // Read: coachee + mentor + admin only. Foundation Reps cannot get
-      // an individual session even with the doc id (no rule branch for
-      // same-school AH leadership — coaching is mentor-coachee private).
       allow get:    if isSignedIn() && (
-                       request.auth.uid == resource.data.principalUid
-                       || request.auth.uid == resource.data.mentorUid
+                       // Probe for a not-yet-created session: only the
+                       // principal's current coach/mentor (the page reads
+                       // the doc id before starting a new session).
+                       (resource == null
+                          && isCurrentPrincipalCoachOf(sessionId.split('_')[0]))
+                       || (resource != null
+                          && (request.auth.uid == resource.data.principalUid
+                              || request.auth.uid == resource.data.mentorUid))
                        || isAdmin()
                     );
-      // List restricted to admin — non-admin must know the doc id (their
-      // own principalUid_YYYY-MM-DD pattern). Discoverability via list
-      // would let any central_user enumerate principal coaching history.
+      // Queries must be scoped to the caller's own sessions (mentorUid ==
+      // auth.uid, or principalUid == auth.uid). Directors no longer list.
       allow list:   if isAdmin()
-                    || (isSignedIn() && isCHDirector())
-                    // The principal lists only their own sessions (AH My
-                    // Coaching queries principalUid == auth.uid). Added 2026-10-01.
+                    || (isSignedIn() && resource.data.mentorUid == request.auth.uid)
                     || (isSignedIn() && resource.data.principalUid == request.auth.uid);
-      // Director-only write (coaching-confidentiality exception, see above).
       allow create: if isSignedIn()
                     && request.auth.uid == request.resource.data.mentorUid
-                    && isCHDirector();
+                    && request.resource.data.principalUid is string
+                    && sessionId == request.resource.data.principalUid + '_' + request.resource.data.sessionDate
+                    && request.resource.data.status in ['draft', 'logged']
+                    && canLogPrincipalCoaching(request.resource.data.principalUid,
+                                               request.resource.data.mode);
       allow update: if isSignedIn()
+                    && resource.data.status != 'logged'
                     && request.auth.uid == resource.data.mentorUid
-                    && isCHDirector()
-                    && resource.data.status != 'logged';
+                    && request.resource.data.mentorUid == resource.data.mentorUid
+                    && request.resource.data.principalUid == resource.data.principalUid
+                    && request.resource.data.sessionDate == resource.data.sessionDate
+                    && request.resource.data.status in ['draft', 'logged']
+                    && canLogPrincipalCoaching(resource.data.principalUid,
+                                               request.resource.data.mode);
+      // House rule: archive, never delete — but keep the admin escape hatch
+      // for a mistaken empty draft, as before.
       allow delete: if isAdmin();
+    }
+
+    // -- principal_coaching_assignments ----------------------
+    // Year-2+ coach of a principal. Doc id = principalUid. One current
+    // coach; reassignment overwrites coachUid and appends the previous
+    // coach to previousCoaches[] (archive, never delete). Eduversal assigns
+    // the coach (coaching framework → year_2_plus_mode: "Reassignment is
+    // made by Eduversal"), so writes are central_admin only.
+    // The principal's own FR/GM is never the coach (Handbook §13). The
+    // "not the principal's appraiser" check (Handbook §10) is done in the
+    // hub UI — appraiserUid varies by year, so it is not rule-checkable here.
+    match /principal_coaching_assignments/{principalUid} {
+      allow get:    if isAdmin()
+                    || (isSignedIn() && (request.auth.uid == principalUid
+                                         || request.auth.uid == resource.data.coachUid));
+      allow list:   if isAdmin()
+                    || (isSignedIn() && resource.data.coachUid == request.auth.uid);
+      allow create, update: if isAdmin()
+                    && request.resource.data.principalUid == principalUid
+                    && request.resource.data.coachUid is string
+                    && request.resource.data.coachUid.size() > 0
+                    && request.resource.data.coachUid != principalUid
+                    && request.resource.data.status in ['active', 'ended']
+                    && !isFoundationRepOfPrincipalSchool(request.resource.data.coachUid,
+                                                         request.resource.data.get('schoolId', null));
+      allow delete: if false;   // archive with status 'ended' instead
+    }
+    function isFoundationRepOfPrincipalSchool(uid, schoolId) {
+      return schoolId != null
+          && exists(/databases/$(database)/documents/users/$(uid))
+          && get(/databases/$(database)/documents/users/$(uid)).data.get('schoolId', '') == schoolId
+          && 'foundation_representative' in get(/databases/$(database)/documents/users/$(uid)).data.get('ah_sub_roles', []);
     }
 
     // -- Principal Appraisal access helpers (2026-10-01) -----
@@ -3112,7 +3297,11 @@ service cloud.firestore {
       // central_user mint certs made NN3 self-defeating. Certs are
       // issued from /induction-admin (central_admin page).
       allow list:   if isAdmin() || isCentralUser() || isAcademicUser();
-      allow create, update: if isAdmin();
+      // 2026-10-02: endorsement types retired from new issuance (Induction
+      // Module: Principal 26-27 §2.2 — "no separate endorsement document is
+      // required"); old records stay editable (e.g. active:false).
+      allow create: if isAdmin() && request.resource.data.certificationType == 'mentor_base';
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -3354,7 +3543,9 @@ service cloud.firestore {
     // 2026-05-20, AI Maturity reviewer scope is gated solely by
     // page-access — admin manages who sees /ai-maturity-admin via
     // page_access_config.visible_to[]. Any central_user who reaches
-    // the page can validate maturity levels and write back.
+    // the page can add Eduversal developmental notes (status value
+    // 'appraised' = "Notes added"). Since 2026-10-02 no levels are
+    // noted or validated (AICF 26-27, Relationship to School Appraisal).
     function isAICFReviewer() {
       return isAdmin() || isCentralUser();
     }
@@ -3465,7 +3656,7 @@ service cloud.firestore {
     //   - school side: CREATE + UPDATE while status ∈ {'draft','submitted'}
     //     by AH school_principal / academic_admin at the school
     //     OR central_admin (network-wide rare).
-    //   - appraiser: CH director / central_admin writes appraisal.*
+    //   - Eduversal notes: CH reviewer writes appraisal.* (notes only)
     //     + flips status to 'appraised'. Other fields immutable.
     //   - delete: central_admin only.
     match /ai_maturity_assessments/{docId} {
@@ -3527,7 +3718,7 @@ service cloud.firestore {
             )
           )
         )
-        // Path 2: appraiser writes appraisal.* + flips status to 'appraised'.
+        // Path 2: Eduversal adds notes (appraisal.*) + flips status to 'appraised' ("Notes added").
         // domainRatings + other fields immutable at this stage.
         || (
           isAICFReviewer()
@@ -3536,6 +3727,9 @@ service cloud.firestore {
           && request.resource.data.schoolId == resource.data.schoolId
           && request.resource.data.domainRatings == resource.data.domainRatings
           && request.resource.data.priorityActions == resource.data.priorityActions
+          // Notes only — never a level (AICF 26-27, 2026-10-02).
+          && !('validatedDomainRatings' in request.resource.data.appraisal)
+          && !('validatedOverallLevel' in request.resource.data.appraisal)
         )
         // Path 3: central_admin override (forensic).
         || isAdmin()
