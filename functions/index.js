@@ -1354,6 +1354,7 @@ exports.startPracticeRun = onCall({ region: "asia-southeast1" }, async (req) => 
   const subjectId = String(data.subjectId || "");
   if (!PRACTICE_SUBJECTS.includes(subjectId)) throw new HttpsError("invalid-argument", "Unknown subject.");
   const topicGroup = typeof data.topicGroup === "string" && data.topicGroup ? data.topicGroup.slice(0, 40) : null;
+  const book = typeof data.book === "string" && data.book ? data.book.slice(0, 80) : null;
   const chapter = typeof data.chapter === "string" && data.chapter ? data.chapter.slice(0, 120) : null;
   const chapterTopic = chapter && typeof data.chapterTopic === "string" && data.chapterTopic ? data.chapterTopic.slice(0, 160) : null;
   const difficulty = PRACTICE_DIFFS.includes(data.difficulty) ? data.difficulty : null;
@@ -1364,8 +1365,9 @@ exports.startPracticeRun = onCall({ region: "asia-southeast1" }, async (req) => 
   if (topicGroup) q = q.where("topicGroup", "==", topicGroup);
   if (difficulty) q = q.where("difficulty", "==", difficulty);
   // chapter / topic are filtered here, not in the query, so no new composite index is needed.
-  const poolSnap = await q.select("correctAnswer", "options", "chapter", "topic").limit(PRACTICE_POOL_LIMIT).get();
+  const poolSnap = await q.select("correctAnswer", "options", "book", "chapter", "topic").limit(PRACTICE_POOL_LIMIT).get();
   const pool = poolSnap.docs
+    .filter(d => !book || (d.get("book") || "Other") === book)
     .filter(d => !chapter || d.get("chapter") === chapter)
     .filter(d => !chapterTopic || d.get("topic") === chapterTopic)
     .filter(d => d.get("correctAnswer") && Array.isArray(d.get("options")) && d.get("options").length >= 2)
@@ -1384,7 +1386,7 @@ exports.startPracticeRun = onCall({ region: "asia-southeast1" }, async (req) => 
   const ref = await attempts.add({
     studentUid: uid, studentName: s.displayName || "", schoolId: s.schoolId || null,
     gradeLevel: s.grade, subjectId, mode: "practice", sourceType: "free", challengeId: null,
-    topicGroup, chapter, chapterTopic, difficulty, itemIds: items.map(i => i.id), responses: [], status: "in_progress",
+    topicGroup, book, chapter, chapterTopic, difficulty, itemIds: items.map(i => i.id), responses: [], status: "in_progress",
     correctCount: 0, attemptedCount: 0, rawScorePct: 0, streakCurrent: 0, streakBest: 0,
     pointsAwarded: null, serverGraded: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp(), submittedAt: null,
@@ -1450,9 +1452,9 @@ exports.practicePoolStats = onCall({ region: "asia-southeast1" }, async (req) =>
   const snap = await db.collection("practice_questions")
     .where("status", "==", "active").where("type", "==", "mcq")
     .where("gradeLevels", "array-contains", s.grade)
-    .select("subjectId", "topicGroup", "difficulty", "correctAnswer", "chapter", "topic").get();
+    .select("subjectId", "topicGroup", "difficulty", "correctAnswer", "book", "chapter", "topic").get();
   const subjects = {};
-  for (const subj of PRACTICE_SUBJECTS) subjects[subj] = { total: 0, byTopic: {}, byDifficulty: {}, byChapter: {} };
+  for (const subj of PRACTICE_SUBJECTS) subjects[subj] = { total: 0, byTopic: {}, byDifficulty: {}, byBook: {} };
   snap.forEach(d => {
     const subj = d.get("subjectId");
     if (!subjects[subj] || !d.get("correctAnswer")) return;
@@ -1461,9 +1463,13 @@ exports.practicePoolStats = onCall({ region: "asia-southeast1" }, async (req) =>
     subjects[subj].byTopic[t] = (subjects[subj].byTopic[t] || 0) + 1;
     subjects[subj].byDifficulty[diff] = (subjects[subj].byDifficulty[diff] || 0) + 1;
     // Cambridge chapter -> topic tree (from the LO workbook), for the chapter picker.
+    // Chapter numbers restart in every coursebook, so chapters are grouped under their book.
     const ch = d.get("chapter");
     if (ch) {
-      const c = subjects[subj].byChapter[ch] || (subjects[subj].byChapter[ch] = { n: 0, topics: {} });
+      const bk = d.get("book") || "Other";
+      const b = subjects[subj].byBook[bk] || (subjects[subj].byBook[bk] = { n: 0, chapters: {} });
+      b.n++;
+      const c = b.chapters[ch] || (b.chapters[ch] = { n: 0, topics: {} });
       c.n++;
       const tp = d.get("topic");
       if (tp) c.topics[tp] = (c.topics[tp] || 0) + 1;
