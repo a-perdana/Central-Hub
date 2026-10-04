@@ -322,15 +322,13 @@ service cloud.firestore {
       // AH appraisal teacher search, and CH coordinators who need to view
       // per-teacher pacing progress.
       //
-      // AH school leadership (FR / SP / AC / CC) is included because the
-      // appraisal + walkthrough entry pages let a principal pick the teacher
-      // they are appraising. Previously only academic_admin could run this
-      // query, so a school_principal hit "Missing or insufficient permissions"
-      // and the teacher picker stayed empty. `list` cannot inspect the matched
-      // docs, so the school scope is enforced by the client query
-      // (where('schoolId','==',<own school>)) rather than here.
+      // AH school leadership (FR / SP / AC / CC) may list users AT THEIR OWN
+      // SCHOOL only (2026-10-04: the Academic Hub never shows a school another
+      // school's people). A list rule can read resource.data: Firestore
+      // accepts the query only when it carries where('schoolId','==',<own
+      // school>), which every AH teacher picker already does.
       allow list:   if isAdmin() || isAHAdmin() || isCHCoordinator()
-                       || isAHSchoolLeaderAnySchool();
+                       || (isAHSchoolLeaderAnySchool() && mySchoolIs(resource.data.schoolId));
 
       allow delete: if isAdmin();
 
@@ -428,7 +426,15 @@ service cloud.firestore {
     //     HQ-seeded row, write userId/linkedAt/invited only.
     // Everything else stays admin-only.
     match /staff/{staffId} {
-      allow read:   if isAuthorized();
+      // Read (2026-10-04): HQ, the row's own person (by email — the first-login
+      // bridge runs before users/{uid} exists), or approved staff of the same
+      // school. Was isAuthorized(): any .sch.id account, students included,
+      // could read the whole network directory.
+      allow read:   if isHQReader()
+                    || (isSignedIn() && ('email' in request.auth.token)
+                        && request.auth.token.email is string
+                        && resource.data.emailLower == request.auth.token.email.lower())
+                    || isStaffAtSchool(resource.data.schoolId);
       allow delete: if isAdmin();
       allow create: if isAdmin() ||
         (isSignedIn()
@@ -471,11 +477,11 @@ service cloud.firestore {
     //     reads only students at their own school. Powers TH
     //     /student-approvals + per-class views.
     //
-    // `list` cannot inspect the target doc's schoolId, so it gates on
-    // role + sub-role only and trusts the client to pass a
-    // `where('schoolId','==',ownSchool)` filter. Same trust-the-filter
-    // pattern as `chapter_test_attempts.list` / `weekly_progress.list`.
-    // `get` enforces the same-school constraint per-doc.
+    // `list` is school-scoped too (2026-10-04): the rule compares
+    // resource.data.schoolId with the caller's own school, so a school user's
+    // query must carry where('schoolId','==',ownSchool) — every AH/TH roster
+    // query does. Before, list trusted the client filter and any leader or
+    // teacher could list every school's students.
     match /students/{uid} {
       allow get:    if isSignedIn() && (
                          request.auth.uid == uid
@@ -489,10 +495,12 @@ service cloud.firestore {
                        );
       allow list:   if isAdmin() || isAHAdmin() || isTHAdmin()
                        || (isAcademicUser()
+                           && mySchoolIs(resource.data.schoolId)
                            && 'ah_sub_roles' in userProfile()
                            && userProfile().ah_sub_roles is list
                            && userProfile().ah_sub_roles.hasAny(['school_principal','academic_coordinator','cambridge_coordinator']))
                        || (isTeachersUser()
+                           && mySchoolIs(resource.data.schoolId)
                            && 'th_sub_roles' in userProfile()
                            && userProfile().th_sub_roles is list
                            && userProfile().th_sub_roles.hasAny(['subject_teacher','subject_leader']));
@@ -899,6 +907,7 @@ service cloud.firestore {
              && (
                userProfile().role_teachershub == 'teachers_admin'
                || (userProfile().role_teachershub == 'teachers_user'
+                   && thApproved()          // 2026-10-04: an unapproved account must not act for a school
                    && 'th_sub_roles' in userProfile()
                    && userProfile().th_sub_roles is list
                    && userProfile().th_sub_roles.hasAny(['subject_teacher','subject_leader']))
@@ -931,9 +940,12 @@ service cloud.firestore {
     //   submitted, the doc is IMMUTABLE for students. Teacher / admin
     //   can update freely (regrading flagged essays in Phase 2).
     match /chapter_test_attempts/{attemptId} {
-      allow get: if isAuthorized() ||
-                    (isSignedIn() && resource.data.studentUid == request.auth.uid);
-      allow list: if isAuthorized();
+      // Read (2026-10-04): HQ, the student who owns the attempt, or approved
+      // staff of the attempt's school. Was isAuthorized(): any .sch.id
+      // account, students included, could list every school's attempts.
+      allow get, list: if isHQReader()
+                    || (isSignedIn() && resource.data.studentUid == request.auth.uid)
+                    || isStaffAtSchool(resource.data.schoolId);
 
       allow create: if isAdmin() ||
                        (isTeacherAtSchool(request.resource.data.schoolId)
@@ -1356,7 +1368,14 @@ service cloud.firestore {
 
     // -- survey_responses ------------------------------------
     match /survey_responses/{responseId} {
-      allow read: if isSignedIn();
+      // Read (2026-10-04): HQ or the respondent. Responses carry no schoolId,
+      // and they carry authorName/authorEmail — was isSignedIn(), so anyone
+      // signed in could read everyone's answers. resource == null lets the
+      // AH/TH survey pages probe for "have I answered?" on docs that don't exist.
+      allow get:  if isHQReader()
+                  || (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid));
+      allow list: if isHQReader()
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
 
       allow create: if isSignedIn() &&
                        isValidResponsePayload(request.resource.data);
@@ -1576,7 +1595,9 @@ service cloud.firestore {
     }
 
     match /school_appraisals_v2/{docId} {
-      allow read:   if isCentralUser() || isAcademicUser();
+      // Read (2026-10-04): HQ, or AH users of that school only.
+      allow read:   if isCentralUser() || isAHAdmin()
+                    || (isAcademicUser() && mySchoolIs(resource.data.schoolId));
       allow create: if isAdmin()
                     || (isAcademicUser()
                         && request.resource.data.schoolId ==
@@ -2105,11 +2126,10 @@ service cloud.firestore {
                 ]);
     }
 
-    // School-agnostic variant for `list` rules, which cannot inspect the
-    // matched docs' fields (a query has no single `resource`). The caller must
-    // constrain the query itself — AH teacher search adds
-    // where('schoolId','==',<own school>) — so this grants "may run a
-    // leadership-scoped query", not "may read every doc".
+    // School-agnostic: the caller is a leadership-team member at SOME school.
+    // On its own it grants a network-wide query, so pair it with
+    // mySchoolIs(resource.data.schoolId) — list rules CAN read resource.data
+    // and then accept only queries that pin schoolId with ==.
     function isAHSchoolLeaderAnySchool() {
       return isAcademicUser()
              && userProfile().ah_sub_roles is list
@@ -2121,12 +2141,39 @@ service cloud.firestore {
                 ]);
     }
 
+    // ── Own-school scoping (2026-10-04) ─────────────────────────
+    // Alif: a partner-school user never sees another school's records; HQ
+    // (central users, academic_admin, teachers_admin) reads across schools.
+    function isHQReader() {
+      return isAdmin() || isCentralUser() || isAHAdmin() || isTHAdmin();
+    }
+    // Null-safe: a user with no school must not match a doc with no school.
+    function mySchoolIs(schoolId) {
+      return userProfileExists()
+             && userProfile().get('schoolId', null) is string
+             && userProfile().get('schoolId', '') != ''
+             && userProfile().get('schoolId', '') == schoolId;
+    }
+    // Approved Academic Hub or Teachers Hub user at that school.
+    function isStaffAtSchool(schoolId) {
+      return (isAcademicUser() || isTeachersUser()) && mySchoolIs(schoolId);
+    }
+    // AH leadership team (FR / SP / AC / CC) at the mentee's assignment school.
+    function isInductionSchoolTeamOf(menteeUid) {
+      return inductionAssignmentExists(menteeUid)
+             && isAHSchoolLeader(inductionAssignment(menteeUid).get('schoolId', ''))
+             && mySchoolIs(inductionAssignment(menteeUid).get('schoolId', ''));
+    }
+
     match /userProgress/{uid} {
       allow get:   if (isSignedIn() && request.auth.uid == uid)
                    || isAdmin()
                    || isCHCoordinator()
                    || isAHUserAtSameSchool(uid);
-      allow list:  if isAdmin() || isCHCoordinator() || isAcademicUser();
+      // list: HQ only (2026-10-04). No school-side page lists userProgress —
+      // AH Syllabus Coverage reads per teacher with get — and the docs carry
+      // no schoolId, so a school-scoped list is not possible.
+      allow list:  if isAdmin() || isCHCoordinator() || isAHAdmin();
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
@@ -2458,7 +2505,8 @@ service cloud.firestore {
     //   AH creates also require createdBy == request.auth.uid so the audit
     //   trail stays honest; CH HQ users may write on behalf of any school.
     match /school_events/{eventId} {
-      allow read:   if isAuthorized();
+      // Read (2026-10-04): HQ, or approved staff of the event's school.
+      allow read:   if isHQReader() || isStaffAtSchool(resource.data.schoolId);
       allow create: if isCentralUser()
                     || (isAcademicUser()
                         && request.resource.data.schoolId == userProfile().schoolId
@@ -3267,8 +3315,15 @@ service cloud.firestore {
                        || isInductionSchoolLeaderOf(resource.data.menteeUid)
                        || isAdmin()
                     );
-      allow list:   if isAdmin()
-                    || (isSignedIn() && request.auth.uid != null);  // client filters by menteeUid or observerUid
+      // list (2026-10-04): the same parties as get, plus the school leadership
+      // team of the mentee's own school. Was open to any signed-in account.
+      // Queries must pin menteeUid (or observerUid) with ==, as all do.
+      allow list:   if isAdmin() || isAHAdmin() || (isSignedIn() && (
+                       request.auth.uid == resource.data.menteeUid
+                       || request.auth.uid == resource.data.observerUid
+                       || isMentorOf(resource.data.menteeUid)
+                       || isInductionSchoolLeaderOf(resource.data.menteeUid)
+                       || isInductionSchoolTeamOf(resource.data.menteeUid)));
       allow create: if isSignedIn()
                     && request.auth.uid == request.resource.data.observerUid
                     && (isMentorOf(request.resource.data.menteeUid)
@@ -3308,7 +3363,14 @@ service cloud.firestore {
                        || isMentorOf(resource.data.uid)
                        || isInductionSchoolLeaderOf(resource.data.uid)
                     );
-      allow list:   if isSignedIn() && request.auth.uid != null;  // client filters by uid or schoolId
+      // list (2026-10-04): owner, mentor, assigned leader, or the mentee's own
+      // school leadership team. Was open to any signed-in account. No HQ path:
+      // HQ sees pulses only through the aggregates.
+      allow list:   if isSignedIn() && (
+                       request.auth.uid == resource.data.uid
+                       || isMentorOf(resource.data.uid)
+                       || isInductionSchoolLeaderOf(resource.data.uid)
+                       || isInductionSchoolTeamOf(resource.data.uid));
       allow create: if isSignedIn() && request.auth.uid == request.resource.data.uid;
       allow update: if isSignedIn() && request.auth.uid == resource.data.uid;
       allow delete: if isAdmin();
@@ -3631,7 +3693,13 @@ service cloud.firestore {
       // List: AH leadership over their own school + CH reviewers.
       // Clients filter by (schoolId == ownSchoolId) + (academicYear == ...)
       // which the indexes support.
-      allow list: if isAICFReviewer() || isAcademicUser();
+      // 2026-10-04: own school only (was any AH user, any school) — the line
+      // manager of get, i.e. the principal of that school.
+      allow list: if isAICFReviewer() || isAHAdmin()
+                  || (isSignedIn() && resource.data.userId == request.auth.uid)
+                  || (isAcademicUser() && mySchoolIs(resource.data.schoolId)
+                      && userProfile().get('ah_sub_roles', []) is list
+                      && 'school_principal' in userProfile().get('ah_sub_roles', []));
 
       // Owner self-CREATE: must claim own userId, set status to 'draft',
       // and not pre-populate validation.* fields.
@@ -3705,9 +3773,9 @@ service cloud.firestore {
                    )
                  );
 
-      // List: AH leadership over their own school + CH reviewers.
-      // Clients filter by schoolId or academicYear which indexes support.
-      allow list: if isAICFReviewer() || isAcademicUser();
+      // List: AH users over their own school only (2026-10-04) + CH reviewers.
+      allow list: if isAICFReviewer() || isAHAdmin()
+                  || (isAcademicUser() && mySchoolIs(resource.data.schoolId));
 
       // CREATE: AH school_principal / academic_admin for own school,
       // or central_admin. Must claim submittedBy = self + schoolId matches.
