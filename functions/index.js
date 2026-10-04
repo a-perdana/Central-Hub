@@ -36,6 +36,7 @@ const { onCall, HttpsError }= require("firebase-functions/v2/https");
 const { defineSecret }      = require("firebase-functions/params");
 const { setGlobalOptions }  = require("firebase-functions/v2");
 const admin                 = require("firebase-admin");
+const GAME                  = require("./practice-game.js");   // SH game rules (pure, unit-tested)
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -730,14 +731,8 @@ const POINTS = {
   EASE_GROWTH_STRONG_BONUS: 50,        // growthVsPrev >= 5
   STREAK_MILESTONE_7:   100,
   STREAK_MILESTONE_30:  250,
-  // SH engagement (2026-05-13) — practice + daily-challenge
-  PRACTICE_BASE: 20,                    // attempting a run at all
-  DAILY_CHALLENGE_BASE: 50,             // higher floor than free practice
-  TOURNAMENT_BASE: 75,                  // reserved for future /tournaments page
-  PRACTICE_PER_CORRECT: 5,              // correctCount * this
-  PRACTICE_RUN_STREAK_3: 10,            // bestStreak >= 3 within the run
-  PRACTICE_RUN_STREAK_5: 20,            // bestStreak >= 5 within the run
-  PRACTICE_PERFECT_BONUS: 30,           // rawScorePct === 100
+  // SH practice + daily-challenge run points live in practice-game.js
+  // (GAME.runPoints / GAME.RUN_POINTS) since 2026-10-04.
   DAILY_CHALLENGE_FIRST_BONUS: 25,      // first daily-challenge submit of the day for this (uid, subj)
 };
 
@@ -770,6 +765,7 @@ async function loadStudentIdentity(studentUid) {
     classId:      s.classId || null,
     className:    s.className || null,
     gradeLevel:   s.gradeLevel || null,
+    mascotId:     typeof s.mascotId === "string" ? s.mascotId.slice(0, 24) : null,
   };
 }
 
@@ -893,7 +889,16 @@ async function awardPoints(studentUid, points, opts = {}) {
     if (opts.counter === "chapter_perfect") update.perfectScores       = admin.firestore.FieldValue.increment(1);
     if (opts.counter === "practice")        update.practiceRunsCompleted = admin.firestore.FieldValue.increment(1);
     if (opts.counter === "daily_challenge") update.dailyChallengesCompleted = admin.firestore.FieldValue.increment(1);
-    if (opts.counter === "practice_perfect") update.perfectScores       = admin.firestore.FieldValue.increment(1);
+    if (opts.counter === "practice_perfect") {
+      // A perfect run is still a run — before 2026-10-04 it bumped perfectScores only.
+      update.perfectScores = admin.firestore.FieldValue.increment(1);
+      update.practiceRunsCompleted = admin.firestore.FieldValue.increment(1);
+    }
+    // School Cup: weekly points per subject (reset with weeklyPoints on Mondays).
+    if (GAME.CUP_SUBJECTS.includes(opts.subjectId)) {
+      update.weeklyBySubject = { [opts.subjectId]: admin.firestore.FieldValue.increment(points) };
+    }
+    if (!GAME.LEAGUES.includes(cur.league)) update.league = "bronze";
 
     if (!snap.exists) {
       update.createdAt = admin.firestore.FieldValue.serverTimestamp();
@@ -1090,12 +1095,18 @@ exports.recomputeEaseGrowth = onDocumentWritten(
 // ───────────────────────────────────────────────────────────────
 // 6b. awardPracticeAttemptPoints — on practice_attempts write (2026-05-13)
 //    Fires on transition INTO 'submitted' (or 'scored', for parity
-//    with chapter test pipeline). Mode-aware point formula:
+//    with chapter test pipeline). Formula = GAME.runPoints (practice-game.js),
+//    since 2026-10-04 paid per CORRECT answer, weighted by difficulty:
 //
-//      practice         : base 20  + 5/correct + run-streak + perfect
-//      daily_challenge  : base 50  + 5/correct + run-streak + perfect
-//                                  + 25 first-of-day-per-subject bonus
+//      correct answers  : easy 5 · medium 8 · hard 10 (×1.5 in a rematch run)
+//      practice         : +10 for finishing a run with at least one right answer
+//      daily_challenge  : +50 base, +25 first-of-day-per-subject bonus
+//      bonuses          : combo 3 / 5 → +10 / +20 · perfect run of 5+ → +30 ·
+//                         boss beaten → +15 · chapter mastery tier-up → +10/25/50/100
 //      tournament       : base 75  (reserved — no /tournaments page yet)
+//
+//    The old flat base of 20 per run paid a wrong 1-question run more than a
+//    correct answer, so speed-clicking 20 tiny runs out-earned honest work.
 //
 //    Writes the awarded total back to practice_attempts.pointsAwarded
 //    so the student dashboard can render it without re-deriving.
@@ -1135,38 +1146,14 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
 
     const mode         = after.mode || "practice";
     const correctCount = Number(after.correctCount || 0);
-    const bestStreak   = Number(after.streakBest || 0);
     const scorePct     = Number(after.rawScorePct || 0);
     const subjectId    = after.subjectId;
     const challengeId  = after.challengeId;
 
-    // Base by mode
-    let points;
-    let counter;
-    if (mode === "daily_challenge") {
-      points  = POINTS.DAILY_CHALLENGE_BASE;
-      counter = "daily_challenge";
-    } else if (mode === "tournament") {
-      points  = POINTS.TOURNAMENT_BASE;
-      counter = "practice";
-    } else {
-      points  = POINTS.PRACTICE_BASE;
-      counter = "practice";
-    }
-
-    // Per-correct
-    points += correctCount * POINTS.PRACTICE_PER_CORRECT;
-
-    // Run-internal streak
-    if      (bestStreak >= 5) points += POINTS.PRACTICE_RUN_STREAK_5;
-    else if (bestStreak >= 3) points += POINTS.PRACTICE_RUN_STREAK_3;
-
-    // Perfect run
-    const isPerfect = scorePct >= 100;
-    if (isPerfect) {
-      points += POINTS.PRACTICE_PERFECT_BONUS;
-      counter = mode === "daily_challenge" ? "daily_challenge" : "practice_perfect";
-    }
+    const breakdown = GAME.runPoints(after);
+    let points = breakdown.total;
+    const isPerfect = breakdown.perfect > 0 || (mode === "daily_challenge" && scorePct >= 100);
+    let counter = mode === "daily_challenge" ? "daily_challenge" : isPerfect ? "practice_perfect" : "practice";
 
     // Daily cap (2026-10-02): free-practice runs earn points for the
     // first PRACTICE_DAILY_POINT_RUNS completed runs of a Jakarta day;
@@ -1196,13 +1183,15 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
           .where("challengeId", "==", challengeId)
           .where("status", "in", ["submitted", "scored"])
           .count().get();
-        if (dup.data().count <= 1) points += POINTS.DAILY_CHALLENGE_FIRST_BONUS;
+        if (dup.data().count <= 1) { points += POINTS.DAILY_CHALLENGE_FIRST_BONUS; breakdown.firstOfDay = POINTS.DAILY_CHALLENGE_FIRST_BONUS; }
       } catch (e) {
         console.warn("[awardPracticeAttemptPoints] first-bonus count failed", e.message);
       }
     }
 
-    if (points > 0) await awardPoints(studentUid, points, { counter, eventId: event.id });
+    if (capped) breakdown.capped = true;
+    breakdown.total = points;
+    if (points > 0) await awardPoints(studentUid, points, { counter, eventId: event.id, subjectId });
 
     // Daily-challenge board row (2026-10-02). Students may only read
     // their own practice_attempts, so the school x grade board reads this
@@ -1212,6 +1201,7 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
         await db.collection("daily_challenge_results").doc(`${challengeId}_${studentUid}`).set({
           challengeId, studentUid,
           studentName: after.studentName || "Student",
+          mascotId: await db.collection("students").doc(studentUid).get().then(d => d.get("mascotId") || null).catch(() => null),
           schoolId: after.schoolId || null,
           gradeLevel: after.gradeLevel || null,
           subjectId: subjectId || null,
@@ -1231,6 +1221,7 @@ exports.awardPracticeAttemptPoints = onDocumentWritten(
     try {
       await event.data.after.ref.update({
         pointsAwarded: points,
+        pointsBreakdown: breakdown,
         pointsAwardedAt: admin.firestore.FieldValue.serverTimestamp(),
         ...(capped ? { pointsNote: "daily point limit reached" } : {}),
       });
@@ -1275,10 +1266,11 @@ const PRACTICE_MAX_ITEMS = 20;
 const PRACTICE_POOL_LIMIT = 3000;
 const PRACTICE_RECENT_ATTEMPTS = 30;
 const PRACTICE_DAILY_POINT_RUNS = 20;
+const PRACTICE_REMATCH_MAX = 10;
 const PRACTICE_PUBLIC_FIELDS = [
   "subjectId", "topic", "topicGroup", "difficulty", "stem", "stemHtml",
   "options", "optionsHtml", "hasDiagram", "diagramUrl", "diagramStoragePath",
-  "diagramType", "diagramAlt",
+  "diagramType", "diagramAlt", "book", "chapter",
 ];
 
 function jakartaDayStart() {
@@ -1368,6 +1360,37 @@ exports.startPracticeRun = onCall({ region: "asia-southeast1" }, async (req) => 
       items: usable.map(publicPracticeItem), responses: [], correctCount: 0, streak: 0, streakBest: 0 };
   }
 
+  // ── Rematch (2026-10-04) ────────────────────────────────────
+  // Questions the student missed come back 1, 3 and 7 days later
+  // (practice_mastery/{uid}.missed, written by answerPracticeItem).
+  // Stored as mode "practice" + sourceType "rematch" so the daily cap,
+  // streak and quests treat it as a practice run; right answers pay ×1.5.
+  if (data.rematch === true) {
+    const subj = PRACTICE_SUBJECTS.includes(data.subjectId) ? data.subjectId : null;
+    const mSnap = await db.collection("practice_mastery").doc(uid).get();
+    const due = GAME.dueRematch(mSnap.exists ? mSnap.data() : {}, jakartaDayISO(), subj).slice(0, PRACTICE_REMATCH_MAX);
+    const snaps = due.length ? await db.getAll(...due.map(id => qcol.doc(id))) : [];
+    const usable = snaps.filter(x => x.exists && x.get("status") === "active" && x.get("correctAnswer"));
+    if (!usable.length) throw new HttpsError("not-found", "No rematch questions are due today. Come back tomorrow!");
+    const bySubj = {};
+    usable.forEach(x => { const k = x.get("subjectId"); bySubj[k] = (bySubj[k] || 0) + 1; });
+    const subjectId = Object.keys(bySubj).sort((a, b) => bySubj[b] - bySubj[a])[0] || null;
+    const items = shuffleInPlace(usable).map(publicPracticeItem);
+    const ref = await attempts.add({
+      studentUid: uid, studentName: s.displayName || "", schoolId: s.schoolId || null,
+      gradeLevel: s.grade, subjectId, mode: "practice", sourceType: "rematch", challengeId: null,
+      topicGroup: null, book: null, chapter: null, chapterTopic: null, difficulty: null,
+      itemIds: items.map(i => i.id), itemDiffs: items.map(i => GAME.diffOf(i.difficulty)),
+      bossIndex: null, reserveIds: [], powerIdx: [], responses: [], status: "in_progress",
+      correctCount: 0, attemptedCount: 0, rawScorePct: 0, streakCurrent: 0, streakBest: 0,
+      earnedCorrectPts: 0, hardCorrect: 0, comebacks: 0, bossBeaten: false, tierBonus: 0, tierUps: [], rematchCleared: 0,
+      pointsAwarded: null, serverGraded: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(), submittedAt: null,
+    });
+    return { attemptId: ref.id, mode: "practice", sourceType: "rematch", subjectId, topicGroup: null, items,
+      responses: [], correctCount: 0, streak: 0, streakBest: 0, bossIndex: null, rematchDue: due.length };
+  }
+
   // ── Free practice ───────────────────────────────────────────
   const subjectId = String(data.subjectId || "");
   if (!PRACTICE_SUBJECTS.includes(subjectId)) throw new HttpsError("invalid-argument", "Unknown subject.");
@@ -1376,41 +1399,57 @@ exports.startPracticeRun = onCall({ region: "asia-southeast1" }, async (req) => 
   const chapter = typeof data.chapter === "string" && data.chapter ? data.chapter.slice(0, 120) : null;
   const chapterTopic = chapter && typeof data.chapterTopic === "string" && data.chapterTopic ? data.chapterTopic.slice(0, 160) : null;
   const difficulty = PRACTICE_DIFFS.includes(data.difficulty) ? data.difficulty : null;
-  const n = Math.max(1, Math.min(PRACTICE_MAX_ITEMS, parseInt(data.n, 10) || 10));
+  // At least GAME.PRACTICE_MIN_ITEMS questions (2026-10-04): 1-question runs were a points farm.
+  const n = Math.max(GAME.PRACTICE_MIN_ITEMS, Math.min(PRACTICE_MAX_ITEMS, parseInt(data.n, 10) || 10));
 
+  // Difficulty is filtered in memory (not in the query) so the same read
+  // also yields the harder items used for the boss and the power-ups.
   let q = qcol.where("subjectId", "==", subjectId).where("status", "==", "active")
     .where("type", "==", "mcq").where("gradeLevels", "array-contains", s.grade);
   if (topicGroup) q = q.where("topicGroup", "==", topicGroup);
-  if (difficulty) q = q.where("difficulty", "==", difficulty);
-  // chapter / topic are filtered here, not in the query, so no new composite index is needed.
-  const poolSnap = await q.select("correctAnswer", "options", "book", "chapter", "topic").limit(PRACTICE_POOL_LIMIT).get();
-  const pool = poolSnap.docs
+  const poolSnap = await q.select("correctAnswer", "options", "book", "chapter", "topic", "difficulty").limit(PRACTICE_POOL_LIMIT).get();
+  const all = poolSnap.docs
     .filter(d => !book || (d.get("book") || "Other") === book)
     .filter(d => !chapter || d.get("chapter") === chapter)
     .filter(d => !chapterTopic || d.get("topic") === chapterTopic)
     .filter(d => d.get("correctAnswer") && Array.isArray(d.get("options")) && d.get("options").length >= 2)
-    .map(d => d.id);
+    .map(d => ({ id: d.id, diff: GAME.diffOf(d.get("difficulty")) }));
+  const pool = difficulty ? all.filter(x => x.diff === difficulty) : all;
   if (!pool.length) throw new HttpsError("not-found", "No questions for your grade match this topic, chapter and difficulty yet.");
 
   const recent = await attempts.where("studentUid", "==", uid)
     .orderBy("createdAt", "desc").limit(PRACTICE_RECENT_ATTEMPTS).select("itemIds").get();
   const seen = new Set(recent.docs.flatMap(d => d.get("itemIds") || []));
-  const unseen = shuffleInPlace(pool.filter(id => !seen.has(id)));
-  const again = shuffleInPlace(pool.filter(id => seen.has(id)));
-  const pickedIds = [...unseen, ...again].slice(0, n);
+  const freshFirst = (list) => [...shuffleInPlace(list.filter(x => !seen.has(x.id))), ...shuffleInPlace(list.filter(x => seen.has(x.id)))];
+
+  // Boss = the last question, one level harder than the run (Any → Hard).
+  // Reserve = up to 3 more harder items swapped in when the student is on a 3-combo.
+  const baseRank = difficulty ? GAME.DIFF_RANK[difficulty] : 1;
+  const harder = freshFirst(all.filter(x => GAME.DIFF_RANK[x.diff] > baseRank));
+  const boss = pool.length >= GAME.PRACTICE_MIN_ITEMS ? harder[0] || null : null;
+  const used = new Set(boss ? [boss.id] : []);
+  const main = freshFirst(pool.filter(x => !used.has(x.id))).slice(0, boss ? n - 1 : n);
+  main.forEach(x => used.add(x.id));
+  const reserve = harder.filter(x => !used.has(x.id)).slice(0, 3).map(x => x.id);
+  const unseenCount = pool.filter(x => !seen.has(x.id)).length;
+  const pickedIds = [...main.map(x => x.id), ...(boss ? [boss.id] : [])];
 
   const snaps = await db.getAll(...pickedIds.map(id => qcol.doc(id)));
   const items = snaps.filter(x => x.exists).map(publicPracticeItem);
+  const bossIndex = boss && items.length && items[items.length - 1].id === boss.id ? items.length - 1 : null;
   const ref = await attempts.add({
     studentUid: uid, studentName: s.displayName || "", schoolId: s.schoolId || null,
     gradeLevel: s.grade, subjectId, mode: "practice", sourceType: "free", challengeId: null,
-    topicGroup, book, chapter, chapterTopic, difficulty, itemIds: items.map(i => i.id), responses: [], status: "in_progress",
+    topicGroup, book, chapter, chapterTopic, difficulty,
+    itemIds: items.map(i => i.id), itemDiffs: items.map(i => GAME.diffOf(i.difficulty)),
+    bossIndex, reserveIds: reserve, powerIdx: [], responses: [], status: "in_progress",
     correctCount: 0, attemptedCount: 0, rawScorePct: 0, streakCurrent: 0, streakBest: 0,
+    earnedCorrectPts: 0, hardCorrect: 0, comebacks: 0, bossBeaten: false, tierBonus: 0, tierUps: [], rematchCleared: 0,
     pointsAwarded: null, serverGraded: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp(), submittedAt: null,
   });
   return { attemptId: ref.id, mode: "practice", subjectId, topicGroup, items,
-    responses: [], correctCount: 0, streak: 0, streakBest: 0, poolSize: pool.length, unseenCount: unseen.length };
+    responses: [], correctCount: 0, streak: 0, streakBest: 0, bossIndex, poolSize: pool.length, unseenCount };
 });
 
 exports.answerPracticeItem = onCall({ region: "asia-southeast1" }, async (req) => {
@@ -1425,41 +1464,124 @@ exports.answerPracticeItem = onCall({ region: "asia-southeast1" }, async (req) =
   }
   await enforcePerUserRateLimit("answerPracticeItem", uid, 900, 4000);
   const ref = db.collection("practice_attempts").doc(attemptId);
+  const mRef = db.collection("practice_mastery").doc(uid);
+  const today = jakartaDayISO();
   return db.runTransaction(async (tx) => {
+    // ── reads (all before the first write) ──
     const aSnap = await tx.get(ref);
     const a = aSnap.exists ? aSnap.data() : null;
     if (!a || a.studentUid !== uid || a.serverGraded !== true) throw new HttpsError("permission-denied", "This run is not yours.");
     if (a.status !== "in_progress") throw new HttpsError("failed-precondition", "This run is already finished.");
-    const ids = a.itemIds || [];
+    const ids = [...(a.itemIds || [])];
     const responses = a.responses || [];
-    if (ids[responses.length] !== itemId) {
+    const idx = responses.length;
+    if (ids[idx] !== itemId) {
       throw new HttpsError("failed-precondition", responses.some(r => r.itemId === itemId)
         ? "You have already answered this question." : "Please answer the questions in order.");
     }
     const qSnap = await tx.get(db.collection("practice_questions").doc(itemId));
     const key = qSnap.exists ? qSnap.get("correctAnswer") : null;
     if (!key) throw new HttpsError("not-found", "This question is no longer available.");
+    const mSnap = await tx.get(mRef);
+
     const isCorrect = answer === key;
     const streak = isCorrect ? (a.streakCurrent || 0) + 1 : 0;
+    const prevWrong = idx > 0 && responses[idx - 1] && responses[idx - 1].isCorrect === false;
+    const diff = GAME.diffOf(qSnap.get("difficulty"));
+    const isRematch = a.sourceType === "rematch";
+    const isBoss = a.bossIndex != null && idx === a.bossIndex;
+    const isPower = Array.isArray(a.powerIdx) && a.powerIdx.includes(idx);
+
+    // Power-up: on every 3-in-a-row, the NEXT question is swapped for a
+    // harder one from the reserve (never the boss slot, never easier).
+    const itemDiffs = Array.isArray(a.itemDiffs) ? [...a.itemDiffs] : [];
+    const reserve = Array.isArray(a.reserveIds) ? [...a.reserveIds] : [];
+    const next = idx + 1;
+    let swapSnap = null;
+    if (isCorrect && streak > 0 && streak % 3 === 0 && reserve.length && next < ids.length
+        && next !== a.bossIndex && GAME.DIFF_RANK[itemDiffs[next] || "medium"] < GAME.DIFF_RANK.hard) {
+      const cand = await tx.get(db.collection("practice_questions").doc(reserve[0]));
+      reserve.shift();
+      if (cand.exists && cand.get("status") === "active" && cand.get("correctAnswer")
+          && GAME.DIFF_RANK[GAME.diffOf(cand.get("difficulty"))] > GAME.DIFF_RANK[itemDiffs[next] || "medium"]) swapSnap = cand;
+    }
+
+    // ── compute ──
+    const earned = isCorrect ? GAME.pointsForCorrect(diff, { rematch: isRematch }) : 0;
     const streakBest = Math.max(a.streakBest || 0, streak);
     const correctCount = (a.correctCount || 0) + (isCorrect ? 1 : 0);
     const spent = Math.max(0, Math.min(30 * 60 * 1000, Number(data.timeSpentMs) || 0));
-    const nextResponses = [...responses, { itemId, answer, isCorrect, timeSpentMs: spent, answeredAt: new Date().toISOString() }];
+    const nextResponses = [...responses, { itemId, answer, isCorrect, difficulty: diff, points: earned, timeSpentMs: spent, answeredAt: new Date().toISOString() }];
     const done = nextResponses.length >= ids.length;
     const rawScorePct = Math.round((correctCount / ids.length) * 100);
+
+    const item = { id: itemId, subjectId: qSnap.get("subjectId"), book: qSnap.get("book") || null, chapter: qSnap.get("chapter") || null, difficulty: diff };
+    const res = GAME.applyAnswer(mSnap.exists ? mSnap.data() : {}, item, isCorrect, today);
+    const tierUps = [...(a.tierUps || []), ...(res.tierUp ? [res.tierUp] : [])];
+
     const update = {
       responses: nextResponses, correctCount, attemptedCount: nextResponses.length,
       streakCurrent: streak, streakBest, rawScorePct,
+      earnedCorrectPts: (a.earnedCorrectPts || 0) + earned,
+      hardCorrect: (a.hardCorrect || 0) + (isCorrect && diff === "hard" ? 1 : 0),
+      comebacks: (a.comebacks || 0) + (isCorrect && prevWrong ? 1 : 0),
+      tierUps, tierBonus: (a.tierBonus || 0) + (res.tierUp ? res.tierUp.bonus : 0),
+      rematchCleared: (a.rematchCleared || 0) + (res.rematch === "cleared" ? 1 : 0),
+      reserveIds: reserve,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (isBoss && isCorrect) update.bossBeaten = true;
+    let swapIn = null;
+    if (swapSnap) {
+      ids[next] = swapSnap.id;
+      itemDiffs[next] = GAME.diffOf(swapSnap.get("difficulty"));
+      update.itemIds = ids;
+      update.itemDiffs = itemDiffs;
+      update.powerIdx = [...(a.powerIdx || []), next];
+      swapIn = Object.assign(publicPracticeItem(swapSnap), { index: next });
+    }
     if (done) { update.status = "submitted"; update.submittedAt = admin.firestore.FieldValue.serverTimestamp(); }
+
+    // ── writes ──
     tx.update(ref, update);
+    tx.set(mRef, Object.assign({}, res.mastery, { studentUid: uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() }));
     return {
       isCorrect, correctAnswer: key, explanation: qSnap.get("explanation") || null,
       done, correctCount, attemptedCount: nextResponses.length, total: ids.length,
       streak, streakBest, rawScorePct,
+      points: earned, difficulty: diff, isBoss, bossBeaten: isBoss && isCorrect, isPower,
+      tierUp: res.tierUp, rematch: res.rematch, swapIn,
+      earnedSoFar: update.earnedCorrectPts,
     };
   });
+});
+
+// ── practiceJourney (callable, 2026-10-04) ─────────────────────
+// The student's own chapter mastery + rematch deck for the Journey map.
+// practice_mastery has no client rule (deny-all), so it is read here.
+exports.practiceJourney = onCall({ region: "asia-southeast1" }, async (req) => {
+  const uid = req.auth && req.auth.uid;
+  const s = await loadActiveStudent(uid);
+  const snap = await db.collection("practice_mastery").doc(uid).get();
+  const m = snap.exists ? snap.data() : {};
+  const today = jakartaDayISO();
+  const chapters = Object.values(m.chapters || {}).map(e => ({
+    subj: e.subj || null, book: e.book || "Other", chapter: e.chapter, tier: Number(e.tier) || 0,
+    n: Number(e.n) || 0, c: Number(e.c) || 0, hc: Number(e.hc) || 0, last: e.last || "", at: e.at || null,
+    hint: GAME.nextTierHint(e),
+  }));
+  const missed = m.missed || {};
+  const dueBySubject = {};
+  let nextDue = null;
+  for (const id of Object.keys(missed)) {
+    const x = missed[id];
+    if (x.due <= today) dueBySubject[x.subj || "other"] = (dueBySubject[x.subj || "other"] || 0) + 1;
+    else if (!nextDue || x.due < nextDue) nextDue = x.due;
+  }
+  return {
+    grade: s.grade, today, chapters,
+    rematch: { due: Object.values(dueBySubject).reduce((n, v) => n + v, 0), dueBySubject, waiting: Object.keys(missed).length, nextDue, cleared: Number(m.rematchCleared) || 0 },
+  };
 });
 
 const practiceStatsCache = new Map();   // grade -> { at, data }
@@ -1473,19 +1595,9 @@ const practiceStatsCache = new Map();   // grade -> { at, data }
 //   QUEST_VARIANTS + questHash MUST stay identical to Students Hub partials/quests.js (a node test
 //   compares them). The loot is cosmetic / protective only — it never grants points.
 // ───────────────────────────────────────────────────────────────
-function questHash(str) {              // FNV-1a 32-bit
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-  return h >>> 0;
-}
-const QUEST_VARIANTS = [
-  { id: "subject-math",    target: 1, progress: (a) => a.filter(x => x.subjectId === "math").length },
-  { id: "subject-english", target: 1, progress: (a) => a.filter(x => x.subjectId === "english").length },
-  { id: "subject-science", target: 1, progress: (a) => a.filter(x => x.subjectId === "science").length },
-  { id: "score-80",        target: 1, progress: (a) => a.some(x => Number(x.rawScorePct) >= 80) ? 1 : 0 },
-  { id: "two-runs",        target: 2, progress: (a) => Math.min(2, a.length) },
-];
-function pickQuestVariant(uid, dayISO) { return QUEST_VARIANTS[questHash(uid + "|" + dayISO) % QUEST_VARIANTS.length]; }
+// Quest variants + hash live in practice-game.js (GAME.QUEST_VARIANTS / GAME.pickQuestVariant) since
+// 2026-10-04 — 15 twists, mirrored by Students Hub partials/quests.js and checked by practice-game.test.js.
+const pickQuestVariant = GAME.pickQuestVariant;
 
 // Cosmetics the chest can unlock early. Requirements mirror Students Hub avatar.html ITEMS.
 const CHEST_ITEMS = [
@@ -1531,7 +1643,7 @@ exports.claimDailyChest = onCall({ region: "asia-southeast1" }, async (req) => {
   const sp = spSnap.exists ? spSnap.data() : {};
   const challengeDone = todays.some(a => a.mode === "daily_challenge");
   const variant = pickQuestVariant(uid, today);
-  const twistDone = variant.progress(practice) >= variant.target;
+  const twistDone = GAME.questProgress(variant, practice) >= variant.target;
   const streakAlive = !!(sp.streak && sp.streak.lastDayISO === today);
   if (!(challengeDone && twistDone && streakAlive)) {
     throw new HttpsError("failed-precondition", "Finish all three of today's quests to open the chest.");
@@ -1654,6 +1766,8 @@ exports.rebuildLeaderboards = onSchedule(
         weeklyPoints: r.weeklyPoints || 0,
         monthlyPoints: r.monthlyPoints || 0,
         level: r.level || 1,
+        mascotId: r.mascotId || null,
+        league: GAME.leagueOf(r),
       }));
       const id = `${scope}_${scopeId}_${period}`;
       if (seen.has(id)) return;
@@ -1684,8 +1798,51 @@ exports.rebuildLeaderboards = onSchedule(
       writeBoard("network", "all", p, rows);
     });
 
+    // ── Weekly leagues (2026-10-04) ──
+    // A student joins a cohort (≤30, same league + stage band) the first time
+    // they score in a week. Skipped until resetLeaderboardWindows has resolved
+    // last week (game_state/leagues.week), so Monday 00:00 can't seat students
+    // in a new cohort with last week's points.
+    const weekKey = GAME.weekKeyOf(jakartaDayISO());
+    const stateRef = db.collection("game_state").doc("leagues");
+    const stateSnap = await stateRef.get();
+    if (!stateSnap.exists) await stateRef.set({ week: weekKey, startedAt: admin.firestore.FieldValue.serverTimestamp() });
+    const leagueWeek = stateSnap.exists ? stateSnap.get("week") : weekKey;
+    let cohortCount = 0;
+    if (leagueWeek === weekKey) {
+      const { cohorts, assign } = GAME.assignCohorts(rows, weekKey);
+      for (const a of assign) {
+        writer.set(db.collection("student_points").doc(a.uid), { leagueWeek: weekKey, leagueCohort: a.cohortId, league: a.league }, { merge: true });
+      }
+      for (const [cohortId, list] of Object.entries(cohorts)) {
+        const meta = GAME.cohortMeta(cohortId);
+        const sorted = [...list].sort((x, y) => (y.weeklyPoints || 0) - (x.weeklyPoints || 0) || String(x.id).localeCompare(String(y.id)));
+        writer.set(db.collection("school_leaderboards").doc(`league_${cohortId}_weekly`), {
+          scope: "league", scopeId: cohortId, period: "weekly",
+          league: meta.league, band: meta.band, weekKey,
+          size: sorted.length, promote: GAME.promoteCount(sorted.length), demote: GAME.demoteCount(sorted.length),
+          minPromotePoints: GAME.MIN_PROMOTE_POINTS,
+          entries: sorted.map((r, i) => ({
+            rank: i + 1, studentUid: r.studentUid || r.id, displayName: r.displayName || "Student",
+            schoolName: r.schoolName || null, gradeLevel: r.gradeLevel || null,
+            weeklyPoints: r.weeklyPoints || 0, level: r.level || 1, mascotId: r.mascotId || null,
+          })),
+          computedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        cohortCount++;
+      }
+    }
+
+    // ── School Cup (2026-10-04): one featured subject per week ──
+    const cupSubj = GAME.cupSubject(weekKey);
+    writer.set(db.collection("school_leaderboards").doc("cup_all_weekly"), {
+      scope: "cup", scopeId: "all", period: "weekly", weekKey, subjectId: cupSubj,
+      minDivisor: 5, schools: GAME.schoolCup(rows, cupSubj),
+      computedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     await writer.close();
-    console.log(`[rebuildLeaderboards] wrote ${seen.size} boards across ${rows.length} students`);
+    console.log(`[rebuildLeaderboards] wrote ${seen.size} boards + ${cohortCount} league cohorts + cup(${cupSubj}) across ${rows.length} students`);
   }
 );
 
@@ -1724,14 +1881,38 @@ exports.resetLeaderboardWindows = onSchedule(
     // from the 501st student onward (2026-08-01 pre-launch fix).
     const writer = db.bulkWriter();
     const stamp = admin.firestore.FieldValue.serverTimestamp();
+
+    // Weekly leagues (2026-10-04): settle last week's cohorts BEFORE the
+    // weekly points are zeroed — top climbs a league, bottom of a big cohort drops.
+    const results = {};
+    const thisWeek = GAME.weekKeyOf(jakartaDayISO());
+    const lastWeek = GAME.addDays(thisWeek, -7);
+    if (resetWeekly) {
+      const cohorts = {};
+      all.docs.forEach(d => {
+        const r = { id: d.id, ...d.data() };
+        if (r.leagueWeek === lastWeek && typeof r.leagueCohort === "string") (cohorts[r.leagueCohort] ||= []).push(r);
+      });
+      for (const [cohortId, list] of Object.entries(cohorts)) {
+        for (const x of GAME.resolveCohort(list)) results[x.uid] = Object.assign({ cohortId, weekKey: lastWeek }, x);
+      }
+    }
+
     all.docs.forEach(d => {
       const upd = { updatedAt: stamp };
-      if (resetWeekly)  { upd.weeklyPoints  = 0; upd.lastWeeklyResetAt  = stamp; }
+      if (resetWeekly)  { upd.weeklyPoints  = 0; upd.weeklyBySubject = {}; upd.lastWeeklyResetAt  = stamp; }
       if (resetMonthly) { upd.monthlyPoints = 0; upd.lastMonthlyResetAt = stamp; }
-      writer.set(d.ref, upd, { merge: true });
+      const res = results[d.id];
+      if (res) {
+        upd.league = res.to;
+        upd.lastLeagueResult = { weekKey: res.weekKey, cohortId: res.cohortId, rank: res.rank, size: res.size, from: res.from, to: res.to, outcome: res.outcome, weeklyPoints: res.weeklyPoints };
+      }
+      // update() (not set-merge) so the weeklyBySubject map is replaced, not merged; every doc here exists.
+      writer.update(d.ref, upd);
     });
     await writer.close();
-    console.log(`[resetLeaderboardWindows] reset ${all.size} docs (weekly=${resetWeekly} monthly=${resetMonthly})`);
+    if (resetWeekly) await db.collection("game_state").doc("leagues").set({ week: thisWeek, resolvedAt: stamp, resolvedWeek: lastWeek, resolvedStudents: Object.keys(results).length }, { merge: true });
+    console.log(`[resetLeaderboardWindows] reset ${all.size} docs (weekly=${resetWeekly} monthly=${resetMonthly}, league results=${Object.keys(results).length})`);
   }
 );
 
